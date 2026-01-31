@@ -1,0 +1,103 @@
+# Plan - CLAP Plugin Framework
+
+## Plan Context
+- Goals: Extract reusable DSP, GUI, param/state, and CLAP processing utilities from current plugins; accelerate creation of new internal CLAP plugins.
+- Decisions: CLAP-only; preserve current plugin patterns; realtime-safe audio callbacks.
+- Constraints: Minimal dependencies; framework API must stay small and focused.
+
+## Phase 0 - Audit and Inventory
+- [ ] 0.1 Inventory reusable patterns and candidate modules
+- Phase: 0 - Audit and Inventory
+- Plan Context:
+  - Goals: Identify reusable DSP, GUI, param/state, and snapshot patterns across plugins.
+  - Decisions: CLAP-only; extract only proven patterns.
+- Phase Constraints:
+  - Planning-only for this step; no code changes.
+- Scope: Identify common modules and map each to source locations in the current plugins.
+- Files: `test-plugins/lilt-clap/src/lib.rs`, `test-plugins/lilt-clap/src/params.rs`, `test-plugins/lilt-clap/src/gui.rs`, `test-plugins/cellweave-clap/src/dsp.rs`, `test-plugins/cellweave-clap/src/gui.rs`, `test-plugins/cellweave-clap/src/params.rs`, `test-plugins/cellweave-clap/src/snapshot.rs`, `test-plugins/rd-field-filter-clap/src/dsp.rs`, `test-plugins/rd-field-filter-clap/src/gui.rs`, `test-plugins/rd-field-filter-clap/src/snapshot.rs`, `test-plugins/polyphonic-reverb-clap/src/dsp.rs`, `test-plugins/polyphonic-reverb-clap/src/voices.rs`, `test-plugins/polyphonic-reverb-clap/src/params.rs`
+- Entry Points: plugin `process` loops and param/state modules in each plugin.
+- Example (primary): “Common CLAP process loop” (validates process/buffer/event pattern shared across plugins).
+- Example (required): “Snapshot usage” (validates audio→GUI sharing patterns).
+- Commands:
+  - not applicable
+- Verification:
+  - Inventory list matches each plugin source.
+- Constraints:
+  - Planning-only.
+- Non-goals:
+  - No code extraction yet.
+- Expected Artifacts:
+  - Documented list of reusable items in RFC and plan.
+- Acceptance Checklist:
+  - Reusable DSP list documented with source references.
+  - GUI and snapshot patterns documented.
+  - Param/state patterns documented.
+- Failure Modes:
+  - Missing a plugin-specific pattern that should be shared.
+- Update Docs:
+  - Update `docs/RFC.md` and `docs/PLAN.md` (this step).
+
+## Phase 1 - Framework Foundation (DSP + Snapshot)
+- [ ] 1.1 Extract DSP primitives used across plugins
+- Phase: 1 - Framework Foundation
+- Plan Context:
+  - Goals: Create reusable DSP modules used in multiple plugins.
+  - Decisions: Keep modules small and composable.
+- Phase Constraints:
+  - No behavioral changes to existing plugins.
+- Scope: Delay lines, one-pole filters, smoothing utilities, window/OLA helpers, biquad utilities, and other shared primitives.
+- Files: new framework crate (planned), `test-plugins/polyphonic-reverb-clap/src/dsp.rs`, `test-plugins/lilt-clap/src/lib.rs`, `test-plugins/cellweave-clap/src/dsp.rs`.
+- Entry Points: DSP utility modules; existing unit tests for delay/comb and snapshots.
+- Example (primary): “DelayLine + FeedbackComb tests” (validates DSP extraction).
+- Example (required): “Smoothing helper test” (validates shared smoothing).
+- Commands:
+  - `cargo test -p <framework-crate>`
+- Verification:
+  - Unit tests pass; no allocations in audio callbacks.
+- Constraints:
+  - Keep API stable and minimal.
+- Non-goals:
+  - Not extracting full DSP engines yet.
+- Expected Artifacts:
+  - `framework::dsp` module with tests and docs.
+- Acceptance Checklist:
+  - DSP primitives documented and tested.
+  - Existing plugin behavior unchanged.
+  - No audio-thread allocations introduced.
+- Failure Modes:
+  - Performance regressions due to poor extraction boundaries.
+- Update Docs:
+  - Update framework module docs and RFC decisions.
+
+## Phase 2 - Framework Glue (Params + GUI + CLAP helpers)
+- [ ] 2.1 Standardize params, state, and GUI scaffolding
+- Phase: 2 - Framework Glue
+- Plan Context:
+  - Goals: Provide reusable param/state handling and GUI window helpers.
+  - Decisions: Thin wrappers; retain direct egui usage.
+- Phase Constraints:
+  - Avoid breaking existing plugin UIs.
+- Scope: Param snapshot pattern, state serialization helpers, snapshot buffer utilities, baseview/egui window wrapper, standard control helpers (knobs/sliders), and CLAP process helpers (sample bounds, buffer routing).
+- Files: new framework crate (planned), `test-plugins/lilt-clap/src/params.rs`, `test-plugins/lilt-clap/src/gui.rs`, `test-plugins/cellweave-clap/src/snapshot.rs`, `test-plugins/rd-field-filter-clap/src/snapshot.rs`.
+- Entry Points: param modules and GUI wrappers in existing plugins.
+- Example (primary): “GUI snapshot reader” (validates GUI update path).
+- Example (required): “Param snapshot extraction” (validates param handoff into audio thread).
+- Commands:
+  - `cargo test -p <framework-crate>`
+  - `cargo check -p <plugin-crate>`
+- Verification:
+  - Plugins compile unchanged; examples build.
+- Constraints:
+  - Keep CLAP-only; do not expand to VST3.
+- Non-goals:
+  - Not building a full UI theme system.
+- Expected Artifacts:
+  - `framework::params`, `framework::gui`, `framework::snapshot`, `framework::clap` modules with docs and tests.
+- Acceptance Checklist:
+  - Helpers reduce duplication in at least one plugin or template.
+  - Public APIs documented.
+  - Tests cover non-trivial logic.
+- Failure Modes:
+  - Excessive abstraction that makes plugin code harder to read.
+- Update Docs:
+  - Update framework API docs and examples.
