@@ -166,3 +166,384 @@
   - Bundle guidance drifts from the actual Lilt layout.
 - Update Docs:
   - Update `docs/RFC.md` and framework docs.
+
+## Phase 4 - GUI Controls and Widgets
+- [ ] 4.1 Extract common egui controls/widgets from existing plugins
+- Phase: 4 - GUI Controls and Widgets
+- Plan Context:
+  - Goals: Provide reusable GUI widgets and visualization helpers across plugins.
+  - Decisions: Keep widgets small, composable, and aligned with existing egui/baseview usage.
+- Phase Constraints:
+  - Preserve existing GUI behavior; no forced style/theme.
+- Scope: Knobs, sliders, toggles, XY pad, meters, spectrum/curve display, envelopes, and text/value display helpers.
+- Files: new framework GUI modules (planned), `test-plugins/*/gui.rs` (reference sources).
+- Entry Points: existing egui widget helpers in plugin GUIs.
+- Example (primary): “Knob + value display” (validates control + text formatting).
+- Example (required): “Spectrum/curve widget” (validates visualization).
+- Commands:
+  - `cargo test -p <framework-crate>`
+- Verification:
+  - Widgets render in at least one example plugin or template.
+- Constraints:
+  - No hard dependency on a theme system.
+- Non-goals:
+  - No full UI layout system.
+- Expected Artifacts:
+  - `framework::gui::controls` and `framework::gui::widgets` modules with docs and tests.
+- Acceptance Checklist:
+  - Each widget has docs + minimal usage example.
+  - At least one plugin/template adopts the widgets without regressions.
+  - No GUI-thread allocations in hot loops beyond egui defaults.
+- Failure Modes:
+  - Widgets are too opinionated and hard to compose.
+- Update Docs:
+  - Update `docs/RFC.md` and framework GUI docs.
+
+## Phase 5 - DSP Extraction (Common Elements)
+- [ ] 5.1 Extract common DSP blocks across plugins
+- Phase: 5 - DSP Extraction
+- Plan Context:
+  - Goals: Provide reusable DSP blocks covering filters, delays, modulation, and spectral tools.
+  - Decisions: Extract only patterns already used in multiple plugins.
+- Phase Constraints:
+  - Preserve realtime safety; no allocations in audio callbacks.
+- Scope: Filters/biquads, delay/comb, LFOs, envelopes, modulation matrix helpers, oversampling/resampling, FFT/STFT helpers, and spectral windows.
+- Files: new `framework::dsp` modules (planned), `test-plugins/*/dsp.rs` (reference sources).
+- Entry Points: DSP helpers and per-plugin DSP utilities currently duplicated.
+- Example (primary): “LFO + envelope” (validates modulation building blocks).
+- Example (required): “FFT/STFT windowing helper” (validates spectral utilities).
+- Commands:
+  - `cargo test -p <framework-crate>`
+- Verification:
+  - Unit tests and example usages pass.
+- Constraints:
+  - Keep API minimal and composable.
+- Non-goals:
+  - No full DSP engine abstractions.
+- Expected Artifacts:
+  - `framework::dsp` modules for common blocks with docs and tests.
+- Acceptance Checklist:
+  - Each block has tests and docs.
+  - At least one plugin/template adopts each block.
+  - No realtime regressions.
+- Failure Modes:
+  - Extraction boundaries are too broad or too narrow.
+- Update Docs:
+  - Update `docs/RFC.md` and framework DSP docs.
+
+## Phase 6 - CLAP Prelude + Descriptor + Factories
+- [ ] 6.1 Add a full CLAP prelude re-export for plugin authors
+- Phase: 6 - CLAP Prelude + Descriptor + Factories
+- Plan Context:
+  - Goals: Provide a stable toybox prelude so downstream crates avoid direct clack dependency.
+  - Decisions: Re-export only stable clack types used by plugins.
+- Phase Constraints:
+  - No behavioral changes to existing plugins.
+- Scope: `toybox::clap::prelude` module exporting core clack types (plugin/process/events/extensions/utils),
+  plus documentation showing the intended import path.
+- Files: `src/clap/prelude.rs`, `src/clap/mod.rs`, `docs/RFC.md`.
+- Entry Points: `use toybox::clap::prelude::*`.
+- Example (primary): “Plugin uses only toybox prelude imports.”
+- Commands:
+  - `cargo test -p toybox`
+- Verification:
+  - Example plugin compiles using only toybox imports.
+- Constraints:
+  - Keep the re-export surface minimal and version-pinned.
+- Non-goals:
+  - No new clack feature additions.
+- Expected Artifacts:
+  - `toybox::clap::prelude` module with docs.
+- Acceptance Checklist:
+  - Prelude covers all clack types used by existing plugins/templates.
+  - Docs describe intended usage.
+- Failure Modes:
+  - Prelude misses a commonly used type.
+- Update Docs:
+  - Update `docs/RFC.md` and module docs.
+
+- [ ] 6.2 Provide PluginDescriptor builder wrapper + canonical feature constants
+- Phase: 6 - CLAP Prelude + Descriptor + Factories
+- Plan Context:
+  - Goals: Make descriptor creation concise, consistent, and feature-complete.
+  - Decisions: Wrap clack descriptor with a toybox builder and curated feature constants.
+- Phase Constraints:
+  - Maintain backward compatibility for existing descriptors.
+- Scope: `DescriptorBuilder` with vendor/version/features helpers, plus `feature::` constants for CLAP.
+- Files: `src/clap/descriptor.rs`, `src/clap/mod.rs`.
+- Entry Points: `DescriptorBuilder::new().with_feature(...)`.
+- Example (primary): “Descriptor builder with vendor/version/features.”
+- Commands:
+  - `cargo test -p toybox`
+- Verification:
+  - Builder produces expected CLAP descriptor values.
+- Constraints:
+  - Keep builder fluent and minimal.
+- Non-goals:
+  - No host-side feature inference.
+- Expected Artifacts:
+  - Descriptor builder and canonical feature constants.
+- Acceptance Checklist:
+  - Builder covers name, id, vendor, version, and features.
+  - Feature constants match CLAP spec.
+- Failure Modes:
+  - Feature constants drift from spec.
+- Update Docs:
+  - Update `docs/RFC.md` and API docs.
+
+- [ ] 6.3 Add multi-plugin factory helpers
+- Phase: 6 - CLAP Prelude + Descriptor + Factories
+- Plan Context:
+  - Goals: Support exporting multiple plugins with minimal boilerplate.
+  - Decisions: Provide helpers that wrap clack factory registration.
+- Phase Constraints:
+  - No breaking changes to single-plugin export macro.
+- Scope: helper functions/macros for multi-plugin factories and entries.
+- Files: `src/clap/registration.rs`, `src/clap/factory.rs`, `docs/RFC.md`.
+- Entry Points: `toybox::clap_plugin_factory!` (name TBD).
+- Example (primary): “Two plugins exported from one crate.”
+- Commands:
+  - `cargo test -p toybox`
+- Verification:
+  - Example builds and exposes multiple plugin descriptors.
+- Constraints:
+  - Keep macro surface small and stable.
+- Non-goals:
+  - No dynamic plugin discovery.
+- Expected Artifacts:
+  - Factory helper module + macro.
+- Acceptance Checklist:
+  - Multi-plugin export path documented and tested.
+- Failure Modes:
+  - Macro complexity obscures clack errors.
+- Update Docs:
+  - Update `docs/RFC.md` and examples.
+
+## Phase 7 - Parameters + State + Presets
+- [ ] 7.1 Add parameter storage primitives and smoothing wrappers
+- Phase: 7 - Parameters + State + Presets
+- Plan Context:
+  - Goals: Provide reusable atomic parameter storage and smoothing.
+  - Decisions: Favor lock-free atomics and small wrappers.
+- Phase Constraints:
+  - No allocations on audio thread.
+- Scope: atomic float/int/bool, param smoothing wrappers.
+- Files: `src/params/storage.rs`, `src/params/smoothing.rs`.
+- Entry Points: param state structs used by plugins.
+- Example (primary): “Atomic float with smoothing in process loop.”
+- Commands:
+  - `cargo test -p toybox`
+- Verification:
+  - Unit tests cover atomic read/write and smoothing steps.
+- Constraints:
+  - Avoid external deps beyond std.
+- Non-goals:
+  - No global param registry yet.
+- Expected Artifacts:
+  - `toybox::params` module with storage + smoothing.
+- Acceptance Checklist:
+  - Atomic helpers documented and tested.
+- Failure Modes:
+  - Non-atomic access in shared state.
+- Update Docs:
+  - Update `docs/RFC.md` and params docs.
+
+- [ ] 7.2 Add param registry/builder with CLAP ParamInfo + value/text mapping
+- Phase: 7 - Parameters + State + Presets
+- Plan Context:
+  - Goals: Generate CLAP param metadata and conversions from a registry.
+  - Decisions: Builder pattern with explicit ranges and formatting hooks.
+- Phase Constraints:
+  - Keep per-parameter conversions deterministic.
+- Scope: `ParamRegistry` + `ParamBuilder` generating CLAP `ParamInfo`, value<->text hooks,
+  normalized/plain mapping helpers.
+- Files: `src/params/registry.rs`, `src/clap/params.rs`.
+- Entry Points: `ParamRegistry::new().param(...).build()`.
+- Example (primary): “Registry defines params, emits CLAP ParamInfo.”
+- Commands:
+  - `cargo test -p toybox`
+- Verification:
+  - Tests for conversion correctness and info generation.
+- Constraints:
+  - Avoid heap allocation in per-sample paths.
+- Non-goals:
+  - No GUI binding system.
+- Expected Artifacts:
+  - Registry + mapping helpers with docs.
+- Acceptance Checklist:
+  - Covers normalized/plain/value/text conversions.
+  - ParamInfo fields validated.
+- Failure Modes:
+  - Inconsistent normalization across helpers.
+- Update Docs:
+  - Update `docs/RFC.md` and param docs.
+
+- [ ] 7.3 Add state serialization helpers for CLAP state extension
+- Phase: 7 - Parameters + State + Presets
+- Plan Context:
+  - Goals: Make state save/load consistent and easy.
+  - Decisions: Provide helper traits for read/write.
+- Phase Constraints:
+  - Explicit error handling.
+- Scope: state serializer/deserializer helpers for CLAP state extension.
+- Files: `src/clap/state.rs`, `src/state/mod.rs`.
+- Entry Points: `StateWriter`, `StateReader`.
+- Example (primary): “Serialize params + custom state.”
+- Commands:
+  - `cargo test -p toybox`
+- Verification:
+  - Round-trip tests for state.
+- Constraints:
+  - Avoid panics on malformed data.
+- Non-goals:
+  - No file I/O helpers.
+- Expected Artifacts:
+  - State helpers with docs.
+- Acceptance Checklist:
+  - Save/load tested and documented.
+- Failure Modes:
+  - Incomplete state capture.
+- Update Docs:
+  - Update `docs/RFC.md` and state docs.
+
+- [ ] 7.4 Add preset discovery helpers for CLAP preset discovery extension
+- Phase: 7 - Parameters + State + Presets
+- Plan Context:
+  - Goals: Provide helpers to expose preset discovery metadata.
+  - Decisions: Wrap clack preset discovery types.
+- Phase Constraints:
+  - No dynamic filesystem discovery in v1.
+- Scope: helper structs/functions to declare preset metadata.
+- Files: `src/clap/preset.rs`.
+- Entry Points: `PresetCatalogBuilder`.
+- Example (primary): “Expose a small in-memory preset catalog.”
+- Commands:
+  - `cargo test -p toybox`
+- Verification:
+  - Preset metadata compiles and exports.
+- Constraints:
+  - Keep API minimal.
+- Non-goals:
+  - No host-specific preset formats.
+- Expected Artifacts:
+  - Preset discovery helpers with docs.
+- Acceptance Checklist:
+  - Helpers cover name/vendor/category.
+- Failure Modes:
+  - Incorrect metadata mapping.
+- Update Docs:
+  - Update `docs/RFC.md` and preset docs.
+
+## Phase 8 - Audio/MIDI/Event Helpers
+- [ ] 8.1 Add higher-level process wrappers for event batching and automation
+- Phase: 8 - Audio/MIDI/Event Helpers
+- Plan Context:
+  - Goals: Provide consistent event handling patterns and automation application.
+  - Decisions: Wrap existing event routing with richer helpers.
+- Phase Constraints:
+  - Keep realtime safe; no allocations per callback.
+- Scope: event batching + time ranges, MIDI/note routing helpers, automation application utilities.
+- Files: `src/clap/events.rs`, `src/clap/process.rs`.
+- Entry Points: `ProcessContext` helpers for event iteration.
+- Example (primary): “Process loop with event batching and automation.”
+- Commands:
+  - `cargo test -p toybox`
+- Verification:
+  - Unit tests cover event grouping and automation behavior.
+- Constraints:
+  - Keep API explicit, avoid hidden state.
+- Non-goals:
+  - No MIDI file parsing.
+- Expected Artifacts:
+  - Event/process helpers with docs.
+- Acceptance Checklist:
+  - Covers note events and parameter automation.
+- Failure Modes:
+  - Events applied out of time order.
+- Update Docs:
+  - Update `docs/RFC.md` and process docs.
+
+- [ ] 8.2 Add port-safe audio processing utilities
+- Phase: 8 - Audio/MIDI/Event Helpers
+- Plan Context:
+  - Goals: Provide safe helpers for in-place vs IO buffer handling.
+  - Decisions: Provide minimal buffer adapters and guards.
+- Phase Constraints:
+  - No per-sample allocations.
+- Scope: in-place vs input/output helpers, mono/stereo adapters, buffer length guards.
+- Files: `src/clap/process.rs`, `src/audio/buffers.rs`.
+- Entry Points: `ProcessBuffer` helpers.
+- Example (primary): “Mono-in/stereo-out buffer adapter.”
+- Commands:
+  - `cargo test -p toybox`
+- Verification:
+  - Helper tests cover edge cases (zero/short buffers).
+- Constraints:
+  - Keep helpers opt-in.
+- Non-goals:
+  - No channel mixer abstractions.
+- Expected Artifacts:
+  - Buffer helpers with docs.
+- Acceptance Checklist:
+  - Guards prevent out-of-bounds processing.
+- Failure Modes:
+  - Incorrect buffer mapping.
+- Update Docs:
+  - Update `docs/RFC.md` and buffer docs.
+
+## Phase 9 - Ports & IO Extensions
+- [ ] 9.1 Add audio ports extension wrappers
+- Phase: 9 - Ports & IO Extensions
+- Plan Context:
+  - Goals: Provide helpers for stereo/mono port declarations.
+  - Decisions: Wrap clack audio ports extension types.
+- Phase Constraints:
+  - Preserve CLAP compatibility.
+- Scope: stereo/mono setup helpers, port config presets.
+- Files: `src/clap/ports/audio.rs`.
+- Entry Points: `AudioPortsBuilder`.
+- Example (primary): “Stereo in/out port config preset.”
+- Commands:
+  - `cargo test -p toybox`
+- Verification:
+  - Port descriptors match expected counts and flags.
+- Constraints:
+  - Keep API small.
+- Non-goals:
+  - No dynamic port mutation.
+- Expected Artifacts:
+  - Audio port helpers with docs.
+- Acceptance Checklist:
+  - Presets cover common port layouts.
+- Failure Modes:
+  - Incorrect channel counts.
+- Update Docs:
+  - Update `docs/RFC.md` and ports docs.
+
+- [ ] 9.2 Add note ports extension wrappers
+- Phase: 9 - Ports & IO Extensions
+- Plan Context:
+  - Goals: Provide helpers for MIDI/note port declarations.
+  - Decisions: Wrap clack note ports extension types.
+- Phase Constraints:
+  - Keep configuration explicit.
+- Scope: MIDI in/out configuration helpers.
+- Files: `src/clap/ports/note.rs`.
+- Entry Points: `NotePortsBuilder`.
+- Example (primary): “MIDI in/out port setup.”
+- Commands:
+  - `cargo test -p toybox`
+- Verification:
+  - Port descriptors match expected flags.
+- Constraints:
+  - No auto-detection.
+- Non-goals:
+  - No MIDI message parsing.
+- Expected Artifacts:
+  - Note port helpers with docs.
+- Acceptance Checklist:
+  - Helpers cover common MIDI configs.
+- Failure Modes:
+  - Incorrect flag wiring.
+- Update Docs:
+  - Update `docs/RFC.md` and ports docs.
