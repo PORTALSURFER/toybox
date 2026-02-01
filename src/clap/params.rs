@@ -4,10 +4,14 @@ use std::ffi::CStr;
 use std::fmt::Write;
 
 use clack_extensions::params::{ParamDisplayWriter, ParamInfo, ParamInfoFlags, ParamInfoWriter};
+use clack_plugin::events::event_types::{
+    ParamGestureBeginEvent, ParamGestureEndEvent, ParamModEvent, ParamValueEvent,
+};
+use clack_plugin::events::io::{InputEvents, OutputEvents, TryPushError};
 use clack_plugin::events::spaces::CoreEventSpace;
+use clack_plugin::events::Pckn;
 use clack_plugin::prelude::UnknownEvent;
-use clack_plugin::utils::ClapId;
-use clack_plugin::events::io::InputEvents;
+use clack_plugin::utils::{ClapId, Cookie};
 
 /// Describes a CLAP parameter's metadata for registration with the host.
 pub struct ParamSpec<'a> {
@@ -104,5 +108,109 @@ pub fn parse_toggle_text(text: &CStr, on_label: &str, off_label: &str) -> Option
         Some(0.0)
     } else {
         None
+    }
+}
+
+/// Push a CLAP parameter value event into an output event list.
+pub fn push_param_value(
+    output: &mut OutputEvents<'_>,
+    time: u32,
+    param_id: ClapId,
+    value: f64,
+    pckn: Pckn,
+    cookie: Cookie,
+) -> Result<(), TryPushError> {
+    output.try_push(ParamValueEvent::new(time, param_id, pckn, value, cookie))
+}
+
+/// Push a CLAP parameter modulation event into an output event list.
+pub fn push_param_mod(
+    output: &mut OutputEvents<'_>,
+    time: u32,
+    param_id: ClapId,
+    amount: f64,
+    pckn: Pckn,
+    cookie: Cookie,
+) -> Result<(), TryPushError> {
+    output.try_push(ParamModEvent::new(time, param_id, pckn, amount, cookie))
+}
+
+/// Push a CLAP parameter gesture begin event into an output event list.
+pub fn push_param_gesture_begin(
+    output: &mut OutputEvents<'_>,
+    time: u32,
+    param_id: ClapId,
+) -> Result<(), TryPushError> {
+    output.try_push(ParamGestureBeginEvent::new(time, param_id))
+}
+
+/// Push a CLAP parameter gesture end event into an output event list.
+pub fn push_param_gesture_end(
+    output: &mut OutputEvents<'_>,
+    time: u32,
+    param_id: ClapId,
+) -> Result<(), TryPushError> {
+    output.try_push(ParamGestureEndEvent::new(time, param_id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        push_param_gesture_begin, push_param_gesture_end, push_param_mod, push_param_value,
+    };
+
+    use clack_plugin::events::io::EventBuffer;
+    use clack_plugin::events::spaces::CoreEventSpace;
+    use clack_plugin::events::Pckn;
+    use clack_plugin::utils::{ClapId, Cookie};
+
+    #[test]
+    fn push_param_events_writes_output_buffer() {
+        let param_id = ClapId::new(5);
+        let mut buffer = EventBuffer::new();
+        let mut output = buffer.as_output();
+
+        push_param_gesture_begin(&mut output, 0, param_id).unwrap();
+        push_param_value(
+            &mut output,
+            0,
+            param_id,
+            0.75,
+            Pckn::match_all(),
+            Cookie::empty(),
+        )
+        .unwrap();
+        push_param_mod(
+            &mut output,
+            0,
+            param_id,
+            0.25,
+            Pckn::match_all(),
+            Cookie::empty(),
+        )
+        .unwrap();
+        push_param_gesture_end(&mut output, 0, param_id).unwrap();
+
+        assert_eq!(buffer.len(), 4);
+        let mut saw_value = false;
+        let mut saw_mod = false;
+
+        for index in 0..buffer.len() {
+            let event = buffer.get(index as u32).unwrap();
+            if let Some(core) = event.as_core_event() {
+                match core {
+                    CoreEventSpace::ParamValue(value) => {
+                        saw_value = value.param_id() == Some(param_id);
+                    }
+                    CoreEventSpace::ParamMod(mod_event) => {
+                        saw_mod = mod_event.param_id() == Some(param_id);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        assert!(saw_value);
+        assert!(saw_mod);
     }
 }
