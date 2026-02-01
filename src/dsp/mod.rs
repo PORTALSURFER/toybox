@@ -8,6 +8,7 @@ pub mod delay;
 pub mod filters;
 pub mod eq;
 pub mod level;
+pub mod motion;
 pub mod smoothing;
 pub mod time;
 pub mod window;
