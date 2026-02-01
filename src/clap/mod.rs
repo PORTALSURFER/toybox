@@ -9,3 +9,5 @@ pub mod events;
 pub mod params;
 pub mod process;
 pub mod registration;
+#[cfg(feature = "gui")]
+pub mod gui;
