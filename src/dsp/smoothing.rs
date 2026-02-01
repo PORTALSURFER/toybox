@@ -17,6 +17,15 @@ pub fn exp_smoothing_coeff(sample_rate: f32, time_sec: f32) -> f32 {
     (-1.0 / (sample_rate.max(1.0) * time_sec)).exp()
 }
 
+/// Compute the exponential smoothing coefficient for an `n`-sample step.
+///
+/// This is useful when applying smoothing at control-rate intervals instead
+/// of per-sample updates.
+pub fn exp_smoothing_coeff_steps(sample_rate: f32, time_sec: f32, steps: usize) -> f32 {
+    let steps = steps.max(1);
+    exp_smoothing_coeff(sample_rate, time_sec).powi(steps as i32)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -33,5 +42,12 @@ mod tests {
     fn exp_smoothing_coeff_is_between_zero_and_one() {
         let coeff = exp_smoothing_coeff(48_000.0, 0.01);
         assert!(coeff > 0.0 && coeff < 1.0);
+    }
+
+    #[test]
+    fn exp_smoothing_coeff_steps_respects_steps() {
+        let per_sample = exp_smoothing_coeff(48_000.0, 0.01);
+        let stepped = exp_smoothing_coeff_steps(48_000.0, 0.01, 4);
+        assert!(stepped < per_sample);
     }
 }
