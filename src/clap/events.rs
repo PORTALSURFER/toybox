@@ -2,7 +2,9 @@
 
 use std::ops::Bound;
 
-use clack_plugin::events::io::{EventBatch, EventBatcher, InputEvents};
+use clack_plugin::events::io::{EventBatch, EventBatcher, InputEvents, InputEventsIter};
+use clack_plugin::events::spaces::CoreEventSpace;
+use clack_plugin::events::UnknownEvent;
 
 /// Provides CLAP input event batching and common range conversions.
 pub struct EventRouter<'a> {
@@ -18,6 +20,33 @@ impl<'a> EventRouter<'a> {
     /// Returns an iterator that batches input events by sample time.
     pub fn batches(&self) -> EventBatcher<'a> {
         self.input.batch()
+    }
+
+    /// Returns an iterator over all incoming events.
+    pub fn events(&self) -> InputEventsIter<'a> {
+        self.input.iter()
+    }
+
+    /// Invoke a callback for every event, regardless of event space.
+    pub fn for_each_event<F>(&self, mut f: F)
+    where
+        F: FnMut(&'a UnknownEvent),
+    {
+        for event in self.input.iter() {
+            f(event);
+        }
+    }
+
+    /// Invoke a callback for every core CLAP event.
+    pub fn for_each_core_event<F>(&self, mut f: F)
+    where
+        F: FnMut(CoreEventSpace<'a>),
+    {
+        for event in self.input.iter() {
+            if let Some(core) = event.as_core_event() {
+                f(core);
+            }
+        }
     }
 
     /// Iterate all event batches and invoke the callback with a concrete sample range.
@@ -70,8 +99,14 @@ pub fn bounds_to_range(
 
 #[cfg(test)]
 mod tests {
-    use super::bounds_to_range;
+    use super::{bounds_to_range, EventRouter};
     use std::ops::Bound;
+
+    use clack_plugin::events::event_types::ParamValueEvent;
+    use clack_plugin::events::io::InputEvents;
+    use clack_plugin::events::spaces::CoreEventSpace;
+    use clack_plugin::events::Pckn;
+    use clack_plugin::utils::{ClapId, Cookie};
 
     #[test]
     fn bounds_to_range_handles_empty_buffer() {
@@ -104,5 +139,23 @@ mod tests {
             None,
             bounds_to_range((Bound::Included(3), Bound::Included(2)), 4)
         );
+    }
+
+    #[test]
+    fn event_router_yields_core_events() {
+        let param_id = ClapId::new(7);
+        let event = ParamValueEvent::new(0, param_id, Pckn::match_all(), 0.25, Cookie::empty());
+        let buffer = [event];
+        let input = InputEvents::from_buffer(&buffer);
+        let router = EventRouter::new(&input);
+        let mut saw_param = false;
+
+        router.for_each_core_event(|core| {
+            if let CoreEventSpace::ParamValue(param) = core {
+                saw_param = param.param_id() == Some(param_id);
+            }
+        });
+
+        assert!(saw_param);
     }
 }
