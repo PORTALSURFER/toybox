@@ -1,0 +1,13 @@
+[package]
+name = "toybox-minimal-clap"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+clack-plugin = { git = "https://github.com/prokopyl/clack.git", package = "clack-plugin" }
+clack-extensions = { git = "https://github.com/prokopyl/clack.git", package = "clack-extensions", features = ["audio-ports", "params"] }
+toybox = { path = "../.." }

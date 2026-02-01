@@ -13,3 +13,6 @@ raw-window-handle = { version = "0.5.2", optional = true }
 [features]
 default = []
 gui = ["dep:baseview", "dep:egui-baseview", "dep:raw-window-handle"]
+
+[workspace]
+members = ["examples/minimal-clap"]
