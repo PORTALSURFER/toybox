@@ -5,3 +5,4 @@
 //! focuses on small, composable helpers that preserve realtime safety.
 
 pub mod dsp;
+pub mod clap;

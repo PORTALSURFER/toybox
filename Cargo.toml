@@ -4,3 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+clack-plugin = { git = "https://github.com/prokopyl/clack.git", package = "clack-plugin" }
+clack-extensions = { git = "https://github.com/prokopyl/clack.git", package = "clack-extensions", features = ["params", "clack-plugin"] }

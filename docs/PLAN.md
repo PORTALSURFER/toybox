@@ -37,6 +37,38 @@
 - Update Docs:
   - Update `docs/RFC.md` and `docs/PLAN.md` (this step).
 
+- [ ] 0.2 Audit Lilt CLAP wiring and bundle layout
+- Phase: 0 - Audit and Inventory
+- Plan Context:
+  - Goals: Capture the Lilt reference patterns for CLAP entry/descriptor/factory, params, events, and packaging.
+  - Decisions: Use Lilt as baseline for minimal CLAP boilerplate.
+- Phase Constraints:
+  - Planning-only for this step; no code changes.
+- Scope: Review Lilt `build.rs`, CLAP entry export, param/value text mapping, and event batching flow.
+- Files: `/tmp/lilt/build.rs`, `/tmp/lilt/src/lib.rs`, `/tmp/lilt/src/params.rs`
+- Entry Points: `clack_export_entry!`, `PluginParams` impl, `process` event loop.
+- Example (primary): “CLAP entry + param mapping in Lilt” (validates minimal boilerplate path).
+- Example (required): “Windows `.clap` bundle layout” (validates packaging expectations).
+- Commands:
+  - not applicable
+- Verification:
+  - Notes capture entry/params/events/bundle patterns with source references.
+- Constraints:
+  - Planning-only.
+- Non-goals:
+  - No code extraction yet.
+- Expected Artifacts:
+  - Lilt-derived notes captured in RFC/plan updates.
+- Acceptance Checklist:
+  - CLAP entry/export pattern captured.
+  - Param metadata/value↔text mapping pattern captured.
+  - Event batching flow captured.
+  - Windows bundle layout captured.
+- Failure Modes:
+  - Missing a key Lilt pattern that affects framework API shape.
+- Update Docs:
+  - Update `docs/RFC.md` and `docs/PLAN.md` (this step).
+
 ## Phase 1 - Framework Foundation (DSP + Snapshot)
 - [ ] 1.1 Extract DSP primitives used across plugins
 - Phase: 1 - Framework Foundation
@@ -69,19 +101,20 @@
 - Update Docs:
   - Update framework module docs and RFC decisions.
 
-## Phase 2 - Framework Glue (Params + GUI + CLAP helpers)
-- [ ] 2.1 Standardize params, state, and GUI scaffolding
+## Phase 2 - Framework Glue (CLAP Core + Params + Events + GUI)
+- [ ] 2.1 Standardize CLAP entry/params/events and GUI scaffolding
 - Phase: 2 - Framework Glue
 - Plan Context:
   - Goals: Provide reusable param/state handling and GUI window helpers.
   - Decisions: Thin wrappers; retain direct egui usage.
 - Phase Constraints:
   - Avoid breaking existing plugin UIs.
-- Scope: Param snapshot pattern, state serialization helpers, snapshot buffer utilities, baseview/egui window wrapper, standard control helpers (knobs/sliders), and CLAP process helpers (sample bounds, buffer routing).
-- Files: new framework crate (planned), `test-plugins/lilt-clap/src/params.rs`, `test-plugins/lilt-clap/src/gui.rs`, `test-plugins/cellweave-clap/src/snapshot.rs`, `test-plugins/rd-field-filter-clap/src/snapshot.rs`.
-- Entry Points: param modules and GUI wrappers in existing plugins.
-- Example (primary): “GUI snapshot reader” (validates GUI update path).
-- Example (required): “Param snapshot extraction” (validates param handoff into audio thread).
+- Scope: CLAP entry/descriptor/factory/ABI glue, param metadata + value↔text conversion + automation handling, full CLAP event processing helpers (process context, input/output events, full CLAP event set), baseview/egui window wrapper, standard control helpers (knobs/sliders), and CLAP process helpers (sample bounds, buffer routing).
+- Files: new framework crate (planned), `test-plugins/lilt-clap/src/lib.rs`, `test-plugins/lilt-clap/src/params.rs`, `test-plugins/lilt-clap/src/gui.rs`, `test-plugins/cellweave-clap/src/snapshot.rs`, `test-plugins/rd-field-filter-clap/src/snapshot.rs`.
+- Entry Points: CLAP entry export, param modules, process loop/event batching, and GUI wrappers in existing plugins.
+- Example (primary): “CLAP entry + param mapping” (validates minimal boilerplate path).
+- Example (required): “GUI snapshot reader” (validates GUI update path).
+- Example (required): “CLAP event handling coverage” (validates full CLAP event set support).
 - Commands:
   - `cargo test -p <framework-crate>`
   - `cargo check -p <plugin-crate>`
@@ -92,12 +125,44 @@
 - Non-goals:
   - Not building a full UI theme system.
 - Expected Artifacts:
-  - `framework::params`, `framework::gui`, `framework::snapshot`, `framework::clap` modules with docs and tests.
+- `framework::entry`, `framework::params`, `framework::events`, `framework::gui`, `framework::snapshot`, `framework::clap`, `framework::registration` modules with docs and tests.
 - Acceptance Checklist:
   - Helpers reduce duplication in at least one plugin or template.
   - Public APIs documented.
   - Tests cover non-trivial logic.
 - Failure Modes:
-  - Excessive abstraction that makes plugin code harder to read.
+- Excessive abstraction that makes plugin code harder to read.
 - Update Docs:
   - Update framework API docs and examples.
+
+## Phase 3 - Packaging Helpers (Windows `.clap`)
+- [ ] 3.1 Add Windows `.clap` bundle guidance and scripts
+- Phase: 3 - Packaging Helpers
+- Plan Context:
+  - Goals: Ensure a Lilt-style effect can emit a Windows `.clap` bundle with minimal boilerplate.
+  - Decisions: Follow Lilt’s build output pattern as the baseline.
+- Phase Constraints:
+  - Keep packaging helpers optional and non-invasive.
+- Scope: Provide bundle layout docs, Windows output naming conventions, and optional `xtask`/script templates.
+- Files: new framework crate docs (planned), `docs/PLAN.md`, `docs/RFC.md`, optional `xtask/` or `scripts/`.
+- Entry Points: packaging guidance docs and optional template build files.
+- Example (primary): “Windows bundle layout” (validates naming + output location).
+- Example (required): “Build helper invocation” (validates the helper script or documented steps).
+- Commands:
+  - `cargo run -p xtask -- bundle` (if xtask is introduced)
+- Verification:
+  - Bundle layout matches documented Windows expectations.
+- Constraints:
+  - Windows-only in v1; other platforms deferred.
+- Non-goals:
+  - Do not introduce platform-specific GUI packaging.
+- Expected Artifacts:
+  - `framework::bundle` docs and helper templates.
+- Acceptance Checklist:
+  - Windows bundle layout documented and aligned with Lilt reference.
+  - Helper scripts (if any) are optional and documented.
+  - Lilt-style effect can ship a `.clap` bundle without custom build glue.
+- Failure Modes:
+  - Bundle guidance drifts from the actual Lilt layout.
+- Update Docs:
+  - Update `docs/RFC.md` and framework docs.

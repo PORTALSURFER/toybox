@@ -2,6 +2,7 @@
 
 ## Summary
 - Build an internal CLAP plugin framework library that extracts reusable DSP, GUI, parameter/state, and host-integration patterns from existing test plugins to speed up new plugin creation.
+- Include CLAP entry/descriptor/factory/ABI glue, parameter metadata + value/text + automation plumbing, event handling helpers, registration macros, and Windows-focused `.clap` bundle packaging guidance.
 - The framework targets the current in-repo plugin style (clack + egui_baseview) and focuses on reusable building blocks, not a full product SDK.
 
 ## Goals
@@ -9,6 +10,7 @@
 - Provide reusable GUI building blocks (baseview/egui window wrapper, common controls, visualization helpers, snapshot readers).
 - Standardize parameter/state plumbing (param definitions, snapshots, state serialization, event handling) across plugins.
 - Reduce time to create a new CLAP plugin by providing templates and example wiring.
+- Enable a Lilt-style effect to depend only on `toybox` for CLAP-specific wiring (entry points, params, events, packaging).
 
 ## Non-goals
 - VST3 support in the framework (CLAP only for v1).
@@ -19,6 +21,7 @@
 - New framework crate design and plan (planning-only here), with a clear module layout and responsibilities.
 - Inventory of reusable components from existing CLAP plugins: Lilt, Cellweave, RD Field Filter, Polyphonic Reverb.
 - Guidance for how new plugins should consume the framework (API shape, examples, conventions).
+- CLAP plugin framework coverage: entry points, descriptor/factory, ABI glue, params/state/value↔text/automation, event processing, registration macros, and Windows `.clap` bundle layout.
 
 ## Users and Stakeholders
 - Primary users: internal developers authoring new CLAP plugins in this repo.
@@ -39,8 +42,11 @@
 - CLAP remains the only target format for the framework in v1.
 - Egui + baseview remains the default UI stack.
 - Existing plugin behavior stays the reference for feature parity.
+- The Lilt CLAP plugin structure remains the baseline for minimal boilerplate expectations.
+- The framework should evolve to support VST in a future version without redesigning core abstractions.
 
 ## Dependencies
 - clack/clack_extensions and the existing CLAP integration patterns in this repo.
 - egui_baseview + baseview for GUI.
 - rustfft for spectral processing in plugins that need it.
+- Lilt CLAP reference implementation (used for entry/param/event/bundle patterns).
