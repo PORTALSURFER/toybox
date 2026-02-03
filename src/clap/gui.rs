@@ -8,6 +8,9 @@ use clack_plugin::plugin::PluginError;
 use egui_baseview::{egui::Context, EguiWindow, GraphicsConfig, Queue};
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 
+/// Re-export egui-baseview types for downstream GUI integrations.
+pub use egui_baseview::{egui, GraphicsConfig as EguiGraphicsConfig, Queue as EguiQueue};
+
 /// Packed size stored as (width << 32) | height.
 fn pack_size(width: u32, height: u32) -> u64 {
     ((width as u64) << 32) | (height as u64)
