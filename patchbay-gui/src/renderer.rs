@@ -49,7 +49,7 @@ impl Renderer {
     /// Create a new renderer for the given window.
     pub fn new(window: SurfaceWindow, size: Size) -> Result<Self, GuiError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::DX12,
+            backends: wgpu::Backends::VULKAN,
             ..Default::default()
         });
         let surface = unsafe { instance.create_surface(&window) }.map_err(GuiError::Surface)?;
