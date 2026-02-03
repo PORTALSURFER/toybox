@@ -6,4 +6,5 @@
 
 pub mod dsp;
 pub mod clap;
+#[cfg(feature = "gui")]
 pub mod gui;
