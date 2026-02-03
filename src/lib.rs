@@ -6,3 +6,4 @@
 
 pub mod dsp;
 pub mod clap;
+pub mod gui;
