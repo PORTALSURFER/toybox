@@ -54,6 +54,11 @@ impl<'a> Queue<'a> {
         *self.physical_size = physical_size;
     }
 
+    /// Return the current physical window size in pixels.
+    pub fn physical_size(&self) -> PhySize {
+        *self.physical_size
+    }
+
     /// Close the window.
     pub fn close_window(&mut self) {
         *self.close_requested = true;

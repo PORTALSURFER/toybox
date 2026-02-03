@@ -141,9 +141,9 @@ impl EguiHostWindow {
                     f32::from_bits(base)
                 };
 
-                let viewport_rect = ctx.input(|input| input.viewport_rect());
-                let scale_x = viewport_rect.width() / design_size.0.max(1.0);
-                let scale_y = viewport_rect.height() / design_size.1.max(1.0);
+                let physical = queue.physical_size();
+                let scale_x = physical.width as f32 / design_size.0.max(1.0);
+                let scale_y = physical.height as f32 / design_size.1.max(1.0);
                 let scale = scale_x.min(scale_y).max(0.1);
                 let target_ppp = base * scale;
                 if (ctx.pixels_per_point() - target_ppp).abs() > 0.001 {
