@@ -15,5 +15,7 @@ mod ui;
 mod win32;
 
 pub use crate::canvas::{Canvas, Color, Point, Rect, Size};
-pub use crate::host::{GuiError, HostWindow, InputState, WindowHandle};
+pub use crate::host::{GuiError, HostWindow, InputState};
+#[cfg(target_os = "windows")]
+pub use crate::win32::WindowHandle;
 pub use crate::ui::{KnobResponse, Layout, Theme, Ui, WidgetId};

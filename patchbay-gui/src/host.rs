@@ -6,6 +6,7 @@ use crate::win32::{spawn_window_thread, WindowHandle};
 use raw_window_handle::RawWindowHandle;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
+use windows::Win32::Foundation::{HINSTANCE, HWND};
 
 /// Input snapshot delivered to UI widgets for a single frame.
 #[derive(Clone, Copy, Debug, Default)]
@@ -117,6 +118,14 @@ impl HostWindow {
         State: Send + 'static,
     {
         let parent = self.parent.ok_or(GuiError::NoParent)?;
+        let (parent_hwnd, parent_hinstance) = match parent {
+            RawWindowHandle::Win32(handle) => {
+                let hwnd = HWND(handle.hwnd);
+                let hinstance = HINSTANCE(handle.hinstance);
+                (hwnd, hinstance)
+            }
+            _ => return Err(GuiError::UnsupportedHandle),
+        };
 
         let resize_request = self.resize_request.clone();
         let last_size = self.last_size.clone();
@@ -127,7 +136,8 @@ impl HostWindow {
         let ui_state = UiState::default();
 
         let handle = spawn_window_thread(
-            parent,
+            parent_hwnd,
+            parent_hinstance,
             title,
             Size {
                 width: size.0,

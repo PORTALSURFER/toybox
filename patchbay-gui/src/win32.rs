@@ -4,23 +4,29 @@ use crate::canvas::{Canvas, Point, Size};
 use crate::host::{GuiError, InputState};
 use crate::renderer::Renderer;
 use crate::ui::{Layout, Theme, Ui, UiState};
-use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle};
+use raw_window_handle_06::{
+    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
+    RawWindowHandle as RawWindowHandle06, Win32WindowHandle, WindowHandle as WindowHandle06,
+    WindowsDisplayHandle,
+};
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
+use std::ptr::NonNull;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc};
 use std::thread;
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, PAINTSTRUCT};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DispatchMessageW, GetClientRect, LoadCursorW,
-    PeekMessageW, PostQuitMessage, RegisterClassW, ReleaseCapture, SetCapture, SetTimer,
-    SetWindowLongPtrW, SetWindowPos, TranslateMessage, CS_HREDRAW, CS_VREDRAW,
-    CW_USEDEFAULT, GWLP_USERDATA, HMENU, MSG, PM_REMOVE, SWP_NOZORDER, WM_DESTROY,
-    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT,
-    WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPSIBLINGS, WS_CLIPCHILDREN, WS_VISIBLE,
+    PeekMessageW, PostQuitMessage, RegisterClassW, SetTimer, SetWindowLongPtrW, SetWindowPos,
+    TranslateMessage, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA, HMENU, MSG,
+    PM_REMOVE, SWP_NOZORDER, WM_DESTROY, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
+    WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD,
+    WS_CLIPSIBLINGS, WS_CLIPCHILDREN, WS_VISIBLE,
 };
 
 const TIMER_ID: usize = 1;
@@ -42,23 +48,29 @@ impl WindowHandle {
 /// A window type that exposes raw window handles for wgpu surfaces.
 pub struct SurfaceWindow {
     hwnd: HWND,
-    hinstance: windows::Win32::Foundation::HINSTANCE,
+    hinstance: HINSTANCE,
 }
 
-unsafe impl HasRawWindowHandle for SurfaceWindow {
-    fn raw_window_handle(&self) -> RawWindowHandle {
-        let mut handle = raw_window_handle::Win32Handle::empty();
-        handle.hwnd = self.hwnd.0 as *mut _;
-        handle.hinstance = self.hinstance.0 as *mut _;
-        RawWindowHandle::Win32(handle)
+unsafe impl HasWindowHandle for SurfaceWindow {
+    fn window_handle(&self) -> Result<WindowHandle06<'_>, HandleError> {
+        let hwnd = NonNull::new(self.hwnd.0).ok_or(HandleError::NullHandle)?;
+        let mut handle = Win32WindowHandle::new(hwnd);
+        if let Some(hinstance) = NonNull::new(self.hinstance.0) {
+            handle.hinstance = Some(hinstance);
+        }
+        Ok(unsafe { WindowHandle06::borrow_raw(RawWindowHandle06::Win32(handle)) })
     }
 }
 
-unsafe impl HasRawDisplayHandle for SurfaceWindow {
-    fn raw_display_handle(&self) -> RawDisplayHandle {
-        RawDisplayHandle::Windows(raw_window_handle::WindowsDisplayHandle::empty())
+unsafe impl HasDisplayHandle for SurfaceWindow {
+    fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
+        let display = WindowsDisplayHandle::new();
+        Ok(unsafe { DisplayHandle::borrow_raw(RawDisplayHandle::Windows(display)) })
     }
 }
+
+unsafe impl Send for SurfaceWindow {}
+unsafe impl Sync for SurfaceWindow {}
 
 struct WindowState<State, Init, Frame>
 where
@@ -107,7 +119,7 @@ where
                 unsafe { SetCapture(self.hwnd) };
                 true
             }
-           WM_LBUTTONUP => {
+            WM_LBUTTONUP => {
                 self.input.mouse_down = false;
                 self.input.mouse_released = true;
                 unsafe {
@@ -182,7 +194,7 @@ where
             unsafe {
                 SetWindowPos(
                     self.hwnd,
-                    HWND(0),
+                    HWND(std::ptr::null_mut()),
                     0,
                     0,
                     width as i32,
@@ -218,7 +230,8 @@ where
 
 /// Spawn a GUI thread that owns the Win32 window and render loop.
 pub fn spawn_window_thread<State, Init, Frame>(
-    parent: RawWindowHandle,
+    parent_hwnd: HWND,
+    _parent_hinstance: HINSTANCE,
     title: String,
     size: Size,
     state: State,
@@ -242,7 +255,7 @@ where
         .name("patchbay-gui".to_string())
         .spawn(move || {
             let result = run_window_loop(
-                parent,
+                parent_hwnd,
                 title,
                 size,
                 state,
@@ -264,7 +277,7 @@ where
 }
 
 fn run_window_loop<State, Init, Frame>(
-    parent: RawWindowHandle,
+    parent_hwnd: HWND,
     title: String,
     size: Size,
     mut state: State,
@@ -283,24 +296,19 @@ where
     Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
     State: Send + 'static,
 {
-    let (hwnd, hinstance) = match parent {
-        RawWindowHandle::Win32(handle) => {
-            let hwnd = HWND(handle.hwnd as isize);
-            let hinstance = windows::Win32::Foundation::HINSTANCE(handle.hinstance as isize);
-            (hwnd, hinstance)
-        }
-        _ => return Err(GuiError::UnsupportedHandle),
-    };
-
     let class_name = to_wide("PatchbayGuiWindow");
+    let hinstance = unsafe { GetModuleHandleW(PCWSTR::null()) }
+        .map_err(|_| GuiError::WindowCreateFailed)?;
+    let hinstance = HINSTANCE(hinstance.0);
+
     unsafe {
-        let hinstance = GetModuleHandleW(PCWSTR::null());
         let wnd_class = WNDCLASSW {
             style: CS_HREDRAW | CS_VREDRAW,
             lpfnWndProc: Some(window_proc::<State, Init, Frame>),
             hInstance: hinstance,
             lpszClassName: PCWSTR(class_name.as_ptr()),
-            hCursor: LoadCursorW(None, windows::Win32::UI::WindowsAndMessaging::IDC_ARROW).unwrap(),
+            hCursor: LoadCursorW(None, windows::Win32::UI::WindowsAndMessaging::IDC_ARROW)
+                .unwrap(),
             ..Default::default()
         };
         RegisterClassW(&wnd_class);
@@ -317,22 +325,19 @@ where
             CW_USEDEFAULT,
             size.width as i32,
             size.height as i32,
-            hwnd,
-            HMENU(0),
-            GetModuleHandleW(PCWSTR::null()),
-            std::ptr::null_mut(),
+            parent_hwnd,
+            HMENU(std::ptr::null_mut()),
+            hinstance,
+            None,
         )
-    };
-
-    if child_hwnd.0 == 0 {
-        return Err(GuiError::WindowCreateFailed);
     }
+    .map_err(|_| GuiError::WindowCreateFailed)?;
 
     let window = SurfaceWindow {
         hwnd: child_hwnd,
         hinstance,
     };
-    let renderer = Renderer::new(&window, size)?;
+    let renderer = Renderer::new(window, size)?;
     let canvas = Canvas::new(size.width, size.height);
 
     let mut window_state = Box::new(WindowState {
@@ -364,7 +369,7 @@ where
     let mut msg = MSG::default();
     loop {
         unsafe {
-            while PeekMessageW(&mut msg, HWND(0), 0, 0, PM_REMOVE).into() {
+            while PeekMessageW(&mut msg, HWND(std::ptr::null_mut()), 0, 0, PM_REMOVE).into() {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }

@@ -31,7 +31,9 @@ const VERTICES: [Vertex; 3] = [
 /// GPU renderer that uploads a CPU canvas into a surface texture.
 pub struct Renderer {
     instance: wgpu::Instance,
-    surface: wgpu::Surface,
+    #[allow(dead_code)]
+    window: SurfaceWindow,
+    surface: wgpu::Surface<'static>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
@@ -45,12 +47,13 @@ pub struct Renderer {
 
 impl Renderer {
     /// Create a new renderer for the given window.
-    pub fn new(window: &SurfaceWindow, size: Size) -> Result<Self, GuiError> {
+    pub fn new(window: SurfaceWindow, size: Size) -> Result<Self, GuiError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
             ..Default::default()
         });
-        let surface = unsafe { instance.create_surface(window) }.map_err(GuiError::Surface)?;
+        let surface = unsafe { instance.create_surface(&window) }.map_err(GuiError::Surface)?;
+        let surface = unsafe { std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(surface) };
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: Some(&surface),
@@ -182,6 +185,7 @@ impl Renderer {
 
         Ok(Self {
             instance,
+            window,
             surface,
             device,
             queue,
@@ -222,7 +226,46 @@ impl Renderer {
 
     /// Upload the latest canvas pixels to the GPU texture.
     pub fn upload(&self, size: Size, pixels: &[u8]) {
-        let bytes_per_row = 4 * size.width;
+        use std::num::NonZeroU32;
+
+        let bytes_per_pixel = 4u32;
+        let bytes_per_row = bytes_per_pixel * size.width;
+        let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u32;
+        let padded_bytes_per_row = ((bytes_per_row + alignment - 1) / alignment) * alignment;
+
+        if padded_bytes_per_row == bytes_per_row {
+            self.queue.write_texture(
+                wgpu::ImageCopyTexture {
+                    texture: &self.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                pixels,
+                wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: NonZeroU32::new(bytes_per_row),
+                    rows_per_image: NonZeroU32::new(size.height),
+                },
+                wgpu::Extent3d {
+                    width: size.width,
+                    height: size.height,
+                    depth_or_array_layers: 1,
+                },
+            );
+            return;
+        }
+
+        let mut padded = vec![0u8; (padded_bytes_per_row * size.height) as usize];
+        let src_row = bytes_per_row as usize;
+        let dst_row = padded_bytes_per_row as usize;
+        for row in 0..size.height as usize {
+            let src_offset = row * src_row;
+            let dst_offset = row * dst_row;
+            padded[dst_offset..dst_offset + src_row]
+                .copy_from_slice(&pixels[src_offset..src_offset + src_row]);
+        }
+
         self.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &self.texture,
@@ -230,11 +273,11 @@ impl Renderer {
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            pixels,
+            &padded,
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: Some(bytes_per_row),
-                rows_per_image: Some(size.height),
+                bytes_per_row: NonZeroU32::new(padded_bytes_per_row),
+                rows_per_image: NonZeroU32::new(size.height),
             },
             wgpu::Extent3d {
                 width: size.width,
@@ -269,6 +312,8 @@ impl Renderer {
                     },
                 })],
                 depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
             });
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &self.bind_group, &[]);
