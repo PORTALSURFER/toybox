@@ -2,7 +2,8 @@
 
 use std::ops::RangeInclusive;
 
-use egui::{Color32, Pos2, Rect, Response, Sense, Shape, Stroke, Vec2};
+use egui_baseview::egui;
+use egui_baseview::egui::{Color32, Pos2, Rect, Response, Sense, Shape, Stroke, Vec2};
 
 /// Shared configuration for knob rendering and interaction.
 #[derive(Debug, Clone)]
