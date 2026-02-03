@@ -6,7 +6,7 @@ description = "Minimal CLAP plugin GUI toolkit with a Vulkan-backed renderer"
 
 [dependencies]
 raw-window-handle = "0.5.2"
-wgpu = { version = "0.19", default-features = false, features = ["dx12", "vulkan", "wgsl"] }
+wgpu = { version = "0.19", default-features = false, features = ["dx12", "wgsl"] }
 pollster = "0.3"
 bytemuck = { version = "1.15", features = ["derive"] }
 thiserror = "1.0"
