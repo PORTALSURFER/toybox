@@ -306,7 +306,7 @@ fn draw_xy_pad(
 ) {
     let painter = ui.painter();
     painter.rect_filled(rect, 4.0, style.background);
-    painter.rect_stroke(rect, 4.0, style.outline);
+    painter.rect_stroke(rect, 4.0, style.outline, egui::StrokeKind::Inside);
 
     let t_x = normalize_value(x, x_min, x_max);
     let t_y = 1.0 - normalize_value(y, y_min, y_max);
