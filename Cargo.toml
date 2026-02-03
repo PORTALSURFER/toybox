@@ -8,13 +8,12 @@ clack-plugin = { git = "https://github.com/prokopyl/clack.git", package = "clack
 clack-extensions = { git = "https://github.com/prokopyl/clack.git", package = "clack-extensions", features = ["params", "clack-plugin", "audio-ports", "note-ports", "state", "gui", "raw-window-handle_05"] }
 clack-common = { git = "https://github.com/prokopyl/clack.git", package = "clack-common" }
 mts_esp = { git = "https://github.com/PORTALSURFER/mts-esp-rs", package = "mts-esp-rs" }
-baseview = { git = "https://github.com/RustAudio/baseview.git", rev = "237d323c729f3aa99476ba3efa50129c5e86cad3", version = "0.1.0", optional = true }
-egui-baseview = { path = "egui-baseview", version = "0.7.0", optional = true }
+patchbay-gui = { path = "patchbay-gui", version = "0.1.0", optional = true }
 raw-window-handle = { version = "0.5.2", optional = true }
 
 [features]
 default = []
-gui = ["dep:baseview", "dep:egui-baseview", "dep:raw-window-handle"]
+gui = ["dep:patchbay-gui", "dep:raw-window-handle"]
 
 [workspace]
-members = ["egui-baseview", "examples/minimal-clap"]
+members = ["patchbay-gui", "examples/minimal-clap"]

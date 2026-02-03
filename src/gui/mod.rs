@@ -1,5 +1,6 @@
-//! GUI helpers for egui-based plugin interfaces.
+//! Patchbay GUI re-exports for plugin UIs.
+//!
+//! The module mirrors the Patchbay GUI API so downstream plugins can depend on
+//! `toybox` and keep GUI integrations consistent.
 
-pub mod controls;
-pub mod header;
-pub mod layout;
+pub use patchbay_gui::*;

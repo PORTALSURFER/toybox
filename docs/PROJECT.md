@@ -3,11 +3,11 @@
 ## Summary
 - Build an internal CLAP plugin framework library that extracts reusable DSP, GUI, parameter/state, and host-integration patterns from existing test plugins to speed up new plugin creation.
 - Include CLAP entry/descriptor/factory/ABI glue, parameter metadata + value/text + automation plumbing, event handling helpers, registration macros, and Windows-focused `.clap` bundle packaging guidance.
-- The framework targets the current in-repo plugin style (clack + egui_baseview) and focuses on reusable building blocks, not a full product SDK.
+- The framework targets the current in-repo plugin style (clack + Patchbay GUI) and focuses on reusable building blocks, not a full product SDK.
 
 ## Goals
 - Provide reusable DSP utilities (filters, delay lines, smoothing, spectral/STFT helpers) derived from current plugins.
-- Provide reusable GUI building blocks (baseview/egui window wrapper, common controls, visualization helpers, snapshot readers).
+- Provide reusable GUI building blocks (Patchbay GUI window wrapper, common controls, visualization helpers, snapshot readers).
 - Standardize parameter/state plumbing (param definitions, snapshots, state serialization, event handling) across plugins.
 - Reduce time to create a new CLAP plugin by providing templates and example wiring.
 - Enable a Lilt-style effect to depend only on `toybox` for CLAP-specific wiring (entry points, params, events, packaging).
@@ -28,7 +28,7 @@
 - Secondary stakeholders: maintainers of the current test plugins.
 
 ## Constraints
-- Follow patterns proven in current test plugins (clack, egui_baseview, baseview, rustfft, no-alloc in audio path).
+- Follow patterns proven in current test plugins (clack, Patchbay GUI, rustfft, no-alloc in audio path).
 - Preserve realtime safety and avoid allocations in the audio callback.
 - Keep dependencies minimal and consistent with existing crates.
 - Maintainability over cleverness; documentation required for public APIs.
@@ -40,13 +40,13 @@
 
 ## Assumptions
 - CLAP remains the only target format for the framework in v1.
-- Egui + baseview remains the default UI stack.
+- Patchbay GUI remains the default UI stack.
 - Existing plugin behavior stays the reference for feature parity.
 - The Lilt CLAP plugin structure remains the baseline for minimal boilerplate expectations.
 - The framework should evolve to support VST in a future version without redesigning core abstractions.
 
 ## Dependencies
 - clack/clack_extensions and the existing CLAP integration patterns in this repo.
-- egui_baseview + baseview for GUI.
+- patchbay-gui + wgpu for GUI.
 - rustfft for spectral processing in plugins that need it.
 - Lilt CLAP reference implementation (used for entry/param/event/bundle patterns).

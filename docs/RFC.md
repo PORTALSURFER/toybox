@@ -17,7 +17,7 @@
 - Re-architect existing plugins during the initial framework design.
 
 ## Background / Problem
-- Current CLAP plugins reimplement the same patterns: audio port setup, event batching, buffer handling, parameter snapshots, tempo sync, baseview/egui window handling, and GUI snapshot transport. This slows down new plugin creation and increases divergence across plugins.
+- Current CLAP plugins reimplement the same patterns: audio port setup, event batching, buffer handling, parameter snapshots, tempo sync, Patchbay GUI window handling, and GUI snapshot transport. This slows down new plugin creation and increases divergence across plugins.
 
 ## Architecture
 ### Components
@@ -27,7 +27,7 @@
 - `framework::params`: Parameter ID conventions, atomic storage helpers, snapshot patterns, and serialization helpers.
 - `framework::params::clap`: Param metadata, value↔text conversion, and automation/event plumbing aligned with CLAP.
 - `framework::dsp`: Reusable DSP blocks (smoothing, delay lines, one-pole filters, biquad helpers, STFT scaffolding, windowing/OLA utilities).
-- `framework::gui`: Baseview/egui window wrapper, resizing/parent handle helpers, common widgets, and visualization primitives.
+- `framework::gui`: Patchbay GUI window wrapper, resizing/parent handle helpers, common widgets, and visualization primitives.
 - `framework::snapshot`: Lock-free snapshot buffers for GUI visualization (ring buffers, atomic frames).
 - `framework::templates`: Optional examples and plugin skeletons aligned with existing patterns (internal use only).
 - `framework::registration`: Macros/helpers to expose a CLAP plugin with minimal boilerplate.
@@ -38,7 +38,7 @@
 
 ### Key Interfaces
 - `ParamSnapshot` pattern to capture atomic parameter state for audio processing.
-- `GuiHostWindow` abstraction that wraps baseview/egui sizing, repaint, and resize coordination.
+- `GuiHostWindow` abstraction that wraps Patchbay GUI sizing, repaint, and resize coordination.
 - `SnapshotBuffer` interfaces for audio→GUI visualization data.
 - `PluginEntry` helper to emit format-specific descriptor/factory/ABI glue for a plugin type (CLAP first, VST later).
 - `EventRouter` (or similar) to normalize CLAP input event batches and provide typed helpers for common event classes.
@@ -66,7 +66,7 @@
 ## Risks and Mitigations
 - Risk: framework becomes overly generic and hard to use -> keep API surface small and focused on proven patterns.
 - Risk: migration churn -> prioritize additive extraction and opt-in usage.
-- Risk: GUI abstraction too leaky -> keep GUI helpers thin and allow direct egui usage.
+- Risk: GUI abstraction too leaky -> keep GUI helpers thin and allow direct Patchbay usage.
 
 ## Testing and Validation
 - Unit tests for reusable DSP blocks (e.g., delay line, filters, snapshot read/write).

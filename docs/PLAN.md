@@ -106,10 +106,10 @@
 - Phase: 2 - Framework Glue
 - Plan Context:
   - Goals: Provide reusable param/state handling and GUI window helpers.
-  - Decisions: Thin wrappers; retain direct egui usage.
+  - Decisions: Thin wrappers; retain direct Patchbay usage.
 - Phase Constraints:
   - Avoid breaking existing plugin UIs.
-- Scope: CLAP entry/descriptor/factory/ABI glue, param metadata + value↔text conversion + automation handling, full CLAP event processing helpers (process context, input/output events, full CLAP event set), baseview/egui window wrapper, standard control helpers (knobs/sliders), and CLAP process helpers (sample bounds, buffer routing).
+- Scope: CLAP entry/descriptor/factory/ABI glue, param metadata + value↔text conversion + automation handling, full CLAP event processing helpers (process context, input/output events, full CLAP event set), Patchbay GUI window wrapper, standard control helpers (knobs/sliders), and CLAP process helpers (sample bounds, buffer routing).
 - Files: new framework crate (planned), `test-plugins/lilt-clap/src/lib.rs`, `test-plugins/lilt-clap/src/params.rs`, `test-plugins/lilt-clap/src/gui.rs`, `test-plugins/cellweave-clap/src/snapshot.rs`, `test-plugins/rd-field-filter-clap/src/snapshot.rs`.
 - Entry Points: CLAP entry export, param modules, process loop/event batching, and GUI wrappers in existing plugins.
 - Example (primary): “CLAP entry + param mapping” (validates minimal boilerplate path).
@@ -168,16 +168,16 @@
   - Update `docs/RFC.md` and framework docs.
 
 ## Phase 4 - GUI Controls and Widgets
-- [ ] 4.1 Extract common egui controls/widgets from existing plugins
+- [ ] 4.1 Extract common Patchbay controls/widgets from existing plugins
 - Phase: 4 - GUI Controls and Widgets
 - Plan Context:
   - Goals: Provide reusable GUI widgets and visualization helpers across plugins.
-  - Decisions: Keep widgets small, composable, and aligned with existing egui/baseview usage.
+  - Decisions: Keep widgets small, composable, and aligned with Patchbay usage.
 - Phase Constraints:
   - Preserve existing GUI behavior; no forced style/theme.
 - Scope: Knobs, sliders, toggles, XY pad, meters, spectrum/curve display, envelopes, and text/value display helpers.
 - Files: new framework GUI modules (planned), `test-plugins/*/gui.rs` (reference sources).
-- Entry Points: existing egui widget helpers in plugin GUIs.
+- Entry Points: existing Patchbay widget helpers in plugin GUIs.
 - Example (primary): “Knob + value display” (validates control + text formatting).
 - Example (required): “Spectrum/curve widget” (validates visualization).
 - Commands:
@@ -193,7 +193,7 @@
 - Acceptance Checklist:
   - Each widget has docs + minimal usage example.
   - At least one plugin/template adopts the widgets without regressions.
-  - No GUI-thread allocations in hot loops beyond egui defaults.
+  - No GUI-thread allocations in hot loops beyond Patchbay defaults.
 - Failure Modes:
   - Widgets are too opinionated and hard to compose.
 - Update Docs:

@@ -18,8 +18,6 @@ pub use mts_esp;
 
 /// Re-export GUI dependencies behind the `gui` feature flag.
 #[cfg(feature = "gui")]
-pub use baseview;
-#[cfg(feature = "gui")]
-pub use egui_baseview;
+pub use patchbay_gui;
 #[cfg(feature = "gui")]
 pub use raw_window_handle;
