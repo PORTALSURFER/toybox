@@ -256,6 +256,7 @@ where
         .spawn(move || {
             let result = run_window_loop(
                 parent_hwnd,
+                parent_hinstance,
                 title,
                 size,
                 state,
@@ -298,9 +299,6 @@ where
     State: Send + 'static,
 {
     let class_name = to_wide("PatchbayGuiWindow");
-    let hinstance = unsafe { GetModuleHandleW(PCWSTR::null()) }
-        .map_err(|_| GuiError::WindowCreateFailed)?;
-    let hinstance = HINSTANCE(hinstance.0);
     let parent_hwnd = HWND(parent_hwnd as *mut _);
     let parent_hinstance = HINSTANCE(parent_hinstance as *mut _);
 
