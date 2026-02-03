@@ -131,6 +131,7 @@ impl EguiHostWindow {
             graphics,
             state,
             move |ctx: &Context, queue: &mut Queue, state: &mut State| {
+                queue.set_design_size(egui_baseview::egui::vec2(design_size.0, design_size.1));
                 on_init(ctx, queue, state);
             },
             move |ctx: &Context, queue: &mut Queue, state: &mut State| {
@@ -143,21 +144,9 @@ impl EguiHostWindow {
                 }
 
                 let base = base_pixels_per_point.load(Ordering::Relaxed);
-                let base = if base == 0 {
-                    let ppp = ctx.pixels_per_point();
-                    base_pixels_per_point.store(ppp.to_bits(), Ordering::Relaxed);
-                    ppp
-                } else {
-                    f32::from_bits(base)
-                };
-
-                let physical = queue.physical_size();
-                let scale_x = physical.width as f32 / design_size.0.max(1.0);
-                let scale_y = physical.height as f32 / design_size.1.max(1.0);
-                let scale = scale_x.min(scale_y).max(0.1);
-                let target_ppp = base * scale;
-                if (ctx.pixels_per_point() - target_ppp).abs() > 0.001 {
-                    queue.set_pixels_per_point(target_ppp);
+                if base == 0 {
+                    base_pixels_per_point
+                        .store(ctx.pixels_per_point().to_bits(), Ordering::Relaxed);
                 }
 
                 let aspect_bits = aspect_ratio.load(Ordering::Relaxed);

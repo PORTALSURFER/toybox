@@ -24,6 +24,7 @@ pub struct Queue<'a> {
     key_capture: &'a mut KeyCapture,
     pending_pixels_per_point: &'a mut Option<f32>,
     pending_aspect_ratio: &'a mut Option<f32>,
+    design_size: &'a mut Option<egui::Vec2>,
 }
 
 impl<'a> Queue<'a> {
@@ -34,6 +35,7 @@ impl<'a> Queue<'a> {
         key_capture: &'a mut KeyCapture,
         pending_pixels_per_point: &'a mut Option<f32>,
         pending_aspect_ratio: &'a mut Option<f32>,
+        design_size: &'a mut Option<egui::Vec2>,
     ) -> Self {
         Self {
             bg_color,
@@ -44,6 +46,7 @@ impl<'a> Queue<'a> {
             key_capture,
             pending_pixels_per_point,
             pending_aspect_ratio,
+            design_size,
         }
     }
 
@@ -85,6 +88,13 @@ impl<'a> Queue<'a> {
     /// Provide `None` to allow free resizing.
     pub fn set_aspect_ratio(&mut self, aspect_ratio: Option<f32>) {
         *self.pending_aspect_ratio = aspect_ratio.filter(|ratio| ratio.is_finite() && *ratio > 0.0);
+    }
+
+    /// Set the base design size (in logical points) used to derive scaling.
+    pub fn set_design_size(&mut self, size: egui::Vec2) {
+        if size.x.is_finite() && size.y.is_finite() && size.x > 0.0 && size.y > 0.0 {
+            *self.design_size = Some(size);
+        }
     }
 }
 
@@ -158,6 +168,7 @@ where
     pending_pixels_per_point: Option<f32>,
     pending_aspect_ratio: Option<f32>,
     aspect_ratio: Option<f32>,
+    design_size: Option<egui::Vec2>,
 }
 
 impl<State, U> EguiWindow<State, U>
@@ -227,6 +238,7 @@ where
         let mut key_capture = KeyCapture::default();
         let mut pending_pixels_per_point = None;
         let mut pending_aspect_ratio = None;
+        let mut design_size = None;
         let mut queue = Queue::new(
             &mut bg_color,
             &mut close_requested,
@@ -234,6 +246,7 @@ where
             &mut key_capture,
             &mut pending_pixels_per_point,
             &mut pending_aspect_ratio,
+            &mut design_size,
         );
         (build)(&egui_ctx, &mut queue, &mut state);
 
@@ -273,6 +286,7 @@ where
             pending_pixels_per_point: None,
             pending_aspect_ratio,
             aspect_ratio: None,
+            design_size,
         }
     }
 
@@ -366,7 +380,25 @@ where
             return;
         };
 
-        if let Some(pixels_per_point) = self.pending_pixels_per_point.take() {
+        if let Some(design_size) = self.design_size {
+            let scale_x = self.physical_size.width as f32 / design_size.x.max(1.0);
+            let scale_y = self.physical_size.height as f32 / design_size.y.max(1.0);
+            let target_ppp = scale_x.min(scale_y).max(0.1);
+            self.pixels_per_point = target_ppp;
+            self.points_per_pixel = self.pixels_per_point.recip();
+
+            let screen_rect =
+                calculate_screen_rect(self.physical_size, self.points_per_pixel);
+            self.egui_input.screen_rect = Some(screen_rect);
+
+            let viewport_info = self
+                .egui_input
+                .viewports
+                .get_mut(&self.viewport_id)
+                .unwrap();
+            viewport_info.native_pixels_per_point = Some(self.pixels_per_point);
+            viewport_info.inner_rect = Some(screen_rect);
+        } else if let Some(pixels_per_point) = self.pending_pixels_per_point.take() {
             self.pixels_per_point = pixels_per_point.max(0.1);
             self.points_per_pixel = self.pixels_per_point.recip();
 
@@ -402,6 +434,7 @@ where
             &mut self.key_capture,
             &mut self.pending_pixels_per_point,
             &mut self.pending_aspect_ratio,
+            &mut self.design_size,
         );
 
         (self.user_update)(&self.egui_ctx, &mut queue, state);
