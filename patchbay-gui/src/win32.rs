@@ -5,13 +5,13 @@ use crate::host::{GuiError, InputState};
 use crate::renderer::Renderer;
 use crate::ui::{Layout, Theme, Ui, UiState};
 use raw_window_handle_06::{
-    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
+    DisplayHandle, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
     RawWindowHandle as RawWindowHandle06, Win32WindowHandle, WindowHandle as WindowHandle06,
     WindowsDisplayHandle,
 };
 use std::ffi::OsStr;
+use std::num::NonZeroIsize;
 use std::os::windows::ffi::OsStrExt;
-use std::ptr::NonNull;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc};
 use std::thread;
@@ -51,19 +51,19 @@ pub struct SurfaceWindow {
     hinstance: HINSTANCE,
 }
 
-unsafe impl HasWindowHandle for SurfaceWindow {
-    fn window_handle(&self) -> Result<WindowHandle06<'_>, HandleError> {
-        let hwnd = NonNull::new(self.hwnd.0).ok_or(HandleError::NullHandle)?;
+impl HasWindowHandle for SurfaceWindow {
+    fn window_handle(&self) -> Result<WindowHandle06<'_>, raw_window_handle_06::HandleError> {
+        let hwnd = NonZeroIsize::new(self.hwnd.0 as isize).expect("HWND must be non-null");
         let mut handle = Win32WindowHandle::new(hwnd);
-        if let Some(hinstance) = NonNull::new(self.hinstance.0) {
+        if let Some(hinstance) = NonZeroIsize::new(self.hinstance.0 as isize) {
             handle.hinstance = Some(hinstance);
         }
         Ok(unsafe { WindowHandle06::borrow_raw(RawWindowHandle06::Win32(handle)) })
     }
 }
 
-unsafe impl HasDisplayHandle for SurfaceWindow {
-    fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
+impl HasDisplayHandle for SurfaceWindow {
+    fn display_handle(&self) -> Result<DisplayHandle<'_>, raw_window_handle_06::HandleError> {
         let display = WindowsDisplayHandle::new();
         Ok(unsafe { DisplayHandle::borrow_raw(RawDisplayHandle::Windows(display)) })
     }
@@ -230,8 +230,8 @@ where
 
 /// Spawn a GUI thread that owns the Win32 window and render loop.
 pub fn spawn_window_thread<State, Init, Frame>(
-    parent_hwnd: HWND,
-    _parent_hinstance: HINSTANCE,
+    parent_hwnd: isize,
+    parent_hinstance: isize,
     title: String,
     size: Size,
     state: State,
@@ -277,7 +277,8 @@ where
 }
 
 fn run_window_loop<State, Init, Frame>(
-    parent_hwnd: HWND,
+    parent_hwnd: isize,
+    parent_hinstance: isize,
     title: String,
     size: Size,
     mut state: State,
@@ -300,12 +301,14 @@ where
     let hinstance = unsafe { GetModuleHandleW(PCWSTR::null()) }
         .map_err(|_| GuiError::WindowCreateFailed)?;
     let hinstance = HINSTANCE(hinstance.0);
+    let parent_hwnd = HWND(parent_hwnd as *mut _);
+    let parent_hinstance = HINSTANCE(parent_hinstance as *mut _);
 
     unsafe {
         let wnd_class = WNDCLASSW {
             style: CS_HREDRAW | CS_VREDRAW,
             lpfnWndProc: Some(window_proc::<State, Init, Frame>),
-            hInstance: hinstance,
+            hInstance: parent_hinstance,
             lpszClassName: PCWSTR(class_name.as_ptr()),
             hCursor: LoadCursorW(None, windows::Win32::UI::WindowsAndMessaging::IDC_ARROW)
                 .unwrap(),
@@ -327,7 +330,7 @@ where
             size.height as i32,
             parent_hwnd,
             HMENU(std::ptr::null_mut()),
-            hinstance,
+            parent_hinstance,
             None,
         )
     }
@@ -335,7 +338,7 @@ where
 
     let window = SurfaceWindow {
         hwnd: child_hwnd,
-        hinstance,
+        hinstance: parent_hinstance,
     };
     let renderer = Renderer::new(window, size)?;
     let canvas = Canvas::new(size.width, size.height);

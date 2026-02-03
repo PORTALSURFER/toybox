@@ -226,8 +226,6 @@ impl Renderer {
 
     /// Upload the latest canvas pixels to the GPU texture.
     pub fn upload(&self, size: Size, pixels: &[u8]) {
-        use std::num::NonZeroU32;
-
         let bytes_per_pixel = 4u32;
         let bytes_per_row = bytes_per_pixel * size.width;
         let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u32;
@@ -244,8 +242,8 @@ impl Renderer {
                 pixels,
                 wgpu::ImageDataLayout {
                     offset: 0,
-                    bytes_per_row: NonZeroU32::new(bytes_per_row),
-                    rows_per_image: NonZeroU32::new(size.height),
+                    bytes_per_row: Some(bytes_per_row),
+                    rows_per_image: Some(size.height),
                 },
                 wgpu::Extent3d {
                     width: size.width,
@@ -276,8 +274,8 @@ impl Renderer {
             &padded,
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: NonZeroU32::new(padded_bytes_per_row),
-                rows_per_image: NonZeroU32::new(size.height),
+                bytes_per_row: Some(padded_bytes_per_row),
+                rows_per_image: Some(size.height),
             },
             wgpu::Extent3d {
                 width: size.width,
