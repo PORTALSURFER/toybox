@@ -12,6 +12,7 @@ pub mod gui;
 /// Re-exported CLAP crates so downstream plugins only depend on `toybox`.
 pub use clack_extensions;
 pub use clack_plugin;
+pub use clack_common;
 /// Re-export MTS-ESP for shared tuning support across plugins.
 pub use mts_esp;
 
