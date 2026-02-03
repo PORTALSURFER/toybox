@@ -319,6 +319,7 @@ pub fn keyboard(
     ui: &mut egui::Ui,
     note_range: RangeInclusive<u8>,
     active_notes: &[bool; 128],
+    note_colors: Option<&[Color32; 128]>,
     style: &KeyboardStyle,
 ) -> Response {
     let white_notes = collect_white_notes(note_range.clone());
@@ -334,15 +335,14 @@ pub fn keyboard(
             Vec2::new(style.white_key_width, style.white_key_height),
         );
         let is_active = active_notes[*note as usize];
-        let fill = if is_active {
-            style.active_fill
+        let (fill, outline) = if is_active {
+            let color = note_colors
+                .and_then(|colors| colors.get(*note as usize))
+                .copied()
+                .unwrap_or(style.active_fill);
+            (color, darken_color(color, 0.6))
         } else {
-            style.white_key_fill
-        };
-        let outline = if is_active {
-            style.active_outline
-        } else {
-            style.white_key_outline
+            (style.white_key_fill, style.white_key_outline)
         };
         painter.rect_filled(key_rect, 2.0, fill);
         painter.rect_stroke(key_rect, 2.0, Stroke::new(1.0, outline), egui::StrokeKind::Inside);
@@ -371,15 +371,14 @@ pub fn keyboard(
             Vec2::new(black_width, style.black_key_height),
         );
         let is_active = active_notes[note as usize];
-        let fill = if is_active {
-            style.active_fill
+        let (fill, outline) = if is_active {
+            let color = note_colors
+                .and_then(|colors| colors.get(note as usize))
+                .copied()
+                .unwrap_or(style.active_fill);
+            (color, darken_color(color, 0.6))
         } else {
-            style.black_key_fill
-        };
-        let outline = if is_active {
-            style.active_outline
-        } else {
-            style.black_key_outline
+            (style.black_key_fill, style.black_key_outline)
         };
         painter.rect_filled(key_rect, 2.0, fill);
         painter.rect_stroke(key_rect, 2.0, Stroke::new(1.0, outline), egui::StrokeKind::Inside);
@@ -497,6 +496,14 @@ fn parse_f32_from_text(text: &str) -> Option<f32> {
         return None;
     }
     trimmed.parse::<f32>().ok()
+}
+
+fn darken_color(color: Color32, factor: f32) -> Color32 {
+    let factor = factor.clamp(0.0, 1.0);
+    let r = (color.r() as f32 * factor).round() as u8;
+    let g = (color.g() as f32 * factor).round() as u8;
+    let b = (color.b() as f32 * factor).round() as u8;
+    Color32::from_rgb(r, g, b)
 }
 
 fn collect_white_notes(range: RangeInclusive<u8>) -> Vec<u8> {
