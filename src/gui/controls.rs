@@ -287,6 +287,8 @@ pub struct KeyboardStyle {
     pub label_color: Color32,
     /// Font size for octave labels.
     pub label_size: f32,
+    /// Octave offset for labeling (host-dependent).
+    pub octave_offset: i8,
 }
 
 impl Default for KeyboardStyle {
@@ -304,6 +306,7 @@ impl Default for KeyboardStyle {
             active_outline: Color32::from_rgb(40, 120, 140),
             label_color: Color32::from_gray(40),
             label_size: 10.0,
+            octave_offset: -2,
         }
     }
 }
@@ -345,7 +348,7 @@ pub fn keyboard(
         painter.rect_stroke(key_rect, 2.0, Stroke::new(1.0, outline), egui::StrokeKind::Inside);
 
         if is_c_note(*note) {
-            let label = format!("C{}", midi_octave(*note));
+            let label = format!("C{}", midi_octave(*note, style.octave_offset));
             painter.text(
                 Pos2::new(key_rect.center().x, key_rect.bottom() - 6.0),
                 Align2::CENTER_BOTTOM,
@@ -508,8 +511,8 @@ fn is_c_note(note: u8) -> bool {
     note % 12 == 0
 }
 
-fn midi_octave(note: u8) -> i8 {
-    (note / 12) as i8 - 1
+fn midi_octave(note: u8, offset: i8) -> i8 {
+    (note / 12) as i8 + offset
 }
 
 fn white_index_before(note: u8, whites: &[u8]) -> usize {
