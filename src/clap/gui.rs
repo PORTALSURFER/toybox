@@ -131,7 +131,6 @@ impl EguiHostWindow {
             graphics,
             state,
             move |ctx: &Context, queue: &mut Queue, state: &mut State| {
-                queue.set_design_size(egui_baseview::egui::vec2(design_size.0, design_size.1));
                 on_init(ctx, queue, state);
             },
             move |ctx: &Context, queue: &mut Queue, state: &mut State| {
