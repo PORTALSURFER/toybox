@@ -23,6 +23,7 @@ pub struct Queue<'a> {
     physical_size: &'a mut PhySize,
     key_capture: &'a mut KeyCapture,
     pending_pixels_per_point: &'a mut Option<f32>,
+    pending_aspect_ratio: &'a mut Option<f32>,
 }
 
 impl<'a> Queue<'a> {
@@ -32,6 +33,7 @@ impl<'a> Queue<'a> {
         physical_size: &'a mut PhySize,
         key_capture: &'a mut KeyCapture,
         pending_pixels_per_point: &'a mut Option<f32>,
+        pending_aspect_ratio: &'a mut Option<f32>,
     ) -> Self {
         Self {
             bg_color,
@@ -41,6 +43,7 @@ impl<'a> Queue<'a> {
             physical_size,
             key_capture,
             pending_pixels_per_point,
+            pending_aspect_ratio,
         }
     }
 
@@ -75,6 +78,13 @@ impl<'a> Queue<'a> {
     /// input mapping, and layout stay in sync.
     pub fn set_pixels_per_point(&mut self, pixels_per_point: f32) {
         *self.pending_pixels_per_point = Some(pixels_per_point.max(0.1));
+    }
+
+    /// Request an aspect ratio constraint for the window.
+    ///
+    /// Provide `None` to allow free resizing.
+    pub fn set_aspect_ratio(&mut self, aspect_ratio: Option<f32>) {
+        *self.pending_aspect_ratio = aspect_ratio.filter(|ratio| ratio.is_finite() && *ratio > 0.0);
     }
 }
 
@@ -146,6 +156,8 @@ where
     repaint_after: Option<Instant>,
     key_capture: KeyCapture,
     pending_pixels_per_point: Option<f32>,
+    pending_aspect_ratio: Option<f32>,
+    aspect_ratio: Option<f32>,
 }
 
 impl<State, U> EguiWindow<State, U>
@@ -214,12 +226,14 @@ where
         let mut close_requested = false;
         let mut key_capture = KeyCapture::default();
         let mut pending_pixels_per_point = None;
+        let mut pending_aspect_ratio = None;
         let mut queue = Queue::new(
             &mut bg_color,
             &mut close_requested,
             &mut physical_size,
             &mut key_capture,
             &mut pending_pixels_per_point,
+            &mut pending_aspect_ratio,
         );
         (build)(&egui_ctx, &mut queue, &mut state);
 
@@ -257,6 +271,8 @@ where
             repaint_after: Some(start_time),
             key_capture,
             pending_pixels_per_point: None,
+            pending_aspect_ratio,
+            aspect_ratio: None,
         }
     }
 
@@ -366,6 +382,9 @@ where
             viewport_info.native_pixels_per_point = Some(self.pixels_per_point);
             viewport_info.inner_rect = Some(screen_rect);
         }
+        if let Some(aspect_ratio) = self.pending_aspect_ratio.take() {
+            self.aspect_ratio = Some(aspect_ratio);
+        }
 
         self.egui_input.time = Some(self.start_time.elapsed().as_secs_f64());
         self.egui_input.screen_rect = Some(calculate_screen_rect(
@@ -382,6 +401,7 @@ where
             &mut self.physical_size,
             &mut self.key_capture,
             &mut self.pending_pixels_per_point,
+            &mut self.pending_aspect_ratio,
         );
 
         (self.user_update)(&self.egui_ctx, &mut queue, state);
@@ -482,7 +502,7 @@ where
         }
     }
 
-    fn on_event(&mut self, _window: &mut Window, event: Event) -> EventStatus {
+    fn on_event(&mut self, window: &mut Window, event: Event) -> EventStatus {
         let mut return_status = EventStatus::Captured;
 
         match &event {
@@ -664,7 +684,22 @@ where
                     }
                     self.points_per_pixel = self.pixels_per_point.recip();
 
-                    self.physical_size = window_info.physical_size();
+                    let mut physical_size = window_info.physical_size();
+                    if let Some(aspect_ratio) = self.aspect_ratio {
+                        let corrected = clamp_physical_to_aspect(physical_size, aspect_ratio);
+                        if corrected != physical_size {
+                            let logical_width =
+                                corrected.width as f64 * self.points_per_pixel as f64;
+                            let logical_height =
+                                corrected.height as f64 * self.points_per_pixel as f64;
+                            window.resize(baseview::Size {
+                                width: logical_width,
+                                height: logical_height,
+                            });
+                            physical_size = corrected;
+                        }
+                    }
+                    self.physical_size = physical_size;
 
                     let screen_rect =
                         calculate_screen_rect(self.physical_size, self.points_per_pixel);
@@ -785,5 +820,26 @@ fn drop_data_to_dropped_files(data: &baseview::DropData) -> Vec<egui::DroppedFil
             })
             .collect(),
         baseview::DropData::None => Vec::new(),
+    }
+}
+
+fn clamp_physical_to_aspect(physical: PhySize, aspect_ratio: f32) -> PhySize {
+    let width = physical.width.max(1);
+    let height = physical.height.max(1);
+    let target_width = (height as f32 * aspect_ratio).round().max(1.0) as u32;
+    let target_height = (width as f32 / aspect_ratio).round().max(1.0) as u32;
+    let width_delta = width.abs_diff(target_width);
+    let height_delta = height.abs_diff(target_height);
+
+    if width_delta <= height_delta {
+        PhySize {
+            width: target_width,
+            height,
+        }
+    } else {
+        PhySize {
+            width,
+            height: target_height,
+        }
     }
 }

@@ -37,6 +37,8 @@ pub struct EguiHostWindow {
     last_size: Arc<AtomicU64>,
     /// Base pixels-per-point used for scale-to-fit.
     base_pixels_per_point: Arc<AtomicU32>,
+    /// Optional aspect ratio for resizing.
+    aspect_ratio: Arc<AtomicU32>,
 }
 
 impl Default for EguiHostWindow {
@@ -47,6 +49,7 @@ impl Default for EguiHostWindow {
             resize_request: Arc::new(AtomicU64::new(0)),
             last_size: Arc::new(AtomicU64::new(0)),
             base_pixels_per_point: Arc::new(AtomicU32::new(0)),
+            aspect_ratio: Arc::new(AtomicU32::new(0)),
         }
     }
 }
@@ -72,6 +75,12 @@ impl EguiHostWindow {
     pub fn request_resize(&self, width: u32, height: u32) {
         self.resize_request
             .store(pack_size(width, height), Ordering::Release);
+    }
+
+    /// Set an optional aspect ratio for window resizing.
+    pub fn set_aspect_ratio(&mut self, ratio: Option<f32>) {
+        let bits = ratio.filter(|value| value.is_finite() && *value > 0.0).unwrap_or(0.0);
+        self.aspect_ratio.store(bits.to_bits(), Ordering::Release);
     }
 
     /// Open a parented egui/baseview window.
@@ -114,6 +123,7 @@ impl EguiHostWindow {
         let last_size = self.last_size.clone();
         let design_size = (size.0 as f32, size.1 as f32);
         let base_pixels_per_point = self.base_pixels_per_point.clone();
+        let aspect_ratio = self.aspect_ratio.clone();
 
         self.handle = Some(EguiWindow::open_parented(
             self,
@@ -148,6 +158,11 @@ impl EguiHostWindow {
                 let target_ppp = base * scale;
                 if (ctx.pixels_per_point() - target_ppp).abs() > 0.001 {
                     queue.set_pixels_per_point(target_ppp);
+                }
+
+                let aspect_bits = aspect_ratio.load(Ordering::Relaxed);
+                if aspect_bits != 0 {
+                    queue.set_aspect_ratio(Some(f32::from_bits(aspect_bits)));
                 }
 
                 let content_rect = ctx.input(|input| input.content_rect());
