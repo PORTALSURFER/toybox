@@ -260,6 +260,114 @@ pub fn toggle(ui: &mut egui::Ui, label: &str, value: &mut bool) -> Response {
     ui.checkbox(value, label)
 }
 
+/// Style configuration for the keyboard visualization.
+#[derive(Debug, Clone)]
+pub struct KeyboardStyle {
+    /// Width of a single white key in points.
+    pub white_key_width: f32,
+    /// Height of the white keys in points.
+    pub white_key_height: f32,
+    /// Height of the black keys in points.
+    pub black_key_height: f32,
+    /// Relative width of the black keys (0..1) against white keys.
+    pub black_key_width_ratio: f32,
+    /// White key fill color.
+    pub white_key_fill: Color32,
+    /// White key outline color.
+    pub white_key_outline: Color32,
+    /// Black key fill color.
+    pub black_key_fill: Color32,
+    /// Black key outline color.
+    pub black_key_outline: Color32,
+    /// Fill color for active notes.
+    pub active_fill: Color32,
+    /// Outline color for active notes.
+    pub active_outline: Color32,
+}
+
+impl Default for KeyboardStyle {
+    fn default() -> Self {
+        Self {
+            white_key_width: 22.0,
+            white_key_height: 80.0,
+            black_key_height: 48.0,
+            black_key_width_ratio: 0.6,
+            white_key_fill: Color32::from_gray(220),
+            white_key_outline: Color32::from_gray(80),
+            black_key_fill: Color32::from_gray(30),
+            black_key_outline: Color32::from_gray(10),
+            active_fill: Color32::from_rgb(90, 200, 220),
+            active_outline: Color32::from_rgb(40, 120, 140),
+        }
+    }
+}
+
+/// Draw a simple piano keyboard visualization.
+///
+/// The keyboard renders white keys first, then black keys on top. `active_notes`
+/// is a 128-entry MIDI map where true indicates the key should be highlighted.
+pub fn keyboard(
+    ui: &mut egui::Ui,
+    note_range: RangeInclusive<u8>,
+    active_notes: &[bool; 128],
+    style: &KeyboardStyle,
+) -> Response {
+    let white_notes = collect_white_notes(note_range.clone());
+    let white_count = white_notes.len().max(1);
+    let total_width = style.white_key_width * white_count as f32;
+    let desired = Vec2::new(total_width, style.white_key_height);
+    let (rect, response) = ui.allocate_exact_size(desired, Sense::hover());
+
+    let painter = ui.painter();
+    for (index, note) in white_notes.iter().enumerate() {
+        let key_rect = Rect::from_min_size(
+            Pos2::new(rect.left() + index as f32 * style.white_key_width, rect.top()),
+            Vec2::new(style.white_key_width, style.white_key_height),
+        );
+        let is_active = active_notes[*note as usize];
+        let fill = if is_active {
+            style.active_fill
+        } else {
+            style.white_key_fill
+        };
+        let outline = if is_active {
+            style.active_outline
+        } else {
+            style.white_key_outline
+        };
+        painter.rect_filled(key_rect, 2.0, fill);
+        painter.rect_stroke(key_rect, 2.0, Stroke::new(1.0, outline), egui::StrokeKind::Inside);
+    }
+
+    let black_width = style.white_key_width * style.black_key_width_ratio;
+    for note in note_range {
+        if is_white_note(note) {
+            continue;
+        }
+        let white_index = white_index_before(note, &white_notes);
+        let x = rect.left() + (white_index as f32 + 1.0) * style.white_key_width - black_width * 0.5;
+        let key_rect = Rect::from_min_size(
+            Pos2::new(x, rect.top()),
+            Vec2::new(black_width, style.black_key_height),
+        );
+        let is_active = active_notes[note as usize];
+        let fill = if is_active {
+            style.active_fill
+        } else {
+            style.black_key_fill
+        };
+        let outline = if is_active {
+            style.active_outline
+        } else {
+            style.black_key_outline
+        };
+        painter.rect_filled(key_rect, 2.0, fill);
+        painter.rect_stroke(key_rect, 2.0, Stroke::new(1.0, outline), egui::StrokeKind::Inside);
+    }
+
+    response
+}
+
 fn draw_knob(ui: &egui::Ui, rect: Rect, t: f32, hovered: bool, active: bool, style: &KnobStyle) {
     let painter = ui.painter();
     let center = rect.center();
@@ -369,6 +477,18 @@ fn parse_f32_from_text(text: &str) -> Option<f32> {
         return None;
     }
     trimmed.parse::<f32>().ok()
+}
+
+fn collect_white_notes(range: RangeInclusive<u8>) -> Vec<u8> {
+    range.filter(|note| is_white_note(*note)).collect()
+}
+
+fn is_white_note(note: u8) -> bool {
+    matches!(note % 12, 0 | 2 | 4 | 5 | 7 | 9 | 11)
+}
+
+fn white_index_before(note: u8, whites: &[u8]) -> usize {
+    whites.iter().take_while(|key| **key < note).count().saturating_sub(1)
 }
 
 #[cfg(all(test, feature = "gui"))]
