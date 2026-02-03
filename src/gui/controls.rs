@@ -3,7 +3,7 @@
 use std::ops::RangeInclusive;
 
 use egui_baseview::egui;
-use egui_baseview::egui::{Color32, Pos2, Rect, Response, Sense, Shape, Stroke, Vec2};
+use egui_baseview::egui::{Align2, Color32, FontId, Pos2, Rect, Response, Sense, Shape, Stroke, Vec2};
 
 /// Shared configuration for knob rendering and interaction.
 #[derive(Debug, Clone)]
@@ -283,6 +283,10 @@ pub struct KeyboardStyle {
     pub active_fill: Color32,
     /// Outline color for active notes.
     pub active_outline: Color32,
+    /// Text color for octave labels.
+    pub label_color: Color32,
+    /// Font size for octave labels.
+    pub label_size: f32,
 }
 
 impl Default for KeyboardStyle {
@@ -298,6 +302,8 @@ impl Default for KeyboardStyle {
             black_key_outline: Color32::from_gray(10),
             active_fill: Color32::from_rgb(90, 200, 220),
             active_outline: Color32::from_rgb(40, 120, 140),
+            label_color: Color32::from_gray(40),
+            label_size: 10.0,
         }
     }
 }
@@ -337,6 +343,17 @@ pub fn keyboard(
         };
         painter.rect_filled(key_rect, 2.0, fill);
         painter.rect_stroke(key_rect, 2.0, Stroke::new(1.0, outline), egui::StrokeKind::Inside);
+
+        if is_c_note(*note) {
+            let label = format!("C{}", midi_octave(*note));
+            painter.text(
+                Pos2::new(key_rect.center().x, key_rect.bottom() - 6.0),
+                Align2::CENTER_BOTTOM,
+                label,
+                FontId::proportional(style.label_size),
+                style.label_color,
+            );
+        }
     }
 
     let black_width = style.white_key_width * style.black_key_width_ratio;
@@ -485,6 +502,14 @@ fn collect_white_notes(range: RangeInclusive<u8>) -> Vec<u8> {
 
 fn is_white_note(note: u8) -> bool {
     matches!(note % 12, 0 | 2 | 4 | 5 | 7 | 9 | 11)
+}
+
+fn is_c_note(note: u8) -> bool {
+    note % 12 == 0
+}
+
+fn midi_octave(note: u8) -> i8 {
+    (note / 12) as i8 - 1
 }
 
 fn white_index_before(note: u8, whites: &[u8]) -> usize {
