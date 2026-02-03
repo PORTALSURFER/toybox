@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use baseview::{
     Event, EventStatus, PhySize, Window, WindowHandle, WindowHandler, WindowOpenOptions,
@@ -169,6 +169,8 @@ where
     pending_aspect_ratio: Option<f32>,
     aspect_ratio: Option<f32>,
     design_size: Option<egui::Vec2>,
+    last_resize: Option<Instant>,
+    resize_debounce: Duration,
 }
 
 impl<State, U> EguiWindow<State, U>
@@ -287,6 +289,8 @@ where
             pending_aspect_ratio,
             aspect_ratio: None,
             design_size,
+            last_resize: None,
+            resize_debounce: Duration::from_millis(120),
         }
     }
 
@@ -381,23 +385,31 @@ where
         };
 
         if let Some(design_size) = self.design_size {
-            let scale_x = self.physical_size.width as f32 / design_size.x.max(1.0);
-            let scale_y = self.physical_size.height as f32 / design_size.y.max(1.0);
-            let target_ppp = scale_x.min(scale_y).max(0.1);
-            self.pixels_per_point = target_ppp;
-            self.points_per_pixel = self.pixels_per_point.recip();
+            let should_apply = self
+                .last_resize
+                .map(|last| last.elapsed() >= self.resize_debounce)
+                .unwrap_or(true);
+            if should_apply {
+                let scale_x = self.physical_size.width as f32 / design_size.x.max(1.0);
+                let scale_y = self.physical_size.height as f32 / design_size.y.max(1.0);
+                let target_ppp = scale_x.min(scale_y).max(0.1);
+                self.pixels_per_point = target_ppp;
+                self.points_per_pixel = self.pixels_per_point.recip();
 
-            let screen_rect =
-                calculate_screen_rect(self.physical_size, self.points_per_pixel);
-            self.egui_input.screen_rect = Some(screen_rect);
+                let screen_rect =
+                    calculate_screen_rect(self.physical_size, self.points_per_pixel);
+                self.egui_input.screen_rect = Some(screen_rect);
 
-            let viewport_info = self
-                .egui_input
-                .viewports
-                .get_mut(&self.viewport_id)
-                .unwrap();
-            viewport_info.native_pixels_per_point = Some(self.pixels_per_point);
-            viewport_info.inner_rect = Some(screen_rect);
+                let viewport_info = self
+                    .egui_input
+                    .viewports
+                    .get_mut(&self.viewport_id)
+                    .unwrap();
+                viewport_info.native_pixels_per_point = Some(self.pixels_per_point);
+                viewport_info.inner_rect = Some(screen_rect);
+
+                self.last_resize = None;
+            }
         } else if let Some(pixels_per_point) = self.pending_pixels_per_point.take() {
             self.pixels_per_point = pixels_per_point.max(0.1);
             self.points_per_pixel = self.pixels_per_point.recip();
@@ -712,6 +724,7 @@ where
             }
             baseview::Event::Window(event) => match event {
                 baseview::WindowEvent::Resized(window_info) => {
+                    self.last_resize = Some(Instant::now());
                     if let WindowScalePolicy::SystemScaleFactor = self.scale_policy {
                         self.pixels_per_point = window_info.scale() as f32;
                     }
