@@ -143,7 +143,7 @@ impl EguiHostWindow {
                 let viewport_rect = ctx.input(|input| input.viewport_rect());
                 let scale_x = viewport_rect.width() / design_size.0.max(1.0);
                 let scale_y = viewport_rect.height() / design_size.1.max(1.0);
-                let scale = scale_x.min(scale_y).clamp(0.6, 2.0);
+                let scale = scale_x.min(scale_y);
                 ctx.set_pixels_per_point(base * scale);
 
                 let content_rect = ctx.input(|input| input.content_rect());
