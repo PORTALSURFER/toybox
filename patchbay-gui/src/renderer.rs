@@ -70,7 +70,6 @@ impl Renderer {
                 memory_hints: wgpu::MemoryHints::Performance,
                 trace: wgpu::Trace::Off,
             },
-            None,
         ))
         .map_err(GuiError::Device)?;
 
