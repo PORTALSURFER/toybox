@@ -162,7 +162,25 @@ impl EguiHostWindow {
 
                 let aspect_bits = aspect_ratio.load(Ordering::Relaxed);
                 if aspect_bits != 0 {
-                    queue.set_aspect_ratio(Some(f32::from_bits(aspect_bits)));
+                    let aspect = f32::from_bits(aspect_bits);
+                    queue.set_aspect_ratio(Some(aspect));
+                    let viewport_rect = ctx.input(|input| input.viewport_rect());
+                    let logical_w = viewport_rect.width().max(1.0);
+                    let logical_h = viewport_rect.height().max(1.0);
+                    let target_w = (logical_h * aspect).round().max(1.0);
+                    let target_h = (logical_w / aspect).round().max(1.0);
+                    let dw = (logical_w - target_w).abs();
+                    let dh = (logical_h - target_h).abs();
+                    let (new_w, new_h) = if dw <= dh {
+                        (target_w, logical_h)
+                    } else {
+                        (logical_w, target_h)
+                    };
+                    if (new_w - logical_w).abs() > 0.5 || (new_h - logical_h).abs() > 0.5 {
+                        ctx.send_viewport_cmd(egui_baseview::egui::ViewportCommand::InnerSize(
+                            egui_baseview::egui::vec2(new_w, new_h),
+                        ));
+                    }
                 }
 
                 let content_rect = ctx.input(|input| input.content_rect());
