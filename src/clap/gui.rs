@@ -145,7 +145,10 @@ impl EguiHostWindow {
                 let scale_x = viewport_rect.width() / design_size.0.max(1.0);
                 let scale_y = viewport_rect.height() / design_size.1.max(1.0);
                 let scale = scale_x.min(scale_y).max(0.1);
-                ctx.set_pixels_per_point(base * scale);
+                let target_ppp = base * scale;
+                if (ctx.pixels_per_point() - target_ppp).abs() > 0.001 {
+                    queue.set_pixels_per_point(target_ppp);
+                }
 
                 let content_rect = ctx.input(|input| input.content_rect());
                 let logical_width = content_rect.width().round().max(1.0) as u32;

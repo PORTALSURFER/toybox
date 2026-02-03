@@ -22,6 +22,7 @@ pub struct Queue<'a> {
     close_requested: &'a mut bool,
     physical_size: &'a mut PhySize,
     key_capture: &'a mut KeyCapture,
+    pending_pixels_per_point: &'a mut Option<f32>,
 }
 
 impl<'a> Queue<'a> {
@@ -30,6 +31,7 @@ impl<'a> Queue<'a> {
         close_requested: &'a mut bool,
         physical_size: &'a mut PhySize,
         key_capture: &'a mut KeyCapture,
+        pending_pixels_per_point: &'a mut Option<f32>,
     ) -> Self {
         Self {
             bg_color,
@@ -38,6 +40,7 @@ impl<'a> Queue<'a> {
             close_requested,
             physical_size,
             key_capture,
+            pending_pixels_per_point,
         }
     }
 
@@ -59,6 +62,14 @@ impl<'a> Queue<'a> {
     /// Set how to handle capturing key events from the host.
     pub fn set_key_capture(&mut self, key_capture: KeyCapture) {
         *self.key_capture = key_capture;
+    }
+
+    /// Request a UI scale update by setting a new pixels-per-point value.
+    ///
+    /// The window handler applies this value on the next frame so rendering,
+    /// input mapping, and layout stay in sync.
+    pub fn set_pixels_per_point(&mut self, pixels_per_point: f32) {
+        *self.pending_pixels_per_point = Some(pixels_per_point.max(0.1));
     }
 }
 
@@ -129,6 +140,7 @@ where
     close_requested: bool,
     repaint_after: Option<Instant>,
     key_capture: KeyCapture,
+    pending_pixels_per_point: Option<f32>,
 }
 
 impl<State, U> EguiWindow<State, U>
@@ -196,11 +208,13 @@ where
         let mut bg_color = Rgba::BLACK;
         let mut close_requested = false;
         let mut key_capture = KeyCapture::default();
+        let mut pending_pixels_per_point = None;
         let mut queue = Queue::new(
             &mut bg_color,
             &mut close_requested,
             &mut physical_size,
             &mut key_capture,
+            &mut pending_pixels_per_point,
         );
         (build)(&egui_ctx, &mut queue, &mut state);
 
@@ -237,6 +251,7 @@ where
             close_requested,
             repaint_after: Some(start_time),
             key_capture,
+            pending_pixels_per_point: None,
         }
     }
 
@@ -330,6 +345,23 @@ where
             return;
         };
 
+        if let Some(pixels_per_point) = self.pending_pixels_per_point.take() {
+            self.pixels_per_point = pixels_per_point.max(0.1);
+            self.points_per_pixel = self.pixels_per_point.recip();
+
+            let screen_rect =
+                calculate_screen_rect(self.physical_size, self.points_per_pixel);
+            self.egui_input.screen_rect = Some(screen_rect);
+
+            let viewport_info = self
+                .egui_input
+                .viewports
+                .get_mut(&self.viewport_id)
+                .unwrap();
+            viewport_info.native_pixels_per_point = Some(self.pixels_per_point);
+            viewport_info.inner_rect = Some(screen_rect);
+        }
+
         self.egui_input.time = Some(self.start_time.elapsed().as_secs_f64());
         self.egui_input.screen_rect = Some(calculate_screen_rect(
             self.physical_size,
@@ -344,6 +376,7 @@ where
             &mut self.close_requested,
             &mut self.physical_size,
             &mut self.key_capture,
+            &mut self.pending_pixels_per_point,
         );
 
         (self.user_update)(&self.egui_ctx, &mut queue, state);
