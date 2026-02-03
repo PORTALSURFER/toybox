@@ -82,8 +82,8 @@ impl EguiHostWindow {
         mut on_frame: Frame,
     ) -> Result<(), PluginError>
     where
-        Init: FnMut(&Context, &mut Queue, &mut State) + 'static,
-        Frame: FnMut(&Context, &mut Queue, &mut State) + 'static,
+        Init: FnMut(&Context, &mut Queue, &mut State) + 'static + Send,
+        Frame: FnMut(&Context, &mut Queue, &mut State) + 'static + Send,
         State: 'static + Send,
     {
         if self.parent.is_none() {
