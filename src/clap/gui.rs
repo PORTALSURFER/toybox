@@ -93,10 +93,17 @@ impl EguiHostWindow {
             return Err(PluginError::Message("No parent window provided"));
         }
 
+        let scale_policy = if cfg!(target_os = "windows") {
+            // Avoid host/client size mismatches on Windows by using a fixed scale.
+            WindowScalePolicy::ScaleFactor(1.0)
+        } else {
+            WindowScalePolicy::SystemScaleFactor
+        };
+
         let settings = WindowOpenOptions {
             title,
             size: Size::new(size.0, size.1),
-            scale: WindowScalePolicy::SystemScaleFactor,
+            scale: scale_policy,
             gl_config: Some(Default::default()),
         };
 
