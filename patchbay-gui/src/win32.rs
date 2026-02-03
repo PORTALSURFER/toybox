@@ -197,7 +197,7 @@ where
             unsafe {
                 SetWindowPos(
                     self.hwnd,
-                    HWND(std::ptr::null_mut()),
+                    None,
                     0,
                     0,
                     width as i32,
@@ -329,9 +329,9 @@ where
             CW_USEDEFAULT,
             size.width as i32,
             size.height as i32,
-            parent_hwnd,
-            HMENU(std::ptr::null_mut()),
-            parent_hinstance,
+            Some(parent_hwnd),
+            Some(HMENU(std::ptr::null_mut())),
+            Some(parent_hinstance),
             None,
         )
     }
@@ -364,7 +364,7 @@ where
 
     unsafe {
         SetWindowLongPtrW(child_hwnd, GWLP_USERDATA, &mut *window_state as *mut _ as isize);
-        SetTimer(child_hwnd, TIMER_ID, TIMER_INTERVAL_MS, None);
+        SetTimer(Some(child_hwnd), TIMER_ID, TIMER_INTERVAL_MS, None);
     }
 
     let handle = WindowHandle { hwnd: child_hwnd };
@@ -373,7 +373,7 @@ where
     let mut msg = MSG::default();
     loop {
         unsafe {
-            while PeekMessageW(&mut msg, HWND(std::ptr::null_mut()), 0, 0, PM_REMOVE).into() {
+            while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).into() {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
