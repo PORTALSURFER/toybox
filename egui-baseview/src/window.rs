@@ -659,10 +659,9 @@ where
             }
             baseview::Event::Window(event) => match event {
                 baseview::WindowEvent::Resized(window_info) => {
-                    self.pixels_per_point = match self.scale_policy {
-                        WindowScalePolicy::ScaleFactor(scale) => scale,
-                        WindowScalePolicy::SystemScaleFactor => window_info.scale(),
-                    } as f32;
+                    if let WindowScalePolicy::SystemScaleFactor = self.scale_policy {
+                        self.pixels_per_point = window_info.scale() as f32;
+                    }
                     self.points_per_pixel = self.pixels_per_point.recip();
 
                     self.physical_size = window_info.physical_size();
