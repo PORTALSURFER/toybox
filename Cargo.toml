@@ -19,4 +19,4 @@ gui = ["dep:patchbay-gui", "dep:raw-window-handle"]
 members = ["patchbay-gui", "examples/minimal-clap"]
 
 [patch.crates-io]
-windows = "0.62.2"
+windows = { git = "https://github.com/microsoft/windows-rs", tag = "0.62.2" }
