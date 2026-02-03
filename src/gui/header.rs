@@ -29,14 +29,10 @@ pub fn header_with_scale(
     ui.horizontal(|ui| {
         ui.vertical(|ui| {
             ui.label(
-                RichText::new(title)
-                    .size(22.0 * scale)
-                    .color(Color32::from_rgb(210, 220, 230)),
+                RichText::new(title).color(Color32::from_rgb(210, 220, 230)),
             );
             ui.label(
-                RichText::new(subtitle)
-                    .size(12.0 * scale)
-                    .color(Color32::from_rgb(130, 150, 170)),
+                RichText::new(subtitle).color(Color32::from_rgb(130, 150, 170)),
             );
         });
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
