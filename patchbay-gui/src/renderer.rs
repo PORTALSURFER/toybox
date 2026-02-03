@@ -46,7 +46,10 @@ pub struct Renderer {
 impl Renderer {
     /// Create a new renderer for the given window.
     pub fn new(window: &SurfaceWindow, size: Size) -> Result<Self, GuiError> {
-        let instance = wgpu::Instance::new(wgpu::Backends::VULKAN);
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::VULKAN,
+            ..Default::default()
+        });
         let surface = unsafe { instance.create_surface(window) }.map_err(GuiError::Surface)?;
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
@@ -58,27 +61,37 @@ impl Renderer {
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 label: Some("patchbay-gui-device"),
-                features: wgpu::Features::empty(),
-                limits: wgpu::Limits::downlevel_defaults(),
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::downlevel_defaults(),
             },
             None,
         ))
         .map_err(GuiError::Device)?;
 
-        let format = surface
-            .get_supported_formats(&adapter)
-            .first()
+        let capabilities = surface.get_capabilities(&adapter);
+        let format = capabilities
+            .formats
+            .iter()
             .copied()
-            .ok_or(GuiError::SurfaceFormat)?;
+            .find(|format| format.is_srgb())
+            .unwrap_or_else(|| capabilities.formats[0]);
+        let present_mode = capabilities
+            .present_modes
+            .iter()
+            .copied()
+            .find(|mode| *mode == wgpu::PresentMode::Fifo)
+            .unwrap_or(capabilities.present_modes[0]);
+        let alpha_mode = capabilities.alpha_modes[0];
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
             width: size.width.max(1),
             height: size.height.max(1),
-            present_mode: wgpu::PresentMode::Fifo,
-            alpha_mode: wgpu::CompositeAlphaMode::Opaque,
+            present_mode,
+            alpha_mode,
             view_formats: vec![],
+            desired_maximum_frame_latency: 2,
         };
         surface.configure(&device, &config);
 
@@ -252,7 +265,7 @@ impl Renderer {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: true,
+                        store: wgpu::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
