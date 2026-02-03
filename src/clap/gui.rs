@@ -84,7 +84,7 @@ impl EguiHostWindow {
     where
         Init: FnMut(&Context, &mut Queue, &mut State) + 'static,
         Frame: FnMut(&Context, &mut Queue, &mut State) + 'static,
-        State: 'static,
+        State: 'static + Send,
     {
         if self.parent.is_none() {
             return Err(PluginError::Message("No parent window provided"));
