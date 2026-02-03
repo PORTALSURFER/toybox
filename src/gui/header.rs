@@ -21,19 +21,21 @@ pub fn header_with_scale(
     scale_label: &str,
     scale_steps: &[ScaleStep],
     selected: &mut usize,
+    scale: f32,
 ) -> bool {
     let mut changed = false;
-    ui.add_space(4.0);
+    let scale = scale.max(0.1);
+    ui.add_space(4.0 * scale);
     ui.horizontal(|ui| {
         ui.vertical(|ui| {
             ui.label(
                 RichText::new(title)
-                    .size(22.0)
+                    .size(22.0 * scale)
                     .color(Color32::from_rgb(210, 220, 230)),
             );
             ui.label(
                 RichText::new(subtitle)
-                    .size(12.0)
+                    .size(12.0 * scale)
                     .color(Color32::from_rgb(130, 150, 170)),
             );
         });
@@ -53,6 +55,6 @@ pub fn header_with_scale(
             }
         });
     });
-    ui.add_space(4.0);
+    ui.add_space(4.0 * scale);
     changed
 }
