@@ -27,7 +27,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WM_NCDESTROY, WM_PAINT, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPSIBLINGS,
     WS_CLIPCHILDREN, WS_VISIBLE,
 };
-use windows::Win32::UI::WindowsAndMessaging::{InvalidateRect, UpdateWindow};
 
 const TIMER_ID: usize = 1;
 const TIMER_INTERVAL_MS: u32 = 16;
@@ -401,8 +400,6 @@ where
 
     unsafe {
         window_state.render_frame();
-        InvalidateRect(child_hwnd, None, false);
-        UpdateWindow(child_hwnd);
         let state_ptr = Box::into_raw(window_state);
         SetWindowLongPtrW(child_hwnd, GWLP_USERDATA, state_ptr as isize);
         SetTimer(Some(child_hwnd), TIMER_ID, TIMER_INTERVAL_MS, None);
