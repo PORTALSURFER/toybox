@@ -25,10 +25,10 @@ use windows::Win32::Graphics::Gdi::{
 };
 use windows::Win32::System::LibraryLoader::{GetModuleHandleExW, GetModuleHandleW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS};
 use windows::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDROP};
-use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetCursorPos, ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, GetParent, LoadCursorW,
-    RegisterClassW, SendMessageW, SetTimer, SetWindowLongPtrW, SetWindowPos, ShowWindow,
+    RegisterClassW, ScreenToClient, SendMessageW, SetTimer, SetWindowLongPtrW, SetWindowPos, ShowWindow,
     CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA, HMENU, SWP_NOZORDER, SW_HIDE,
     SW_SHOW, WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN,
     WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_RBUTTONDOWN,
@@ -261,6 +261,22 @@ where
         self.renderer.resize(Size { width, height });
     }
 
+    fn sync_pointer_pos(&mut self) {
+        let mut point = windows::Win32::Foundation::POINT::default();
+        let got_pos = unsafe { GetCursorPos(&mut point).as_bool() };
+        if !got_pos {
+            return;
+        }
+        let mut client_point = point;
+        unsafe {
+            let _ = ScreenToClient(self.hwnd, &mut client_point);
+        }
+        self.input.pointer_pos = Point {
+            x: client_point.x,
+            y: client_point.y,
+        };
+    }
+
     fn render_frame(&mut self) {
         if !self.initialized {
             let mut ui = Ui::new(
@@ -298,6 +314,7 @@ where
 
         self.layout.cursor = self.layout_origin;
         self.canvas.clear(self.theme.background);
+        self.sync_pointer_pos();
 
         {
             let mut ui = Ui::new(
