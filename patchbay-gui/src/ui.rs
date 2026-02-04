@@ -101,6 +101,7 @@ struct DropdownOverlay {
     base_rect: Rect,
     options: Vec<String>,
     hovered: Option<usize>,
+    open_up: bool,
 }
 
 /// Layout state for sequential widgets.
@@ -427,11 +428,13 @@ impl<'a> Ui<'a> {
         base_rect: Rect,
         options: &[&str],
         hovered: Option<usize>,
+        open_up: bool,
     ) {
         self.state.overlays.push(DropdownOverlay {
             base_rect,
             options: options.iter().map(|option| (*option).to_string()).collect(),
             hovered,
+            open_up,
         });
     }
 
@@ -444,7 +447,11 @@ impl<'a> Ui<'a> {
                 let option_rect = Rect {
                     origin: Point {
                         x: rect.origin.x,
-                        y: rect.origin.y + height * (index as i32 + 1),
+                        y: if overlay.open_up {
+                            rect.origin.y - height * (index as i32 + 1)
+                        } else {
+                            rect.origin.y + height * (index as i32 + 1)
+                        },
                     },
                     size: rect.size,
                 };
@@ -1296,11 +1303,19 @@ impl<'a> Ui<'a> {
         if response.open {
             let mut any_hovered = false;
             let mut hovered_index = None;
+            let menu_height = height * options.len() as i32;
+            let canvas_height = self.canvas.size().height as i32;
+            let open_up = rect.origin.y + height + menu_height > canvas_height
+                && rect.origin.y >= menu_height;
             for (index, _option) in options.iter().enumerate() {
                 let option_rect = Rect {
                     origin: Point {
                         x: rect.origin.x,
-                        y: rect.origin.y + height * (index as i32 + 1),
+                        y: if open_up {
+                            rect.origin.y - height * (index as i32 + 1)
+                        } else {
+                            rect.origin.y + height * (index as i32 + 1)
+                        },
                     },
                     size: rect.size,
                 };
@@ -1323,7 +1338,7 @@ impl<'a> Ui<'a> {
             }
 
             if response.open {
-                self.push_dropdown_overlay(rect, options, hovered_index);
+                self.push_dropdown_overlay(rect, options, hovered_index, open_up);
             }
         }
 
