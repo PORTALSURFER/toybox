@@ -21,11 +21,11 @@ use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, PAINTSTRUCT};
 use windows::Win32::System::LibraryLoader::{GetModuleHandleExW, GetModuleHandleW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS};
 use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, GetClientRect, LoadCursorW, RegisterClassW, SetTimer,
-    SetWindowLongPtrW, SetWindowPos, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA, HMENU,
-    SWP_NOZORDER, WM_DESTROY, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
-    WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD,
-    WS_CLIPSIBLINGS, WS_CLIPCHILDREN, WS_VISIBLE,
+    CreateWindowExW, DefWindowProcW, GetClientRect, InvalidateRect, LoadCursorW, RegisterClassW,
+    SetTimer, SetWindowLongPtrW, SetWindowPos, UpdateWindow, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT,
+    GWLP_USERDATA, HMENU, SWP_NOZORDER, WM_DESTROY, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
+    WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPSIBLINGS,
+    WS_CLIPCHILDREN, WS_VISIBLE,
 };
 
 const TIMER_ID: usize = 1;
@@ -380,7 +380,7 @@ where
     log_line_safe("win32: renderer created");
     let canvas = Canvas::new(size.width, size.height);
 
-    let window_state = Box::new(WindowState {
+    let mut window_state = Box::new(WindowState {
         hwnd: child_hwnd,
         renderer,
         canvas,
@@ -399,6 +399,9 @@ where
     });
 
     unsafe {
+        window_state.render_frame();
+        InvalidateRect(child_hwnd, None, false);
+        UpdateWindow(child_hwnd);
         let state_ptr = Box::into_raw(window_state);
         SetWindowLongPtrW(child_hwnd, GWLP_USERDATA, state_ptr as isize);
         SetTimer(Some(child_hwnd), TIMER_ID, TIMER_INTERVAL_MS, None);
