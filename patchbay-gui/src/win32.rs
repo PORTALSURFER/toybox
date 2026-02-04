@@ -192,7 +192,7 @@ where
                 let mut rect = windows::Win32::Foundation::RECT::default();
                 unsafe {
                     GetClientRect(self.hwnd, &mut rect);
-                    FillRect(HDC(wparam.0 as isize), &rect, self.background_brush);
+                    FillRect(HDC(wparam.0 as *mut _), &rect, self.background_brush);
                 }
                 true
             }
@@ -517,7 +517,7 @@ where
 {
     fn drop(&mut self) {
         unsafe {
-            let _ = DeleteObject(self.background_brush);
+            let _ = DeleteObject(self.background_brush.into());
         }
     }
 }
