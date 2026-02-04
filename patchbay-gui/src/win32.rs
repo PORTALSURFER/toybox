@@ -151,10 +151,7 @@ where
                     false
                 }
             }
-            WM_DESTROY => {
-                unsafe { PostQuitMessage(0) };
-                true
-            }
+            WM_DESTROY => true,
             _ => false,
         }
     }
