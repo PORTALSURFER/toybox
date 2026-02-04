@@ -197,6 +197,21 @@ impl<'a> Ui<'a> {
             .draw_text(position, text, self.theme.text, self.theme.text_scale);
     }
 
+    /// Access the input snapshot for this frame.
+    pub fn input(&self) -> &InputState {
+        self.input
+    }
+
+    /// Access the canvas for custom drawing.
+    pub fn canvas(&mut self) -> &mut Canvas {
+        self.canvas
+    }
+
+    /// Access the layout for custom sizing.
+    pub fn layout_mut(&mut self) -> &mut Layout {
+        self.layout
+    }
+
     /// Draw a label at the current cursor and advance the cursor.
     pub fn label(&mut self, text: &str) {
         let pos = self.layout.cursor;

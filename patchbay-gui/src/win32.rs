@@ -13,6 +13,7 @@ use raw_window_handle_06::{
 use std::ffi::OsStr;
 use std::num::NonZeroIsize;
 use std::os::windows::ffi::OsStrExt;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -23,14 +24,15 @@ use windows::Win32::Graphics::Gdi::{
     PAINTSTRUCT,
 };
 use windows::Win32::System::LibraryLoader::{GetModuleHandleExW, GetModuleHandleW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS};
+use windows::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDROP};
 use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, GetParent, LoadCursorW,
     RegisterClassW, SendMessageW, SetTimer, SetWindowLongPtrW, SetWindowPos, ShowWindow,
     CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA, HMENU, SWP_NOZORDER, SW_HIDE, SW_SHOW,
-    WM_DESTROY, WM_ERASEBKGND, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL,
-    WM_NCDESTROY, WM_PAINT, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPSIBLINGS,
-    WS_CLIPCHILDREN, WS_VISIBLE,
+    WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
+    WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD,
+    WS_CLIPSIBLINGS, WS_CLIPCHILDREN, WS_VISIBLE,
 };
 
 const TIMER_ID: usize = 1;
@@ -169,6 +171,14 @@ where
             WM_MOUSEWHEEL => {
                 let delta = ((wparam.0 >> 16) & 0xFFFF) as i16 as f32 / 120.0;
                 self.input.wheel_delta += delta;
+                true
+            }
+            WM_DROPFILES => {
+                let hdrop = HDROP(wparam.0 as *mut _);
+                self.input.dropped_files = collect_dropped_files(hdrop);
+                unsafe {
+                    DragFinish(hdrop);
+                }
                 true
             }
             WM_PAINT => {
@@ -311,6 +321,7 @@ where
         self.input.mouse_pressed = false;
         self.input.mouse_released = false;
         self.input.wheel_delta = 0.0;
+        self.input.dropped_files.clear();
     }
 }
 
@@ -513,6 +524,7 @@ where
         let state_ptr = Box::into_raw(window_state);
         SetWindowLongPtrW(child_hwnd, GWLP_USERDATA, state_ptr as isize);
         SetTimer(Some(child_hwnd), TIMER_ID, TIMER_INTERVAL_MS, None);
+        DragAcceptFiles(child_hwnd, true);
         log_line_safe("win32: initial window hidden; waiting for show gate");
         // Render once; on success it will reveal the window.
         let state = &mut *(state_ptr as *mut WindowState<State, Init, Frame>);
@@ -588,4 +600,33 @@ fn to_wide(text: &str) -> Vec<u16> {
 
 fn colorref_from_theme(color: Color) -> COLORREF {
     COLORREF(color.r as u32 | ((color.g as u32) << 8) | ((color.b as u32) << 16))
+}
+
+fn collect_dropped_files(hdrop: HDROP) -> Vec<PathBuf> {
+    let count = unsafe { DragQueryFileW(hdrop, 0xFFFF_FFFF, None) };
+    let mut paths = Vec::new();
+    for index in 0..count {
+        let len = unsafe { DragQueryFileW(hdrop, index, None) };
+        if len == 0 {
+            continue;
+        }
+        let mut buffer = vec![0u16; (len + 1) as usize];
+        let written = unsafe { DragQueryFileW(hdrop, index, Some(&mut buffer)) };
+        if written == 0 {
+            continue;
+        }
+        if let Some(path) = wide_to_path(&buffer[..written as usize]) {
+            paths.push(path);
+        }
+    }
+    paths
+}
+
+fn wide_to_path(buffer: &[u16]) -> Option<PathBuf> {
+    let string = String::from_utf16(buffer).ok()?;
+    if string.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(string))
+    }
 }

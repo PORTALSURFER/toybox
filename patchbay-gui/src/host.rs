@@ -5,11 +5,12 @@ use crate::ui::{Layout, Theme, Ui, UiState};
 use crate::win32::{spawn_window_thread, WindowHandle};
 use crate::renderer::RendererDevice;
 use raw_window_handle::RawWindowHandle;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// Input snapshot delivered to UI widgets for a single frame.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct InputState {
     /// Current pointer position in pixels.
     pub pointer_pos: crate::canvas::Point,
@@ -21,6 +22,8 @@ pub struct InputState {
     pub mouse_released: bool,
     /// Scroll delta for this frame (positive = up).
     pub wheel_delta: f32,
+    /// Files dropped onto the window this frame.
+    pub dropped_files: Vec<PathBuf>,
 }
 
 /// Errors returned by the Patchbay GUI system.
