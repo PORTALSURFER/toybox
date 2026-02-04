@@ -93,6 +93,25 @@ impl HostWindow {
             .store(pack_size(width, height), Ordering::Release);
     }
 
+    /// Return true if a native window has been created.
+    pub fn is_open(&self) -> bool {
+        self.handle.is_some()
+    }
+
+    /// Show the native window if it exists.
+    pub fn show(&self) {
+        if let Some(handle) = &self.handle {
+            handle.set_visible(true);
+        }
+    }
+
+    /// Hide the native window if it exists.
+    pub fn hide(&self) {
+        if let Some(handle) = &self.handle {
+            handle.set_visible(false);
+        }
+    }
+
     /// Set a desired aspect ratio for host-driven resizing.
     pub fn set_aspect_ratio(&mut self, ratio: Option<f32>) {
         let bits = ratio.filter(|value| value.is_finite() && *value > 0.0).unwrap_or(0.0);
@@ -116,6 +135,10 @@ impl HostWindow {
         Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
         State: Send + 'static,
     {
+        if self.handle.is_some() {
+            self.show();
+            return Ok(());
+        }
         let parent = self.parent.ok_or(GuiError::NoParent)?;
         let (parent_hwnd, parent_hinstance) = match parent {
             RawWindowHandle::Win32(handle) => {

@@ -26,6 +26,23 @@ impl GuiHostWindow {
         self.inner.last_size()
     }
 
+    /// Return true if a native window has been created.
+    pub fn is_open(&self) -> bool {
+        self.inner.is_open()
+    }
+
+    /// Show the native window if it exists.
+    pub fn show(&self) {
+        log_line_safe("toybox/gui: show");
+        self.inner.show();
+    }
+
+    /// Hide the native window if it exists.
+    pub fn hide(&self) {
+        log_line_safe("toybox/gui: hide");
+        self.inner.hide();
+    }
+
     /// Request a logical resize from the GUI thread.
     pub fn request_resize(&self, width: u32, height: u32) {
         log_line_safe(&format!(

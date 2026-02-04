@@ -23,7 +23,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, GetClientRect, LoadCursorW, RegisterClassW, SetTimer,
     SetWindowLongPtrW, SetWindowPos, ShowWindow, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT,
-    GWLP_USERDATA, HMENU, SWP_NOZORDER, SW_SHOW, WM_DESTROY, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    GWLP_USERDATA, HMENU, SWP_NOZORDER, SW_HIDE, SW_SHOW, WM_DESTROY, WM_LBUTTONDOWN, WM_LBUTTONUP,
     WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD,
     WS_CLIPSIBLINGS, WS_CLIPCHILDREN, WS_VISIBLE,
 };
@@ -41,6 +41,13 @@ impl WindowHandle {
     /// Return the underlying HWND.
     pub fn hwnd(&self) -> HWND {
         self.hwnd
+    }
+
+    /// Show or hide the window.
+    pub fn set_visible(&self, visible: bool) {
+        unsafe {
+            ShowWindow(self.hwnd, if visible { SW_SHOW } else { SW_HIDE });
+        }
     }
 }
 
