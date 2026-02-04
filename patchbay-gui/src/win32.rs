@@ -380,7 +380,7 @@ where
     log_line_safe("win32: renderer created");
     let canvas = Canvas::new(size.width, size.height);
 
-    let mut window_state = Box::new(WindowState {
+    let window_state = Box::new(WindowState {
         hwnd: child_hwnd,
         renderer,
         canvas,
@@ -399,7 +399,8 @@ where
     });
 
     unsafe {
-        SetWindowLongPtrW(child_hwnd, GWLP_USERDATA, &mut *window_state as *mut _ as isize);
+        let state_ptr = Box::into_raw(window_state);
+        SetWindowLongPtrW(child_hwnd, GWLP_USERDATA, state_ptr as isize);
         SetTimer(Some(child_hwnd), TIMER_ID, TIMER_INTERVAL_MS, None);
     }
 
