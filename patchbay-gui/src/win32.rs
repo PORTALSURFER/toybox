@@ -21,11 +21,11 @@ use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, PAINTSTRUCT};
 use windows::Win32::System::LibraryLoader::{GetModuleHandleExW, GetModuleHandleW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS};
 use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, GetClientRect, LoadCursorW, RegisterClassW, SetTimer,
-    SetWindowLongPtrW, SetWindowPos, ShowWindow, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT,
-    GWLP_USERDATA, HMENU, SWP_NOZORDER, SW_HIDE, SW_SHOW, WM_DESTROY, WM_LBUTTONDOWN, WM_LBUTTONUP,
-    WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD,
-    WS_CLIPSIBLINGS, WS_CLIPCHILDREN, WS_VISIBLE,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, GetParent, LoadCursorW,
+    RegisterClassW, SetTimer, SetWindowLongPtrW, SetWindowPos, ShowWindow, CS_HREDRAW, CS_VREDRAW,
+    CW_USEDEFAULT, GWLP_USERDATA, HMENU, SWP_NOZORDER, SW_HIDE, SW_SHOW, WM_DESTROY,
+    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_SIZE,
+    WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPSIBLINGS, WS_CLIPCHILDREN, WS_VISIBLE,
 };
 
 const TIMER_ID: usize = 1;
@@ -47,6 +47,23 @@ impl WindowHandle {
     pub fn set_visible(&self, visible: bool) {
         unsafe {
             ShowWindow(self.hwnd, if visible { SW_SHOW } else { SW_HIDE });
+        }
+    }
+
+    /// Return true if the HWND is still valid.
+    pub fn is_valid(&self) -> bool {
+        unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindow(Some(self.hwnd)).as_bool() }
+    }
+
+    /// Return true if the parent matches the provided HWND.
+    pub fn parent_matches(&self, parent: isize) -> bool {
+        unsafe { GetParent(self.hwnd) == HWND(parent as *mut _) }
+    }
+
+    /// Destroy the underlying HWND.
+    pub fn destroy(&self) {
+        unsafe {
+            let _ = DestroyWindow(self.hwnd);
         }
     }
 }

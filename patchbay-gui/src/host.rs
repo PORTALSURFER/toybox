@@ -58,6 +58,7 @@ pub enum GuiError {
 #[derive(Clone, Debug)]
 pub struct HostWindow {
     parent: Option<RawWindowHandle>,
+    parent_hwnd: Option<isize>,
     handle: Option<WindowHandle>,
     resize_request: Arc<AtomicU64>,
     last_size: Arc<AtomicU64>,
@@ -68,6 +69,7 @@ impl Default for HostWindow {
     fn default() -> Self {
         Self {
             parent: None,
+            parent_hwnd: None,
             handle: None,
             resize_request: Arc::new(AtomicU64::new(0)),
             last_size: Arc::new(AtomicU64::new(0)),
@@ -79,6 +81,17 @@ impl Default for HostWindow {
 impl HostWindow {
     /// Assign the raw parent handle supplied by the CLAP host.
     pub fn set_parent(&mut self, parent: RawWindowHandle) {
+        let new_parent_hwnd = match parent {
+            RawWindowHandle::Win32(handle) => Some(handle.hwnd as isize),
+            _ => None,
+        };
+        if self.parent_hwnd != new_parent_hwnd {
+            if let Some(handle) = &self.handle {
+                handle.destroy();
+            }
+            self.handle = None;
+            self.parent_hwnd = new_parent_hwnd;
+        }
         self.parent = Some(parent);
     }
 
@@ -135,10 +148,6 @@ impl HostWindow {
         Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
         State: Send + 'static,
     {
-        if self.handle.is_some() {
-            self.show();
-            return Ok(());
-        }
         let parent = self.parent.ok_or(GuiError::NoParent)?;
         let (parent_hwnd, parent_hinstance) = match parent {
             RawWindowHandle::Win32(handle) => {
@@ -146,6 +155,14 @@ impl HostWindow {
             }
             _ => return Err(GuiError::UnsupportedHandle),
         };
+        if let Some(handle) = &self.handle {
+            if handle.is_valid() && handle.parent_matches(parent_hwnd) {
+                self.show();
+                return Ok(());
+            }
+            handle.destroy();
+            self.handle = None;
+        }
 
         let resize_request = self.resize_request.clone();
         let last_size = self.last_size.clone();
