@@ -409,6 +409,11 @@ impl<'a> Ui<'a> {
         self.canvas
     }
 
+    /// Access the current theme settings.
+    pub fn theme(&self) -> &Theme {
+        self.theme
+    }
+
     /// Access the layout for custom sizing.
     pub fn layout_mut(&mut self) -> &mut Layout {
         self.layout

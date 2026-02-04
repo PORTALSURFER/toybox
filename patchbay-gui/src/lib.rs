@@ -8,6 +8,7 @@
 compile_error!("patchbay-gui currently supports Windows only.");
 
 mod canvas;
+mod declarative;
 mod host;
 mod logging;
 mod renderer;
@@ -16,6 +17,10 @@ mod ui;
 mod win32;
 
 pub use crate::canvas::{Canvas, Color, Point, Rect, Size};
+pub use crate::declarative::{
+    Align, FlexSpec, GridSpec as DeclarativeGridSpec, LabelSpec, Node, Padding, PanelSpec,
+    SizeSpec, SpacerSpec, UiSpec, WidgetSpec, measure, render,
+};
 pub use crate::host::{GuiError, HostWindow, InputState, OpenParentedMode};
 #[cfg(target_os = "windows")]
 pub use crate::win32::WindowHandle;

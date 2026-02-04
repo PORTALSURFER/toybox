@@ -4,3 +4,12 @@
 //! `toybox` and keep GUI integrations consistent.
 
 pub use patchbay_gui::*;
+
+/// Declarative layout helpers for Patchbay GUI.
+pub mod declarative {
+    //! Declarative layout helpers re-exported from patchbay-gui.
+    pub use patchbay_gui::{
+        Align, FlexSpec, LabelSpec, Node, Padding, PanelSpec, SizeSpec, SpacerSpec, UiSpec,
+        WidgetSpec, DeclarativeGridSpec, measure, render,
+    };
+}
