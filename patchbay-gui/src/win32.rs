@@ -324,6 +324,14 @@ where
     log_line_safe("win32: RegisterClassW completed");
 
     let title_w = to_wide(&title);
+    log_line_safe(&format!(
+        "win32: CreateWindowExW begin title=\"{}\" size={}x{} parent_hwnd={:?} parent_hinstance={:?}",
+        title,
+        size.width,
+        size.height,
+        parent_hwnd,
+        parent_hinstance
+    ));
     let child_hwnd = unsafe {
         CreateWindowExW(
             Default::default(),
@@ -340,7 +348,10 @@ where
             None,
         )
     }
-    .map_err(|_| GuiError::WindowCreateFailed)?;
+    .map_err(|err| {
+        log_line_safe(&format!("win32: CreateWindowExW error: {err:?}"));
+        GuiError::WindowCreateFailed
+    })?;
     log_line_safe(&format!("win32: CreateWindowExW ok hwnd={:?}", child_hwnd));
 
     let window = SurfaceWindow {
