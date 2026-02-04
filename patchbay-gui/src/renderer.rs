@@ -303,25 +303,7 @@ impl Renderer {
         let padded_bytes_per_row = ((bytes_per_row + alignment - 1) / alignment) * alignment;
 
         if padded_bytes_per_row == bytes_per_row {
-            self.device.queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &self.texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                pixels,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(bytes_per_row),
-                    rows_per_image: Some(size.height),
-                },
-                wgpu::Extent3d {
-                    width: size.width,
-                    height: size.height,
-                    depth_or_array_layers: 1,
-                },
-            );
+            self.write_texture(size, pixels, bytes_per_row);
             return;
         }
 
@@ -335,25 +317,7 @@ impl Renderer {
                 .copy_from_slice(&pixels[src_offset..src_offset + src_row]);
         }
 
-        self.device.queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &self.texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &padded,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(padded_bytes_per_row),
-                rows_per_image: Some(size.height),
-            },
-            wgpu::Extent3d {
-                width: size.width,
-                height: size.height,
-                depth_or_array_layers: 1,
-            },
-        );
+        self.write_texture(size, &padded, padded_bytes_per_row);
     }
 
     /// Render the canvas to the surface.
@@ -431,5 +395,27 @@ impl Renderer {
             ..Default::default()
         });
         (texture, texture_view, sampler)
+    }
+
+    fn write_texture(&self, size: Size, pixels: &[u8], bytes_per_row: u32) {
+        self.device.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            pixels,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(bytes_per_row),
+                rows_per_image: Some(size.height),
+            },
+            wgpu::Extent3d {
+                width: size.width,
+                height: size.height,
+                depth_or_array_layers: 1,
+            },
+        );
     }
 }
