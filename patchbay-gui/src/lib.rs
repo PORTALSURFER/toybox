@@ -19,4 +19,7 @@ pub use crate::canvas::{Canvas, Color, Point, Rect, Size};
 pub use crate::host::{GuiError, HostWindow, InputState};
 #[cfg(target_os = "windows")]
 pub use crate::win32::WindowHandle;
-pub use crate::ui::{KnobResponse, Layout, Theme, Ui, WidgetId};
+pub use crate::ui::{
+    ButtonResponse, DropdownResponse, KnobResponse, Layout, SliderResponse, Theme,
+    ToggleResponse, Ui, WidgetId,
+};

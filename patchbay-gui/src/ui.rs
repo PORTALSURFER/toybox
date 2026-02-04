@@ -68,6 +68,7 @@ pub struct UiState {
     hot: Option<WidgetId>,
     drag_start: Option<Point>,
     drag_value: f32,
+    open_dropdown: Option<WidgetId>,
 }
 
 /// Layout state for sequential widgets.
@@ -103,6 +104,46 @@ pub struct KnobResponse {
     pub hovered: bool,
     /// The knob is actively being dragged.
     pub active: bool,
+}
+
+/// Response metadata from slider widgets.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SliderResponse {
+    /// The slider value changed this frame.
+    pub changed: bool,
+    /// The pointer is hovering the slider.
+    pub hovered: bool,
+    /// The slider is actively being dragged.
+    pub active: bool,
+}
+
+/// Response metadata from toggle widgets.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ToggleResponse {
+    /// The toggle value changed this frame.
+    pub changed: bool,
+    /// The pointer is hovering the toggle.
+    pub hovered: bool,
+}
+
+/// Response metadata from button widgets.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ButtonResponse {
+    /// The button was clicked this frame.
+    pub clicked: bool,
+    /// The pointer is hovering the button.
+    pub hovered: bool,
+}
+
+/// Response metadata from dropdown widgets.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DropdownResponse {
+    /// The selection changed this frame.
+    pub changed: bool,
+    /// The dropdown is open this frame.
+    pub open: bool,
+    /// The pointer is hovering the dropdown control.
+    pub hovered: bool,
 }
 
 /// UI frame context used to draw widgets and handle input.
@@ -318,6 +359,393 @@ impl<'a> Ui<'a> {
         self.knob(id, label, value, range)
     }
 
+    /// Draw a horizontal slider with the given label and value.
+    ///
+    /// The provided `id` must be stable across frames. If the label changes
+    /// while dragging, use [`Ui::slider_with_key`] to provide a separate stable
+    /// identifier.
+    pub fn slider(
+        &mut self,
+        id: WidgetId,
+        label: &str,
+        value: &mut f32,
+        range: (f32, f32),
+        width: i32,
+        height: i32,
+    ) -> SliderResponse {
+        let label_height = 10;
+        let base = self.layout.cursor;
+        let mut rect_origin = base;
+        if !label.is_empty() {
+            self.canvas.draw_text(base, label, self.theme.text, 1);
+            rect_origin.y += label_height;
+        }
+
+        let rect = Rect {
+            origin: rect_origin,
+            size: Size {
+                width: width.max(1) as u32,
+                height: height.max(1) as u32,
+            },
+        };
+        let hovered = rect.contains(self.input.pointer_pos);
+        if hovered {
+            self.state.hot = Some(id);
+        }
+
+        let mut response = SliderResponse {
+            hovered,
+            active: self.state.active == Some(id),
+            changed: false,
+        };
+
+        if hovered && self.input.mouse_pressed {
+            self.state.active = Some(id);
+            response.active = true;
+        }
+
+        if self.state.active == Some(id) && self.input.mouse_released {
+            self.state.active = None;
+            response.active = false;
+        }
+
+        if self.state.active == Some(id) && self.input.mouse_down {
+            let span = (range.1 - range.0).max(1.0e-6);
+            let x = (self.input.pointer_pos.x - rect.origin.x) as f32;
+            let t = (x / rect.size.width.max(1) as f32).clamp(0.0, 1.0);
+            let new_value = range.0 + t * span;
+            if (*value - new_value).abs() > f32::EPSILON {
+                *value = new_value;
+                response.changed = true;
+            }
+        }
+
+        if hovered && self.input.wheel_delta != 0.0 {
+            let span = (range.1 - range.0).max(1.0e-6);
+            let step = 0.02 * span;
+            let new_value = (*value + step * self.input.wheel_delta.signum())
+                .clamp(range.0, range.1);
+            if (*value - new_value).abs() > f32::EPSILON {
+                *value = new_value;
+                response.changed = true;
+            }
+        }
+
+        let span = (range.1 - range.0).max(1.0e-6);
+        let t = ((*value - range.0) / span).clamp(0.0, 1.0);
+        let track_height = (height / 4).max(4);
+        let track_y = rect.origin.y + (height - track_height) / 2;
+        let track_rect = Rect {
+            origin: Point {
+                x: rect.origin.x,
+                y: track_y,
+            },
+            size: Size {
+                width: rect.size.width,
+                height: track_height as u32,
+            },
+        };
+        let fill_width = ((rect.size.width as f32) * t).round() as u32;
+        let fill_rect = Rect {
+            origin: track_rect.origin,
+            size: Size {
+                width: fill_width,
+                height: track_rect.size.height,
+            },
+        };
+        let fill = if response.active {
+            self.theme.knob_active
+        } else if hovered {
+            self.theme.knob_hover
+        } else {
+            self.theme.knob_fill
+        };
+        self.canvas.fill_rect(track_rect, fill);
+        self.canvas
+            .stroke_rect(track_rect, 1, self.theme.knob_outline);
+        self.canvas
+            .fill_rect(fill_rect, self.theme.knob_indicator);
+
+        let handle_x = rect.origin.x + (rect.size.width as f32 * t) as i32;
+        let handle_center = Point {
+            x: handle_x,
+            y: rect.origin.y + height / 2,
+        };
+        let handle_radius = (height / 2).max(3);
+        self.canvas
+            .fill_circle(handle_center, handle_radius, self.theme.knob_indicator);
+
+        self.layout.cursor.y = rect.origin.y + height + self.layout.spacing;
+        response
+    }
+
+    /// Draw a horizontal slider with a stable key and a dynamic label.
+    pub fn slider_with_key(
+        &mut self,
+        key: &str,
+        label: &str,
+        value: &mut f32,
+        range: (f32, f32),
+        width: i32,
+        height: i32,
+    ) -> SliderResponse {
+        let id = WidgetId::from_label(key);
+        self.slider(id, label, value, range, width, height)
+    }
+
+    /// Draw a toggle switch with the given label and value.
+    pub fn toggle(
+        &mut self,
+        id: WidgetId,
+        label: &str,
+        value: &mut bool,
+        width: i32,
+        height: i32,
+    ) -> ToggleResponse {
+        let label_height = 10;
+        let base = self.layout.cursor;
+        let mut rect_origin = base;
+        if !label.is_empty() {
+            self.canvas.draw_text(base, label, self.theme.text, 1);
+            rect_origin.y += label_height;
+        }
+        let rect = Rect {
+            origin: rect_origin,
+            size: Size {
+                width: width.max(1) as u32,
+                height: height.max(1) as u32,
+            },
+        };
+        let hovered = rect.contains(self.input.pointer_pos);
+        if hovered {
+            self.state.hot = Some(id);
+        }
+        let mut response = ToggleResponse {
+            hovered,
+            changed: false,
+        };
+        if hovered && self.input.mouse_pressed {
+            *value = !*value;
+            response.changed = true;
+        }
+        let fill = if *value {
+            self.theme.knob_indicator
+        } else if hovered {
+            self.theme.knob_hover
+        } else {
+            self.theme.knob_fill
+        };
+        self.canvas.fill_rect(rect, fill);
+        self.canvas
+            .stroke_rect(rect, 1, self.theme.knob_outline);
+
+        let thumb_radius = (height / 2).max(3);
+        let thumb_x = if *value {
+            rect.origin.x + width - thumb_radius
+        } else {
+            rect.origin.x + thumb_radius
+        };
+        let thumb_center = Point {
+            x: thumb_x,
+            y: rect.origin.y + height / 2,
+        };
+        self.canvas
+            .fill_circle(thumb_center, thumb_radius, self.theme.knob_outline);
+
+        self.layout.cursor.y = rect.origin.y + height + self.layout.spacing;
+        response
+    }
+
+    /// Draw a toggle switch with a stable key and a dynamic label.
+    pub fn toggle_with_key(
+        &mut self,
+        key: &str,
+        label: &str,
+        value: &mut bool,
+        width: i32,
+        height: i32,
+    ) -> ToggleResponse {
+        let id = WidgetId::from_label(key);
+        self.toggle(id, label, value, width, height)
+    }
+
+    /// Draw a button with the given label.
+    pub fn button(
+        &mut self,
+        id: WidgetId,
+        label: &str,
+        width: i32,
+        height: i32,
+    ) -> ButtonResponse {
+        let rect = Rect {
+            origin: self.layout.cursor,
+            size: Size {
+                width: width.max(1) as u32,
+                height: height.max(1) as u32,
+            },
+        };
+        let hovered = rect.contains(self.input.pointer_pos);
+        if hovered {
+            self.state.hot = Some(id);
+        }
+        let mut response = ButtonResponse {
+            hovered,
+            clicked: false,
+        };
+        if hovered && self.input.mouse_pressed {
+            response.clicked = true;
+        }
+        let fill = if hovered {
+            self.theme.knob_hover
+        } else {
+            self.theme.knob_fill
+        };
+        self.canvas.fill_rect(rect, fill);
+        self.canvas
+            .stroke_rect(rect, 1, self.theme.knob_outline);
+        let text_pos = Point {
+            x: rect.origin.x + 4,
+            y: rect.origin.y + (height / 2) - 3,
+        };
+        self.canvas.draw_text(text_pos, label, self.theme.text, 1);
+
+        self.layout.cursor.y = rect.origin.y + height + self.layout.spacing;
+        response
+    }
+
+    /// Draw a button with a stable key and a dynamic label.
+    pub fn button_with_key(
+        &mut self,
+        key: &str,
+        label: &str,
+        width: i32,
+        height: i32,
+    ) -> ButtonResponse {
+        let id = WidgetId::from_label(key);
+        self.button(id, label, width, height)
+    }
+
+    /// Draw a dropdown selector with the given label and options.
+    pub fn dropdown(
+        &mut self,
+        id: WidgetId,
+        label: &str,
+        options: &[&str],
+        selected: &mut usize,
+        width: i32,
+        height: i32,
+    ) -> DropdownResponse {
+        let label_height = 10;
+        let base = self.layout.cursor;
+        let mut rect_origin = base;
+        if !label.is_empty() {
+            self.canvas.draw_text(base, label, self.theme.text, 1);
+            rect_origin.y += label_height;
+        }
+
+        let rect = Rect {
+            origin: rect_origin,
+            size: Size {
+                width: width.max(1) as u32,
+                height: height.max(1) as u32,
+            },
+        };
+        let hovered = rect.contains(self.input.pointer_pos);
+        if hovered {
+            self.state.hot = Some(id);
+        }
+        let mut response = DropdownResponse {
+            hovered,
+            open: self.state.open_dropdown == Some(id),
+            changed: false,
+        };
+
+        if hovered && self.input.mouse_pressed {
+            if response.open {
+                self.state.open_dropdown = None;
+                response.open = false;
+            } else {
+                self.state.open_dropdown = Some(id);
+                response.open = true;
+            }
+        }
+
+        let fill = if response.open {
+            self.theme.knob_active
+        } else if hovered {
+            self.theme.knob_hover
+        } else {
+            self.theme.knob_fill
+        };
+        self.canvas.fill_rect(rect, fill);
+        self.canvas
+            .stroke_rect(rect, 1, self.theme.knob_outline);
+        let current = options.get(*selected).copied().unwrap_or("-");
+        let text_pos = Point {
+            x: rect.origin.x + 4,
+            y: rect.origin.y + (height / 2) - 3,
+        };
+        self.canvas.draw_text(text_pos, current, self.theme.text, 1);
+
+        if response.open {
+            let mut any_hovered = false;
+            for (index, option) in options.iter().enumerate() {
+                let option_rect = Rect {
+                    origin: Point {
+                        x: rect.origin.x,
+                        y: rect.origin.y + height * (index as i32 + 1),
+                    },
+                    size: rect.size,
+                };
+                let option_hovered = option_rect.contains(self.input.pointer_pos);
+                if option_hovered {
+                    any_hovered = true;
+                }
+                let option_fill = if option_hovered {
+                    self.theme.knob_hover
+                } else {
+                    self.theme.knob_fill
+                };
+                self.canvas.fill_rect(option_rect, option_fill);
+                self.canvas
+                    .stroke_rect(option_rect, 1, self.theme.knob_outline);
+                let option_text = Point {
+                    x: option_rect.origin.x + 4,
+                    y: option_rect.origin.y + (height / 2) - 3,
+                };
+                self.canvas.draw_text(option_text, option, self.theme.text, 1);
+                if option_hovered && self.input.mouse_pressed {
+                    *selected = index;
+                    response.changed = true;
+                    self.state.open_dropdown = None;
+                    response.open = false;
+                }
+            }
+
+            if self.input.mouse_pressed && !hovered && !any_hovered {
+                self.state.open_dropdown = None;
+                response.open = false;
+            }
+        }
+
+        self.layout.cursor.y = rect.origin.y + height + self.layout.spacing;
+        response
+    }
+
+    /// Draw a dropdown selector with a stable key and a dynamic label.
+    pub fn dropdown_with_key(
+        &mut self,
+        key: &str,
+        label: &str,
+        options: &[&str],
+        selected: &mut usize,
+        width: i32,
+        height: i32,
+    ) -> DropdownResponse {
+        let id = WidgetId::from_label(key);
+        self.dropdown(id, label, options, selected, width, height)
+    }
+
     /// Clear the background with the theme color.
     pub fn clear(&mut self) {
         self.canvas.clear(self.theme.background);
@@ -382,6 +810,94 @@ mod tests {
             let response =
                 ui.knob_with_key("attack", "Attack 0.60s", &mut value, (0.0, 1.0));
             assert!(response.changed);
+        }
+    }
+
+    #[test]
+    fn slider_updates_value_on_drag() {
+        let mut canvas = Canvas::new(200, 200);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let mut value = 0.0;
+        let mut input = InputState::default();
+        input.pointer_pos = Point { x: 20, y: 20 };
+        input.mouse_pressed = true;
+        input.mouse_down = true;
+
+        {
+            let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+            ui.slider(WidgetId::new(2), "GAIN", &mut value, (0.0, 1.0), 100, 16);
+        }
+
+        input.mouse_pressed = false;
+        input.pointer_pos = Point { x: 80, y: 20 };
+
+        {
+            let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+            let response =
+                ui.slider(WidgetId::new(2), "GAIN", &mut value, (0.0, 1.0), 100, 16);
+            assert!(response.changed);
+        }
+    }
+
+    #[test]
+    fn toggle_flips_on_click() {
+        let mut canvas = Canvas::new(200, 200);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let mut value = false;
+        let mut input = InputState::default();
+        input.pointer_pos = Point { x: 20, y: 20 };
+        input.mouse_pressed = true;
+
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let response = ui.toggle(WidgetId::new(3), "Toggle", &mut value, 40, 16);
+        assert!(response.changed);
+        assert!(value);
+    }
+
+    #[test]
+    fn button_reports_click() {
+        let mut canvas = Canvas::new(200, 200);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let mut input = InputState::default();
+        input.pointer_pos = Point { x: 20, y: 20 };
+        input.mouse_pressed = true;
+
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let response = ui.button(WidgetId::new(4), "OK", 40, 16);
+        assert!(response.clicked);
+    }
+
+    #[test]
+    fn dropdown_selects_option() {
+        let mut canvas = Canvas::new(200, 200);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let mut input = InputState::default();
+        let options = ["Off", "Mono", "Poly"];
+        let mut selected = 0;
+
+        input.pointer_pos = Point { x: 20, y: 20 };
+        input.mouse_pressed = true;
+        {
+            let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+            ui.dropdown(WidgetId::new(5), "Mode", &options, &mut selected, 80, 16);
+        }
+
+        input.mouse_pressed = true;
+        input.pointer_pos = Point { x: 20, y: 40 };
+        {
+            let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+            let response =
+                ui.dropdown(WidgetId::new(5), "Mode", &options, &mut selected, 80, 16);
+            assert!(response.changed);
+            assert_eq!(selected, 1);
         }
     }
 }
