@@ -324,18 +324,19 @@ impl Renderer {
     pub fn render(&mut self) -> Result<(), GuiError> {
         let output = match self.surface.get_current_texture() {
             Ok(output) => output,
-            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                self.surface.configure(&self.device.device, &self.config);
-                self.surface.get_current_texture().map_err(|err| {
-                    log_line_safe(&format!(
-                        "renderer: get_current_texture after reconfigure error: {err:?}"
-                    ));
-                    GuiError::SurfaceAcquire(err)
-                })?
-            }
             Err(err) => {
-                log_line_safe(&format!("renderer: get_current_texture error: {err:?}"));
-                return Err(GuiError::SurfaceAcquire(err));
+                if should_reconfigure_surface(&err) {
+                    self.surface.configure(&self.device.device, &self.config);
+                    self.surface.get_current_texture().map_err(|err| {
+                        log_line_safe(&format!(
+                            "renderer: get_current_texture after reconfigure error: {err:?}"
+                        ));
+                        GuiError::SurfaceAcquire(err)
+                    })?
+                } else {
+                    log_line_safe(&format!("renderer: get_current_texture error: {err:?}"));
+                    return Err(GuiError::SurfaceAcquire(err));
+                }
             }
         };
         let view = output
@@ -426,5 +427,22 @@ impl Renderer {
                 depth_or_array_layers: 1,
             },
         );
+    }
+}
+
+fn should_reconfigure_surface(err: &wgpu::SurfaceError) -> bool {
+    matches!(err, wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_reconfigure_surface;
+
+    #[test]
+    fn surface_errors_trigger_reconfigure() {
+        assert!(should_reconfigure_surface(&wgpu::SurfaceError::Lost));
+        assert!(should_reconfigure_surface(&wgpu::SurfaceError::Outdated));
+        assert!(!should_reconfigure_surface(&wgpu::SurfaceError::Timeout));
+        assert!(!should_reconfigure_surface(&wgpu::SurfaceError::OutOfMemory));
     }
 }
