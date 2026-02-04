@@ -309,7 +309,7 @@ where
     let parent_hwnd = HWND(parent_hwnd as *mut _);
     let parent_hinstance = HINSTANCE(parent_hinstance as *mut _);
     let module_hinstance = if parent_hinstance.0.is_null() {
-        unsafe { GetModuleHandleW(None).unwrap_or_default() }
+        unsafe { GetModuleHandleW(None).unwrap_or_default().into() }
     } else {
         parent_hinstance
     };
@@ -320,7 +320,7 @@ where
         ));
     }
     unsafe {
-        if !windows::Win32::UI::WindowsAndMessaging::IsWindow(parent_hwnd).as_bool() {
+        if !windows::Win32::UI::WindowsAndMessaging::IsWindow(Some(parent_hwnd)).as_bool() {
             log_line_safe(&format!(
                 "win32: invalid parent hwnd={:?}; aborting CreateWindowExW",
                 parent_hwnd
