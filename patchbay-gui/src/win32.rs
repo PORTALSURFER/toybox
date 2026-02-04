@@ -308,12 +308,32 @@ where
     let class_name = to_wide("PatchbayGuiWindow");
     let parent_hwnd = HWND(parent_hwnd as *mut _);
     let parent_hinstance = HINSTANCE(parent_hinstance as *mut _);
+    let module_hinstance = if parent_hinstance.0.is_null() {
+        unsafe { GetModuleHandleW(None).unwrap_or_default() }
+    } else {
+        parent_hinstance
+    };
+    if parent_hinstance.0.is_null() {
+        log_line_safe(&format!(
+            "win32: parent hinstance was null, using module hinstance={:?}",
+            module_hinstance
+        ));
+    }
+    unsafe {
+        if !windows::Win32::UI::WindowsAndMessaging::IsWindow(parent_hwnd).as_bool() {
+            log_line_safe(&format!(
+                "win32: invalid parent hwnd={:?}; aborting CreateWindowExW",
+                parent_hwnd
+            ));
+            return Err(GuiError::WindowCreateFailed);
+        }
+    }
 
     unsafe {
         let wnd_class = WNDCLASSW {
             style: CS_HREDRAW | CS_VREDRAW,
             lpfnWndProc: Some(window_proc::<State, Init, Frame>),
-            hInstance: parent_hinstance,
+            hInstance: module_hinstance,
             lpszClassName: PCWSTR(class_name.as_ptr()),
             hCursor: LoadCursorW(None, windows::Win32::UI::WindowsAndMessaging::IDC_ARROW)
                 .unwrap(),
@@ -325,12 +345,13 @@ where
 
     let title_w = to_wide(&title);
     log_line_safe(&format!(
-        "win32: CreateWindowExW begin title=\"{}\" size={}x{} parent_hwnd={:?} parent_hinstance={:?}",
+        "win32: CreateWindowExW begin title=\"{}\" size={}x{} parent_hwnd={:?} parent_hinstance={:?} module_hinstance={:?}",
         title,
         size.width,
         size.height,
         parent_hwnd,
-        parent_hinstance
+        parent_hinstance,
+        module_hinstance
     ));
     let child_hwnd = unsafe {
         CreateWindowExW(
@@ -344,7 +365,7 @@ where
             size.height as i32,
             Some(parent_hwnd),
             Some(HMENU(std::ptr::null_mut())),
-            Some(parent_hinstance),
+            Some(module_hinstance),
             None,
         )
     }
