@@ -6,6 +6,7 @@
 pub mod bundle;
 pub mod entry;
 pub mod events;
+pub mod automation;
 pub mod params;
 pub mod process;
 pub mod registration;
