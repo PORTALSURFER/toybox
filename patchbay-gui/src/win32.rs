@@ -34,7 +34,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA, HMENU, SWP_NOZORDER, SW_HIDE,
     SW_SHOW, WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN,
     WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_RBUTTONDOWN,
-    WM_RBUTTONUP, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD,
+    WM_RBUTTONUP, WM_SIZE, WM_TIMER, WM_CHAR, WNDCLASSW, WS_CHILD,
     WS_CLIPSIBLINGS, WS_CLIPCHILDREN, WS_VISIBLE,
 };
 
@@ -513,7 +513,6 @@ where
     }
 
     unsafe {
-        let background_brush = unsafe { CreateSolidBrush(BACKGROUND_COLOR) };
         let wnd_class = WNDCLASSW {
             style: CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS,
             lpfnWndProc: Some(window_proc::<State, Init, Frame>),
@@ -521,7 +520,7 @@ where
             lpszClassName: PCWSTR(class_name.as_ptr()),
             hCursor: LoadCursorW(None, windows::Win32::UI::WindowsAndMessaging::IDC_ARROW)
                 .unwrap(),
-            hbrBackground: background_brush,
+            hbrBackground: HBRUSH(0),
             ..Default::default()
         };
         RegisterClassW(&wnd_class);
@@ -606,7 +605,7 @@ where
             created_at: Instant::now(),
             last_mouse_down: false,
             last_mouse_secondary_down: false,
-            debug_input: true,
+            debug_input: std::env::var_os("PATCHBAY_DEBUG_INPUT").is_some(),
             frame_counter: 0,
         });
 
