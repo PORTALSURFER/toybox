@@ -1,4 +1,24 @@
 //! Automation helpers for routing GUI parameter edits to the host.
+//!
+//! # Example
+//! ```
+//! use toybox::clack_plugin::utils::ClapId;
+//! use toybox::clap::automation::{AutomationConfig, AutomationQueue};
+//! use toybox::clack_plugin::events::io::EventBuffer;
+//!
+//! let mut config = AutomationConfig::default();
+//! config.disable_param(ClapId::new(2));
+//!
+//! let queue = AutomationQueue::default();
+//! queue.push_gesture_begin(&config, ClapId::new(1));
+//! queue.push_value(&config, ClapId::new(1), 0.5);
+//! queue.push_gesture_end(&config, ClapId::new(1));
+//!
+//! let mut buffer = EventBuffer::new();
+//! let mut output = buffer.as_output();
+//! let mut scratch = Vec::new();
+//! queue.drain_to_output(&mut output, &mut scratch);
+//! ```
 
 use std::collections::HashSet;
 use std::sync::Mutex;
