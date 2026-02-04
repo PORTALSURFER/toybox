@@ -31,6 +31,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 const TIMER_ID: usize = 1;
 const TIMER_INTERVAL_MS: u32 = 16;
+const PREWARM_FRAMES: u8 = 2;
 
 /// Thin wrapper around an HWND for cross-thread use.
 #[derive(Clone, Debug)]
@@ -449,7 +450,7 @@ where
         aspect_ratio,
         initialized: false,
         shown: false,
-        prewarm_frames: 1,
+        prewarm_frames: PREWARM_FRAMES,
     });
 
     unsafe {
