@@ -123,6 +123,7 @@ where
     initialized: bool,
     shown: bool,
     prewarm_frames: u8,
+    saw_timer_tick: bool,
 }
 
 impl<State, Init, Frame> WindowState<State, Init, Frame>
@@ -173,6 +174,7 @@ where
             }
             WM_TIMER => {
                 if wparam.0 == TIMER_ID {
+                    self.saw_timer_tick = true;
                     self.render_frame();
                     true
                 } else {
@@ -248,11 +250,11 @@ where
         }
 
         self.renderer.upload(self.canvas.size(), self.canvas.pixels());
-        let _ = self.renderer.render();
+        let render_ok = self.renderer.render().is_ok();
         if !self.shown {
             if self.prewarm_frames > 0 {
                 self.prewarm_frames = self.prewarm_frames.saturating_sub(1);
-            } else {
+            } else if self.saw_timer_tick && render_ok {
                 unsafe {
                     ShowWindow(self.hwnd, SW_SHOW);
                 }
@@ -451,6 +453,7 @@ where
         initialized: false,
         shown: false,
         prewarm_frames: PREWARM_FRAMES,
+        saw_timer_tick: false,
     });
 
     unsafe {
