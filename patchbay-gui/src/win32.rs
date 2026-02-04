@@ -120,6 +120,7 @@ where
     last_size: Arc<AtomicU64>,
     aspect_ratio: Arc<AtomicU32>,
     initialized: bool,
+    shown: bool,
 }
 
 impl<State, Init, Frame> WindowState<State, Init, Frame>
@@ -246,6 +247,12 @@ where
 
         self.renderer.upload(self.canvas.size(), self.canvas.pixels());
         let _ = self.renderer.render();
+        if !self.shown {
+            unsafe {
+                ShowWindow(self.hwnd, SW_SHOW);
+            }
+            self.shown = true;
+        }
 
         self.input.mouse_pressed = false;
         self.input.mouse_released = false;
@@ -436,18 +443,16 @@ where
         last_size,
         aspect_ratio,
         initialized: false,
+        shown: false,
     });
 
     unsafe {
-        window_state.render_frame();
         let state_ptr = Box::into_raw(window_state);
         SetWindowLongPtrW(child_hwnd, GWLP_USERDATA, state_ptr as isize);
         SetTimer(Some(child_hwnd), TIMER_ID, TIMER_INTERVAL_MS, None);
-        ShowWindow(child_hwnd, SW_SHOW);
-        // Render once more after showing so the first visible frame is ready.
+        // Render once; on success it will reveal the window.
         let state = &mut *(state_ptr as *mut WindowState<State, Init, Frame>);
         state.render_frame();
-        let _ = SendMessageW(child_hwnd, WM_PAINT, WPARAM(0), LPARAM(0));
     }
 
     let handle = WindowHandle { hwnd: child_hwnd };
