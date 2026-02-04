@@ -708,7 +708,23 @@ impl<'a> Ui<'a> {
         response
     }
 
-    /// Draw a knob with the given label and value.
+    fn format_knob_value(value: f32) -> String {
+        let mut text = format!("{value:.2}");
+        if text.contains('.') {
+            while text.ends_with('0') {
+                text.pop();
+            }
+            if text.ends_with('.') {
+                text.pop();
+            }
+        }
+        if text == "-0" {
+            text = "0".to_string();
+        }
+        text
+    }
+
+    /// Draw a knob with the given name label and value.
     ///
     /// The provided `id` must be stable across frames. If the label changes
     /// while dragging, use [`Ui::knob_with_key`] to provide a separate stable
@@ -720,11 +736,28 @@ impl<'a> Ui<'a> {
         value: &mut f32,
         range: (f32, f32),
     ) -> KnobResponse {
+        let value_label = Self::format_knob_value(*value);
+        self.knob_with_labels(id, label, &value_label, value, range)
+    }
+
+    /// Draw a knob with a name label above and a value label below.
+    pub fn knob_with_labels(
+        &mut self,
+        id: WidgetId,
+        name_label: &str,
+        value_label: &str,
+        value: &mut f32,
+        range: (f32, f32),
+    ) -> KnobResponse {
         let knob_size = self.layout.knob_size;
         let label_height = 8 * self.theme.text_scale as i32;
         let label_gap = 4 * self.theme.text_scale as i32;
+        let knob_origin = Point {
+            x: self.layout.cursor.x,
+            y: self.layout.cursor.y + label_height + label_gap,
+        };
         let knob_rect = Rect {
-            origin: self.layout.cursor,
+            origin: knob_origin,
             size: Size {
                 width: knob_size as u32,
                 height: knob_size as u32,
@@ -828,27 +861,40 @@ impl<'a> Ui<'a> {
         self.canvas
             .draw_line(center, indicator, self.theme.knob_indicator);
 
-        let mut extra_height = 0;
-        if !label.is_empty() {
-            let label_pos = Point {
-                x: knob_rect.origin.x,
-                y: knob_rect.origin.y + knob_size + label_gap,
-            };
+        let name_pos = Point {
+            x: knob_rect.origin.x,
+            y: self.layout.cursor.y,
+        };
+        if !name_label.is_empty() {
             self.canvas
-                .draw_text(label_pos, label, self.theme.text, self.theme.text_scale);
-            let label_size = text_size(label, self.theme.text_scale);
+                .draw_text(name_pos, name_label, self.theme.text, self.theme.text_scale);
+            let label_size = text_size(name_label, self.theme.text_scale);
             self.track_rect(Rect {
-                origin: label_pos,
+                origin: name_pos,
                 size: label_size,
             });
-            extra_height = label_gap + label_height;
         }
 
-        self.layout.cursor.y += knob_size + extra_height + self.layout.spacing;
+        let value_pos = Point {
+            x: knob_rect.origin.x,
+            y: knob_rect.origin.y + knob_size + label_gap,
+        };
+        if !value_label.is_empty() {
+            self.canvas
+                .draw_text(value_pos, value_label, self.theme.text, self.theme.text_scale);
+            let label_size = text_size(value_label, self.theme.text_scale);
+            self.track_rect(Rect {
+                origin: value_pos,
+                size: label_size,
+            });
+        }
+
+        let block_height = knob_size + label_height * 2 + label_gap * 2;
+        self.layout.cursor.y += block_height + self.layout.spacing;
         response
     }
 
-    /// Draw a knob with a stable key and a potentially dynamic label.
+    /// Draw a knob with a stable key and a potentially dynamic name label.
     ///
     /// The `key` should be a stable identifier across frames (for example,
     /// `"attack"`). The `label` can change to include formatted values without
@@ -878,6 +924,19 @@ impl<'a> Ui<'a> {
     ) -> KnobResponse {
         let id = WidgetId::from_label(key);
         self.knob(id, label, value, range)
+    }
+
+    /// Draw a knob with explicit name and value labels and a stable key.
+    pub fn knob_with_key_labels(
+        &mut self,
+        key: &str,
+        name_label: &str,
+        value_label: &str,
+        value: &mut f32,
+        range: (f32, f32),
+    ) -> KnobResponse {
+        let id = WidgetId::from_label(key);
+        self.knob_with_labels(id, name_label, value_label, value, range)
     }
 
     /// Draw a horizontal slider with the given label and value.
