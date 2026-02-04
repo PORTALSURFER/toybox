@@ -8,7 +8,8 @@ use crate::logging::log_line_safe;
 /// Re-export Patchbay GUI types for downstream GUI integrations.
 pub use patchbay_gui::{
     ButtonResponse, Canvas, Color, DropdownResponse, InputState, KnobResponse, Layout,
-    OpenParentedMode, RegionResponse, SliderResponse, Theme, ToggleResponse, Ui, WidgetId,
+    OpenParentedMode, RegionResponse, RootFrameResponse, RootFrameStyle, SliderResponse, Theme,
+    ToggleResponse, Ui, WidgetId,
 };
 
 /// Wrapper around a Patchbay GUI window for a CLAP editor.

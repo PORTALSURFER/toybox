@@ -19,12 +19,13 @@ mod win32;
 pub use crate::canvas::{Canvas, Color, Point, Rect, Size};
 pub use crate::declarative::{
     Align, FlexSpec, GridSpec as DeclarativeGridSpec, LabelSpec, Node, Padding, PanelSpec,
-    SizeSpec, SpacerSpec, UiSpec, WidgetSpec, measure, render,
+    RootFrameSpec, SizeSpec, SpacerSpec, UiSpec, WidgetSpec, measure, render,
 };
 pub use crate::host::{GuiError, HostWindow, InputState, OpenParentedMode};
 #[cfg(target_os = "windows")]
 pub use crate::win32::WindowHandle;
 pub use crate::ui::{
     ButtonResponse, DropdownResponse, GridContext, GridResponse, GridSpec, KnobResponse, Layout,
-    PanelResponse, PanelStyle, RegionResponse, SliderResponse, Theme, ToggleResponse, Ui, WidgetId,
+    PanelResponse, PanelStyle, RegionResponse, RootFrameResponse, RootFrameStyle, SliderResponse,
+    Theme, ToggleResponse, Ui, WidgetId,
 };

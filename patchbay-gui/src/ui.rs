@@ -77,6 +77,8 @@ pub struct UiState {
     layout: LayoutState,
     overlays: Vec<DropdownOverlay>,
     consume_mouse_pressed: bool,
+    root_frame_size: Option<Size>,
+    root_frame_used: bool,
 }
 
 /// Cached container sizes for auto layout.
@@ -92,6 +94,26 @@ impl LayoutState {
 
     fn set(&mut self, id: WidgetId, size: Size) {
         self.sizes.insert(id, size);
+    }
+}
+
+impl UiState {
+    pub(crate) fn begin_frame(&mut self) {
+        self.root_frame_used = false;
+        self.root_frame_size = None;
+    }
+
+    pub(crate) fn set_root_frame_size(&mut self, size: Size) {
+        self.root_frame_used = true;
+        self.root_frame_size = Some(size);
+    }
+
+    pub(crate) fn root_frame_used(&self) -> bool {
+        self.root_frame_used
+    }
+
+    pub(crate) fn take_root_frame_size(&mut self) -> Option<Size> {
+        self.root_frame_size.take()
     }
 }
 
@@ -153,6 +175,44 @@ impl Default for PanelStyle<'_> {
             header_height: None,
         }
     }
+}
+
+/// Styling configuration for root frame containers.
+#[derive(Clone, Copy, Debug)]
+pub struct RootFrameStyle<'a> {
+    /// Optional title rendered in the frame header.
+    pub title: Option<&'a str>,
+    /// Padding applied to all sides of the frame content.
+    pub padding: i32,
+    /// Optional background fill color for the frame.
+    pub background: Option<Color>,
+    /// Optional outline color for the frame.
+    pub outline: Option<Color>,
+    /// Explicit header height override (in pixels).
+    pub header_height: Option<i32>,
+}
+
+impl Default for RootFrameStyle<'_> {
+    fn default() -> Self {
+        Self {
+            title: None,
+            padding: 12,
+            background: None,
+            outline: None,
+            header_height: None,
+        }
+    }
+}
+
+/// Response metadata from root frame containers.
+#[derive(Clone, Copy, Debug)]
+pub struct RootFrameResponse {
+    /// The outer bounds of the frame.
+    pub outer_rect: Rect,
+    /// The content rectangle available to children.
+    pub content_rect: Rect,
+    /// The measured size captured for window sizing.
+    pub measured_size: Size,
 }
 
 /// Response metadata from panel containers.
@@ -391,7 +451,15 @@ impl<'a> Ui<'a> {
         self.canvas
             .draw_text(position, text, self.theme.text, self.theme.text_scale);
         let size = text_size(text, self.theme.text_scale);
-        self.track_rect(Rect { origin: position, size });
+        self.track_rect_internal(Rect { origin: position, size });
+    }
+
+    /// Draw a label at the given position with a custom color.
+    pub fn text_with_color(&mut self, position: Point, text: &str, color: Color) {
+        self.canvas
+            .draw_text(position, text, color, self.theme.text_scale);
+        let size = text_size(text, self.theme.text_scale);
+        self.track_rect_internal(Rect { origin: position, size });
     }
 
     /// Access the input snapshot for this frame.
@@ -510,13 +578,125 @@ impl<'a> Ui<'a> {
         self.bounds_stack.pop().flatten()
     }
 
-    fn track_rect(&mut self, rect: Rect) {
+    fn track_rect_internal(&mut self, rect: Rect) {
         if let Some(entry) = self.bounds_stack.last_mut() {
             *entry = Some(match *entry {
                 Some(existing) => rect_union(existing, rect),
                 None => rect,
             });
         }
+    }
+
+    /// Track a rectangle so container sizing can include custom drawing.
+    pub fn track_rect(&mut self, rect: Rect) {
+        self.track_rect_internal(rect);
+    }
+
+    /// Draw a root frame container sized to its contents.
+    ///
+    /// Root frames are the top-level container for a window. The measured size
+    /// is stored for auto-resizing the native window each frame. When `size`
+    /// is provided, it is treated as the pre-measured content size.
+    pub fn root_frame_with_key<F>(
+        &mut self,
+        key: &str,
+        style: RootFrameStyle<'_>,
+        size: Option<Size>,
+        mut f: F,
+    ) -> RootFrameResponse
+    where
+        F: FnMut(&mut Ui<'_>, Rect),
+    {
+        let id = WidgetId::from_label(key);
+        let header_height = style.header_height.unwrap_or_else(|| {
+            if style.title.is_some() {
+                (8 * self.theme.text_scale as i32 + 4).max(0)
+            } else {
+                0
+            }
+        });
+        let padding = style.padding.max(0);
+        let fallback = Size {
+            width: (padding * 2 + 160).max(0) as u32,
+            height: (padding * 2 + header_height + 80).max(0) as u32,
+        };
+        let requested_size = size;
+        let cached = self.state.layout.get(id);
+        let size = requested_size.or(cached).unwrap_or(fallback);
+        let origin = Point { x: 0, y: 0 };
+        let outer_rect = Rect { origin, size };
+        let background = style.background.unwrap_or(self.theme.knob_fill);
+        let outline = style.outline.unwrap_or(self.theme.knob_outline);
+
+        self.canvas.fill_rect(outer_rect, background);
+        self.canvas.stroke_rect(outer_rect, 1, outline);
+
+        if let Some(title) = style.title {
+            let title_pos = Point {
+                x: origin.x + padding,
+                y: origin.y + padding,
+            };
+            self.canvas
+                .draw_text(title_pos, title, self.theme.text, self.theme.text_scale);
+            let title_size = text_size(title, self.theme.text_scale);
+            self.track_rect_internal(Rect {
+                origin: title_pos,
+                size: title_size,
+            });
+        }
+
+        let content_origin = Point {
+            x: origin.x + padding,
+            y: origin.y + padding + header_height,
+        };
+        let content_rect = Rect {
+            origin: content_origin,
+            size: Size {
+                width: size.width.saturating_sub((padding * 2) as u32),
+                height: size
+                    .height
+                    .saturating_sub((padding * 2 + header_height) as u32),
+            },
+        };
+
+        self.push_bounds();
+        self.with_layout(content_origin, |ui| f(ui, content_rect));
+        let measured_bounds = self.pop_bounds();
+
+        let measured_size = if let Some(bounds) = measured_bounds {
+            let max_x = bounds.origin.x + bounds.size.width as i32;
+            let max_y = bounds.origin.y + bounds.size.height as i32;
+            let content_width = (max_x - content_origin.x).max(0) as u32;
+            let content_height = (max_y - content_origin.y).max(0) as u32;
+            Size {
+                width: content_width + (padding * 2) as u32,
+                height: content_height + (padding * 2 + header_height) as u32,
+            }
+        } else {
+            Size {
+                width: (padding * 2) as u32,
+                height: (padding * 2 + header_height) as u32,
+            }
+        };
+        let measured_size = requested_size.unwrap_or(measured_size);
+
+        self.state.layout.set(id, measured_size);
+        self.track_rect_internal(outer_rect);
+        self.state.set_root_frame_size(measured_size);
+
+        RootFrameResponse {
+            outer_rect,
+            content_rect,
+            measured_size,
+        }
+    }
+
+    /// Draw a root frame with a stable default key.
+    pub fn root_frame<F>(&mut self, style: RootFrameStyle<'_>, f: F) -> RootFrameResponse
+    where
+        F: FnMut(&mut Ui<'_>, Rect),
+    {
+        self.root_frame_with_key("__root_frame__", style, None, f)
     }
 
     /// Draw a panel container with an optional title and padding.
@@ -568,7 +748,7 @@ impl<'a> Ui<'a> {
             self.canvas
                 .draw_text(title_pos, title, self.theme.text, self.theme.text_scale);
             let title_size = text_size(title, self.theme.text_scale);
-            self.track_rect(Rect {
+            self.track_rect_internal(Rect {
                 origin: title_pos,
                 size: title_size,
             });
@@ -609,7 +789,7 @@ impl<'a> Ui<'a> {
         };
 
         self.state.layout.set(id, measured_size);
-        self.track_rect(outer_rect);
+        self.track_rect_internal(outer_rect);
         let advance_height = requested_size
             .map(|explicit| explicit.height)
             .unwrap_or(measured_size.height);
@@ -661,7 +841,7 @@ impl<'a> Ui<'a> {
                 height: height.max(0) as u32,
             },
         };
-        self.track_rect(bounds_rect);
+        self.track_rect_internal(bounds_rect);
 
         GridResponse {
             bounds_rect,
@@ -677,7 +857,7 @@ impl<'a> Ui<'a> {
         self.canvas
             .draw_text(pos, text, self.theme.text, self.theme.text_scale);
         let size = text_size(text, self.theme.text_scale);
-        self.track_rect(Rect { origin: pos, size });
+        self.track_rect_internal(Rect { origin: pos, size });
         self.layout.cursor.y += line_height + self.layout.spacing;
     }
 
@@ -786,7 +966,7 @@ impl<'a> Ui<'a> {
                 height: knob_size as u32,
             },
         };
-        self.track_rect(knob_rect);
+        self.track_rect_internal(knob_rect);
         let center = Point {
             x: knob_rect.origin.x + knob_size / 2,
             y: knob_rect.origin.y + knob_size / 2,
@@ -892,7 +1072,7 @@ impl<'a> Ui<'a> {
             self.canvas
                 .draw_text(name_pos, name_label, self.theme.text, self.theme.text_scale);
             let label_size = text_size(name_label, self.theme.text_scale);
-            self.track_rect(Rect {
+            self.track_rect_internal(Rect {
                 origin: name_pos,
                 size: label_size,
             });
@@ -906,7 +1086,7 @@ impl<'a> Ui<'a> {
             self.canvas
                 .draw_text(value_pos, value_label, self.theme.text, self.theme.text_scale);
             let label_size = text_size(value_label, self.theme.text_scale);
-            self.track_rect(Rect {
+            self.track_rect_internal(Rect {
                 origin: value_pos,
                 size: label_size,
             });
@@ -983,7 +1163,7 @@ impl<'a> Ui<'a> {
             self.canvas
                 .draw_text(base, label, self.theme.text, self.theme.text_scale);
             let label_size = text_size(label, self.theme.text_scale);
-            self.track_rect(Rect {
+            self.track_rect_internal(Rect {
                 origin: base,
                 size: label_size,
             });
@@ -997,7 +1177,7 @@ impl<'a> Ui<'a> {
                 height: height.max(1) as u32,
             },
         };
-        self.track_rect(rect);
+        self.track_rect_internal(rect);
         let hovered = rect.contains(self.input.pointer_pos);
         if hovered {
             self.state.hot = Some(id);
@@ -1119,7 +1299,7 @@ impl<'a> Ui<'a> {
             self.canvas
                 .draw_text(base, label, self.theme.text, self.theme.text_scale);
             let label_size = text_size(label, self.theme.text_scale);
-            self.track_rect(Rect {
+            self.track_rect_internal(Rect {
                 origin: base,
                 size: label_size,
             });
@@ -1132,7 +1312,7 @@ impl<'a> Ui<'a> {
                 height: height.max(1) as u32,
             },
         };
-        self.track_rect(rect);
+        self.track_rect_internal(rect);
         let hovered = rect.contains(self.input.pointer_pos);
         if hovered {
             self.state.hot = Some(id);
@@ -1201,7 +1381,7 @@ impl<'a> Ui<'a> {
                 height: height.max(1) as u32,
             },
         };
-        self.track_rect(rect);
+        self.track_rect_internal(rect);
         let hovered = rect.contains(self.input.pointer_pos);
         if hovered {
             self.state.hot = Some(id);
@@ -1262,7 +1442,7 @@ impl<'a> Ui<'a> {
             self.canvas
                 .draw_text(base, label, self.theme.text, self.theme.text_scale);
             let label_size = text_size(label, self.theme.text_scale);
-            self.track_rect(Rect {
+            self.track_rect_internal(Rect {
                 origin: base,
                 size: label_size,
             });
@@ -1276,7 +1456,7 @@ impl<'a> Ui<'a> {
                 height: height.max(1) as u32,
             },
         };
-        self.track_rect(rect);
+        self.track_rect_internal(rect);
         let hovered = rect.contains(self.input.pointer_pos);
         if hovered {
             self.state.hot = Some(id);
@@ -1397,7 +1577,7 @@ impl<'a> Ui<'a> {
         };
         self.canvas.fill_rect(rect, fill);
         self.canvas.stroke_rect(rect, 1, self.theme.knob_outline);
-        self.track_rect(rect);
+        self.track_rect_internal(rect);
     }
 }
 
@@ -1488,6 +1668,57 @@ mod tests {
                 ui.slider(WidgetId::new(2), "GAIN", &mut value, (0.0, 1.0), 100, 16);
             assert!(response.changed);
         }
+    }
+
+    #[test]
+    fn root_frame_measures_text_content() {
+        let mut canvas = Canvas::new(200, 200);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState::default();
+
+        {
+            let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+            ui.root_frame_with_key(
+                "root",
+                RootFrameStyle {
+                    padding: 0,
+                    ..RootFrameStyle::default()
+                },
+                None,
+                |ui, _rect| {
+                    ui.text(Point { x: 0, y: 0 }, "Root");
+                },
+            );
+        }
+
+        let measured = ui_state
+            .take_root_frame_size()
+            .expect("root frame size missing");
+        let expected = text_size("Root", theme.text_scale);
+        assert_eq!(measured.width, expected.width);
+        assert_eq!(measured.height, expected.height);
+    }
+
+    #[test]
+    fn root_frame_respects_explicit_size() {
+        let mut canvas = Canvas::new(200, 200);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState::default();
+        let explicit = Size { width: 123, height: 77 };
+
+        {
+            let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+            ui.root_frame_with_key("root", RootFrameStyle::default(), Some(explicit), |_ui, _| {});
+        }
+
+        let measured = ui_state
+            .take_root_frame_size()
+            .expect("root frame size missing");
+        assert_eq!(measured, explicit);
     }
 
     #[test]

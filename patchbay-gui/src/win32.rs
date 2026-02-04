@@ -138,6 +138,7 @@ where
     last_mouse_secondary_down: bool,
     debug_input: bool,
     frame_counter: u64,
+    logged_missing_root_frame: bool,
 }
 
 impl<State, Init, Frame> WindowState<State, Init, Frame>
@@ -359,6 +360,7 @@ where
         self.sync_mouse_buttons();
 
         {
+            self.ui_state.begin_frame();
             let mut ui = Ui::new(
                 &mut self.canvas,
                 &self.input,
@@ -370,6 +372,16 @@ where
             ui.clear_overlays();
             (self.on_frame)(&mut ui, &mut self.state);
             ui.draw_overlays();
+        }
+        if let Some(size) = self.ui_state.take_root_frame_size() {
+            let current = self.canvas.size();
+            if size.width != current.width || size.height != current.height {
+                self.resize_request
+                    .store(pack_size(size.width, size.height), Ordering::Release);
+            }
+        } else if !self.ui_state.root_frame_used() && !self.logged_missing_root_frame {
+            log_line_safe("win32: warning: no root frame drawn in frame; window auto-resize skipped");
+            self.logged_missing_root_frame = true;
         }
         if self.debug_input {
             let text = format!(
@@ -608,6 +620,7 @@ where
         last_mouse_secondary_down: false,
         debug_input: std::env::var_os("PATCHBAY_DEBUG_INPUT").is_some(),
         frame_counter: 0,
+        logged_missing_root_frame: false,
     });
 
     unsafe {

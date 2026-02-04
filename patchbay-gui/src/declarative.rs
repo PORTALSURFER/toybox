@@ -5,8 +5,20 @@ use crate::ui::{Theme, Ui};
 
 /// Declarative UI tree describing a window.
 pub struct UiSpec<'a, C> {
-    /// Root layout node.
-    pub root: Node<'a, C>,
+    /// Root frame definition.
+    pub root: RootFrameSpec<'a, C>,
+}
+
+/// Root frame definition for a declarative window.
+pub struct RootFrameSpec<'a, C> {
+    /// Stable frame key.
+    pub key: String,
+    /// Optional title displayed in the header.
+    pub title: Option<String>,
+    /// Padding inside the frame.
+    pub padding: i32,
+    /// Root content.
+    pub content: Box<Node<'a, C>>,
 }
 
 /// Layout nodes for the declarative UI tree.
@@ -162,15 +174,31 @@ pub struct WidgetSpec<'a, C> {
 
 /// Measure the required size for a UI specification.
 pub fn measure<C>(spec: &UiSpec<'_, C>, theme: &Theme) -> Size {
-    measure_node(&spec.root, theme)
+    measure_root_frame(&spec.root, theme)
 }
 
-/// Render a UI specification at the given origin and return the measured size.
+/// Render a UI specification and return the measured size.
+///
+/// The root frame is always anchored at the window origin, so the `origin`
+/// parameter is ignored.
 pub fn render<C>(spec: &mut UiSpec<'_, C>, ui: &mut Ui<'_>, origin: Point, ctx: &mut C) -> Size {
     let theme = ui.theme().clone();
-    let measured = measure_node(&spec.root, &theme);
-    let rect = Rect { origin, size: measured };
-    render_node(&mut spec.root, rect, ui, &theme, ctx);
+    let measured = measure_root_frame(&spec.root, &theme);
+    let content = &mut *spec.root.content;
+    let frame_padding = spec.root.padding;
+    let title = spec.root.title.as_deref();
+    let header_height = panel_header_height(title, &theme);
+    let style = crate::ui::RootFrameStyle {
+        title,
+        padding: frame_padding,
+        background: None,
+        outline: None,
+        header_height: Some(header_height),
+    };
+    let _ = origin;
+    ui.root_frame_with_key(&spec.root.key, style, Some(measured), |ui, rect| {
+        render_node(content, rect, ui, &theme, ctx);
+    });
     measured
 }
 
@@ -199,6 +227,15 @@ fn measure_node<C>(node: &Node<'_, C>, theme: &Theme) -> Size {
             _ => Size { width: 0, height: 0 },
         },
     }
+}
+
+fn measure_root_frame<C>(frame: &RootFrameSpec<'_, C>, theme: &Theme) -> Size {
+    let content = measure_node(&frame.content, theme);
+    let header_height = panel_header_height(frame.title.as_deref(), theme);
+    let width = content.width + (frame.padding.max(0) * 2) as u32;
+    let height =
+        content.height + (frame.padding.max(0) * 2 + header_height) as u32;
+    Size { width, height }
 }
 
 fn measure_panel<C>(panel: &PanelSpec<'_, C>, theme: &Theme) -> Size {
@@ -519,20 +556,25 @@ mod tests {
     #[test]
     fn measures_row_with_gap_and_padding() {
         let spec = UiSpec {
-            root: Node::Row(FlexSpec {
-                size: SizeSpec::Auto,
-                gap: 4,
-                padding: Padding::uniform(2),
-                align: Align::Start,
-                children: vec![
-                    Node::Spacer(SpacerSpec {
-                        size: Size { width: 10, height: 8 },
-                    }),
-                    Node::Spacer(SpacerSpec {
-                        size: Size { width: 6, height: 12 },
-                    }),
-                ],
-            }),
+            root: RootFrameSpec {
+                key: "root".to_string(),
+                title: None,
+                padding: 0,
+                content: Box::new(Node::Row(FlexSpec {
+                    size: SizeSpec::Auto,
+                    gap: 4,
+                    padding: Padding::uniform(2),
+                    align: Align::Start,
+                    children: vec![
+                        Node::Spacer(SpacerSpec {
+                            size: Size { width: 10, height: 8 },
+                        }),
+                        Node::Spacer(SpacerSpec {
+                            size: Size { width: 6, height: 12 },
+                        }),
+                    ],
+                })),
+            },
         };
         let theme = Theme::default();
         let size = measure(&spec, &theme);
@@ -544,13 +586,18 @@ mod tests {
     fn renders_widget_with_resolved_rect() {
         let rect_seen = std::cell::Cell::new(None);
         let mut spec = UiSpec {
-            root: Node::Widget(WidgetSpec {
-                key: "widget".to_string(),
-                size: SizeSpec::Fixed(Size { width: 20, height: 10 }),
-                render: Box::new(|_ui, rect, _ctx: &mut ()| {
-                    rect_seen.set(Some(rect));
-                }),
-            }),
+            root: RootFrameSpec {
+                key: "root".to_string(),
+                title: None,
+                padding: 0,
+                content: Box::new(Node::Widget(WidgetSpec {
+                    key: "widget".to_string(),
+                    size: SizeSpec::Fixed(Size { width: 20, height: 10 }),
+                    render: Box::new(|_ui, rect, _ctx: &mut ()| {
+                        rect_seen.set(Some(rect));
+                    }),
+                })),
+            },
         };
         let mut canvas = Canvas::new(100, 100);
         let mut layout = Layout::default();
@@ -563,8 +610,8 @@ mod tests {
         assert_eq!(measured.width, 20);
         assert_eq!(measured.height, 10);
         let rect = rect_seen.get().expect("widget rect not captured");
-        assert_eq!(rect.origin.x, 5);
-        assert_eq!(rect.origin.y, 7);
+        assert_eq!(rect.origin.x, 0);
+        assert_eq!(rect.origin.y, 0);
         assert_eq!(rect.size.width, 20);
         assert_eq!(rect.size.height, 10);
     }
