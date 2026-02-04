@@ -361,7 +361,7 @@ where
             lpszClassName: PCWSTR(class_name.as_ptr()),
             hCursor: LoadCursorW(None, windows::Win32::UI::WindowsAndMessaging::IDC_ARROW)
                 .unwrap(),
-            hbrBackground: None,
+            hbrBackground: windows::Win32::Graphics::Gdi::HBRUSH::default(),
             ..Default::default()
         };
         RegisterClassW(&wnd_class);
