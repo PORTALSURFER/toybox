@@ -254,11 +254,25 @@ where
         if !self.shown {
             if self.prewarm_frames > 0 {
                 self.prewarm_frames = self.prewarm_frames.saturating_sub(1);
+                log_line_safe(&format!(
+                    "win32: show gate waiting prewarm={} saw_timer={} render_ok={}",
+                    self.prewarm_frames,
+                    self.saw_timer_tick,
+                    render_ok
+                ));
             } else if self.saw_timer_tick && render_ok {
+                log_line_safe("win32: show gate passed, showing window");
                 unsafe {
                     ShowWindow(self.hwnd, SW_SHOW);
                 }
                 self.shown = true;
+            } else {
+                log_line_safe(&format!(
+                    "win32: show gate blocked prewarm={} saw_timer={} render_ok={}",
+                    self.prewarm_frames,
+                    self.saw_timer_tick,
+                    render_ok
+                ));
             }
         }
 
@@ -460,6 +474,7 @@ where
         let state_ptr = Box::into_raw(window_state);
         SetWindowLongPtrW(child_hwnd, GWLP_USERDATA, state_ptr as isize);
         SetTimer(Some(child_hwnd), TIMER_ID, TIMER_INTERVAL_MS, None);
+        log_line_safe("win32: initial window hidden; waiting for show gate");
         // Render once; on success it will reveal the window.
         let state = &mut *(state_ptr as *mut WindowState<State, Init, Frame>);
         state.render_frame();
