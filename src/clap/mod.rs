@@ -10,5 +10,6 @@ pub mod automation;
 pub mod params;
 pub mod process;
 pub mod registration;
+pub mod prelude;
 #[cfg(feature = "gui")]
 pub mod gui;

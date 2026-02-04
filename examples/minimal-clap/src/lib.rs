@@ -6,10 +6,7 @@ use std::fmt::Write;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
-use clack_extensions::audio_ports::*;
-use clack_extensions::params::*;
-use clack_plugin::prelude::*;
-use toybox::clap::params::{apply_param_events, ParamBuilder};
+use toybox::clap::prelude::*;
 
 /// CLAP parameter id for the gain control.
 const PARAM_GAIN_ID: ClapId = ClapId::new(0);

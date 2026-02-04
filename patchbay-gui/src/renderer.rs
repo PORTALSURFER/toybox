@@ -306,18 +306,14 @@ impl Renderer {
         }
 
         let required = (padded_bytes_per_row * size.height) as usize;
-        {
-            self.upload_scratch.resize(required, 0);
-            let padded = &mut self.upload_scratch;
-            let src_row = bytes_per_row as usize;
-            let dst_row = padded_bytes_per_row as usize;
-            for row in 0..size.height as usize {
-                let src_offset = row * src_row;
-                let dst_offset = row * dst_row;
-                padded[dst_offset..dst_offset + src_row]
-                    .copy_from_slice(&pixels[src_offset..src_offset + src_row]);
-            }
-        }
+        Self::pad_rows_rgba(
+            pixels,
+            size.width,
+            size.height,
+            padded_bytes_per_row,
+            &mut self.upload_scratch,
+            required,
+        );
 
         self.write_texture(size, &self.upload_scratch, padded_bytes_per_row);
     }
@@ -430,6 +426,26 @@ impl Renderer {
             },
         );
     }
+
+    fn pad_rows_rgba(
+        pixels: &[u8],
+        width: u32,
+        height: u32,
+        padded_bytes_per_row: u32,
+        scratch: &mut Vec<u8>,
+        required: usize,
+    ) {
+        scratch.resize(required, 0);
+        scratch.fill(0);
+        let src_row = (width as usize) * 4;
+        let dst_row = padded_bytes_per_row as usize;
+        for row in 0..height as usize {
+            let src_offset = row * src_row;
+            let dst_offset = row * dst_row;
+            scratch[dst_offset..dst_offset + src_row]
+                .copy_from_slice(&pixels[src_offset..src_offset + src_row]);
+        }
+    }
 }
 
 fn should_reconfigure_surface(err: &wgpu::SurfaceError) -> bool {
@@ -438,7 +454,67 @@ fn should_reconfigure_surface(err: &wgpu::SurfaceError) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::should_reconfigure_surface;
+    use super::{should_reconfigure_surface, Renderer};
+
+    #[test]
+    fn pad_rows_rgba_zeroes_padding_bytes() {
+        let width = 3u32;
+        let height = 2u32;
+        let bytes_per_row = width * 4;
+        let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u32;
+        let padded_bytes_per_row = ((bytes_per_row + alignment - 1) / alignment) * alignment;
+        assert!(padded_bytes_per_row > bytes_per_row);
+
+        let pixels = vec![1u8; (width * height * 4) as usize];
+        let mut scratch = vec![9u8; 64];
+        let required = (padded_bytes_per_row * height) as usize;
+        Renderer::pad_rows_rgba(
+            &pixels,
+            width,
+            height,
+            padded_bytes_per_row,
+            &mut scratch,
+            required,
+        );
+
+        let dst_row = padded_bytes_per_row as usize;
+        let src_row = bytes_per_row as usize;
+        for row in 0..height as usize {
+            let pad_start = row * dst_row + src_row;
+            let pad_end = (row + 1) * dst_row;
+            assert!(scratch[pad_start..pad_end].iter().all(|value| *value == 0));
+        }
+    }
+
+    #[test]
+    fn pad_rows_rgba_overwrites_old_padding() {
+        let width = 5u32;
+        let height = 3u32;
+        let bytes_per_row = width * 4;
+        let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u32;
+        let padded_bytes_per_row = ((bytes_per_row + alignment - 1) / alignment) * alignment;
+        assert!(padded_bytes_per_row > bytes_per_row);
+
+        let pixels = vec![2u8; (width * height * 4) as usize];
+        let mut scratch = vec![7u8; 512];
+        let required = (padded_bytes_per_row * height) as usize;
+        Renderer::pad_rows_rgba(
+            &pixels,
+            width,
+            height,
+            padded_bytes_per_row,
+            &mut scratch,
+            required,
+        );
+
+        let dst_row = padded_bytes_per_row as usize;
+        let src_row = bytes_per_row as usize;
+        for row in 0..height as usize {
+            let pad_start = row * dst_row + src_row;
+            let pad_end = (row + 1) * dst_row;
+            assert!(scratch[pad_start..pad_end].iter().all(|value| *value == 0));
+        }
+    }
 
     #[test]
     fn surface_errors_trigger_reconfigure() {

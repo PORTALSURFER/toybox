@@ -1312,7 +1312,7 @@ impl<'a> Ui<'a> {
             .draw_text(text_pos, current, self.theme.text, self.theme.text_scale);
 
         if response.open {
-            let pressed = self.input.mouse_pressed;
+            let pressed = self.mouse_pressed();
             let mut any_hovered = false;
             let mut hovered_index = None;
             let menu_height = height * options.len() as i32;
@@ -1543,6 +1543,26 @@ mod tests {
             assert!(response.changed);
             assert_eq!(selected, 1);
         }
+    }
+
+    #[test]
+    fn dropdown_respects_consumed_mouse_press() {
+        let mut canvas = Canvas::new(200, 200);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let options = ["One", "Two"];
+        let mut selected = 0;
+
+        ui_state.consume_mouse_pressed = true;
+        let mut input = InputState::default();
+        input.pointer_pos = Point { x: 20, y: 40 };
+        input.mouse_pressed = true;
+
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let response = ui.dropdown(WidgetId::new(9), "Mode", &options, &mut selected, 80, 16);
+        assert!(!response.open);
+        assert!(ui.state.open_dropdown.is_none());
     }
 
     #[test]

@@ -91,7 +91,7 @@ impl FeedbackComb {
     }
 }
 
-/// A stereo pair of feedback comb filters with subtle offset for width.
+/// A stereo pair of feedback comb filters for widening effects.
 #[derive(Debug, Clone)]
 pub struct StereoComb {
     left: FeedbackComb,
