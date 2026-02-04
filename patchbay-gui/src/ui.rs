@@ -231,7 +231,7 @@ impl<'a> Ui<'a> {
         }
 
         let t = (*value - range.0) / (range.1 - range.0).max(1.0e-6);
-        let angle = (-0.75 + t * 1.5) * std::f32::consts::PI;
+        let angle = (-0.75 + t * 1.5) * std::f32::consts::PI - std::f32::consts::FRAC_PI_2;
         let indicator = Point {
             x: center.x + (angle.cos() * (radius as f32 * 0.7)) as i32,
             y: center.y + (angle.sin() * (radius as f32 * 0.7)) as i32,
