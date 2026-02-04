@@ -75,6 +75,7 @@ pub struct UiState {
     drag_value: f32,
     open_dropdown: Option<WidgetId>,
     layout: LayoutState,
+    overlays: Vec<DropdownOverlay>,
 }
 
 /// Cached container sizes for auto layout.
@@ -91,6 +92,14 @@ impl LayoutState {
     fn set(&mut self, id: WidgetId, size: Size) {
         self.sizes.insert(id, size);
     }
+}
+
+/// Deferred dropdown overlay drawing data.
+#[derive(Clone, Debug)]
+struct DropdownOverlay {
+    base_rect: Rect,
+    options: Vec<String>,
+    hovered: Option<usize>,
 }
 
 /// Layout state for sequential widgets.
@@ -409,6 +418,51 @@ impl<'a> Ui<'a> {
         f(self);
         if let Some(restored) = self.layout_stack.pop() {
             *self.layout = restored;
+        }
+    }
+
+    fn push_dropdown_overlay(
+        &mut self,
+        base_rect: Rect,
+        options: &[&str],
+        hovered: Option<usize>,
+    ) {
+        self.state.overlays.push(DropdownOverlay {
+            base_rect,
+            options: options.iter().map(|option| (*option).to_string()).collect(),
+            hovered,
+        });
+    }
+
+    /// Draw any deferred overlays (dropdown menus).
+    pub fn draw_overlays(&mut self) {
+        for overlay in self.state.overlays.iter() {
+            let rect = overlay.base_rect;
+            let height = rect.size.height as i32;
+            for (index, option) in overlay.options.iter().enumerate() {
+                let option_rect = Rect {
+                    origin: Point {
+                        x: rect.origin.x,
+                        y: rect.origin.y + height * (index as i32 + 1),
+                    },
+                    size: rect.size,
+                };
+                let option_fill = if overlay.hovered == Some(index) {
+                    self.theme.knob_hover
+                } else {
+                    self.theme.knob_fill
+                };
+                self.canvas.fill_rect(option_rect, option_fill);
+                self.canvas
+                    .stroke_rect(option_rect, 1, self.theme.knob_outline);
+                let option_text = Point {
+                    x: option_rect.origin.x + 4,
+                    y: option_rect.origin.y
+                        + (height - (7 * self.theme.text_scale as i32)) / 2,
+                };
+                self.canvas
+                    .draw_text(option_text, option, self.theme.text, self.theme.text_scale);
+            }
         }
     }
 
@@ -1163,7 +1217,8 @@ impl<'a> Ui<'a> {
 
         if response.open {
             let mut any_hovered = false;
-            for (index, option) in options.iter().enumerate() {
+            let mut hovered_index = None;
+            for (index, _option) in options.iter().enumerate() {
                 let option_rect = Rect {
                     origin: Point {
                         x: rect.origin.x,
@@ -1174,22 +1229,8 @@ impl<'a> Ui<'a> {
                 let option_hovered = option_rect.contains(self.input.pointer_pos);
                 if option_hovered {
                     any_hovered = true;
+                    hovered_index = Some(index);
                 }
-                let option_fill = if option_hovered {
-                    self.theme.knob_hover
-                } else {
-                    self.theme.knob_fill
-                };
-                self.canvas.fill_rect(option_rect, option_fill);
-                self.canvas
-                    .stroke_rect(option_rect, 1, self.theme.knob_outline);
-                let option_text = Point {
-                    x: option_rect.origin.x + 4,
-                    y: option_rect.origin.y
-                        + (height - (7 * self.theme.text_scale as i32)) / 2,
-                };
-                self.canvas
-                    .draw_text(option_text, option, self.theme.text, self.theme.text_scale);
                 if option_hovered && self.input.mouse_pressed {
                     *selected = index;
                     response.changed = true;
@@ -1201,6 +1242,10 @@ impl<'a> Ui<'a> {
             if self.input.mouse_pressed && !hovered && !any_hovered {
                 self.state.open_dropdown = None;
                 response.open = false;
+            }
+
+            if response.open {
+                self.push_dropdown_overlay(rect, options, hovered_index);
             }
         }
 
