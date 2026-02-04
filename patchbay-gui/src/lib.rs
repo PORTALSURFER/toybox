@@ -20,6 +20,6 @@ pub use crate::host::{GuiError, HostWindow, InputState};
 #[cfg(target_os = "windows")]
 pub use crate::win32::WindowHandle;
 pub use crate::ui::{
-    ButtonResponse, DropdownResponse, KnobResponse, Layout, RegionResponse, SliderResponse, Theme,
-    ToggleResponse, Ui, WidgetId,
+    ButtonResponse, DropdownResponse, GridContext, GridResponse, GridSpec, KnobResponse, Layout,
+    PanelResponse, PanelStyle, RegionResponse, SliderResponse, Theme, ToggleResponse, Ui, WidgetId,
 };
