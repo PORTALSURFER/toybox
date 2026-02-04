@@ -22,10 +22,10 @@ use windows::Win32::System::LibraryLoader::{GetModuleHandleExW, GetModuleHandleW
 use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, GetClientRect, LoadCursorW, RegisterClassW, SetTimer,
-    SetWindowLongPtrW, SetWindowPos, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA, HMENU,
-    SWP_NOZORDER, WM_DESTROY, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL,
-    WM_NCDESTROY, WM_PAINT, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPSIBLINGS,
-    WS_CLIPCHILDREN, WS_VISIBLE,
+    SetWindowLongPtrW, SetWindowPos, ShowWindow, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT,
+    GWLP_USERDATA, HMENU, SWP_NOZORDER, SW_SHOW, WM_DESTROY, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD,
+    WS_CLIPSIBLINGS, WS_CLIPCHILDREN, WS_VISIBLE,
 };
 
 const TIMER_ID: usize = 1;
@@ -354,7 +354,7 @@ where
             Default::default(),
             PCWSTR(class_name.as_ptr()),
             PCWSTR(title_w.as_ptr()),
-            WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
+            WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
             size.width as i32,
@@ -403,6 +403,7 @@ where
         let state_ptr = Box::into_raw(window_state);
         SetWindowLongPtrW(child_hwnd, GWLP_USERDATA, state_ptr as isize);
         SetTimer(Some(child_hwnd), TIMER_ID, TIMER_INTERVAL_MS, None);
+        ShowWindow(child_hwnd, SW_SHOW);
     }
 
     let handle = WindowHandle { hwnd: child_hwnd };
