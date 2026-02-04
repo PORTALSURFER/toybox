@@ -306,18 +306,20 @@ impl Renderer {
         }
 
         let required = (padded_bytes_per_row * size.height) as usize;
-        self.upload_scratch.resize(required, 0);
-        let padded = &mut self.upload_scratch;
-        let src_row = bytes_per_row as usize;
-        let dst_row = padded_bytes_per_row as usize;
-        for row in 0..size.height as usize {
-            let src_offset = row * src_row;
-            let dst_offset = row * dst_row;
-            padded[dst_offset..dst_offset + src_row]
-                .copy_from_slice(&pixels[src_offset..src_offset + src_row]);
+        {
+            self.upload_scratch.resize(required, 0);
+            let padded = &mut self.upload_scratch;
+            let src_row = bytes_per_row as usize;
+            let dst_row = padded_bytes_per_row as usize;
+            for row in 0..size.height as usize {
+                let src_offset = row * src_row;
+                let dst_offset = row * dst_row;
+                padded[dst_offset..dst_offset + src_row]
+                    .copy_from_slice(&pixels[src_offset..src_offset + src_row]);
+            }
         }
 
-        self.write_texture(size, padded, padded_bytes_per_row);
+        self.write_texture(size, &self.upload_scratch, padded_bytes_per_row);
     }
 
     /// Render the canvas to the surface.
