@@ -19,7 +19,7 @@ use std::thread;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, PAINTSTRUCT};
-use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::System::LibraryLoader::{GetModuleHandleExW, GetModuleHandleW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS};
 use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DispatchMessageW, GetClientRect, LoadCursorW,
@@ -309,7 +309,21 @@ where
     let parent_hwnd = HWND(parent_hwnd as *mut _);
     let parent_hinstance = HINSTANCE(parent_hinstance as *mut _);
     let module_hinstance = if parent_hinstance.0.is_null() {
-        unsafe { GetModuleHandleW(None).unwrap_or_default().into() }
+        let mut module = windows::Win32::Foundation::HMODULE::default();
+        let proc_addr = window_proc::<State, Init, Frame> as *const () as *const u16;
+        let got_module = unsafe {
+            GetModuleHandleExW(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                windows::core::PCWSTR(proc_addr),
+                &mut module,
+            )
+        }
+        .as_bool();
+        if got_module {
+            HINSTANCE(module.0)
+        } else {
+            unsafe { GetModuleHandleW(None).unwrap_or_default().into() }
+        }
     } else {
         parent_hinstance
     };
