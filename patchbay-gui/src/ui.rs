@@ -138,6 +138,25 @@ pub struct ButtonResponse {
     pub hovered: bool,
 }
 
+/// Response metadata from custom region widgets.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RegionResponse {
+    /// The pointer is hovering the region.
+    pub hovered: bool,
+    /// The region is actively being dragged.
+    pub active: bool,
+    /// The primary button was pressed on the region.
+    pub pressed: bool,
+    /// The primary button was released on the region.
+    pub released: bool,
+    /// The pointer is being dragged while active.
+    pub dragged: bool,
+    /// The secondary button was clicked on the region.
+    pub secondary_clicked: bool,
+    /// The primary button was double-clicked on the region.
+    pub double_clicked: bool,
+}
+
 /// Response metadata from dropdown widgets.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DropdownResponse {
@@ -219,6 +238,56 @@ impl<'a> Ui<'a> {
         self.canvas
             .draw_text(pos, text, self.theme.text, self.theme.text_scale);
         self.layout.cursor.y += line_height + self.layout.spacing;
+    }
+
+    /// Create an interactive region for custom drawing.
+    ///
+    /// Use this to capture hover/drag interactions over arbitrary rectangles.
+    /// The `key` must be stable across frames.
+    pub fn region_with_key(&mut self, key: &str, rect: Rect) -> RegionResponse {
+        let id = WidgetId::from_label(key);
+        let hovered = rect.contains(self.input.pointer_pos);
+        if hovered {
+            self.state.hot = Some(id);
+        }
+
+        let mut response = RegionResponse {
+            hovered,
+            active: self.state.active == Some(id),
+            pressed: false,
+            released: false,
+            dragged: false,
+            secondary_clicked: false,
+            double_clicked: false,
+        };
+
+        if hovered && self.input.mouse_pressed {
+            self.state.active = Some(id);
+            self.state.drag_start = Some(self.input.pointer_pos);
+            response.active = true;
+            response.pressed = true;
+        }
+
+        if self.state.active == Some(id) && self.input.mouse_released {
+            self.state.active = None;
+            self.state.drag_start = None;
+            response.active = false;
+            response.released = true;
+        }
+
+        if self.state.active == Some(id) && self.input.mouse_down {
+            response.dragged = true;
+        }
+
+        if hovered && self.input.mouse_secondary_pressed {
+            response.secondary_clicked = true;
+        }
+
+        if hovered && self.input.mouse_double_clicked {
+            response.double_clicked = true;
+        }
+
+        response
     }
 
     /// Draw a knob with the given label and value.

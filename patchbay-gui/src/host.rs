@@ -20,6 +20,14 @@ pub struct InputState {
     pub mouse_pressed: bool,
     /// Whether the primary mouse button was released this frame.
     pub mouse_released: bool,
+    /// Whether the primary mouse button was double-clicked this frame.
+    pub mouse_double_clicked: bool,
+    /// Whether the secondary mouse button is held.
+    pub mouse_secondary_down: bool,
+    /// Whether the secondary mouse button was pressed this frame.
+    pub mouse_secondary_pressed: bool,
+    /// Whether the secondary mouse button was released this frame.
+    pub mouse_secondary_released: bool,
     /// Scroll delta for this frame (positive = up).
     pub wheel_delta: f32,
     /// Files dropped onto the window this frame.

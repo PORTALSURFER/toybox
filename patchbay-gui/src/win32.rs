@@ -29,9 +29,10 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, GetParent, LoadCursorW,
     RegisterClassW, SendMessageW, SetTimer, SetWindowLongPtrW, SetWindowPos, ShowWindow,
-    CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA, HMENU, SWP_NOZORDER, SW_HIDE, SW_SHOW,
-    WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
-    WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD,
+    CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA, HMENU, SWP_NOZORDER, SW_HIDE,
+    SW_SHOW, WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN,
+    WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_RBUTTONDOWN,
+    WM_RBUTTONUP, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD,
     WS_CLIPSIBLINGS, WS_CLIPCHILDREN, WS_VISIBLE,
 };
 
@@ -160,12 +161,29 @@ where
                 unsafe { SetCapture(self.hwnd) };
                 true
             }
+            WM_LBUTTONDBLCLK => {
+                self.input.mouse_double_clicked = true;
+                self.input.mouse_down = true;
+                self.input.mouse_pressed = true;
+                unsafe { SetCapture(self.hwnd) };
+                true
+            }
             WM_LBUTTONUP => {
                 self.input.mouse_down = false;
                 self.input.mouse_released = true;
                 unsafe {
                     let _ = ReleaseCapture();
                 }
+                true
+            }
+            WM_RBUTTONDOWN => {
+                self.input.mouse_secondary_down = true;
+                self.input.mouse_secondary_pressed = true;
+                true
+            }
+            WM_RBUTTONUP => {
+                self.input.mouse_secondary_down = false;
+                self.input.mouse_secondary_released = true;
                 true
             }
             WM_MOUSEWHEEL => {
@@ -320,6 +338,9 @@ where
 
         self.input.mouse_pressed = false;
         self.input.mouse_released = false;
+        self.input.mouse_double_clicked = false;
+        self.input.mouse_secondary_pressed = false;
+        self.input.mouse_secondary_released = false;
         self.input.wheel_delta = 0.0;
         self.input.dropped_files.clear();
     }
@@ -429,7 +450,7 @@ where
     unsafe {
         let background_brush = unsafe { CreateSolidBrush(BACKGROUND_COLOR) };
         let wnd_class = WNDCLASSW {
-            style: CS_HREDRAW | CS_VREDRAW,
+            style: CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS,
             lpfnWndProc: Some(window_proc::<State, Init, Frame>),
             hInstance: module_hinstance,
             lpszClassName: PCWSTR(class_name.as_ptr()),
