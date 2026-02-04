@@ -30,6 +30,8 @@ pub struct InputState {
     pub mouse_secondary_released: bool,
     /// Scroll delta for this frame (positive = up).
     pub wheel_delta: f32,
+    /// Key press captured this frame (ASCII).
+    pub key_pressed: Option<char>,
     /// Files dropped onto the window this frame.
     pub dropped_files: Vec<PathBuf>,
 }

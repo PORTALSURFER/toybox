@@ -199,6 +199,13 @@ where
                 }
                 true
             }
+            WM_CHAR => {
+                let code = (wparam.0 & 0xFFFF) as u16;
+                if let Some(ch) = char::from_u32(code as u32) {
+                    self.input.key_pressed = Some(ch);
+                }
+                true
+            }
             WM_PAINT => {
                 unsafe {
                     let mut paint = PAINTSTRUCT::default();
@@ -345,6 +352,7 @@ where
         self.input.mouse_secondary_pressed = false;
         self.input.mouse_secondary_released = false;
         self.input.wheel_delta = 0.0;
+        self.input.key_pressed = None;
         self.input.dropped_files.clear();
     }
 }

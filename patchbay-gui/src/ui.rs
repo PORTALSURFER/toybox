@@ -399,6 +399,11 @@ impl<'a> Ui<'a> {
         self.input
     }
 
+    /// Return the key pressed this frame, if any.
+    pub fn key_pressed(&self) -> Option<char> {
+        self.input.key_pressed
+    }
+
     /// Access the canvas for custom drawing.
     pub fn canvas(&mut self) -> &mut Canvas {
         self.canvas
