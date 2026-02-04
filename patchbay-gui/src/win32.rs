@@ -19,7 +19,8 @@ use std::time::Instant;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    BeginPaint, CreateSolidBrush, DeleteObject, EndPaint, FillRect, HBRUSH, HDC, PAINTSTRUCT,
+    BeginPaint, CreateSolidBrush, DeleteObject, EndPaint, FillRect, GetDC, ReleaseDC, HBRUSH, HDC,
+    PAINTSTRUCT,
 };
 use windows::Win32::System::LibraryLoader::{GetModuleHandleExW, GetModuleHandleW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS};
 use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
@@ -173,7 +174,8 @@ where
             WM_PAINT => {
                 unsafe {
                     let mut paint = PAINTSTRUCT::default();
-                    BeginPaint(self.hwnd, &mut paint);
+                    let hdc = BeginPaint(self.hwnd, &mut paint);
+                    FillRect(hdc, &paint.rcPaint, self.background_brush);
                     EndPaint(self.hwnd, &paint);
                 }
                 self.render_frame();
@@ -190,9 +192,19 @@ where
             }
             WM_ERASEBKGND => {
                 let mut rect = windows::Win32::Foundation::RECT::default();
+                let hdc = if wparam.0 == 0 {
+                    unsafe { GetDC(Some(self.hwnd)) }
+                } else {
+                    HDC(wparam.0 as *mut _)
+                };
                 unsafe {
                     GetClientRect(self.hwnd, &mut rect);
-                    FillRect(HDC(wparam.0 as *mut _), &rect, self.background_brush);
+                    FillRect(hdc, &rect, self.background_brush);
+                }
+                if wparam.0 == 0 {
+                    unsafe {
+                        let _ = ReleaseDC(Some(self.hwnd), hdc);
+                    }
                 }
                 true
             }
