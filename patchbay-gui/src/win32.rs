@@ -14,18 +14,16 @@ use std::ffi::OsStr;
 use std::num::NonZeroIsize;
 use std::os::windows::ffi::OsStrExt;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{mpsc, Arc};
-use std::thread;
+use std::sync::Arc;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, PAINTSTRUCT};
 use windows::Win32::System::LibraryLoader::{GetModuleHandleExW, GetModuleHandleW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS};
 use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetClientRect, LoadCursorW,
-    PeekMessageW, PostQuitMessage, RegisterClassW, SetTimer, SetWindowLongPtrW, SetWindowPos,
-    TranslateMessage, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA, HMENU, MSG,
-    PM_REMOVE, SWP_NOZORDER, WM_DESTROY, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
+    CreateWindowExW, DefWindowProcW, GetClientRect, LoadCursorW, RegisterClassW, SetTimer,
+    SetWindowLongPtrW, SetWindowPos, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA, HMENU,
+    SWP_NOZORDER, WM_DESTROY, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
     WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD,
     WS_CLIPSIBLINGS, WS_CLIPCHILDREN, WS_VISIBLE,
 };
@@ -253,37 +251,25 @@ where
     Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
     State: Send + 'static,
 {
-    log_line_safe("win32: spawn_window_thread begin");
-    let (tx, rx) = mpsc::channel();
-
-    thread::Builder::new()
-        .name("patchbay-gui".to_string())
-        .spawn(move || {
-            log_line_safe("win32: window thread started");
-            let result = run_window_loop(
-                parent_hwnd,
-                parent_hinstance,
-                title,
-                size,
-                state,
-                on_init,
-                on_frame,
-                resize_request,
-                last_size,
-                aspect_ratio,
-                ui_state,
-                layout,
-                theme,
-                &tx,
-            );
-            let _ = tx.send(result);
-        })
-        .map_err(|_| GuiError::ThreadSpawn)?;
-
-    rx.recv().map_err(|_| GuiError::ThreadSpawn)?
+    log_line_safe("win32: spawn_window_thread begin (using caller thread)");
+    create_window_on_thread(
+        parent_hwnd,
+        parent_hinstance,
+        title,
+        size,
+        state,
+        on_init,
+        on_frame,
+        resize_request,
+        last_size,
+        aspect_ratio,
+        ui_state,
+        layout,
+        theme,
+    )
 }
 
-fn run_window_loop<State, Init, Frame>(
+fn create_window_on_thread<State, Init, Frame>(
     parent_hwnd: isize,
     parent_hinstance: isize,
     title: String,
@@ -297,14 +283,13 @@ fn run_window_loop<State, Init, Frame>(
     ui_state: UiState,
     layout: Layout,
     theme: Theme,
-    ready: &mpsc::Sender<Result<WindowHandle, GuiError>>,
 ) -> Result<WindowHandle, GuiError>
 where
     Init: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
     Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
     State: Send + 'static,
 {
-    log_line_safe("win32: run_window_loop begin");
+    log_line_safe("win32: create_window_on_thread begin");
     let class_name = to_wide("PatchbayGuiWindow");
     let parent_hwnd = HWND(parent_hwnd as *mut _);
     let parent_hinstance = HINSTANCE(parent_hinstance as *mut _);
@@ -422,30 +407,6 @@ where
     }
 
     let handle = WindowHandle { hwnd: child_hwnd };
-    let _ = ready.send(Ok(handle.clone()));
-
-    let mut msg = MSG::default();
-    loop {
-        unsafe {
-            while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).into() {
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
-        }
-        if msg.message == WM_NCDESTROY {
-            break;
-        }
-        if msg.message == windows::Win32::UI::WindowsAndMessaging::WM_QUIT {
-            break;
-        }
-        thread::sleep(std::time::Duration::from_millis(1));
-    }
-
-    unsafe {
-        SetWindowLongPtrW(child_hwnd, GWLP_USERDATA, 0);
-    }
-    drop(window_state);
-
     Ok(handle)
 }
 
@@ -460,19 +421,26 @@ where
     Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
     State: Send + 'static,
 {
-    let ptr = windows::Win32::UI::WindowsAndMessaging::GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+    let ptr = unsafe {
+        windows::Win32::UI::WindowsAndMessaging::GetWindowLongPtrW(hwnd, GWLP_USERDATA)
+    };
     if ptr != 0 {
-        let state = &mut *(ptr as *mut WindowState<State, Init, Frame>);
+        let state = unsafe { &mut *(ptr as *mut WindowState<State, Init, Frame>) };
         if state.handle_message(message, wparam, lparam) {
             return LRESULT(0);
         }
     }
 
     if message == WM_NCDESTROY {
-        PostQuitMessage(0);
+        if ptr != 0 {
+            unsafe {
+                windows::Win32::UI::WindowsAndMessaging::SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+                drop(Box::from_raw(ptr as *mut WindowState<State, Init, Frame>));
+            }
+        }
     }
 
-    DefWindowProcW(hwnd, message, wparam, lparam)
+    unsafe { DefWindowProcW(hwnd, message, wparam, lparam) }
 }
 
 fn pack_size(width: u32, height: u32) -> u64 {
