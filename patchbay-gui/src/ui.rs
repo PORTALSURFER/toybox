@@ -303,6 +303,8 @@ impl<'a> Ui<'a> {
         range: (f32, f32),
     ) -> KnobResponse {
         let knob_size = self.layout.knob_size;
+        let label_height = 8 * self.theme.text_scale as i32;
+        let label_gap = 4 * self.theme.text_scale as i32;
         let knob_rect = Rect {
             origin: self.layout.cursor,
             size: Size {
@@ -407,14 +409,18 @@ impl<'a> Ui<'a> {
         self.canvas
             .draw_line(center, indicator, self.theme.knob_indicator);
 
-        let label_pos = Point {
-            x: knob_rect.origin.x,
-            y: knob_rect.origin.y + knob_size + 6 * self.theme.text_scale as i32,
-        };
-        self.canvas
-            .draw_text(label_pos, label, self.theme.text, self.theme.text_scale);
+        let mut extra_height = 0;
+        if !label.is_empty() {
+            let label_pos = Point {
+                x: knob_rect.origin.x,
+                y: knob_rect.origin.y + knob_size + label_gap,
+            };
+            self.canvas
+                .draw_text(label_pos, label, self.theme.text, self.theme.text_scale);
+            extra_height = label_gap + label_height;
+        }
 
-        self.layout.cursor.y += knob_size + 16 + self.layout.spacing;
+        self.layout.cursor.y += knob_size + extra_height + self.layout.spacing;
         response
     }
 
