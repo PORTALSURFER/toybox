@@ -544,8 +544,9 @@ impl<'a> Ui<'a> {
             width: (padding * 2 + 160).max(0) as u32,
             height: (padding * 2 + header_height + 80).max(0) as u32,
         };
+        let requested_size = size;
         let cached = self.state.layout.get(id);
-        let size = size.or(cached).unwrap_or(fallback);
+        let size = requested_size.or(cached).unwrap_or(fallback);
         let origin = self.layout.cursor;
         let outer_rect = Rect { origin, size };
         let background = style.background.unwrap_or(self.theme.knob_fill);
@@ -604,7 +605,7 @@ impl<'a> Ui<'a> {
 
         self.state.layout.set(id, measured_size);
         self.track_rect(outer_rect);
-        let advance_height = size
+        let advance_height = requested_size
             .map(|explicit| explicit.height)
             .unwrap_or(measured_size.height);
         self.layout.cursor.y = origin.y + advance_height as i32 + self.layout.spacing;
