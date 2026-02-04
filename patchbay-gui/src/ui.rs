@@ -850,6 +850,19 @@ impl<'a> Ui<'a> {
     pub fn clear(&mut self) {
         self.canvas.clear(self.theme.background);
     }
+
+    /// Draw a non-interactive indicator cell.
+    ///
+    /// This is useful for sequencer step lights or other simple state displays.
+    pub fn indicator(&mut self, rect: Rect, active: bool) {
+        let fill = if active {
+            self.theme.knob_indicator
+        } else {
+            self.theme.knob_fill
+        };
+        self.canvas.fill_rect(rect, fill);
+        self.canvas.stroke_rect(rect, 1, self.theme.knob_outline);
+    }
 }
 
 #[cfg(test)]
