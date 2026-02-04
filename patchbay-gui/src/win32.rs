@@ -291,7 +291,6 @@ where
 
         self.layout.cursor = self.layout_origin;
         self.canvas.clear(self.theme.background);
-        self.ui_state.overlays.clear();
 
         {
             let mut ui = Ui::new(
@@ -301,6 +300,7 @@ where
                 &mut self.layout,
                 &self.theme,
             );
+            ui.clear_overlays();
             (self.on_frame)(&mut ui, &mut self.state);
             ui.draw_overlays();
         }

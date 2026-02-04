@@ -466,6 +466,11 @@ impl<'a> Ui<'a> {
         }
     }
 
+    /// Clear any deferred overlay drawings for the next frame.
+    pub fn clear_overlays(&mut self) {
+        self.state.overlays.clear();
+    }
+
     fn push_bounds(&mut self) {
         self.bounds_stack.push(None);
     }
