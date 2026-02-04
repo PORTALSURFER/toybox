@@ -1306,6 +1306,7 @@ impl<'a> Ui<'a> {
             .draw_text(text_pos, current, self.theme.text, self.theme.text_scale);
 
         if response.open {
+            let pressed = self.input.mouse_pressed;
             let mut any_hovered = false;
             let mut hovered_index = None;
             let menu_height = height * options.len() as i32;
@@ -1329,7 +1330,7 @@ impl<'a> Ui<'a> {
                     any_hovered = true;
                     hovered_index = Some(index);
                 }
-                if option_hovered && self.mouse_pressed() {
+                if option_hovered && pressed {
                     *selected = index;
                     response.changed = true;
                     self.state.open_dropdown = None;
@@ -1337,7 +1338,7 @@ impl<'a> Ui<'a> {
                 }
             }
 
-            if self.mouse_pressed() && !hovered && !any_hovered {
+            if pressed && !hovered && !any_hovered {
                 self.state.open_dropdown = None;
                 response.open = false;
             }
@@ -1345,10 +1346,10 @@ impl<'a> Ui<'a> {
             if response.open {
                 self.push_dropdown_overlay(rect, options, hovered_index, open_up);
             }
-        }
 
-        if self.mouse_pressed() && (response.changed || response.open) {
-            self.consume_mouse_pressed();
+            if pressed {
+                self.consume_mouse_pressed();
+            }
         }
 
         self.layout.cursor.y = rect.origin.y + height + self.layout.spacing;
