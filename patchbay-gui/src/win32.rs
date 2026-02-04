@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, PAINTSTRUCT};
+use windows::Win32::Graphics::Gdi::{BeginPaint, CreateSolidBrush, EndPaint, COLORREF, HBRUSH, PAINTSTRUCT};
 use windows::Win32::System::LibraryLoader::{GetModuleHandleExW, GetModuleHandleW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS};
 use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -34,6 +34,7 @@ const TIMER_ID: usize = 1;
 const TIMER_INTERVAL_MS: u32 = 16;
 const PREWARM_FRAMES: u8 = 2;
 const MIN_SHOW_DELAY_MS: u128 = 80;
+const BACKGROUND_COLOR: COLORREF = COLORREF(18 | (19 << 8) | (22 << 16));
 
 /// Thin wrapper around an HWND for cross-thread use.
 #[derive(Clone, Debug)]
@@ -184,7 +185,7 @@ where
                     false
                 }
             }
-            WM_ERASEBKGND => true,
+            WM_ERASEBKGND => false,
             WM_DESTROY => true,
             _ => false,
         }
@@ -391,6 +392,7 @@ where
     }
 
     unsafe {
+        let background_brush = unsafe { CreateSolidBrush(BACKGROUND_COLOR) };
         let wnd_class = WNDCLASSW {
             style: CS_HREDRAW | CS_VREDRAW,
             lpfnWndProc: Some(window_proc::<State, Init, Frame>),
@@ -398,7 +400,7 @@ where
             lpszClassName: PCWSTR(class_name.as_ptr()),
             hCursor: LoadCursorW(None, windows::Win32::UI::WindowsAndMessaging::IDC_ARROW)
                 .unwrap(),
-            hbrBackground: windows::Win32::Graphics::Gdi::HBRUSH::default(),
+            hbrBackground: background_brush,
             ..Default::default()
         };
         RegisterClassW(&wnd_class);
