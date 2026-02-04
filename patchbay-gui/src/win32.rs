@@ -373,7 +373,7 @@ where
 
     let window = SurfaceWindow {
         hwnd: child_hwnd,
-        hinstance: parent_hinstance,
+        hinstance: module_hinstance,
     };
     log_line_safe("win32: creating renderer");
     let renderer = Renderer::new(window, size)?;
