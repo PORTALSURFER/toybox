@@ -139,6 +139,7 @@ where
     created_at: Instant,
     last_mouse_down: bool,
     last_mouse_secondary_down: bool,
+    debug_input: bool,
 }
 
 impl<State, Init, Frame> WindowState<State, Init, Frame>
@@ -270,13 +271,27 @@ where
         if unsafe { GetCursorPos(&mut point) }.is_err() {
             return;
         }
-        let mut rect = windows::Win32::Foundation::RECT::default();
-        if unsafe { GetWindowRect(self.hwnd, &mut rect) }.is_err() {
+        let mut window_rect = windows::Win32::Foundation::RECT::default();
+        if unsafe { GetWindowRect(self.hwnd, &mut window_rect) }.is_err() {
             return;
         }
+        let local_x = point.x - window_rect.left;
+        let local_y = point.y - window_rect.top;
+
+        let mut client_rect = windows::Win32::Foundation::RECT::default();
+        if unsafe { GetClientRect(self.hwnd, &mut client_rect) }.is_err() {
+            self.input.pointer_pos = Point { x: local_x, y: local_y };
+            return;
+        }
+        let client_width = (client_rect.right - client_rect.left).max(1) as i32;
+        let client_height = (client_rect.bottom - client_rect.top).max(1) as i32;
+        let canvas_size = self.canvas.size();
+        let scaled_x = (local_x as i64 * canvas_size.width as i64 / client_width as i64) as i32;
+        let scaled_y = (local_y as i64 * canvas_size.height as i64 / client_height as i64) as i32;
+
         self.input.pointer_pos = Point {
-            x: point.x - rect.left,
-            y: point.y - rect.top,
+            x: scaled_x,
+            y: scaled_y,
         };
     }
 
@@ -348,6 +363,18 @@ where
             ui.clear_overlays();
             (self.on_frame)(&mut ui, &mut self.state);
             ui.draw_overlays();
+        }
+        if self.debug_input {
+            let text = format!(
+                "ptr=({}, {}) md={} mr={} rd={}",
+                self.input.pointer_pos.x,
+                self.input.pointer_pos.y,
+                self.input.mouse_down as u8,
+                self.input.mouse_released as u8,
+                self.input.mouse_secondary_down as u8
+            );
+            self.canvas
+                .draw_text(Point { x: 6, y: 6 }, &text, self.theme.text, 1);
         }
 
         self.renderer.upload(self.canvas.size(), self.canvas.pixels());
@@ -567,6 +594,7 @@ where
             created_at: Instant::now(),
             last_mouse_down: false,
             last_mouse_secondary_down: false,
+            debug_input: std::env::var_os("PATCHBAY_DEBUG_INPUT").is_some(),
         });
 
     unsafe {
