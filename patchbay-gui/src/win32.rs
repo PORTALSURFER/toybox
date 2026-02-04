@@ -25,7 +25,9 @@ use windows::Win32::Graphics::Gdi::{
 };
 use windows::Win32::System::LibraryLoader::{GetModuleHandleExW, GetModuleHandleW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS};
 use windows::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDROP};
-use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    GetAsyncKeyState, ReleaseCapture, SetCapture, VK_LBUTTON, VK_RBUTTON,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, GetCursorPos, GetParent, GetWindowRect,
     LoadCursorW, RegisterClassW, SendMessageW, SetTimer, SetWindowLongPtrW, SetWindowPos, ShowWindow,
@@ -135,6 +137,8 @@ where
     prewarm_frames: u8,
     saw_timer_tick: bool,
     created_at: Instant,
+    last_mouse_down: bool,
+    last_mouse_secondary_down: bool,
 }
 
 impl<State, Init, Frame> WindowState<State, Init, Frame>
@@ -276,6 +280,22 @@ where
         };
     }
 
+    fn sync_mouse_buttons(&mut self) {
+        let primary_now = unsafe { GetAsyncKeyState(VK_LBUTTON.0 as i32) } < 0;
+        let secondary_now = unsafe { GetAsyncKeyState(VK_RBUTTON.0 as i32) } < 0;
+
+        self.input.mouse_pressed = primary_now && !self.last_mouse_down;
+        self.input.mouse_released = !primary_now && self.last_mouse_down;
+        self.input.mouse_down = primary_now;
+
+        self.input.mouse_secondary_pressed = secondary_now && !self.last_mouse_secondary_down;
+        self.input.mouse_secondary_released = !secondary_now && self.last_mouse_secondary_down;
+        self.input.mouse_secondary_down = secondary_now;
+
+        self.last_mouse_down = primary_now;
+        self.last_mouse_secondary_down = secondary_now;
+    }
+
     fn render_frame(&mut self) {
         if !self.initialized {
             let mut ui = Ui::new(
@@ -314,6 +334,7 @@ where
         self.layout.cursor = self.layout_origin;
         self.canvas.clear(self.theme.background);
         self.sync_pointer_pos();
+        self.sync_mouse_buttons();
 
         {
             let mut ui = Ui::new(
@@ -523,28 +544,30 @@ where
     let canvas = Canvas::new(size.width, size.height);
     let background_brush = unsafe { CreateSolidBrush(colorref_from_theme(theme.background)) };
 
-    let mut window_state = Box::new(WindowState {
-        hwnd: child_hwnd,
-        renderer,
-        canvas,
-        input: InputState::default(),
-        ui_state,
-        layout,
-        layout_origin: layout.cursor,
-        theme,
-        background_brush,
-        state,
-        on_init,
-        on_frame,
-        resize_request,
-        last_size,
-        aspect_ratio,
-        initialized: false,
-        shown: false,
-        prewarm_frames: PREWARM_FRAMES,
-        saw_timer_tick: false,
-        created_at: Instant::now(),
-    });
+        let mut window_state = Box::new(WindowState {
+            hwnd: child_hwnd,
+            renderer,
+            canvas,
+            input: InputState::default(),
+            ui_state,
+            layout,
+            layout_origin: layout.cursor,
+            theme,
+            background_brush,
+            state,
+            on_init,
+            on_frame,
+            resize_request,
+            last_size,
+            aspect_ratio,
+            initialized: false,
+            shown: false,
+            prewarm_frames: PREWARM_FRAMES,
+            saw_timer_tick: false,
+            created_at: Instant::now(),
+            last_mouse_down: false,
+            last_mouse_secondary_down: false,
+        });
 
     unsafe {
         let state_ptr = Box::into_raw(window_state);
