@@ -57,7 +57,7 @@ impl WindowHandle {
 
     /// Return true if the parent matches the provided HWND.
     pub fn parent_matches(&self, parent: isize) -> bool {
-        unsafe { GetParent(self.hwnd) == HWND(parent as *mut _) }
+        unsafe { GetParent(self.hwnd).ok() == Some(HWND(parent as *mut _)) }
     }
 
     /// Destroy the underlying HWND.
