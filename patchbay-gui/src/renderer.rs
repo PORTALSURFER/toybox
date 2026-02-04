@@ -5,7 +5,8 @@ use crate::host::GuiError;
 use crate::logging::log_line_safe;
 use crate::win32::SurfaceWindow;
 use bytemuck::{Pod, Zeroable};
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use wgpu::util::DeviceExt;
 
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
@@ -37,6 +38,11 @@ pub struct RendererDevice {
     adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
+    texture_bind_group_layout: wgpu::BindGroupLayout,
+    pipeline_layout: wgpu::PipelineLayout,
+    shader: wgpu::ShaderModule,
+    vertex_buffer: wgpu::Buffer,
+    pipelines: Mutex<HashMap<wgpu::TextureFormat, wgpu::RenderPipeline>>,
 }
 
 impl RendererDevice {
@@ -75,12 +81,100 @@ impl RendererDevice {
         })?;
         log_line_safe("renderer_device: device created");
 
+        let texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("patchbay-gui-texture-layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("patchbay-gui-shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("patchbay-gui-pipeline-layout"),
+            bind_group_layouts: &[&texture_bind_group_layout],
+            immediate_size: 0,
+        });
+
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("patchbay-gui-vertex-buffer"),
+            contents: bytemuck::cast_slice(&VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
         Ok(Self {
             instance,
             adapter,
             device,
             queue,
+            texture_bind_group_layout,
+            pipeline_layout,
+            shader,
+            vertex_buffer,
+            pipelines: Mutex::new(HashMap::new()),
         })
+    }
+
+    fn pipeline_for(&self, format: wgpu::TextureFormat) -> Result<wgpu::RenderPipeline, GuiError> {
+        let mut cache = self
+            .pipelines
+            .lock()
+            .map_err(|_| GuiError::DeviceCachePoison)?;
+        if let Some(pipeline) = cache.get(&format) {
+            return Ok(pipeline.clone());
+        }
+        let pipeline = self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("patchbay-gui-pipeline"),
+            layout: Some(&self.pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &self.shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2],
+                }],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &self.shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+        cache.insert(format, pipeline.clone());
+        Ok(pipeline)
     }
 }
 
@@ -96,7 +190,6 @@ pub struct Renderer {
     sampler: wgpu::Sampler,
     bind_group: wgpu::BindGroup,
     pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
 }
 
 impl Renderer {
@@ -142,31 +235,9 @@ impl Renderer {
         log_line_safe("renderer: surface configured");
 
         let (texture, texture_view, sampler) = Self::create_texture(&device.device, size);
-        let bind_group_layout = device.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("patchbay-gui-texture-layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-        });
-
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("patchbay-gui-texture-bind-group"),
-            layout: &bind_group_layout,
+            layout: &device.texture_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -178,56 +249,7 @@ impl Renderer {
                 },
             ],
         });
-
-        let shader = device.device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("patchbay-gui-shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
-        });
-
-        let pipeline_layout = device.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("patchbay-gui-pipeline-layout"),
-            bind_group_layouts: &[&bind_group_layout],
-            immediate_size: 0,
-        });
-
-        let pipeline = device.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("patchbay-gui-pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2],
-                }],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            multiview_mask: None,
-            cache: None,
-        });
-
-        let vertex_buffer = device.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("patchbay-gui-vertex-buffer"),
-            contents: bytemuck::cast_slice(&VERTICES),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        let pipeline = device.pipeline_for(format)?;
 
         Ok(Self {
             device,
@@ -239,7 +261,6 @@ impl Renderer {
             sampler,
             bind_group,
             pipeline,
-            vertex_buffer,
         })
     }
 
@@ -260,7 +281,7 @@ impl Renderer {
         self.sampler = sampler;
         self.bind_group = self.device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("patchbay-gui-texture-bind-group"),
-            layout: &self.pipeline.get_bind_group_layout(0),
+            layout: &self.device.texture_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -374,7 +395,7 @@ impl Renderer {
             });
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &self.bind_group, &[]);
-            pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            pass.set_vertex_buffer(0, self.device.vertex_buffer.slice(..));
             pass.draw(0..3, 0..1);
         }
 
