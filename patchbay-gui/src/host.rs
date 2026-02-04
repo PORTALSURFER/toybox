@@ -36,6 +36,15 @@ pub struct InputState {
     pub dropped_files: Vec<PathBuf>,
 }
 
+/// Policy for handling repeated `open_parented` calls.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OpenParentedMode {
+    /// Reuse an existing window if it matches the parent handle.
+    ReuseIfOpen,
+    /// Always recreate the window and UI state.
+    Recreate,
+}
+
 /// Errors returned by the Patchbay GUI system.
 #[derive(thiserror::Error, Debug)]
 pub enum GuiError {
@@ -153,7 +162,8 @@ impl HostWindow {
     /// Open a parented Patchbay GUI window.
     ///
     /// The caller supplies initial state plus callbacks for initialization and
-    /// per-frame rendering.
+    /// per-frame rendering. If a matching window is already open, this reuses
+    /// it and ignores the new state.
     pub fn open_parented<State, Init, Frame>(
         &mut self,
         title: String,
@@ -161,6 +171,36 @@ impl HostWindow {
         state: State,
         mut on_init: Init,
         mut on_frame: Frame,
+    ) -> Result<(), GuiError>
+    where
+        Init: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
+        Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
+        State: Send + 'static,
+    {
+        self.open_parented_with(
+            title,
+            size,
+            state,
+            on_init,
+            on_frame,
+            OpenParentedMode::ReuseIfOpen,
+        )
+    }
+
+    /// Open a parented Patchbay GUI window with explicit reuse policy.
+    ///
+    /// When `mode` is [`OpenParentedMode::ReuseIfOpen`], a matching window is
+    /// shown and resized, and the new state/callbacks are ignored. When
+    /// `mode` is [`OpenParentedMode::Recreate`], any existing window is
+    /// destroyed and a new one is created with the provided state.
+    pub fn open_parented_with<State, Init, Frame>(
+        &mut self,
+        title: String,
+        size: (u32, u32),
+        state: State,
+        mut on_init: Init,
+        mut on_frame: Frame,
+        mode: OpenParentedMode,
     ) -> Result<(), GuiError>
     where
         Init: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
@@ -176,8 +216,11 @@ impl HostWindow {
         };
         if let Some(handle) = &self.handle {
             if handle.is_valid() && handle.parent_matches(parent_hwnd) {
-                self.show();
-                return Ok(());
+                if mode == OpenParentedMode::ReuseIfOpen {
+                    self.request_resize(size.0, size.1);
+                    self.show();
+                    return Ok(());
+                }
             }
             handle.destroy();
             self.handle = None;

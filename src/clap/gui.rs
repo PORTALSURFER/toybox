@@ -8,7 +8,7 @@ use crate::logging::log_line_safe;
 /// Re-export Patchbay GUI types for downstream GUI integrations.
 pub use patchbay_gui::{
     ButtonResponse, Canvas, Color, DropdownResponse, InputState, KnobResponse, Layout,
-    RegionResponse, SliderResponse, Theme, ToggleResponse, Ui, WidgetId,
+    OpenParentedMode, RegionResponse, SliderResponse, Theme, ToggleResponse, Ui, WidgetId,
 };
 
 /// Wrapper around a Patchbay GUI window for a CLAP editor.
@@ -64,7 +64,9 @@ impl GuiHostWindow {
     /// Open a parented Patchbay GUI window.
     ///
     /// The caller supplies the initial state and the GUI update callback. The
-    /// helper handles resize requests and stores the last logical size.
+    /// helper handles resize requests and stores the last logical size. This
+    /// recreates the window each call so new state is applied; use
+    /// `open_parented_reuse` to keep an existing window.
     pub fn open_parented<State, Init, Frame>(
         &mut self,
         title: String,
@@ -78,12 +80,65 @@ impl GuiHostWindow {
         Frame: FnMut(&mut patchbay_gui::Ui<'_>, &mut State) + Send + 'static,
         State: Send + 'static,
     {
+        self.open_parented_with(
+            title,
+            size,
+            state,
+            on_init,
+            on_frame,
+            OpenParentedMode::Recreate,
+        )
+    }
+
+    /// Open a parented window, reusing it if it is already open.
+    ///
+    /// This mirrors Patchbay's default behavior: if a window is already open
+    /// and attached to the same parent, the new state is ignored and the
+    /// existing window is shown.
+    pub fn open_parented_reuse<State, Init, Frame>(
+        &mut self,
+        title: String,
+        size: (u32, u32),
+        state: State,
+        on_init: Init,
+        on_frame: Frame,
+    ) -> Result<(), PluginError>
+    where
+        Init: FnMut(&mut patchbay_gui::Ui<'_>, &mut State) + Send + 'static,
+        Frame: FnMut(&mut patchbay_gui::Ui<'_>, &mut State) + Send + 'static,
+        State: Send + 'static,
+    {
+        self.open_parented_with(
+            title,
+            size,
+            state,
+            on_init,
+            on_frame,
+            OpenParentedMode::ReuseIfOpen,
+        )
+    }
+
+    /// Open a parented window with an explicit reuse policy.
+    pub fn open_parented_with<State, Init, Frame>(
+        &mut self,
+        title: String,
+        size: (u32, u32),
+        state: State,
+        on_init: Init,
+        on_frame: Frame,
+        mode: OpenParentedMode,
+    ) -> Result<(), PluginError>
+    where
+        Init: FnMut(&mut patchbay_gui::Ui<'_>, &mut State) + Send + 'static,
+        Frame: FnMut(&mut patchbay_gui::Ui<'_>, &mut State) + Send + 'static,
+        State: Send + 'static,
+    {
         log_line_safe(&format!(
-            "toybox/gui: open_parented title=\"{}\" size={}x{}",
+            "toybox/gui: open_parented title=\"{}\" size={}x{} mode={mode:?}",
             title, size.0, size.1
         ));
         self.inner
-            .open_parented(title, size, state, on_init, on_frame)
+            .open_parented_with(title, size, state, on_init, on_frame, mode)
             .map_err(map_gui_error)
     }
 }

@@ -94,6 +94,19 @@ pub struct AutomationQueue {
     events: Mutex<Vec<AutomationEvent>>,
 }
 
+/// Summary information from draining automation events.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct AutomationDrainStats {
+    /// Total events removed from the queue.
+    pub attempted: usize,
+    /// Events successfully pushed to the output buffer.
+    pub pushed: usize,
+    /// Events that failed to push to the output buffer.
+    pub failed: usize,
+    /// Whether the queue lock was unavailable.
+    pub locked: bool,
+}
+
 impl AutomationQueue {
     /// Enqueue a parameter value update if automation is enabled.
     pub fn push_value(&self, config: &AutomationConfig, param_id: ClapId, value: f64) {
@@ -136,38 +149,65 @@ impl AutomationQueue {
         output: &mut OutputEvents<'_>,
         scratch: &mut Vec<AutomationEvent>,
     ) -> bool {
+        let stats = self.drain_to_output_with_stats(output, scratch);
+        stats.attempted > 0
+    }
+
+    /// Drain queued automation events into an output buffer with stats.
+    ///
+    /// The caller supplies a scratch buffer to avoid allocations in realtime
+    /// threads. Events that fail to push are dropped and counted in the stats.
+    /// If the queue is temporarily locked by another thread, `locked` is set
+    /// and no events are drained.
+    pub fn drain_to_output_with_stats(
+        &self,
+        output: &mut OutputEvents<'_>,
+        scratch: &mut Vec<AutomationEvent>,
+    ) -> AutomationDrainStats {
         let Ok(mut events) = self.events.try_lock() else {
-            return false;
+            return AutomationDrainStats {
+                locked: true,
+                ..AutomationDrainStats::default()
+            };
         };
         if events.is_empty() {
-            return false;
+            return AutomationDrainStats::default();
         }
         scratch.clear();
         scratch.extend(events.drain(..));
         drop(events);
 
+        let mut stats = AutomationDrainStats {
+            attempted: scratch.len(),
+            ..AutomationDrainStats::default()
+        };
+
         for event in scratch.drain(..) {
-            match event {
+            let pushed = match event {
                 AutomationEvent::GestureBegin(param_id) => {
-                    let _ = push_param_gesture_begin(output, 0, param_id);
+                    push_param_gesture_begin(output, 0, param_id).is_ok()
                 }
                 AutomationEvent::GestureEnd(param_id) => {
-                    let _ = push_param_gesture_end(output, 0, param_id);
+                    push_param_gesture_end(output, 0, param_id).is_ok()
                 }
-                AutomationEvent::Value(param_id, value) => {
-                    let _ = push_param_value(
-                        output,
-                        0,
-                        param_id,
-                        value,
-                        Pckn::match_all(),
-                        Cookie::empty(),
-                    );
-                }
+                AutomationEvent::Value(param_id, value) => push_param_value(
+                    output,
+                    0,
+                    param_id,
+                    value,
+                    Pckn::match_all(),
+                    Cookie::empty(),
+                )
+                .is_ok(),
+            };
+            if pushed {
+                stats.pushed += 1;
+            } else {
+                stats.failed += 1;
             }
         }
 
-        true
+        stats
     }
 }
 
@@ -201,6 +241,9 @@ mod tests {
         let mut output = buffer.as_output();
         let mut scratch = Vec::new();
 
-        assert!(queue.drain_to_output(&mut output, &mut scratch));
+        let stats = queue.drain_to_output_with_stats(&mut output, &mut scratch);
+        assert_eq!(stats.attempted, 3);
+        assert_eq!(stats.pushed, 3);
+        assert_eq!(stats.failed, 0);
     }
 }

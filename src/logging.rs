@@ -41,9 +41,10 @@ impl From<std::io::Error> for LogError {
 static LOG_FILE: OnceLock<Mutex<File>> = OnceLock::new();
 static LOG_ERRORS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
 
-/// Return the on-disk log file path.
+/// Return the on-disk log file path for this process.
 pub(crate) fn log_path() -> PathBuf {
-    std::env::temp_dir().join("toybox_gui.log")
+    let pid = std::process::id();
+    std::env::temp_dir().join(format!("toybox_gui_{pid}.log"))
 }
 
 /// Initialize the log file if needed and return the file path.

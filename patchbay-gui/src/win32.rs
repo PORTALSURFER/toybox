@@ -133,7 +133,6 @@ where
     initialized: bool,
     shown: bool,
     prewarm_frames: u8,
-    saw_timer_tick: bool,
     created_at: Instant,
     last_mouse_down: bool,
     last_mouse_secondary_down: bool,
@@ -231,7 +230,6 @@ where
             }
             WM_TIMER => {
                 if wparam.0 == TIMER_ID {
-                    self.saw_timer_tick = true;
                     self.render_frame();
                     true
                 } else {
@@ -390,12 +388,18 @@ where
         self.renderer.upload(self.canvas.size(), self.canvas.pixels());
         let render_ok = self.renderer.render().is_ok();
         if !self.shown && render_ok {
-            log_line_safe("win32: render ok, showing window");
-            unsafe {
-                ShowWindow(self.hwnd, SW_SHOW);
+            if self.prewarm_frames > 0 {
+                self.prewarm_frames = self.prewarm_frames.saturating_sub(1);
             }
-            self.shown = true;
-            let _ = self.renderer.render();
+            let elapsed_ms = self.created_at.elapsed().as_millis();
+            if self.prewarm_frames == 0 && elapsed_ms >= MIN_SHOW_DELAY_MS {
+                log_line_safe("win32: render ok, showing window");
+                unsafe {
+                    ShowWindow(self.hwnd, SW_SHOW);
+                }
+                self.shown = true;
+                let _ = self.renderer.render();
+            }
         }
 
         self.input.mouse_pressed = false;
@@ -580,32 +584,31 @@ where
     let canvas = Canvas::new(size.width, size.height);
     let background_brush = unsafe { CreateSolidBrush(colorref_from_theme(theme.background)) };
 
-        let mut window_state = Box::new(WindowState {
-            hwnd: child_hwnd,
-            renderer,
-            canvas,
-            input: InputState::default(),
-            ui_state,
-            layout,
-            layout_origin: layout.cursor,
-            theme,
-            background_brush,
-            state,
-            on_init,
-            on_frame,
-            resize_request,
-            last_size,
-            aspect_ratio,
-            initialized: false,
-            shown: false,
-            prewarm_frames: PREWARM_FRAMES,
-            saw_timer_tick: false,
-            created_at: Instant::now(),
-            last_mouse_down: false,
-            last_mouse_secondary_down: false,
-            debug_input: std::env::var_os("PATCHBAY_DEBUG_INPUT").is_some(),
-            frame_counter: 0,
-        });
+    let mut window_state = Box::new(WindowState {
+        hwnd: child_hwnd,
+        renderer,
+        canvas,
+        input: InputState::default(),
+        ui_state,
+        layout,
+        layout_origin: layout.cursor,
+        theme,
+        background_brush,
+        state,
+        on_init,
+        on_frame,
+        resize_request,
+        last_size,
+        aspect_ratio,
+        initialized: false,
+        shown: false,
+        prewarm_frames: PREWARM_FRAMES,
+        created_at: Instant::now(),
+        last_mouse_down: false,
+        last_mouse_secondary_down: false,
+        debug_input: std::env::var_os("PATCHBAY_DEBUG_INPUT").is_some(),
+        frame_counter: 0,
+    });
 
     unsafe {
         let state_ptr = Box::into_raw(window_state);

@@ -52,7 +52,7 @@ pub fn windows_bundle_paths(name: &str, version: &str) -> WindowsBundlePaths {
 
 /// Build the rustc link-arg used to emit a Windows `.clap` bundle.
 pub fn windows_rustc_link_arg(output_path: &Path) -> String {
-    format!("/OUT:{}", output_path.display())
+    format!("/OUT:\"{}\"", output_path.display())
 }
 
 fn windows_bundle_paths_from(
@@ -104,6 +104,7 @@ mod tests {
     fn link_arg_prefix_matches_lilt() {
         let arg = windows_rustc_link_arg(Path::new("dist/lilt-v0.3.0.clap"));
         assert!(arg.starts_with("/OUT:"));
+        assert!(arg.contains("\"dist/lilt-v0.3.0.clap\""));
     }
 
     #[test]
