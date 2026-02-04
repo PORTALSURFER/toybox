@@ -76,6 +76,7 @@ pub struct UiState {
     open_dropdown: Option<WidgetId>,
     layout: LayoutState,
     overlays: Vec<DropdownOverlay>,
+    consume_mouse_pressed: bool,
 }
 
 /// Cached container sizes for auto layout.
@@ -471,6 +472,19 @@ impl<'a> Ui<'a> {
         self.state.overlays.clear();
     }
 
+    /// Reset per-frame input consumption flags.
+    pub fn reset_input_consumption(&mut self) {
+        self.state.consume_mouse_pressed = false;
+    }
+
+    fn mouse_pressed(&self) -> bool {
+        self.input.mouse_pressed && !self.state.consume_mouse_pressed
+    }
+
+    fn consume_mouse_pressed(&mut self) {
+        self.state.consume_mouse_pressed = true;
+    }
+
     fn push_bounds(&mut self) {
         self.bounds_stack.push(None);
     }
@@ -665,7 +679,7 @@ impl<'a> Ui<'a> {
             double_clicked: false,
         };
 
-        if hovered && self.input.mouse_pressed {
+        if hovered && self.mouse_pressed() {
             self.state.active = Some(id);
             self.state.drag_start = Some(self.input.pointer_pos);
             response.active = true;
@@ -733,7 +747,7 @@ impl<'a> Ui<'a> {
             changed: false,
         };
 
-        if hovered && self.input.mouse_pressed {
+        if hovered && self.mouse_pressed() {
             self.state.active = Some(id);
             self.state.drag_start = Some(self.input.pointer_pos);
             self.state.drag_value = *value;
@@ -913,7 +927,7 @@ impl<'a> Ui<'a> {
             changed: false,
         };
 
-        if hovered && self.input.mouse_pressed {
+        if hovered && self.mouse_pressed() {
             self.state.active = Some(id);
             response.active = true;
         }
@@ -1045,7 +1059,7 @@ impl<'a> Ui<'a> {
             hovered,
             changed: false,
         };
-        if hovered && self.input.mouse_pressed {
+        if hovered && self.mouse_pressed() {
             *value = !*value;
             response.changed = true;
         }
@@ -1114,7 +1128,7 @@ impl<'a> Ui<'a> {
             hovered,
             clicked: false,
         };
-        if hovered && self.input.mouse_pressed {
+        if hovered && self.mouse_pressed() {
             response.clicked = true;
         }
         let fill = if hovered {
@@ -1191,7 +1205,7 @@ impl<'a> Ui<'a> {
             changed: false,
         };
 
-        if hovered && self.input.mouse_pressed {
+        if hovered && self.mouse_pressed() {
             if response.open {
                 self.state.open_dropdown = None;
                 response.open = false;
@@ -1236,7 +1250,7 @@ impl<'a> Ui<'a> {
                     any_hovered = true;
                     hovered_index = Some(index);
                 }
-                if option_hovered && self.input.mouse_pressed {
+                if option_hovered && self.mouse_pressed() {
                     *selected = index;
                     response.changed = true;
                     self.state.open_dropdown = None;
@@ -1244,7 +1258,7 @@ impl<'a> Ui<'a> {
                 }
             }
 
-            if self.input.mouse_pressed && !hovered && !any_hovered {
+            if self.mouse_pressed() && !hovered && !any_hovered {
                 self.state.open_dropdown = None;
                 response.open = false;
             }
@@ -1252,6 +1266,10 @@ impl<'a> Ui<'a> {
             if response.open {
                 self.push_dropdown_overlay(rect, options, hovered_index);
             }
+        }
+
+        if self.mouse_pressed() && (response.changed || response.open) {
+            self.consume_mouse_pressed();
         }
 
         self.layout.cursor.y = rect.origin.y + height + self.layout.spacing;

@@ -300,6 +300,7 @@ where
                 &mut self.layout,
                 &self.theme,
             );
+            ui.reset_input_consumption();
             ui.clear_overlays();
             (self.on_frame)(&mut ui, &mut self.state);
             ui.draw_overlays();
