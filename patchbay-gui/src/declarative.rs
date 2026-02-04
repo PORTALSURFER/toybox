@@ -167,10 +167,10 @@ pub fn measure<C>(spec: &UiSpec<'_, C>, theme: &Theme) -> Size {
 
 /// Render a UI specification at the given origin and return the measured size.
 pub fn render<C>(spec: &mut UiSpec<'_, C>, ui: &mut Ui<'_>, origin: Point, ctx: &mut C) -> Size {
-    let theme = ui.theme();
-    let measured = measure_node(&spec.root, theme);
+    let theme = ui.theme().clone();
+    let measured = measure_node(&spec.root, &theme);
     let rect = Rect { origin, size: measured };
-    render_node(&mut spec.root, rect, ui, theme, ctx);
+    render_node(&mut spec.root, rect, ui, &theme, ctx);
     measured
 }
 
@@ -362,6 +362,7 @@ fn render_flex<C>(
         Axis::Horizontal => rect.origin.x + flex.padding.left,
         Axis::Vertical => rect.origin.y + flex.padding.top,
     };
+    let child_count = flex.children.len();
     for (index, child) in flex.children.iter_mut().enumerate() {
         let size = measure_node(child, theme);
         let mut main = match axis {
@@ -421,7 +422,7 @@ fn render_flex<C>(
         };
         render_node(child, child_rect, ui, theme, ctx);
         cursor_main += main + flex.gap.max(0);
-        if index == flex.children.len().saturating_sub(1) {
+        if index == child_count.saturating_sub(1) {
             break;
         }
     }
