@@ -315,35 +315,13 @@ where
 
         self.renderer.upload(self.canvas.size(), self.canvas.pixels());
         let render_ok = self.renderer.render().is_ok();
-        if !self.shown {
-            let ready_by_time = self.created_at.elapsed().as_millis() >= MIN_SHOW_DELAY_MS;
-            if self.saw_timer_tick && render_ok && self.prewarm_frames > 0 {
-                self.prewarm_frames = self.prewarm_frames.saturating_sub(1);
-                log_line_safe(&format!(
-                    "win32: show gate prewarm tick prewarm={} saw_timer={} render_ok={}",
-                    self.prewarm_frames,
-                    self.saw_timer_tick,
-                    render_ok
-                ));
+        if !self.shown && render_ok {
+            log_line_safe("win32: render ok, showing window");
+            unsafe {
+                ShowWindow(self.hwnd, SW_SHOW);
             }
-
-            if self.saw_timer_tick && render_ok && self.prewarm_frames == 0 && ready_by_time {
-                log_line_safe("win32: show gate passed, showing window");
-                unsafe {
-                    ShowWindow(self.hwnd, SW_SHOW);
-                }
-                self.shown = true;
-                // Ensure a visible frame is presented immediately after showing.
-                let _ = self.renderer.render();
-            } else {
-                log_line_safe(&format!(
-                    "win32: show gate blocked prewarm={} saw_timer={} render_ok={} ready_by_time={}",
-                    self.prewarm_frames,
-                    self.saw_timer_tick,
-                    render_ok,
-                    ready_by_time
-                ));
-            }
+            self.shown = true;
+            let _ = self.renderer.render();
         }
 
         self.input.mouse_pressed = false;
