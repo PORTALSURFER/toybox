@@ -9,6 +9,7 @@ compile_error!("patchbay-gui currently supports Windows only.");
 
 mod canvas;
 mod host;
+mod logging;
 mod renderer;
 mod ui;
 #[cfg(target_os = "windows")]

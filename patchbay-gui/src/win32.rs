@@ -2,6 +2,7 @@
 
 use crate::canvas::{Canvas, Point, Size};
 use crate::host::{GuiError, InputState};
+use crate::logging::log_line_safe;
 use crate::renderer::Renderer;
 use crate::ui::{Layout, Theme, Ui, UiState};
 use raw_window_handle_06::{
@@ -252,11 +253,13 @@ where
     Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
     State: Send + 'static,
 {
+    log_line_safe("win32: spawn_window_thread begin");
     let (tx, rx) = mpsc::channel();
 
     thread::Builder::new()
         .name("patchbay-gui".to_string())
         .spawn(move || {
+            log_line_safe("win32: window thread started");
             let result = run_window_loop(
                 parent_hwnd,
                 parent_hinstance,
@@ -301,6 +304,7 @@ where
     Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
     State: Send + 'static,
 {
+    log_line_safe("win32: run_window_loop begin");
     let class_name = to_wide("PatchbayGuiWindow");
     let parent_hwnd = HWND(parent_hwnd as *mut _);
     let parent_hinstance = HINSTANCE(parent_hinstance as *mut _);
@@ -317,6 +321,7 @@ where
         };
         RegisterClassW(&wnd_class);
     }
+    log_line_safe("win32: RegisterClassW completed");
 
     let title_w = to_wide(&title);
     let child_hwnd = unsafe {
@@ -336,12 +341,15 @@ where
         )
     }
     .map_err(|_| GuiError::WindowCreateFailed)?;
+    log_line_safe(&format!("win32: CreateWindowExW ok hwnd={:?}", child_hwnd));
 
     let window = SurfaceWindow {
         hwnd: child_hwnd,
         hinstance: parent_hinstance,
     };
+    log_line_safe("win32: creating renderer");
     let renderer = Renderer::new(window, size)?;
+    log_line_safe("win32: renderer created");
     let canvas = Canvas::new(size.width, size.height);
 
     let mut window_state = Box::new(WindowState {

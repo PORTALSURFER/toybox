@@ -2,6 +2,7 @@
 
 use crate::canvas::Size;
 use crate::host::GuiError;
+use crate::logging::log_line_safe;
 use crate::win32::SurfaceWindow;
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
@@ -48,18 +49,28 @@ pub struct Renderer {
 impl Renderer {
     /// Create a new renderer for the given window.
     pub fn new(window: SurfaceWindow, size: Size) -> Result<Self, GuiError> {
+        log_line_safe("renderer: new begin");
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
             ..Default::default()
         });
-        let surface = unsafe { instance.create_surface(&window) }.map_err(GuiError::Surface)?;
+        log_line_safe("renderer: instance created");
+        let surface = unsafe { instance.create_surface(&window) }.map_err(|err| {
+            log_line_safe(&format!("renderer: create_surface error: {err:?}"));
+            GuiError::Surface(err)
+        })?;
         let surface = unsafe { std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(surface) };
+        log_line_safe("renderer: surface created");
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: Some(&surface),
             force_fallback_adapter: false,
         }))
-        .map_err(|_| GuiError::AdapterNotFound)?;
+        .map_err(|err| {
+            log_line_safe(&format!("renderer: request_adapter error: {err:?}"));
+            GuiError::AdapterNotFound
+        })?;
+        log_line_safe("renderer: adapter acquired");
 
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
@@ -71,7 +82,11 @@ impl Renderer {
                 trace: wgpu::Trace::Off,
             },
         ))
-        .map_err(GuiError::Device)?;
+        .map_err(|err| {
+            log_line_safe(&format!("renderer: request_device error: {err:?}"));
+            GuiError::Device(err)
+        })?;
+        log_line_safe("renderer: device created");
 
         let capabilities = surface.get_capabilities(&adapter);
         let format = capabilities
@@ -99,6 +114,7 @@ impl Renderer {
             desired_maximum_frame_latency: 2,
         };
         surface.configure(&device, &config);
+        log_line_safe("renderer: surface configured");
 
         let (texture, texture_view, sampler) = Self::create_texture(&device, size);
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -292,7 +308,13 @@ impl Renderer {
 
     /// Render the canvas to the surface.
     pub fn render(&mut self) -> Result<(), GuiError> {
-        let output = self.surface.get_current_texture().map_err(GuiError::SurfaceAcquire)?;
+        let output = match self.surface.get_current_texture() {
+            Ok(output) => output,
+            Err(err) => {
+                log_line_safe(&format!("renderer: get_current_texture error: {err:?}"));
+                return Err(GuiError::SurfaceAcquire(err));
+            }
+        };
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
