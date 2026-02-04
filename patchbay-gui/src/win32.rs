@@ -594,7 +594,7 @@ where
             created_at: Instant::now(),
             last_mouse_down: false,
             last_mouse_secondary_down: false,
-            debug_input: std::env::var_os("PATCHBAY_DEBUG_INPUT").is_some(),
+            debug_input: true,
         });
 
     unsafe {
