@@ -518,7 +518,9 @@ impl<'a> Ui<'a> {
     ///
     /// The panel can auto-size to fit its contents. When `size` is `None`, the
     /// panel uses the last measured size for the key and updates it after the
-    /// closure runs.
+    /// closure runs. Auto-sized panels advance the layout cursor using the
+    /// newly measured height so following widgets line up with the rendered
+    /// content.
     pub fn panel_with_key<F>(
         &mut self,
         key: &str,
@@ -602,7 +604,10 @@ impl<'a> Ui<'a> {
 
         self.state.layout.set(id, measured_size);
         self.track_rect(outer_rect);
-        self.layout.cursor.y = origin.y + size.height as i32 + self.layout.spacing;
+        let advance_height = size
+            .map(|explicit| explicit.height)
+            .unwrap_or(measured_size.height);
+        self.layout.cursor.y = origin.y + advance_height as i32 + self.layout.spacing;
 
         PanelResponse {
             outer_rect,
@@ -1563,6 +1568,35 @@ mod tests {
 
         assert!(response.measured_size.width > 0);
         assert!(response.measured_size.height > 0);
+    }
+
+    #[test]
+    fn panel_auto_size_advances_layout_by_measured_height() {
+        let mut canvas = Canvas::new(400, 200);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState::default();
+
+        let start = layout.cursor;
+        let spacing = layout.spacing;
+
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let response = ui.panel_with_key(
+            "panel-advance",
+            PanelStyle {
+                title: Some("Panel"),
+                ..PanelStyle::default()
+            },
+            None,
+            |ui, _rect| {
+                let mut value = 0.5;
+                ui.knob_with_key("gain", "GAIN", &mut value, (0.0, 1.0));
+            },
+        );
+
+        let expected_y = start.y + response.measured_size.height as i32 + spacing;
+        assert_eq!(ui.layout.cursor.y, expected_y);
     }
 
     #[test]
