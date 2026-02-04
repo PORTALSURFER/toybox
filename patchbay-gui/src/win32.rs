@@ -42,8 +42,6 @@ const TIMER_ID: usize = 1;
 const TIMER_INTERVAL_MS: u32 = 16;
 const PREWARM_FRAMES: u8 = 2;
 const MIN_SHOW_DELAY_MS: u128 = 80;
-const BACKGROUND_COLOR: COLORREF = COLORREF(18 | (19 << 8) | (22 << 16));
-
 /// Thin wrapper around an HWND for cross-thread use.
 #[derive(Clone, Debug)]
 pub struct WindowHandle {
@@ -520,7 +518,7 @@ where
             lpszClassName: PCWSTR(class_name.as_ptr()),
             hCursor: LoadCursorW(None, windows::Win32::UI::WindowsAndMessaging::IDC_ARROW)
                 .unwrap(),
-            hbrBackground: HBRUSH(0),
+            hbrBackground: HBRUSH(std::ptr::null_mut()),
             ..Default::default()
         };
         RegisterClassW(&wnd_class);
