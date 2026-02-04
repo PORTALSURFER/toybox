@@ -5,6 +5,7 @@ use crate::host::GuiError;
 use crate::logging::log_line_safe;
 use crate::win32::SurfaceWindow;
 use bytemuck::{Pod, Zeroable};
+use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
@@ -29,48 +30,34 @@ const VERTICES: [Vertex; 3] = [
     },
 ];
 
-/// GPU renderer that uploads a CPU canvas into a surface texture.
-pub struct Renderer {
+/// Cached GPU device resources shared across window surfaces.
+#[derive(Debug)]
+pub struct RendererDevice {
     instance: wgpu::Instance,
-    #[allow(dead_code)]
-    window: SurfaceWindow,
-    surface: wgpu::Surface<'static>,
+    adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    config: wgpu::SurfaceConfiguration,
-    texture: wgpu::Texture,
-    texture_view: wgpu::TextureView,
-    sampler: wgpu::Sampler,
-    bind_group: wgpu::BindGroup,
-    pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
 }
 
-impl Renderer {
-    /// Create a new renderer for the given window.
-    pub fn new(window: SurfaceWindow, size: Size) -> Result<Self, GuiError> {
-        log_line_safe("renderer: new begin");
+impl RendererDevice {
+    /// Create a new device and queue without binding to a specific surface.
+    pub fn new() -> Result<Self, GuiError> {
+        log_line_safe("renderer_device: create begin");
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
             ..Default::default()
         });
-        log_line_safe("renderer: instance created");
-        let surface = unsafe { instance.create_surface(&window) }.map_err(|err| {
-            log_line_safe(&format!("renderer: create_surface error: {err:?}"));
-            GuiError::Surface(err)
-        })?;
-        let surface = unsafe { std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(surface) };
-        log_line_safe("renderer: surface created");
+        log_line_safe("renderer_device: instance created");
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
-            compatible_surface: Some(&surface),
+            compatible_surface: None,
             force_fallback_adapter: false,
         }))
         .map_err(|err| {
-            log_line_safe(&format!("renderer: request_adapter error: {err:?}"));
+            log_line_safe(&format!("renderer_device: request_adapter error: {err:?}"));
             GuiError::AdapterNotFound
         })?;
-        log_line_safe("renderer: adapter acquired");
+        log_line_safe("renderer_device: adapter acquired");
 
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
@@ -83,12 +70,50 @@ impl Renderer {
             },
         ))
         .map_err(|err| {
-            log_line_safe(&format!("renderer: request_device error: {err:?}"));
+            log_line_safe(&format!("renderer_device: request_device error: {err:?}"));
             GuiError::Device(err)
         })?;
-        log_line_safe("renderer: device created");
+        log_line_safe("renderer_device: device created");
 
-        let capabilities = surface.get_capabilities(&adapter);
+        Ok(Self {
+            instance,
+            adapter,
+            device,
+            queue,
+        })
+    }
+}
+
+/// GPU renderer that uploads a CPU canvas into a surface texture.
+pub struct Renderer {
+    device: Arc<RendererDevice>,
+    #[allow(dead_code)]
+    window: SurfaceWindow,
+    surface: wgpu::Surface<'static>,
+    config: wgpu::SurfaceConfiguration,
+    texture: wgpu::Texture,
+    texture_view: wgpu::TextureView,
+    sampler: wgpu::Sampler,
+    bind_group: wgpu::BindGroup,
+    pipeline: wgpu::RenderPipeline,
+    vertex_buffer: wgpu::Buffer,
+}
+
+impl Renderer {
+    /// Create a new renderer for the given window with a shared device.
+    pub fn new_with_device(
+        device: Arc<RendererDevice>,
+        window: SurfaceWindow,
+        size: Size,
+    ) -> Result<Self, GuiError> {
+        log_line_safe("renderer: new begin");
+        let surface = unsafe { device.instance.create_surface(&window) }.map_err(|err| {
+            log_line_safe(&format!("renderer: create_surface error: {err:?}"));
+            GuiError::Surface(err)
+        })?;
+        let surface = unsafe { std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(surface) };
+        log_line_safe("renderer: surface created");
+        let capabilities = surface.get_capabilities(&device.adapter);
         let format = capabilities
             .formats
             .iter()
@@ -113,11 +138,11 @@ impl Renderer {
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
-        surface.configure(&device, &config);
+        surface.configure(&device.device, &config);
         log_line_safe("renderer: surface configured");
 
-        let (texture, texture_view, sampler) = Self::create_texture(&device, size);
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        let (texture, texture_view, sampler) = Self::create_texture(&device.device, size);
+        let bind_group_layout = device.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("patchbay-gui-texture-layout"),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
@@ -139,7 +164,7 @@ impl Renderer {
             ],
         });
 
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("patchbay-gui-texture-bind-group"),
             layout: &bind_group_layout,
             entries: &[
@@ -154,18 +179,18 @@ impl Renderer {
             ],
         });
 
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        let shader = device.device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("patchbay-gui-shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
         });
 
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        let pipeline_layout = device.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("patchbay-gui-pipeline-layout"),
             bind_group_layouts: &[&bind_group_layout],
             immediate_size: 0,
         });
 
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let pipeline = device.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("patchbay-gui-pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
@@ -198,18 +223,16 @@ impl Renderer {
             cache: None,
         });
 
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let vertex_buffer = device.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("patchbay-gui-vertex-buffer"),
             contents: bytemuck::cast_slice(&VERTICES),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
         Ok(Self {
-            instance,
+            device,
             window,
             surface,
-            device,
-            queue,
             config,
             texture,
             texture_view,
@@ -220,16 +243,22 @@ impl Renderer {
         })
     }
 
+    /// Create a new renderer with a freshly created device.
+    pub fn new(window: SurfaceWindow, size: Size) -> Result<Self, GuiError> {
+        let device = Arc::new(RendererDevice::new()?);
+        Self::new_with_device(device, window, size)
+    }
+
     /// Resize the surface and backing texture.
     pub fn resize(&mut self, size: Size) {
         self.config.width = size.width.max(1);
         self.config.height = size.height.max(1);
-        self.surface.configure(&self.device, &self.config);
-        let (texture, texture_view, sampler) = Self::create_texture(&self.device, size);
+        self.surface.configure(&self.device.device, &self.config);
+        let (texture, texture_view, sampler) = Self::create_texture(&self.device.device, size);
         self.texture = texture;
         self.texture_view = texture_view;
         self.sampler = sampler;
-        self.bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        self.bind_group = self.device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("patchbay-gui-texture-bind-group"),
             layout: &self.pipeline.get_bind_group_layout(0),
             entries: &[
@@ -253,7 +282,7 @@ impl Renderer {
         let padded_bytes_per_row = ((bytes_per_row + alignment - 1) / alignment) * alignment;
 
         if padded_bytes_per_row == bytes_per_row {
-            self.queue.write_texture(
+            self.device.queue.write_texture(
                 wgpu::TexelCopyTextureInfo {
                     texture: &self.texture,
                     mip_level: 0,
@@ -285,7 +314,7 @@ impl Renderer {
                 .copy_from_slice(&pixels[src_offset..src_offset + src_row]);
         }
 
-        self.queue.write_texture(
+        self.device.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &self.texture,
                 mip_level: 0,
@@ -321,6 +350,7 @@ impl Renderer {
 
         let mut encoder = self
             .device
+            .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("patchbay-gui-encoder"),
             });
@@ -348,7 +378,7 @@ impl Renderer {
             pass.draw(0..3, 0..1);
         }
 
-        self.queue.submit(Some(encoder.finish()));
+        self.device.queue.submit(Some(encoder.finish()));
         output.present();
         Ok(())
     }

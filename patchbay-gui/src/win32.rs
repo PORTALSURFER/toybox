@@ -3,7 +3,7 @@
 use crate::canvas::{Canvas, Point, Size};
 use crate::host::{GuiError, InputState};
 use crate::logging::log_line_safe;
-use crate::renderer::Renderer;
+use crate::renderer::{Renderer, RendererDevice};
 use crate::ui::{Layout, Theme, Ui, UiState};
 use raw_window_handle_06::{
     DisplayHandle, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
@@ -14,7 +14,7 @@ use std::ffi::OsStr;
 use std::num::NonZeroIsize;
 use std::os::windows::ffi::OsStrExt;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, PAINTSTRUCT};
@@ -260,6 +260,7 @@ pub fn spawn_window_thread<State, Init, Frame>(
     state: State,
     on_init: Init,
     on_frame: Frame,
+    device_cache: Arc<Mutex<Option<Arc<RendererDevice>>>>,
     resize_request: Arc<AtomicU64>,
     last_size: Arc<AtomicU64>,
     aspect_ratio: Arc<AtomicU32>,
@@ -281,6 +282,7 @@ where
         state,
         on_init,
         on_frame,
+        device_cache,
         resize_request,
         last_size,
         aspect_ratio,
@@ -298,6 +300,7 @@ fn create_window_on_thread<State, Init, Frame>(
     mut state: State,
     mut on_init: Init,
     mut on_frame: Frame,
+    device_cache: Arc<Mutex<Option<Arc<RendererDevice>>>>,
     resize_request: Arc<AtomicU64>,
     last_size: Arc<AtomicU64>,
     aspect_ratio: Arc<AtomicU32>,
@@ -400,7 +403,17 @@ where
         hinstance: module_hinstance,
     };
     log_line_safe("win32: creating renderer");
-    let renderer = Renderer::new(window, size)?;
+    let renderer_device = {
+        let mut cache = device_cache.lock().map_err(|_| GuiError::DeviceCachePoison)?;
+        if let Some(device) = cache.as_ref() {
+            Arc::clone(device)
+        } else {
+            let device = Arc::new(RendererDevice::new()?);
+            *cache = Some(Arc::clone(&device));
+            device
+        }
+    };
+    let renderer = Renderer::new_with_device(renderer_device, window, size)?;
     log_line_safe("win32: renderer created");
     let canvas = Canvas::new(size.width, size.height);
 

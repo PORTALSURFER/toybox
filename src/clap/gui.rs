@@ -97,5 +97,6 @@ fn map_gui_error(err: GuiError) -> PluginError {
         GuiError::SurfaceFormat => "No compatible swapchain format",
         GuiError::SurfaceAcquire(_) => "Failed to acquire swapchain texture",
         GuiError::ThreadSpawn => "Failed to spawn GUI thread",
+        GuiError::DeviceCachePoison => "GUI device cache was poisoned",
     })
 }

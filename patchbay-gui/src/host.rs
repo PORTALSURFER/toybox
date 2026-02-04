@@ -3,9 +3,10 @@
 use crate::canvas::Size;
 use crate::ui::{Layout, Theme, Ui, UiState};
 use crate::win32::{spawn_window_thread, WindowHandle};
+use crate::renderer::RendererDevice;
 use raw_window_handle::RawWindowHandle;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 /// Input snapshot delivered to UI widgets for a single frame.
 #[derive(Clone, Copy, Debug, Default)]
@@ -52,6 +53,9 @@ pub enum GuiError {
     /// GUI thread failed to start.
     #[error("failed to spawn GUI thread")]
     ThreadSpawn,
+    /// Device cache mutex was poisoned.
+    #[error("renderer device cache mutex poisoned")]
+    DeviceCachePoison,
 }
 
 /// Handle to an open GUI window.
@@ -60,6 +64,7 @@ pub struct HostWindow {
     parent: Option<RawWindowHandle>,
     parent_hwnd: Option<isize>,
     handle: Option<WindowHandle>,
+    device_cache: Arc<Mutex<Option<Arc<RendererDevice>>>>,
     resize_request: Arc<AtomicU64>,
     last_size: Arc<AtomicU64>,
     aspect_ratio: Arc<AtomicU32>,
@@ -71,6 +76,7 @@ impl Default for HostWindow {
             parent: None,
             parent_hwnd: None,
             handle: None,
+            device_cache: Arc::new(Mutex::new(None)),
             resize_request: Arc::new(AtomicU64::new(0)),
             last_size: Arc::new(AtomicU64::new(0)),
             aspect_ratio: Arc::new(AtomicU32::new(0)),
@@ -167,6 +173,7 @@ impl HostWindow {
         let resize_request = self.resize_request.clone();
         let last_size = self.last_size.clone();
         let aspect_ratio = self.aspect_ratio.clone();
+        let device_cache = self.device_cache.clone();
 
         let theme = Theme::default();
         let layout = Layout::default();
@@ -187,6 +194,7 @@ impl HostWindow {
             move |ui, state| {
                 on_frame(ui, state);
             },
+            device_cache,
             resize_request,
             last_size,
             aspect_ratio,
