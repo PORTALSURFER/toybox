@@ -35,6 +35,8 @@ pub struct Theme {
     pub background: Color,
     /// Primary text color.
     pub text: Color,
+    /// Text scale factor for the bitmap font.
+    pub text_scale: u32,
     /// Knob fill color.
     pub knob_fill: Color,
     /// Knob outline color.
@@ -52,6 +54,7 @@ impl Default for Theme {
         Self {
             background: Color::rgb(18, 19, 22),
             text: Color::rgb(238, 239, 242),
+            text_scale: 2,
             knob_fill: Color::rgb(52, 57, 66),
             knob_outline: Color::rgb(88, 94, 104),
             knob_active: Color::rgb(90, 140, 220),
@@ -90,7 +93,7 @@ impl Default for Layout {
             cursor: Point { x: 16, y: 16 },
             column_width: 180,
             spacing: 18,
-            knob_size: 72,
+            knob_size: 64,
         }
     }
 }
@@ -190,14 +193,17 @@ impl<'a> Ui<'a> {
 
     /// Draw a label at the given position.
     pub fn text(&mut self, position: Point, text: &str) {
-        self.canvas.draw_text(position, text, self.theme.text, 1);
+        self.canvas
+            .draw_text(position, text, self.theme.text, self.theme.text_scale);
     }
 
     /// Draw a label at the current cursor and advance the cursor.
     pub fn label(&mut self, text: &str) {
         let pos = self.layout.cursor;
-        self.canvas.draw_text(pos, text, self.theme.text, 1);
-        self.layout.cursor.y += 10 + self.layout.spacing;
+        let line_height = 8 * self.theme.text_scale as i32;
+        self.canvas
+            .draw_text(pos, text, self.theme.text, self.theme.text_scale);
+        self.layout.cursor.y += line_height + self.layout.spacing;
     }
 
     /// Draw a knob with the given label and value.
@@ -319,9 +325,10 @@ impl<'a> Ui<'a> {
 
         let label_pos = Point {
             x: knob_rect.origin.x,
-            y: knob_rect.origin.y + knob_size + 6,
+            y: knob_rect.origin.y + knob_size + 6 * self.theme.text_scale as i32,
         };
-        self.canvas.draw_text(label_pos, label, self.theme.text, 1);
+        self.canvas
+            .draw_text(label_pos, label, self.theme.text, self.theme.text_scale);
 
         self.layout.cursor.y += knob_size + 16 + self.layout.spacing;
         response
@@ -373,11 +380,12 @@ impl<'a> Ui<'a> {
         width: i32,
         height: i32,
     ) -> SliderResponse {
-        let label_height = 10;
+        let label_height = 8 * self.theme.text_scale as i32;
         let base = self.layout.cursor;
         let mut rect_origin = base;
         if !label.is_empty() {
-            self.canvas.draw_text(base, label, self.theme.text, 1);
+            self.canvas
+                .draw_text(base, label, self.theme.text, self.theme.text_scale);
             rect_origin.y += label_height;
         }
 
@@ -502,11 +510,12 @@ impl<'a> Ui<'a> {
         width: i32,
         height: i32,
     ) -> ToggleResponse {
-        let label_height = 10;
+        let label_height = 8 * self.theme.text_scale as i32;
         let base = self.layout.cursor;
         let mut rect_origin = base;
         if !label.is_empty() {
-            self.canvas.draw_text(base, label, self.theme.text, 1);
+            self.canvas
+                .draw_text(base, label, self.theme.text, self.theme.text_scale);
             rect_origin.y += label_height;
         }
         let rect = Rect {
@@ -605,9 +614,11 @@ impl<'a> Ui<'a> {
             .stroke_rect(rect, 1, self.theme.knob_outline);
         let text_pos = Point {
             x: rect.origin.x + 4,
-            y: rect.origin.y + (height / 2) - 3,
+            y: rect.origin.y
+                + (height - (7 * self.theme.text_scale as i32)) / 2,
         };
-        self.canvas.draw_text(text_pos, label, self.theme.text, 1);
+        self.canvas
+            .draw_text(text_pos, label, self.theme.text, self.theme.text_scale);
 
         self.layout.cursor.y = rect.origin.y + height + self.layout.spacing;
         response
@@ -635,11 +646,12 @@ impl<'a> Ui<'a> {
         width: i32,
         height: i32,
     ) -> DropdownResponse {
-        let label_height = 10;
+        let label_height = 8 * self.theme.text_scale as i32;
         let base = self.layout.cursor;
         let mut rect_origin = base;
         if !label.is_empty() {
-            self.canvas.draw_text(base, label, self.theme.text, 1);
+            self.canvas
+                .draw_text(base, label, self.theme.text, self.theme.text_scale);
             rect_origin.y += label_height;
         }
 
@@ -683,9 +695,11 @@ impl<'a> Ui<'a> {
         let current = options.get(*selected).copied().unwrap_or("-");
         let text_pos = Point {
             x: rect.origin.x + 4,
-            y: rect.origin.y + (height / 2) - 3,
+            y: rect.origin.y
+                + (height - (7 * self.theme.text_scale as i32)) / 2,
         };
-        self.canvas.draw_text(text_pos, current, self.theme.text, 1);
+        self.canvas
+            .draw_text(text_pos, current, self.theme.text, self.theme.text_scale);
 
         if response.open {
             let mut any_hovered = false;
@@ -711,9 +725,11 @@ impl<'a> Ui<'a> {
                     .stroke_rect(option_rect, 1, self.theme.knob_outline);
                 let option_text = Point {
                     x: option_rect.origin.x + 4,
-                    y: option_rect.origin.y + (height / 2) - 3,
+                    y: option_rect.origin.y
+                        + (height - (7 * self.theme.text_scale as i32)) / 2,
                 };
-                self.canvas.draw_text(option_text, option, self.theme.text, 1);
+                self.canvas
+                    .draw_text(option_text, option, self.theme.text, self.theme.text_scale);
                 if option_hovered && self.input.mouse_pressed {
                     *selected = index;
                     response.changed = true;
@@ -821,7 +837,7 @@ mod tests {
         let mut ui_state = UiState::default();
         let mut value = 0.0;
         let mut input = InputState::default();
-        input.pointer_pos = Point { x: 20, y: 20 };
+        input.pointer_pos = Point { x: 20, y: 40 };
         input.mouse_pressed = true;
         input.mouse_down = true;
 
@@ -831,7 +847,7 @@ mod tests {
         }
 
         input.mouse_pressed = false;
-        input.pointer_pos = Point { x: 80, y: 20 };
+        input.pointer_pos = Point { x: 80, y: 40 };
 
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
@@ -849,7 +865,7 @@ mod tests {
         let mut ui_state = UiState::default();
         let mut value = false;
         let mut input = InputState::default();
-        input.pointer_pos = Point { x: 20, y: 20 };
+        input.pointer_pos = Point { x: 20, y: 40 };
         input.mouse_pressed = true;
 
         let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
@@ -865,7 +881,7 @@ mod tests {
         let theme = Theme::default();
         let mut ui_state = UiState::default();
         let mut input = InputState::default();
-        input.pointer_pos = Point { x: 20, y: 20 };
+        input.pointer_pos = Point { x: 20, y: 40 };
         input.mouse_pressed = true;
 
         let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
@@ -883,7 +899,7 @@ mod tests {
         let options = ["Off", "Mono", "Poly"];
         let mut selected = 0;
 
-        input.pointer_pos = Point { x: 20, y: 20 };
+        input.pointer_pos = Point { x: 20, y: 40 };
         input.mouse_pressed = true;
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
@@ -891,7 +907,7 @@ mod tests {
         }
 
         input.mouse_pressed = true;
-        input.pointer_pos = Point { x: 20, y: 40 };
+        input.pointer_pos = Point { x: 20, y: 70 };
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
             let response =
