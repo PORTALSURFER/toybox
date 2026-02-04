@@ -231,9 +231,14 @@ impl<'a> Ui<'a> {
         }
 
         let t = (*value - range.0) / (range.1 - range.0).max(1.0e-6);
-        let arc_start = 0.0;
-        let arc_end = std::f32::consts::PI;
-        let angle = arc_end - t * (arc_end - arc_start);
+        let arc_start = 7.0 * std::f32::consts::PI / 4.0;
+        let arc_end = 5.0 * std::f32::consts::PI / 4.0;
+        let arc_span = if arc_end < arc_start {
+            arc_end + std::f32::consts::TAU - arc_start
+        } else {
+            arc_end - arc_start
+        };
+        let angle = arc_start + t * arc_span;
         let indicator = Point {
             x: center.x + (angle.cos() * (radius as f32 * 0.7)) as i32,
             y: center.y + (angle.sin() * (radius as f32 * 0.7)) as i32,
@@ -264,8 +269,8 @@ impl<'a> Ui<'a> {
             center,
             arc_radius,
             arc_thickness,
+            arc_start,
             angle,
-            arc_end,
             self.theme.knob_indicator,
         );
         self.canvas
