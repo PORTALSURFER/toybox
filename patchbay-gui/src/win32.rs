@@ -15,6 +15,7 @@ use std::num::NonZeroIsize;
 use std::os::windows::ffi::OsStrExt;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, PAINTSTRUCT};
@@ -32,6 +33,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 const TIMER_ID: usize = 1;
 const TIMER_INTERVAL_MS: u32 = 16;
 const PREWARM_FRAMES: u8 = 2;
+const MIN_SHOW_DELAY_MS: u128 = 80;
 
 /// Thin wrapper around an HWND for cross-thread use.
 #[derive(Clone, Debug)]
@@ -124,6 +126,7 @@ where
     shown: bool,
     prewarm_frames: u8,
     saw_timer_tick: bool,
+    created_at: Instant,
 }
 
 impl<State, Init, Frame> WindowState<State, Init, Frame>
@@ -252,6 +255,7 @@ where
         self.renderer.upload(self.canvas.size(), self.canvas.pixels());
         let render_ok = self.renderer.render().is_ok();
         if !self.shown {
+            let ready_by_time = self.created_at.elapsed().as_millis() >= MIN_SHOW_DELAY_MS;
             if self.saw_timer_tick && render_ok && self.prewarm_frames > 0 {
                 self.prewarm_frames = self.prewarm_frames.saturating_sub(1);
                 log_line_safe(&format!(
@@ -262,7 +266,7 @@ where
                 ));
             }
 
-            if self.saw_timer_tick && render_ok && self.prewarm_frames == 0 {
+            if self.saw_timer_tick && render_ok && self.prewarm_frames == 0 && ready_by_time {
                 log_line_safe("win32: show gate passed, showing window");
                 unsafe {
                     ShowWindow(self.hwnd, SW_SHOW);
@@ -270,10 +274,11 @@ where
                 self.shown = true;
             } else {
                 log_line_safe(&format!(
-                    "win32: show gate blocked prewarm={} saw_timer={} render_ok={}",
+                    "win32: show gate blocked prewarm={} saw_timer={} render_ok={} ready_by_time={}",
                     self.prewarm_frames,
                     self.saw_timer_tick,
-                    render_ok
+                    render_ok,
+                    ready_by_time
                 ));
             }
         }
@@ -473,6 +478,7 @@ where
         shown: false,
         prewarm_frames: PREWARM_FRAMES,
         saw_timer_tick: false,
+        created_at: Instant::now(),
     });
 
     unsafe {
