@@ -441,6 +441,9 @@ where
         SetWindowLongPtrW(child_hwnd, GWLP_USERDATA, state_ptr as isize);
         SetTimer(Some(child_hwnd), TIMER_ID, TIMER_INTERVAL_MS, None);
         ShowWindow(child_hwnd, SW_SHOW);
+        // Render once more after showing so the first visible frame is ready.
+        let state = &mut *(state_ptr as *mut WindowState<State, Init, Frame>);
+        state.render_frame();
     }
 
     let handle = WindowHandle { hwnd: child_hwnd };
