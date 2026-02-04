@@ -121,6 +121,7 @@ where
     aspect_ratio: Arc<AtomicU32>,
     initialized: bool,
     shown: bool,
+    prewarm_frames: u8,
 }
 
 impl<State, Init, Frame> WindowState<State, Init, Frame>
@@ -248,10 +249,14 @@ where
         self.renderer.upload(self.canvas.size(), self.canvas.pixels());
         let _ = self.renderer.render();
         if !self.shown {
-            unsafe {
-                ShowWindow(self.hwnd, SW_SHOW);
+            if self.prewarm_frames > 0 {
+                self.prewarm_frames = self.prewarm_frames.saturating_sub(1);
+            } else {
+                unsafe {
+                    ShowWindow(self.hwnd, SW_SHOW);
+                }
+                self.shown = true;
             }
-            self.shown = true;
         }
 
         self.input.mouse_pressed = false;
@@ -444,6 +449,7 @@ where
         aspect_ratio,
         initialized: false,
         shown: false,
+        prewarm_frames: 1,
     });
 
     unsafe {
