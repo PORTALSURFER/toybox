@@ -128,7 +128,9 @@ impl AutomationQueue {
     /// Drain queued automation events into an output buffer.
     ///
     /// The caller supplies a scratch buffer to avoid allocations in realtime
-    /// threads. Returns `true` if any events were drained.
+    /// threads. Returns `true` if any events were drained. If the queue is
+    /// temporarily locked by another thread, no events are drained and the
+    /// caller should try again on the next cycle.
     pub fn drain_to_output(
         &self,
         output: &mut OutputEvents<'_>,

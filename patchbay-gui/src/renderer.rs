@@ -181,8 +181,6 @@ impl RendererDevice {
 /// GPU renderer that uploads a CPU canvas into a surface texture.
 pub struct Renderer {
     device: Arc<RendererDevice>,
-    #[allow(dead_code)]
-    window: SurfaceWindow,
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     texture: wgpu::Texture,
@@ -190,6 +188,7 @@ pub struct Renderer {
     sampler: wgpu::Sampler,
     bind_group: wgpu::BindGroup,
     pipeline: wgpu::RenderPipeline,
+    upload_scratch: Vec<u8>,
 }
 
 impl Renderer {
@@ -200,11 +199,10 @@ impl Renderer {
         size: Size,
     ) -> Result<Self, GuiError> {
         log_line_safe("renderer: new begin");
-        let surface = unsafe { device.instance.create_surface(&window) }.map_err(|err| {
+        let surface: wgpu::Surface<'static> = device.instance.create_surface(window).map_err(|err| {
             log_line_safe(&format!("renderer: create_surface error: {err:?}"));
             GuiError::Surface(err)
         })?;
-        let surface = unsafe { std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(surface) };
         log_line_safe("renderer: surface created");
         let capabilities = surface.get_capabilities(&device.adapter);
         let format = capabilities
@@ -253,7 +251,6 @@ impl Renderer {
 
         Ok(Self {
             device,
-            window,
             surface,
             config,
             texture,
@@ -261,6 +258,7 @@ impl Renderer {
             sampler,
             bind_group,
             pipeline,
+            upload_scratch: Vec::new(),
         })
     }
 
@@ -296,7 +294,7 @@ impl Renderer {
     }
 
     /// Upload the latest canvas pixels to the GPU texture.
-    pub fn upload(&self, size: Size, pixels: &[u8]) {
+    pub fn upload(&mut self, size: Size, pixels: &[u8]) {
         let bytes_per_pixel = 4u32;
         let bytes_per_row = bytes_per_pixel * size.width;
         let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u32;
@@ -307,7 +305,9 @@ impl Renderer {
             return;
         }
 
-        let mut padded = vec![0u8; (padded_bytes_per_row * size.height) as usize];
+        let required = (padded_bytes_per_row * size.height) as usize;
+        self.upload_scratch.resize(required, 0);
+        let padded = &mut self.upload_scratch;
         let src_row = bytes_per_row as usize;
         let dst_row = padded_bytes_per_row as usize;
         for row in 0..size.height as usize {
@@ -317,13 +317,22 @@ impl Renderer {
                 .copy_from_slice(&pixels[src_offset..src_offset + src_row]);
         }
 
-        self.write_texture(size, &padded, padded_bytes_per_row);
+        self.write_texture(size, padded, padded_bytes_per_row);
     }
 
     /// Render the canvas to the surface.
     pub fn render(&mut self) -> Result<(), GuiError> {
         let output = match self.surface.get_current_texture() {
             Ok(output) => output,
+            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                self.surface.configure(&self.device.device, &self.config);
+                self.surface.get_current_texture().map_err(|err| {
+                    log_line_safe(&format!(
+                        "renderer: get_current_texture after reconfigure error: {err:?}"
+                    ));
+                    GuiError::SurfaceAcquire(err)
+                })?
+            }
             Err(err) => {
                 log_line_safe(&format!("renderer: get_current_texture error: {err:?}"));
                 return Err(GuiError::SurfaceAcquire(err));
