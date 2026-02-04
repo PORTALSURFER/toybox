@@ -225,6 +225,48 @@ impl Canvas {
         }
     }
 
+    /// Draw an arc with the given thickness between two angles (in radians).
+    ///
+    /// Angles are measured in standard mathematical coordinates, where 0 is to
+    /// the right and positive values rotate counter-clockwise. If `end_angle`
+    /// is less than `start_angle`, the arc wraps across 2π.
+    pub fn stroke_arc(
+        &mut self,
+        center: Point,
+        radius: i32,
+        thickness: i32,
+        start_angle: f32,
+        end_angle: f32,
+        color: Color,
+    ) {
+        if radius <= 0 || thickness <= 0 {
+            return;
+        }
+        let outer = radius * radius;
+        let inner = (radius - thickness).max(0);
+        let inner2 = inner * inner;
+        let y0 = max(center.y - radius, 0);
+        let y1 = min(center.y + radius, self.size.height as i32 - 1);
+        let x0 = max(center.x - radius, 0);
+        let x1 = min(center.x + radius, self.size.width as i32 - 1);
+        let start = normalize_angle(start_angle);
+        let end = normalize_angle(end_angle);
+
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                let dx = x - center.x;
+                let dy = y - center.y;
+                let dist2 = dx * dx + dy * dy;
+                if dist2 <= outer && dist2 >= inner2 {
+                    let angle = normalize_angle((dy as f32).atan2(dx as f32));
+                    if angle_in_range(angle, start, end) {
+                        self.blend_pixel(x as u32, y as u32, color);
+                    }
+                }
+            }
+        }
+    }
+
     /// Draw a line using a basic Bresenham algorithm.
     pub fn draw_line(&mut self, start: Point, end: Point, color: Color) {
         let mut x0 = start.x;
@@ -304,6 +346,22 @@ impl Canvas {
     }
 }
 
+fn normalize_angle(angle: f32) -> f32 {
+    let mut normalized = angle % std::f32::consts::TAU;
+    if normalized < 0.0 {
+        normalized += std::f32::consts::TAU;
+    }
+    normalized
+}
+
+fn angle_in_range(angle: f32, start: f32, end: f32) -> bool {
+    if start <= end {
+        angle >= start && angle <= end
+    } else {
+        angle >= start || angle <= end
+    }
+}
+
 struct BitmapFont;
 
 impl BitmapFont {
@@ -360,6 +418,17 @@ impl BitmapFont {
 mod tests {
     use super::*;
 
+    fn pixel_at(canvas: &Canvas, x: u32, y: u32) -> [u8; 4] {
+        let width = canvas.size.width as usize;
+        let index = (y as usize * width + x as usize) * 4;
+        [
+            canvas.pixels[index],
+            canvas.pixels[index + 1],
+            canvas.pixels[index + 2],
+            canvas.pixels[index + 3],
+        ]
+    }
+
     #[test]
     fn rect_contains_point() {
         let rect = Rect {
@@ -379,5 +448,19 @@ mod tests {
         let mut canvas = Canvas::new(64, 64);
         canvas.draw_text(Point { x: 0, y: 0 }, "AB", Color::rgb(255, 255, 255), 1);
         assert!(canvas.pixels().iter().any(|value| *value != 0));
+    }
+
+    #[test]
+    fn stroke_arc_renders_top_semicircle() {
+        let mut canvas = Canvas::new(21, 21);
+        let center = Point { x: 10, y: 10 };
+        let color = Color::rgb(200, 100, 50);
+        canvas.stroke_arc(center, 8, 2, 0.0, std::f32::consts::PI, color);
+
+        let top = pixel_at(&canvas, 10, 2);
+        let bottom = pixel_at(&canvas, 10, 18);
+
+        assert_eq!(top, [color.r, color.g, color.b, color.a]);
+        assert_ne!(bottom, [color.r, color.g, color.b, color.a]);
     }
 }
