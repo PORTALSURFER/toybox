@@ -14,6 +14,10 @@ impl WidgetId {
     }
 
     /// Hash a label into a widget id.
+    ///
+    /// The label must remain stable across frames for correct interaction
+    /// tracking. If the label can change (for example, including formatted
+    /// values), prefer using a stable key and hashing that instead.
     pub fn from_label(label: &str) -> Self {
         let mut hash = 0xcbf29ce484222325u64;
         for byte in label.as_bytes() {
@@ -156,6 +160,10 @@ impl<'a> Ui<'a> {
     }
 
     /// Draw a knob with the given label and value.
+    ///
+    /// The provided `id` must be stable across frames. If the label changes
+    /// while dragging, use [`Ui::knob_with_key`] to provide a separate stable
+    /// identifier.
     pub fn knob(
         &mut self,
         id: WidgetId,
@@ -253,6 +261,38 @@ impl<'a> Ui<'a> {
         response
     }
 
+    /// Draw a knob with a stable key and a potentially dynamic label.
+    ///
+    /// The `key` should be a stable identifier across frames (for example,
+    /// `"attack"`). The `label` can change to include formatted values without
+    /// breaking drag tracking.
+    ///
+    /// # Example
+    /// ```
+    /// # use patchbay_gui::Ui;
+    /// # use patchbay_gui::canvas::Canvas;
+    /// # use patchbay_gui::host::InputState;
+    /// # use patchbay_gui::ui::{Layout, Theme, UiState};
+    /// let mut canvas = Canvas::new(200, 200);
+    /// let mut layout = Layout::default();
+    /// let theme = Theme::default();
+    /// let mut ui_state = UiState::default();
+    /// let input = InputState::default();
+    /// let mut value = 0.5;
+    /// let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+    /// ui.knob_with_key("attack", "Attack 0.50s", &mut value, (0.0, 1.0));
+    /// ```
+    pub fn knob_with_key(
+        &mut self,
+        key: &str,
+        label: &str,
+        value: &mut f32,
+        range: (f32, f32),
+    ) -> KnobResponse {
+        let id = WidgetId::from_label(key);
+        self.knob(id, label, value, range)
+    }
+
     /// Clear the background with the theme color.
     pub fn clear(&mut self) {
         self.canvas.clear(self.theme.background);
@@ -288,6 +328,34 @@ mod tests {
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
             let response = ui.knob(WidgetId::new(1), "GAIN", &mut value, (0.0, 1.0));
+            assert!(response.changed);
+        }
+    }
+
+    #[test]
+    fn knob_with_key_allows_dynamic_labels() {
+        let mut canvas = Canvas::new(200, 200);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let mut value = 0.5;
+        let mut input = InputState::default();
+        input.pointer_pos = Point { x: 30, y: 30 };
+        input.mouse_pressed = true;
+        input.mouse_down = true;
+
+        {
+            let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+            ui.knob_with_key("attack", "Attack 0.50s", &mut value, (0.0, 1.0));
+        }
+
+        input.mouse_pressed = false;
+        input.pointer_pos = Point { x: 30, y: 10 };
+
+        {
+            let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+            let response =
+                ui.knob_with_key("attack", "Attack 0.60s", &mut value, (0.0, 1.0));
             assert!(response.changed);
         }
     }
