@@ -1,6 +1,6 @@
 //! Win32 window creation and message handling.
 
-use crate::canvas::{Canvas, Point, Size};
+use crate::canvas::{Canvas, Color, Point, Size};
 use crate::host::{GuiError, InputState};
 use crate::logging::log_line_safe;
 use crate::renderer::{Renderer, RendererDevice};
@@ -18,7 +18,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::Graphics::Gdi::{BeginPaint, CreateSolidBrush, EndPaint, HBRUSH, PAINTSTRUCT};
+use windows::Win32::Graphics::Gdi::{
+    BeginPaint, CreateSolidBrush, DeleteObject, EndPaint, FillRect, HBRUSH, HDC, PAINTSTRUCT,
+};
 use windows::Win32::System::LibraryLoader::{GetModuleHandleExW, GetModuleHandleW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS};
 use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -117,6 +119,7 @@ where
     layout: Layout,
     layout_origin: Point,
     theme: Theme,
+    background_brush: HBRUSH,
     state: State,
     on_init: Init,
     on_frame: Frame,
@@ -185,7 +188,14 @@ where
                     false
                 }
             }
-            WM_ERASEBKGND => false,
+            WM_ERASEBKGND => {
+                let mut rect = windows::Win32::Foundation::RECT::default();
+                unsafe {
+                    GetClientRect(self.hwnd, &mut rect);
+                    FillRect(HDC(wparam.0 as isize), &rect, self.background_brush);
+                }
+                true
+            }
             WM_DESTROY => true,
             _ => false,
         }
@@ -460,6 +470,7 @@ where
     let renderer = Renderer::new_with_device(renderer_device, window, size)?;
     log_line_safe("win32: renderer created");
     let canvas = Canvas::new(size.width, size.height);
+    let background_brush = unsafe { CreateSolidBrush(colorref_from_theme(theme.background)) };
 
     let mut window_state = Box::new(WindowState {
         hwnd: child_hwnd,
@@ -470,6 +481,7 @@ where
         layout,
         layout_origin: layout.cursor,
         theme,
+        background_brush,
         state,
         on_init,
         on_frame,
@@ -495,6 +507,19 @@ where
 
     let handle = WindowHandle { hwnd: child_hwnd };
     Ok(handle)
+}
+
+impl<State, Init, Frame> Drop for WindowState<State, Init, Frame>
+where
+    Init: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
+    Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
+    State: Send + 'static,
+{
+    fn drop(&mut self) {
+        unsafe {
+            let _ = DeleteObject(self.background_brush);
+        }
+    }
 }
 
 unsafe extern "system" fn window_proc<State, Init, Frame>(
@@ -545,4 +570,8 @@ fn unpack_size(value: u64) -> Option<(u32, u32)> {
 
 fn to_wide(text: &str) -> Vec<u16> {
     OsStr::new(text).encode_wide().chain(Some(0)).collect()
+}
+
+fn colorref_from_theme(color: Color) -> COLORREF {
+    COLORREF(color.r as u32 | ((color.g as u32) << 8) | ((color.b as u32) << 16))
 }
