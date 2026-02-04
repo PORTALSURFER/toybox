@@ -1,5 +1,7 @@
 //! Immediate-mode widgets for the Patchbay GUI.
 
+use std::collections::HashMap;
+
 use crate::canvas::{Canvas, Color, Point, Rect, Size};
 use crate::host::InputState;
 
@@ -72,6 +74,23 @@ pub struct UiState {
     drag_start: Option<Point>,
     drag_value: f32,
     open_dropdown: Option<WidgetId>,
+    layout: LayoutState,
+}
+
+/// Cached container sizes for auto layout.
+#[derive(Debug, Default)]
+struct LayoutState {
+    sizes: HashMap<WidgetId, Size>,
+}
+
+impl LayoutState {
+    fn get(&self, id: WidgetId) -> Option<Size> {
+        self.sizes.get(&id).copied()
+    }
+
+    fn set(&mut self, id: WidgetId, size: Size) {
+        self.sizes.insert(id, size);
+    }
 }
 
 /// Layout state for sequential widgets.
@@ -95,6 +114,148 @@ impl Default for Layout {
             spacing: 18,
             knob_size: 64,
         }
+    }
+}
+
+/// Styling configuration for panel containers.
+#[derive(Clone, Copy, Debug)]
+pub struct PanelStyle<'a> {
+    /// Optional title rendered in the panel header.
+    pub title: Option<&'a str>,
+    /// Padding applied to all sides of the panel content.
+    pub padding: i32,
+    /// Optional background fill color for the panel.
+    pub background: Option<Color>,
+    /// Optional outline color for the panel.
+    pub outline: Option<Color>,
+    /// Explicit header height override (in pixels).
+    pub header_height: Option<i32>,
+}
+
+impl Default for PanelStyle<'_> {
+    fn default() -> Self {
+        Self {
+            title: None,
+            padding: 12,
+            background: None,
+            outline: None,
+            header_height: None,
+        }
+    }
+}
+
+/// Response metadata from panel containers.
+#[derive(Clone, Copy, Debug)]
+pub struct PanelResponse {
+    /// The outer bounds of the panel.
+    pub outer_rect: Rect,
+    /// The content rectangle available to children.
+    pub content_rect: Rect,
+    /// The measured size captured for auto layout.
+    pub measured_size: Size,
+}
+
+/// Specification for grid layouts.
+#[derive(Clone, Copy, Debug)]
+pub struct GridSpec {
+    /// Number of columns in the grid.
+    pub columns: i32,
+    /// Size of each grid cell.
+    pub cell_size: Size,
+    /// Gap between grid cells.
+    pub gap: i32,
+    /// Optional explicit row count.
+    pub rows: Option<i32>,
+}
+
+/// Response metadata from grid containers.
+#[derive(Clone, Copy, Debug)]
+pub struct GridResponse {
+    /// The bounding rectangle covering all rows and columns used.
+    pub bounds_rect: Rect,
+    /// Total rows used by the grid.
+    pub rows: i32,
+    /// Total columns in the grid.
+    pub columns: i32,
+}
+
+/// Helper context for addressing grid cells.
+pub struct GridContext {
+    origin: Point,
+    spec: GridSpec,
+    max_index: i32,
+}
+
+impl GridContext {
+    fn new(origin: Point, spec: GridSpec) -> Self {
+        Self {
+            origin,
+            spec,
+            max_index: -1,
+        }
+    }
+
+    /// Return the rect for a cell at the given linear index.
+    pub fn cell_rect(&mut self, index: i32) -> Rect {
+        let idx = index.max(0);
+        self.max_index = self.max_index.max(idx);
+        let col = idx % self.spec.columns.max(1);
+        let row = idx / self.spec.columns.max(1);
+        self.cell_rect_rc(row, col)
+    }
+
+    /// Return the rect for a cell at the given row/column.
+    pub fn cell_rect_rc(&mut self, row: i32, col: i32) -> Rect {
+        let row = row.max(0);
+        let col = col.max(0);
+        let x = self.origin.x + col * (self.spec.cell_size.width as i32 + self.spec.gap);
+        let y = self.origin.y + row * (self.spec.cell_size.height as i32 + self.spec.gap);
+        Rect {
+            origin: Point { x, y },
+            size: self.spec.cell_size,
+        }
+    }
+
+    /// Set the UI cursor to the specified cell origin and return its rect.
+    pub fn set_cursor_to_cell(&mut self, ui: &mut Ui<'_>, index: i32) -> Rect {
+        let rect = self.cell_rect(index);
+        ui.set_cursor(rect.origin);
+        rect
+    }
+}
+
+fn rect_union(a: Rect, b: Rect) -> Rect {
+    let min_x = a.origin.x.min(b.origin.x);
+    let min_y = a.origin.y.min(b.origin.y);
+    let max_x = (a.origin.x + a.size.width as i32).max(b.origin.x + b.size.width as i32);
+    let max_y = (a.origin.y + a.size.height as i32).max(b.origin.y + b.size.height as i32);
+    Rect {
+        origin: Point { x: min_x, y: min_y },
+        size: Size {
+            width: (max_x - min_x).max(0) as u32,
+            height: (max_y - min_y).max(0) as u32,
+        },
+    }
+}
+
+fn text_size(text: &str, scale: u32) -> Size {
+    let scale = scale.max(1) as i32;
+    let mut max_cols = 0i32;
+    let mut lines = 1i32;
+    let mut current = 0i32;
+    for ch in text.chars() {
+        if ch == '\n' {
+            max_cols = max_cols.max(current);
+            current = 0;
+            lines += 1;
+        } else {
+            current += 1;
+        }
+    }
+    max_cols = max_cols.max(current);
+    Size {
+        width: (max_cols * 6 * scale).max(0) as u32,
+        height: (lines * 8 * scale).max(0) as u32,
     }
 }
 
@@ -175,6 +336,8 @@ pub struct Ui<'a> {
     state: &'a mut UiState,
     layout: &'a mut Layout,
     theme: &'a Theme,
+    layout_stack: Vec<Layout>,
+    bounds_stack: Vec<Option<Rect>>,
 }
 
 impl<'a> Ui<'a> {
@@ -192,6 +355,8 @@ impl<'a> Ui<'a> {
             state,
             layout,
             theme,
+            layout_stack: Vec::new(),
+            bounds_stack: Vec::new(),
         }
     }
 
@@ -214,6 +379,8 @@ impl<'a> Ui<'a> {
     pub fn text(&mut self, position: Point, text: &str) {
         self.canvas
             .draw_text(position, text, self.theme.text, self.theme.text_scale);
+        let size = text_size(text, self.theme.text_scale);
+        self.track_rect(Rect { origin: position, size });
     }
 
     /// Access the input snapshot for this frame.
@@ -231,12 +398,190 @@ impl<'a> Ui<'a> {
         self.layout
     }
 
+    /// Run a closure with a temporary layout origin.
+    pub fn with_layout<F>(&mut self, origin: Point, mut f: F)
+    where
+        F: FnMut(&mut Ui<'_>),
+    {
+        let previous = *self.layout;
+        self.layout_stack.push(previous);
+        self.layout.cursor = origin;
+        f(self);
+        if let Some(restored) = self.layout_stack.pop() {
+            *self.layout = restored;
+        }
+    }
+
+    fn push_bounds(&mut self) {
+        self.bounds_stack.push(None);
+    }
+
+    fn pop_bounds(&mut self) -> Option<Rect> {
+        self.bounds_stack.pop().flatten()
+    }
+
+    fn track_rect(&mut self, rect: Rect) {
+        if let Some(entry) = self.bounds_stack.last_mut() {
+            *entry = Some(match *entry {
+                Some(existing) => rect_union(existing, rect),
+                None => rect,
+            });
+        }
+    }
+
+    /// Draw a panel container with an optional title and padding.
+    ///
+    /// The panel can auto-size to fit its contents. When `size` is `None`, the
+    /// panel uses the last measured size for the key and updates it after the
+    /// closure runs.
+    pub fn panel_with_key<F>(
+        &mut self,
+        key: &str,
+        style: PanelStyle<'_>,
+        size: Option<Size>,
+        mut f: F,
+    ) -> PanelResponse
+    where
+        F: FnMut(&mut Ui<'_>, Rect),
+    {
+        let id = WidgetId::from_label(key);
+        let header_height = style.header_height.unwrap_or_else(|| {
+            if style.title.is_some() {
+                (8 * self.theme.text_scale as i32 + 4).max(0)
+            } else {
+                0
+            }
+        });
+        let padding = style.padding.max(0);
+        let fallback = Size {
+            width: (padding * 2 + 160).max(0) as u32,
+            height: (padding * 2 + header_height + 80).max(0) as u32,
+        };
+        let cached = self.state.layout.get(id);
+        let size = size.or(cached).unwrap_or(fallback);
+        let origin = self.layout.cursor;
+        let outer_rect = Rect { origin, size };
+        let background = style.background.unwrap_or(self.theme.knob_fill);
+        let outline = style.outline.unwrap_or(self.theme.knob_outline);
+
+        self.canvas.fill_rect(outer_rect, background);
+        self.canvas.stroke_rect(outer_rect, 1, outline);
+
+        if let Some(title) = style.title {
+            let title_pos = Point {
+                x: origin.x + padding,
+                y: origin.y + padding,
+            };
+            self.canvas
+                .draw_text(title_pos, title, self.theme.text, self.theme.text_scale);
+            let title_size = text_size(title, self.theme.text_scale);
+            self.track_rect(Rect {
+                origin: title_pos,
+                size: title_size,
+            });
+        }
+
+        let content_origin = Point {
+            x: origin.x + padding,
+            y: origin.y + padding + header_height,
+        };
+        let content_rect = Rect {
+            origin: content_origin,
+            size: Size {
+                width: size.width.saturating_sub((padding * 2) as u32),
+                height: size
+                    .height
+                    .saturating_sub((padding * 2 + header_height) as u32),
+            },
+        };
+
+        self.push_bounds();
+        self.with_layout(content_origin, |ui| f(ui, content_rect));
+        let measured_bounds = self.pop_bounds();
+
+        let measured_size = if let Some(bounds) = measured_bounds {
+            let max_x = bounds.origin.x + bounds.size.width as i32;
+            let max_y = bounds.origin.y + bounds.size.height as i32;
+            let content_width = (max_x - content_origin.x).max(0) as u32;
+            let content_height = (max_y - content_origin.y).max(0) as u32;
+            Size {
+                width: content_width + (padding * 2) as u32,
+                height: content_height + (padding * 2 + header_height) as u32,
+            }
+        } else {
+            Size {
+                width: (padding * 2) as u32,
+                height: (padding * 2 + header_height) as u32,
+            }
+        };
+
+        self.state.layout.set(id, measured_size);
+        self.track_rect(outer_rect);
+        self.layout.cursor.y = origin.y + size.height as i32 + self.layout.spacing;
+
+        PanelResponse {
+            outer_rect,
+            content_rect,
+            measured_size,
+        }
+    }
+
+    /// Draw a grid container and provide a helper for addressing cells.
+    pub fn grid_with_key<F>(
+        &mut self,
+        _key: &str,
+        spec: GridSpec,
+        origin: Point,
+        mut f: F,
+    ) -> GridResponse
+    where
+        F: FnMut(&mut Ui<'_>, &mut GridContext),
+    {
+        let mut ctx = GridContext::new(origin, spec);
+        f(self, &mut ctx);
+
+        let rows = spec.rows.unwrap_or_else(|| {
+            if ctx.max_index < 0 {
+                0
+            } else {
+                (ctx.max_index / spec.columns.max(1)) + 1
+            }
+        });
+        let columns = spec.columns.max(1);
+        let width = if rows == 0 || columns == 0 {
+            0
+        } else {
+            columns * spec.cell_size.width as i32 + (columns - 1) * spec.gap
+        };
+        let height = if rows == 0 || columns == 0 {
+            0
+        } else {
+            rows * spec.cell_size.height as i32 + (rows - 1) * spec.gap
+        };
+        let bounds_rect = Rect {
+            origin,
+            size: Size {
+                width: width.max(0) as u32,
+                height: height.max(0) as u32,
+            },
+        };
+        self.track_rect(bounds_rect);
+
+        GridResponse {
+            bounds_rect,
+            rows,
+            columns,
+        }
+    }
+
     /// Draw a label at the current cursor and advance the cursor.
     pub fn label(&mut self, text: &str) {
         let pos = self.layout.cursor;
         let line_height = 8 * self.theme.text_scale as i32;
         self.canvas
             .draw_text(pos, text, self.theme.text, self.theme.text_scale);
+        let size = text_size(text, self.theme.text_scale);
+        self.track_rect(Rect { origin: pos, size });
         self.layout.cursor.y += line_height + self.layout.spacing;
     }
 
@@ -312,6 +657,7 @@ impl<'a> Ui<'a> {
                 height: knob_size as u32,
             },
         };
+        self.track_rect(knob_rect);
         let center = Point {
             x: knob_rect.origin.x + knob_size / 2,
             y: knob_rect.origin.y + knob_size / 2,
@@ -417,6 +763,11 @@ impl<'a> Ui<'a> {
             };
             self.canvas
                 .draw_text(label_pos, label, self.theme.text, self.theme.text_scale);
+            let label_size = text_size(label, self.theme.text_scale);
+            self.track_rect(Rect {
+                origin: label_pos,
+                size: label_size,
+            });
             extra_height = label_gap + label_height;
         }
 
@@ -476,6 +827,11 @@ impl<'a> Ui<'a> {
         if !label.is_empty() {
             self.canvas
                 .draw_text(base, label, self.theme.text, self.theme.text_scale);
+            let label_size = text_size(label, self.theme.text_scale);
+            self.track_rect(Rect {
+                origin: base,
+                size: label_size,
+            });
             rect_origin.y += label_height;
         }
 
@@ -486,6 +842,7 @@ impl<'a> Ui<'a> {
                 height: height.max(1) as u32,
             },
         };
+        self.track_rect(rect);
         let hovered = rect.contains(self.input.pointer_pos);
         if hovered {
             self.state.hot = Some(id);
@@ -606,6 +963,11 @@ impl<'a> Ui<'a> {
         if !label.is_empty() {
             self.canvas
                 .draw_text(base, label, self.theme.text, self.theme.text_scale);
+            let label_size = text_size(label, self.theme.text_scale);
+            self.track_rect(Rect {
+                origin: base,
+                size: label_size,
+            });
             rect_origin.y += label_height;
         }
         let rect = Rect {
@@ -615,6 +977,7 @@ impl<'a> Ui<'a> {
                 height: height.max(1) as u32,
             },
         };
+        self.track_rect(rect);
         let hovered = rect.contains(self.input.pointer_pos);
         if hovered {
             self.state.hot = Some(id);
@@ -683,6 +1046,7 @@ impl<'a> Ui<'a> {
                 height: height.max(1) as u32,
             },
         };
+        self.track_rect(rect);
         let hovered = rect.contains(self.input.pointer_pos);
         if hovered {
             self.state.hot = Some(id);
@@ -742,6 +1106,11 @@ impl<'a> Ui<'a> {
         if !label.is_empty() {
             self.canvas
                 .draw_text(base, label, self.theme.text, self.theme.text_scale);
+            let label_size = text_size(label, self.theme.text_scale);
+            self.track_rect(Rect {
+                origin: base,
+                size: label_size,
+            });
             rect_origin.y += label_height;
         }
 
@@ -752,6 +1121,7 @@ impl<'a> Ui<'a> {
                 height: height.max(1) as u32,
             },
         };
+        self.track_rect(rect);
         let hovered = rect.contains(self.input.pointer_pos);
         if hovered {
             self.state.hot = Some(id);
@@ -868,6 +1238,7 @@ impl<'a> Ui<'a> {
         };
         self.canvas.fill_rect(rect, fill);
         self.canvas.stroke_rect(rect, 1, self.theme.knob_outline);
+        self.track_rect(rect);
     }
 }
 
@@ -1018,5 +1389,60 @@ mod tests {
             assert!(response.changed);
             assert_eq!(selected, 1);
         }
+    }
+
+    #[test]
+    fn panel_auto_sizes_after_draw() {
+        let mut canvas = Canvas::new(400, 200);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState::default();
+
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let response = ui.panel_with_key(
+            "panel",
+            PanelStyle {
+                title: Some("Panel"),
+                ..PanelStyle::default()
+            },
+            None,
+            |ui, _rect| {
+                let mut value = 0.5;
+                ui.knob_with_key("gain", "GAIN", &mut value, (0.0, 1.0));
+            },
+        );
+
+        assert!(response.measured_size.width > 0);
+        assert!(response.measured_size.height > 0);
+    }
+
+    #[test]
+    fn grid_cell_positions_are_consistent() {
+        let mut canvas = Canvas::new(200, 200);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState::default();
+
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let origin = Point { x: 10, y: 20 };
+        let spec = GridSpec {
+            columns: 4,
+            cell_size: Size {
+                width: 10,
+                height: 12,
+            },
+            gap: 2,
+            rows: None,
+        };
+        let response = ui.grid_with_key("grid", spec, origin, |_ui, grid| {
+            let rect = grid.cell_rect(5);
+            assert_eq!(rect.origin.x, origin.x + (10 + 2) * 1);
+            assert_eq!(rect.origin.y, origin.y + (12 + 2) * 1);
+        });
+
+        assert_eq!(response.rows, 2);
+        assert_eq!(response.columns, 4);
     }
 }
