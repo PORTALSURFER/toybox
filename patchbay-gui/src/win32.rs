@@ -140,6 +140,7 @@ where
     last_mouse_down: bool,
     last_mouse_secondary_down: bool,
     debug_input: bool,
+    frame_counter: u64,
 }
 
 impl<State, Init, Frame> WindowState<State, Init, Frame>
@@ -158,12 +159,14 @@ where
                 let x = (lparam.0 & 0xFFFF) as i16 as i32;
                 let y = ((lparam.0 >> 16) & 0xFFFF) as i16 as i32;
                 self.input.pointer_pos = Point { x, y };
+                self.render_frame();
                 true
             }
             WM_LBUTTONDOWN => {
                 self.input.mouse_down = true;
                 self.input.mouse_pressed = true;
                 unsafe { SetCapture(self.hwnd) };
+                self.render_frame();
                 true
             }
             WM_LBUTTONDBLCLK => {
@@ -171,6 +174,7 @@ where
                 self.input.mouse_down = true;
                 self.input.mouse_pressed = true;
                 unsafe { SetCapture(self.hwnd) };
+                self.render_frame();
                 true
             }
             WM_LBUTTONUP => {
@@ -179,21 +183,25 @@ where
                 unsafe {
                     let _ = ReleaseCapture();
                 }
+                self.render_frame();
                 true
             }
             WM_RBUTTONDOWN => {
                 self.input.mouse_secondary_down = true;
                 self.input.mouse_secondary_pressed = true;
+                self.render_frame();
                 true
             }
             WM_RBUTTONUP => {
                 self.input.mouse_secondary_down = false;
                 self.input.mouse_secondary_released = true;
+                self.render_frame();
                 true
             }
             WM_MOUSEWHEEL => {
                 let delta = ((wparam.0 >> 16) & 0xFFFF) as i16 as f32 / 120.0;
                 self.input.wheel_delta += delta;
+                self.render_frame();
                 true
             }
             WM_DROPFILES => {
@@ -202,6 +210,7 @@ where
                 unsafe {
                     DragFinish(hdrop);
                 }
+                self.render_frame();
                 true
             }
             WM_CHAR => {
@@ -209,6 +218,7 @@ where
                 if let Some(ch) = char::from_u32(code as u32) {
                     self.input.key_pressed = Some(ch);
                 }
+                self.render_frame();
                 true
             }
             WM_PAINT => {
@@ -312,6 +322,7 @@ where
     }
 
     fn render_frame(&mut self) {
+        self.frame_counter = self.frame_counter.wrapping_add(1);
         if !self.initialized {
             let mut ui = Ui::new(
                 &mut self.canvas,
@@ -366,7 +377,8 @@ where
         }
         if self.debug_input {
             let text = format!(
-                "ptr=({}, {}) md={} mr={} rd={}",
+                "frame={} ptr=({}, {}) md={} mr={} rd={}",
+                self.frame_counter,
                 self.input.pointer_pos.x,
                 self.input.pointer_pos.y,
                 self.input.mouse_down as u8,
@@ -595,6 +607,7 @@ where
             last_mouse_down: false,
             last_mouse_secondary_down: false,
             debug_input: true,
+            frame_counter: 0,
         });
 
     unsafe {
