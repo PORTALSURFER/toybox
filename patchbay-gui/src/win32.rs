@@ -318,7 +318,7 @@ where
                 &mut module,
             )
         }
-        .as_bool();
+        .is_ok();
         if got_module {
             HINSTANCE(module.0)
         } else {
