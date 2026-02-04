@@ -26,7 +26,8 @@ use windows::Win32::System::LibraryLoader::{GetModuleHandleExW, GetModuleHandleW
 use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, GetParent, LoadCursorW,
-    RegisterClassW, SendMessageW, SetTimer, SetWindowLongPtrW, SetWindowPos, ShowWindow,
+    InvalidateRect, RegisterClassW, SendMessageW, SetTimer, SetWindowLongPtrW, SetWindowPos,
+    ShowWindow,
     CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA, HMENU, SWP_NOZORDER, SW_HIDE, SW_SHOW,
     WM_DESTROY, WM_ERASEBKGND, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL,
     WM_NCDESTROY, WM_PAINT, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPSIBLINGS,
@@ -295,6 +296,11 @@ where
                     ShowWindow(self.hwnd, SW_SHOW);
                 }
                 self.shown = true;
+                // Ensure a visible frame is presented immediately after showing.
+                let _ = self.renderer.render();
+                unsafe {
+                    InvalidateRect(Some(self.hwnd), None, false);
+                }
             } else {
                 log_line_safe(&format!(
                     "win32: show gate blocked prewarm={} saw_timer={} render_ok={} ready_by_time={}",
