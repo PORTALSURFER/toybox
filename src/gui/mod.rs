@@ -9,7 +9,9 @@ pub use patchbay_gui::*;
 pub mod declarative {
     //! Declarative layout helpers re-exported from patchbay-gui.
     pub use patchbay_gui::{
-        Align, FlexSpec, LabelSpec, Node, Padding, PanelSpec, RootFrameSpec, SizeSpec, SpacerSpec,
-        UiSpec, WidgetSpec, DeclarativeGridSpec, measure, render,
+        AbsoluteChild, AbsoluteSpec, Align, ButtonEvent, ButtonSpec, DeclarativeGridSpec,
+        DropdownEvent, DropdownSpec, FlexSpec, IndicatorSpec, KnobEvent, KnobSpec, LabelSpec, Node,
+        Padding, PanelSpec, RegionEvent, RegionSpec, RootFrameSpec, SizeSpec, SliderEvent,
+        SliderSpec, SpacerSpec, ToggleEvent, ToggleSpec, UiSpec, WidgetSpec, measure, render,
     };
 }

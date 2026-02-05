@@ -1,6 +1,6 @@
 //! Patchbay GUI: a minimal, Vulkan-backed UI toolkit for CLAP plugin windows.
 //!
-//! The crate provides a small immediate-mode UI surface (text + knobs) rendered
+//! The crate provides a declarative UI surface (containers + widgets) rendered
 //! via a CPU canvas that is presented using wgpu. The focus is embedding into a
 //! host-provided window handle on Windows.
 
@@ -18,8 +18,10 @@ mod win32;
 
 pub use crate::canvas::{Canvas, Color, Point, Rect, Size};
 pub use crate::declarative::{
-    Align, FlexSpec, GridSpec as DeclarativeGridSpec, LabelSpec, Node, Padding, PanelSpec,
-    RootFrameSpec, SizeSpec, SpacerSpec, UiSpec, WidgetSpec, measure, render,
+    AbsoluteChild, AbsoluteSpec, Align, ButtonEvent, ButtonSpec, DropdownEvent, DropdownSpec,
+    FlexSpec, GridSpec as DeclarativeGridSpec, IndicatorSpec, KnobEvent, KnobSpec, LabelSpec, Node,
+    Padding, PanelSpec, RegionEvent, RegionSpec, RootFrameSpec, SizeSpec, SliderEvent, SliderSpec,
+    SpacerSpec, ToggleEvent, ToggleSpec, UiSpec, WidgetSpec, measure, render,
 };
 pub use crate::host::{GuiError, HostWindow, InputState, OpenParentedMode};
 #[cfg(target_os = "windows")]

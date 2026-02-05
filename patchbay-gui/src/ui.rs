@@ -1,4 +1,4 @@
-//! Immediate-mode widgets for the Patchbay GUI.
+//! Widget rendering and interaction state for the Patchbay GUI.
 
 use std::collections::HashMap;
 
@@ -678,7 +678,13 @@ impl<'a> Ui<'a> {
                 height: (padding * 2 + header_height) as u32,
             }
         };
-        let measured_size = requested_size.unwrap_or(measured_size);
+        let measured_size = match requested_size {
+            Some(explicit) => Size {
+                width: explicit.width.max(measured_size.width),
+                height: explicit.height.max(measured_size.height),
+            },
+            None => measured_size,
+        };
 
         self.state.layout.set(id, measured_size);
         self.track_rect_internal(outer_rect);
@@ -788,11 +794,17 @@ impl<'a> Ui<'a> {
             }
         };
 
+        let measured_size = match requested_size {
+            Some(explicit) => Size {
+                width: explicit.width.max(measured_size.width),
+                height: explicit.height.max(measured_size.height),
+            },
+            None => measured_size,
+        };
+
         self.state.layout.set(id, measured_size);
         self.track_rect_internal(outer_rect);
-        let advance_height = requested_size
-            .map(|explicit| explicit.height)
-            .unwrap_or(measured_size.height);
+        let advance_height = measured_size.height;
         self.layout.cursor.y = origin.y + advance_height as i32 + self.layout.spacing;
 
         PanelResponse {
@@ -1561,6 +1573,116 @@ impl<'a> Ui<'a> {
         self.dropdown(id, label, options, selected, width, height)
     }
 
+    pub(crate) fn knob_with_labels_in_rect(
+        &mut self,
+        id: WidgetId,
+        name_label: &str,
+        value_label: &str,
+        value: &mut f32,
+        range: (f32, f32),
+        rect: Rect,
+    ) -> KnobResponse {
+        let previous = *self.layout;
+        let label_height = 8 * self.theme.text_scale as i32;
+        let label_gap = 4 * self.theme.text_scale as i32;
+        let knob_size =
+            (rect.size.height as i32 - label_height * 2 - label_gap * 2).max(1);
+        self.layout.cursor = rect.origin;
+        self.layout.knob_size = knob_size.min(rect.size.width as i32);
+        let response = self.knob_with_labels(id, name_label, value_label, value, range);
+        *self.layout = previous;
+        response
+    }
+
+    pub(crate) fn slider_in_rect(
+        &mut self,
+        id: WidgetId,
+        label: &str,
+        value: &mut f32,
+        range: (f32, f32),
+        control_size: Size,
+        rect: Rect,
+    ) -> SliderResponse {
+        let previous = *self.layout;
+        self.layout.cursor = rect.origin;
+        let height = control_size.height.max(1) as i32;
+        let response = self.slider(
+            id,
+            label,
+            value,
+            range,
+            rect.size.width.max(1) as i32,
+            height,
+        );
+        *self.layout = previous;
+        response
+    }
+
+    pub(crate) fn toggle_in_rect(
+        &mut self,
+        id: WidgetId,
+        label: &str,
+        value: &mut bool,
+        control_size: Size,
+        rect: Rect,
+    ) -> ToggleResponse {
+        let previous = *self.layout;
+        self.layout.cursor = rect.origin;
+        let height = control_size.height.max(1) as i32;
+        let response = self.toggle(
+            id,
+            label,
+            value,
+            rect.size.width.max(1) as i32,
+            height,
+        );
+        *self.layout = previous;
+        response
+    }
+
+    pub(crate) fn button_in_rect(
+        &mut self,
+        id: WidgetId,
+        label: &str,
+        _control_size: Size,
+        rect: Rect,
+    ) -> ButtonResponse {
+        let previous = *self.layout;
+        self.layout.cursor = rect.origin;
+        let response = self.button(
+            id,
+            label,
+            rect.size.width.max(1) as i32,
+            rect.size.height.max(1) as i32,
+        );
+        *self.layout = previous;
+        response
+    }
+
+    pub(crate) fn dropdown_in_rect(
+        &mut self,
+        id: WidgetId,
+        label: &str,
+        options: &[&str],
+        selected: &mut usize,
+        control_size: Size,
+        rect: Rect,
+    ) -> DropdownResponse {
+        let previous = *self.layout;
+        self.layout.cursor = rect.origin;
+        let height = control_size.height.max(1) as i32;
+        let response = self.dropdown(
+            id,
+            label,
+            options,
+            selected,
+            rect.size.width.max(1) as i32,
+            height,
+        );
+        *self.layout = previous;
+        response
+    }
+
     /// Clear the background with the theme color.
     pub fn clear(&mut self) {
         self.canvas.clear(self.theme.background);
@@ -1722,6 +1844,38 @@ mod tests {
     }
 
     #[test]
+    fn root_frame_clamps_explicit_size_to_content() {
+        let mut canvas = Canvas::new(200, 200);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState::default();
+        let explicit = Size { width: 1, height: 1 };
+
+        {
+            let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+            ui.root_frame_with_key(
+                "root",
+                RootFrameStyle {
+                    padding: 0,
+                    ..RootFrameStyle::default()
+                },
+                Some(explicit),
+                |ui, _| {
+                    ui.text(Point { x: 0, y: 0 }, "Root");
+                },
+            );
+        }
+
+        let measured = ui_state
+            .take_root_frame_size()
+            .expect("root frame size missing");
+        let expected = text_size("Root", theme.text_scale);
+        assert!(measured.width >= expected.width);
+        assert!(measured.height >= expected.height);
+    }
+
+    #[test]
     fn toggle_flips_on_click() {
         let mut canvas = Canvas::new(200, 200);
         let mut layout = Layout::default();
@@ -1854,6 +2008,33 @@ mod tests {
 
         let expected_y = start.y + response.measured_size.height as i32 + spacing;
         assert_eq!(ui.layout.cursor.y, expected_y);
+    }
+
+    #[test]
+    fn panel_clamps_explicit_size_to_content() {
+        let mut canvas = Canvas::new(400, 200);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState::default();
+        let explicit = Size { width: 1, height: 1 };
+
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let response = ui.panel_with_key(
+            "panel-explicit",
+            PanelStyle {
+                title: Some("Panel"),
+                ..PanelStyle::default()
+            },
+            Some(explicit),
+            |ui, _rect| {
+                let mut value = 0.5;
+                ui.knob_with_key("gain", "GAIN", &mut value, (0.0, 1.0));
+            },
+        );
+
+        assert!(response.measured_size.width > explicit.width);
+        assert!(response.measured_size.height > explicit.height);
     }
 
     #[test]

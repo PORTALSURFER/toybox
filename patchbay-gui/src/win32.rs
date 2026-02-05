@@ -346,11 +346,12 @@ where
 
         if let Some((width, height)) = unpack_size(self.resize_request.swap(0, Ordering::AcqRel))
         {
+            let mut width = width;
             let mut height = height;
             let aspect_bits = self.aspect_ratio.load(Ordering::Relaxed);
             if aspect_bits != 0 {
                 let aspect = f32::from_bits(aspect_bits);
-                height = (width as f32 / aspect).round().max(1.0) as u32;
+                (width, height) = enforce_aspect_min(width, height, aspect);
             }
             unsafe {
                 SetWindowPos(
@@ -434,6 +435,19 @@ where
         self.input.wheel_delta = 0.0;
         self.input.key_pressed = None;
         self.input.dropped_files.clear();
+    }
+}
+
+fn enforce_aspect_min(width: u32, height: u32, aspect: f32) -> (u32, u32) {
+    if !aspect.is_finite() || aspect <= 0.0 {
+        return (width.max(1), height.max(1));
+    }
+    let width_from_height = (height as f32 * aspect).ceil().max(1.0) as u32;
+    let height_from_width = (width as f32 / aspect).ceil().max(1.0) as u32;
+    if width_from_height >= width {
+        (width_from_height, height.max(1))
+    } else {
+        (width.max(1), height_from_width)
     }
 }
 
@@ -743,5 +757,23 @@ fn wide_to_path(buffer: &[u16]) -> Option<PathBuf> {
         None
     } else {
         Some(PathBuf::from(string))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::enforce_aspect_min;
+
+    #[test]
+    fn aspect_enforces_min_dimensions() {
+        let (w, h) = enforce_aspect_min(400, 300, 1.5);
+        assert!(w >= 400);
+        assert!(h >= 300);
+        assert!((w as f32 / h as f32 - 1.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn aspect_noop_for_invalid_ratio() {
+        assert_eq!(enforce_aspect_min(100, 80, 0.0), (100, 80));
     }
 }
