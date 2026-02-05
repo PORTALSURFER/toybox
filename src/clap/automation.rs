@@ -3,7 +3,7 @@
 //! # Example
 //! ```
 //! use toybox::clack_plugin::utils::ClapId;
-//! use toybox::clap::automation::{AutomationConfig, AutomationQueue};
+//! use toybox::clap::automation::{AutomationConfig, AutomationDrainBuffer, AutomationQueue};
 //! use toybox::clack_plugin::events::io::EventBuffer;
 //!
 //! let mut config = AutomationConfig::default();
@@ -16,11 +16,12 @@
 //!
 //! let mut buffer = EventBuffer::new();
 //! let mut output = buffer.as_output();
-//! let mut scratch = Vec::new();
-//! queue.drain_to_output(&mut output, &mut scratch);
+//! let mut drain_buffer = AutomationDrainBuffer::default();
+//! drain_buffer.drain(&queue, &mut output);
 //! ```
 
 use std::collections::HashSet;
+use std::mem;
 use std::sync::Mutex;
 
 use clack_plugin::events::io::OutputEvents;
@@ -107,6 +108,35 @@ pub struct AutomationDrainStats {
     pub locked: bool,
 }
 
+/// Per-thread scratch storage for draining automation to host output.
+///
+/// Plugins should keep one instance in each thread object that emits host
+/// parameter events (for example main-thread and audio-thread parameter flush
+/// implementations). Reusing this scratch buffer avoids allocating while
+/// draining queued GUI automation events.
+#[derive(Default)]
+pub struct AutomationDrainBuffer {
+    scratch: Vec<AutomationEvent>,
+}
+
+impl AutomationDrainBuffer {
+    /// Drain queued automation events into an output buffer.
+    ///
+    /// Returns `true` when at least one queued event was consumed.
+    pub fn drain(&mut self, queue: &AutomationQueue, output: &mut OutputEvents<'_>) -> bool {
+        queue.drain_to_output(output, &mut self.scratch)
+    }
+
+    /// Drain queued automation events into an output buffer with stats.
+    pub fn drain_with_stats(
+        &mut self,
+        queue: &AutomationQueue,
+        output: &mut OutputEvents<'_>,
+    ) -> AutomationDrainStats {
+        queue.drain_to_output_with_stats(output, &mut self.scratch)
+    }
+}
+
 impl AutomationQueue {
     /// Enqueue a parameter value update if automation is enabled.
     pub fn push_value(&self, config: &AutomationConfig, param_id: ClapId, value: f64) {
@@ -174,7 +204,7 @@ impl AutomationQueue {
             return AutomationDrainStats::default();
         }
         scratch.clear();
-        scratch.extend(events.drain(..));
+        mem::swap(scratch, &mut events);
         drop(events);
 
         let mut stats = AutomationDrainStats {
@@ -245,5 +275,20 @@ mod tests {
         assert_eq!(stats.attempted, 3);
         assert_eq!(stats.pushed, 3);
         assert_eq!(stats.failed, 0);
+    }
+
+    #[test]
+    fn drain_buffer_drains_without_external_scratch() {
+        let queue = AutomationQueue::default();
+        let config = AutomationConfig::default();
+        let param_id = ClapId::new(11);
+        queue.push_value(&config, param_id, 0.42);
+
+        let mut output_buffer = EventBuffer::new();
+        let mut output = output_buffer.as_output();
+        let mut drain_buffer = AutomationDrainBuffer::default();
+
+        let drained = drain_buffer.drain(&queue, &mut output);
+        assert!(drained);
     }
 }
