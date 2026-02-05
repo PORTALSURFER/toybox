@@ -10,6 +10,7 @@
 - Provide reusable GUI building blocks (Patchbay GUI window wrapper, common controls, visualization helpers, snapshot readers).
 - Standardize parameter/state plumbing (param definitions, snapshots, state serialization, event handling) across plugins.
 - Provide a stable `toybox::clap::prelude` import surface for CLAP plugin wiring.
+- Enforce CLAP plugin-state support (`PluginState` + `PluginStateImpl`) as the default for toybox-based plugins.
 - Reduce time to create a new CLAP plugin by providing templates and example wiring.
 - Enable a Lilt-style effect to depend only on `toybox` for CLAP-specific wiring (entry points, params, events, packaging).
 

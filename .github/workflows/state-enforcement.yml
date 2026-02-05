@@ -1,0 +1,28 @@
+name: State Enforcement
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  state-enforcement:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Validate plugin state enforcement
+        run: ./scripts/check_clap_state_enforcement.sh
+
+      - name: Build minimal CLAP example
+        run: cargo check -p toybox-minimal-clap
+
+      - name: Run toybox state helper tests
+        run: cargo test -p toybox clap::state
+
+      - name: Run toybox docs tests
+        run: cargo test -p toybox --doc

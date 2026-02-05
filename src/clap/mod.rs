@@ -3,13 +3,14 @@
 //! This module provides thin wrappers around clack to reduce boilerplate while
 //! keeping data flow explicit and realtime-safe.
 
+pub mod automation;
 pub mod bundle;
 pub mod entry;
 pub mod events;
-pub mod automation;
-pub mod params;
-pub mod process;
-pub mod registration;
-pub mod prelude;
 #[cfg(feature = "gui")]
 pub mod gui;
+pub mod params;
+pub mod prelude;
+pub mod process;
+pub mod registration;
+pub mod state;
