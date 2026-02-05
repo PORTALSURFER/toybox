@@ -50,11 +50,6 @@ pub enum OpenParentedMode {
     Recreate,
 }
 
-const DEFAULT_WINDOW_SIZE: Size = Size {
-    width: 640,
-    height: 360,
-};
-
 /// Errors returned by the Patchbay GUI system.
 #[derive(thiserror::Error, Debug)]
 pub enum GuiError {
@@ -174,14 +169,14 @@ impl HostWindow {
     /// Open a parented Patchbay GUI window.
     ///
     /// The caller supplies initial state plus callbacks for initialization and
-    /// per-frame declarative rendering. The `size` argument is ignored and the
-    /// window uses the internal default size before auto-resizing to the root
-    /// frame measurement. If a matching window is already open, this reuses it
-    /// and ignores the new state.
+    /// per-frame declarative rendering. The `size` argument is used as the
+    /// initial window size; the declarative root frame still drives
+    /// auto-resizing each frame. If a matching window is already open, this
+    /// reuses it and ignores the new state.
     pub fn open_parented<State, Init, Frame>(
         &mut self,
         title: String,
-        _size: (u32, u32),
+        size: (u32, u32),
         state: State,
         mut on_init: Init,
         mut on_frame: Frame,
@@ -193,7 +188,10 @@ impl HostWindow {
     {
         self.open_parented_with(
             title,
-            DEFAULT_WINDOW_SIZE,
+            Size {
+                width: size.0.max(1),
+                height: size.1.max(1),
+            },
             state,
             on_init,
             on_frame,

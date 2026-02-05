@@ -1,17 +1,12 @@
 //! Patchbay GUI helpers for CLAP plugins.
 
+use crate::logging::log_line_safe;
 use clack_plugin::plugin::PluginError;
 use patchbay_gui::{GuiError, HostWindow, Size};
 use raw_window_handle::RawWindowHandle;
-use crate::logging::log_line_safe;
 
 /// Re-export Patchbay GUI types for downstream GUI integrations.
 pub use patchbay_gui::{Canvas, Color, InputState, OpenParentedMode, Theme};
-
-const DEFAULT_WINDOW_SIZE: Size = Size {
-    width: 640,
-    height: 360,
-};
 
 /// Wrapper around a Patchbay GUI window for a CLAP editor.
 #[derive(Default)]
@@ -69,8 +64,7 @@ impl GuiHostWindow {
     /// returns a declarative UI spec. The helper handles resize requests and
     /// stores the last logical size. This recreates the window each call so
     /// new state is applied; use `open_parented_reuse` to keep an existing
-    /// window. The `size` argument is ignored so plugins cannot force a
-    /// window size outside the declarative layout measurement.
+    /// window.
     pub fn open_parented<State, Init, Frame>(
         &mut self,
         title: String,
@@ -100,8 +94,7 @@ impl GuiHostWindow {
     ///
     /// This mirrors Patchbay's default behavior: if a window is already open
     /// and attached to the same parent, the new state is ignored and the
-    /// existing window is shown. The `size` argument is ignored so plugins
-    /// cannot force a window size outside the declarative layout measurement.
+    /// existing window is shown.
     pub fn open_parented_reuse<State, Init, Frame>(
         &mut self,
         title: String,
@@ -129,8 +122,8 @@ impl GuiHostWindow {
 
     /// Open a parented window with an explicit reuse policy.
     ///
-    /// The `size` argument is ignored so plugins cannot force a window size
-    /// outside the declarative layout measurement.
+    /// The `size` argument is used as the initial window size before
+    /// declarative auto-resize takes over.
     pub fn open_parented_with<State, Init, Frame>(
         &mut self,
         title: String,
@@ -154,7 +147,10 @@ impl GuiHostWindow {
         self.inner
             .open_parented_with(
                 title,
-                DEFAULT_WINDOW_SIZE,
+                Size {
+                    width: size.0.max(1),
+                    height: size.1.max(1),
+                },
                 state,
                 on_init,
                 on_frame,

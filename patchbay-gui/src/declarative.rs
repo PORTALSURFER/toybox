@@ -508,9 +508,18 @@ fn measure_flex<C>(flex: &FlexSpec<'_, C>, theme: &Theme, axis: Axis) -> Size {
     }
     let gaps = flex.gap.max(0) * (flex.children.len().saturating_sub(1) as i32);
     total_main += gaps;
-    let padded_main = total_main + flex.padding.left + flex.padding.right;
-    let padded_cross =
-        max_cross + flex.padding.top + flex.padding.bottom;
+    let (main_padding, cross_padding) = match axis {
+        Axis::Horizontal => (
+            flex.padding.left + flex.padding.right,
+            flex.padding.top + flex.padding.bottom,
+        ),
+        Axis::Vertical => (
+            flex.padding.top + flex.padding.bottom,
+            flex.padding.left + flex.padding.right,
+        ),
+    };
+    let padded_main = total_main + main_padding;
+    let padded_cross = max_cross + cross_padding;
     let measured = match axis {
         Axis::Horizontal => Size {
             width: padded_main.max(0) as u32,
@@ -720,10 +729,13 @@ fn render_flex<C>(
         Axis::Horizontal => rect.size.width as i32,
         Axis::Vertical => rect.size.height as i32,
     };
+    let main_padding = match axis {
+        Axis::Horizontal => flex.padding.left + flex.padding.right,
+        Axis::Vertical => flex.padding.top + flex.padding.bottom,
+    };
     let available_main = available_main
         - gap_total
-        - flex.padding.left
-        - flex.padding.right;
+        - main_padding;
     let remaining = (available_main - min_total).max(0);
     let fill_extra = if fill_count > 0 {
         remaining / fill_count
