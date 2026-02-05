@@ -13,7 +13,7 @@ pub mod smoothing;
 pub mod time;
 pub mod window;
 
-pub use delay::{DelayLine, FeedbackComb, StereoComb};
+pub use delay::{DelayLine, FeedbackComb, FractionalDelayLine, StereoComb};
 pub use filters::{peaking_eq_coeffs, process_biquad, BiquadCoeffs, BiquadState, OnePole};
 pub use smoothing::{exp_smoothing_coeff, smooth_value};
 pub use time::{hz_to_samples, ms_to_samples};
