@@ -333,6 +333,36 @@ fn text_size(text: &str, scale: u32) -> Size {
     }
 }
 
+fn fit_text_single_line_ellipsis(text: &str, max_width: u32, scale: u32) -> String {
+    if max_width == 0 {
+        return String::new();
+    }
+
+    let single_line: String = text
+        .chars()
+        .map(|ch| if ch == '\n' || ch == '\r' { ' ' } else { ch })
+        .collect();
+    if text_size(&single_line, scale).width <= max_width {
+        return single_line;
+    }
+
+    let char_width = (6 * scale.max(1)) as u32;
+    if char_width == 0 {
+        return String::new();
+    }
+    let max_chars = (max_width / char_width) as usize;
+    if max_chars == 0 {
+        return String::new();
+    }
+    if max_chars <= 3 {
+        return ".".repeat(max_chars);
+    }
+
+    let mut fitted: String = single_line.chars().take(max_chars - 3).collect();
+    fitted.push_str("...");
+    fitted
+}
+
 /// Response metadata from knob widgets.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct KnobResponse {
@@ -454,7 +484,10 @@ impl<'a> Ui<'a> {
         self.canvas
             .draw_text(position, text, self.theme.text, self.theme.text_scale);
         let size = text_size(text, self.theme.text_scale);
-        self.track_rect_internal(Rect { origin: position, size });
+        self.track_rect_internal(Rect {
+            origin: position,
+            size,
+        });
     }
 
     /// Draw a label at the given position with a custom color.
@@ -462,7 +495,10 @@ impl<'a> Ui<'a> {
         self.canvas
             .draw_text(position, text, color, self.theme.text_scale);
         let size = text_size(text, self.theme.text_scale);
-        self.track_rect_internal(Rect { origin: position, size });
+        self.track_rect_internal(Rect {
+            origin: position,
+            size,
+        });
     }
 
     /// Access the input snapshot for this frame.
@@ -488,6 +524,87 @@ impl<'a> Ui<'a> {
     /// Access the layout for custom sizing.
     pub fn layout_mut(&mut self) -> &mut Layout {
         self.layout
+    }
+
+    /// Return the rendered footprint for a knob block at the current theme scale.
+    ///
+    /// The name and value labels are single-line and clamped to the knob width,
+    /// so the returned width is always the current knob diameter.
+    pub fn knob_block_size(&self, _name_label: &str, _value_label: &str) -> Size {
+        let knob_diameter = self.layout.knob_size.max(1) as u32;
+        let label_height = 8 * self.theme.text_scale.max(1);
+        let label_gap = 4 * self.theme.text_scale.max(1);
+        Size {
+            width: knob_diameter,
+            height: knob_diameter + label_height * 2 + label_gap * 2,
+        }
+    }
+
+    /// Return the rendered footprint for a slider block.
+    ///
+    /// The label is rendered above the control and clamped to control width.
+    pub fn slider_block_size(&self, label: &str, control_size: Size) -> Size {
+        let control = Size {
+            width: control_size.width.max(1),
+            height: control_size.height.max(1),
+        };
+        let label_height = if label.is_empty() {
+            0
+        } else {
+            8 * self.theme.text_scale.max(1)
+        };
+        Size {
+            width: control.width,
+            height: control.height + label_height,
+        }
+    }
+
+    /// Return the rendered footprint for a toggle block.
+    ///
+    /// The label is rendered above the control and clamped to control width.
+    pub fn toggle_block_size(&self, label: &str, control_size: Size) -> Size {
+        let control = Size {
+            width: control_size.width.max(1),
+            height: control_size.height.max(1),
+        };
+        let label_height = if label.is_empty() {
+            0
+        } else {
+            8 * self.theme.text_scale.max(1)
+        };
+        Size {
+            width: control.width,
+            height: control.height + label_height,
+        }
+    }
+
+    /// Return the rendered footprint for a dropdown block.
+    ///
+    /// The label is rendered above the control and clamped to control width.
+    pub fn dropdown_block_size(&self, label: &str, control_size: Size) -> Size {
+        let control = Size {
+            width: control_size.width.max(1),
+            height: control_size.height.max(1),
+        };
+        let label_height = if label.is_empty() {
+            0
+        } else {
+            8 * self.theme.text_scale.max(1)
+        };
+        Size {
+            width: control.width,
+            height: control.height + label_height,
+        }
+    }
+
+    /// Return the rendered footprint for a button block.
+    ///
+    /// Button labels are rendered inside the provided control size.
+    pub fn button_block_size(&self, _label: &str, control_size: Size) -> Size {
+        Size {
+            width: control_size.width.max(1),
+            height: control_size.height.max(1),
+        }
     }
 
     /// Run a closure with a temporary layout origin.
@@ -546,11 +663,15 @@ impl<'a> Ui<'a> {
                     .stroke_rect(option_rect, 1, self.theme.knob_outline);
                 let option_text = Point {
                     x: option_rect.origin.x + 4,
-                    y: option_rect.origin.y
-                        + (height - (7 * self.theme.text_scale as i32)) / 2,
+                    y: option_rect.origin.y + (height - (7 * self.theme.text_scale as i32)) / 2,
                 };
+                let fitted = fit_text_single_line_ellipsis(
+                    option,
+                    option_rect.size.width.saturating_sub(8),
+                    self.theme.text_scale,
+                );
                 self.canvas
-                    .draw_text(option_text, option, self.theme.text, self.theme.text_scale);
+                    .draw_text(option_text, &fitted, self.theme.text, self.theme.text_scale);
             }
         }
     }
@@ -571,6 +692,30 @@ impl<'a> Ui<'a> {
 
     fn consume_mouse_pressed(&mut self) {
         self.state.consume_mouse_pressed = true;
+    }
+
+    fn draw_text_single_line_clamped(
+        &mut self,
+        origin: Point,
+        text: &str,
+        max_width: u32,
+        color: Color,
+        track_bounds: bool,
+    ) -> Size {
+        let fitted = fit_text_single_line_ellipsis(text, max_width, self.theme.text_scale);
+        if fitted.is_empty() {
+            return Size {
+                width: 0,
+                height: 0,
+            };
+        }
+        self.canvas
+            .draw_text(origin, &fitted, color, self.theme.text_scale);
+        let size = text_size(&fitted, self.theme.text_scale);
+        if track_bounds {
+            self.track_rect_internal(Rect { origin, size });
+        }
+        size
     }
 
     fn push_bounds(&mut self) {
@@ -959,6 +1104,9 @@ impl<'a> Ui<'a> {
     }
 
     /// Draw a knob with a name label above and a value label below.
+    ///
+    /// Labels are clamped to the knob width with single-line ellipsis to keep
+    /// dense manual layouts from overlapping neighboring controls.
     pub fn knob_with_labels(
         &mut self,
         id: WidgetId,
@@ -967,7 +1115,8 @@ impl<'a> Ui<'a> {
         value: &mut f32,
         range: (f32, f32),
     ) -> KnobResponse {
-        let knob_size = self.layout.knob_size;
+        let knob_size = self.layout.knob_size.max(1);
+        let block_size = self.knob_block_size(name_label, value_label);
         let label_height = 8 * self.theme.text_scale as i32;
         let label_gap = 4 * self.theme.text_scale as i32;
         let knob_origin = Point {
@@ -1025,8 +1174,8 @@ impl<'a> Ui<'a> {
 
         if hovered && self.input.wheel_delta != 0.0 {
             let step = 0.02 * (range.1 - range.0);
-            let new_value = (*value + step * self.input.wheel_delta.signum())
-                .clamp(range.0, range.1);
+            let new_value =
+                (*value + step * self.input.wheel_delta.signum()).clamp(range.0, range.1);
             if (*value - new_value).abs() > f32::EPSILON {
                 *value = new_value;
                 response.changed = true;
@@ -1084,13 +1233,13 @@ impl<'a> Ui<'a> {
             y: self.layout.cursor.y,
         };
         if !name_label.is_empty() {
-            self.canvas
-                .draw_text(name_pos, name_label, self.theme.text, self.theme.text_scale);
-            let label_size = text_size(name_label, self.theme.text_scale);
-            self.track_rect_internal(Rect {
-                origin: name_pos,
-                size: label_size,
-            });
+            let _ = self.draw_text_single_line_clamped(
+                name_pos,
+                name_label,
+                block_size.width,
+                self.theme.text,
+                true,
+            );
         }
 
         let value_pos = Point {
@@ -1098,16 +1247,16 @@ impl<'a> Ui<'a> {
             y: knob_rect.origin.y + knob_size + label_gap,
         };
         if !value_label.is_empty() {
-            self.canvas
-                .draw_text(value_pos, value_label, self.theme.text, self.theme.text_scale);
-            let label_size = text_size(value_label, self.theme.text_scale);
-            self.track_rect_internal(Rect {
-                origin: value_pos,
-                size: label_size,
-            });
+            let _ = self.draw_text_single_line_clamped(
+                value_pos,
+                value_label,
+                block_size.width,
+                self.theme.text,
+                true,
+            );
         }
 
-        let block_height = knob_size + label_height * 2 + label_gap * 2;
+        let block_height = block_size.height as i32;
         self.layout.cursor.y += block_height + self.layout.spacing;
         response
     }
@@ -1171,26 +1320,30 @@ impl<'a> Ui<'a> {
         width: i32,
         height: i32,
     ) -> SliderResponse {
+        let width = width.max(1);
+        let height = height.max(1);
+        let control_size = Size {
+            width: width as u32,
+            height: height as u32,
+        };
+        let block_size = self.slider_block_size(label, control_size);
         let label_height = 8 * self.theme.text_scale as i32;
         let base = self.layout.cursor;
         let mut rect_origin = base;
         if !label.is_empty() {
-            self.canvas
-                .draw_text(base, label, self.theme.text, self.theme.text_scale);
-            let label_size = text_size(label, self.theme.text_scale);
-            self.track_rect_internal(Rect {
-                origin: base,
-                size: label_size,
-            });
+            let _ = self.draw_text_single_line_clamped(
+                base,
+                label,
+                control_size.width,
+                self.theme.text,
+                true,
+            );
             rect_origin.y += label_height;
         }
 
         let rect = Rect {
             origin: rect_origin,
-            size: Size {
-                width: width.max(1) as u32,
-                height: height.max(1) as u32,
-            },
+            size: control_size,
         };
         self.track_rect_internal(rect);
         let hovered = rect.contains(self.input.pointer_pos);
@@ -1228,8 +1381,8 @@ impl<'a> Ui<'a> {
         if hovered && self.input.wheel_delta != 0.0 {
             let span = (range.1 - range.0).max(1.0e-6);
             let step = 0.02 * span;
-            let new_value = (*value + step * self.input.wheel_delta.signum())
-                .clamp(range.0, range.1);
+            let new_value =
+                (*value + step * self.input.wheel_delta.signum()).clamp(range.0, range.1);
             if (*value - new_value).abs() > f32::EPSILON {
                 *value = new_value;
                 response.changed = true;
@@ -1268,8 +1421,7 @@ impl<'a> Ui<'a> {
         self.canvas.fill_rect(track_rect, fill);
         self.canvas
             .stroke_rect(track_rect, 1, self.theme.knob_outline);
-        self.canvas
-            .fill_rect(fill_rect, self.theme.knob_indicator);
+        self.canvas.fill_rect(fill_rect, self.theme.knob_indicator);
 
         let handle_x = rect.origin.x + (rect.size.width as f32 * t) as i32;
         let handle_center = Point {
@@ -1280,7 +1432,7 @@ impl<'a> Ui<'a> {
         self.canvas
             .fill_circle(handle_center, handle_radius, self.theme.knob_indicator);
 
-        self.layout.cursor.y = rect.origin.y + height + self.layout.spacing;
+        self.layout.cursor.y = rect.origin.y + block_size.height as i32 + self.layout.spacing;
         response
     }
 
@@ -1307,25 +1459,29 @@ impl<'a> Ui<'a> {
         width: i32,
         height: i32,
     ) -> ToggleResponse {
+        let width = width.max(1);
+        let height = height.max(1);
+        let control_size = Size {
+            width: width as u32,
+            height: height as u32,
+        };
+        let block_size = self.toggle_block_size(label, control_size);
         let label_height = 8 * self.theme.text_scale as i32;
         let base = self.layout.cursor;
         let mut rect_origin = base;
         if !label.is_empty() {
-            self.canvas
-                .draw_text(base, label, self.theme.text, self.theme.text_scale);
-            let label_size = text_size(label, self.theme.text_scale);
-            self.track_rect_internal(Rect {
-                origin: base,
-                size: label_size,
-            });
+            let _ = self.draw_text_single_line_clamped(
+                base,
+                label,
+                control_size.width,
+                self.theme.text,
+                true,
+            );
             rect_origin.y += label_height;
         }
         let rect = Rect {
             origin: rect_origin,
-            size: Size {
-                width: width.max(1) as u32,
-                height: height.max(1) as u32,
-            },
+            size: control_size,
         };
         self.track_rect_internal(rect);
         let hovered = rect.contains(self.input.pointer_pos);
@@ -1348,8 +1504,7 @@ impl<'a> Ui<'a> {
             self.theme.knob_fill
         };
         self.canvas.fill_rect(rect, fill);
-        self.canvas
-            .stroke_rect(rect, 1, self.theme.knob_outline);
+        self.canvas.stroke_rect(rect, 1, self.theme.knob_outline);
 
         let thumb_radius = (height / 2).max(3);
         let thumb_x = if *value {
@@ -1364,7 +1519,7 @@ impl<'a> Ui<'a> {
         self.canvas
             .fill_circle(thumb_center, thumb_radius, self.theme.knob_outline);
 
-        self.layout.cursor.y = rect.origin.y + height + self.layout.spacing;
+        self.layout.cursor.y = rect.origin.y + block_size.height as i32 + self.layout.spacing;
         response
     }
 
@@ -1382,19 +1537,16 @@ impl<'a> Ui<'a> {
     }
 
     /// Draw a button with the given label.
-    pub fn button(
-        &mut self,
-        id: WidgetId,
-        label: &str,
-        width: i32,
-        height: i32,
-    ) -> ButtonResponse {
+    pub fn button(&mut self, id: WidgetId, label: &str, width: i32, height: i32) -> ButtonResponse {
+        let width = width.max(1);
+        let height = height.max(1);
+        let control_size = Size {
+            width: width as u32,
+            height: height as u32,
+        };
         let rect = Rect {
             origin: self.layout.cursor,
-            size: Size {
-                width: width.max(1) as u32,
-                height: height.max(1) as u32,
-            },
+            size: control_size,
         };
         self.track_rect_internal(rect);
         let hovered = rect.contains(self.input.pointer_pos);
@@ -1414,15 +1566,18 @@ impl<'a> Ui<'a> {
             self.theme.knob_fill
         };
         self.canvas.fill_rect(rect, fill);
-        self.canvas
-            .stroke_rect(rect, 1, self.theme.knob_outline);
+        self.canvas.stroke_rect(rect, 1, self.theme.knob_outline);
         let text_pos = Point {
             x: rect.origin.x + 4,
-            y: rect.origin.y
-                + (height - (7 * self.theme.text_scale as i32)) / 2,
+            y: rect.origin.y + (height - (7 * self.theme.text_scale as i32)) / 2,
         };
-        self.canvas
-            .draw_text(text_pos, label, self.theme.text, self.theme.text_scale);
+        let _ = self.draw_text_single_line_clamped(
+            text_pos,
+            label,
+            rect.size.width.saturating_sub(8),
+            self.theme.text,
+            false,
+        );
 
         self.layout.cursor.y = rect.origin.y + height + self.layout.spacing;
         response
@@ -1450,26 +1605,30 @@ impl<'a> Ui<'a> {
         width: i32,
         height: i32,
     ) -> DropdownResponse {
+        let width = width.max(1);
+        let height = height.max(1);
+        let control_size = Size {
+            width: width as u32,
+            height: height as u32,
+        };
+        let block_size = self.dropdown_block_size(label, control_size);
         let label_height = 8 * self.theme.text_scale as i32;
         let base = self.layout.cursor;
         let mut rect_origin = base;
         if !label.is_empty() {
-            self.canvas
-                .draw_text(base, label, self.theme.text, self.theme.text_scale);
-            let label_size = text_size(label, self.theme.text_scale);
-            self.track_rect_internal(Rect {
-                origin: base,
-                size: label_size,
-            });
+            let _ = self.draw_text_single_line_clamped(
+                base,
+                label,
+                control_size.width,
+                self.theme.text,
+                true,
+            );
             rect_origin.y += label_height;
         }
 
         let rect = Rect {
             origin: rect_origin,
-            size: Size {
-                width: width.max(1) as u32,
-                height: height.max(1) as u32,
-            },
+            size: control_size,
         };
         self.track_rect_internal(rect);
         let hovered = rect.contains(self.input.pointer_pos);
@@ -1500,16 +1659,19 @@ impl<'a> Ui<'a> {
             self.theme.knob_fill
         };
         self.canvas.fill_rect(rect, fill);
-        self.canvas
-            .stroke_rect(rect, 1, self.theme.knob_outline);
+        self.canvas.stroke_rect(rect, 1, self.theme.knob_outline);
         let current = options.get(*selected).copied().unwrap_or("-");
         let text_pos = Point {
             x: rect.origin.x + 4,
-            y: rect.origin.y
-                + (height - (7 * self.theme.text_scale as i32)) / 2,
+            y: rect.origin.y + (height - (7 * self.theme.text_scale as i32)) / 2,
         };
-        self.canvas
-            .draw_text(text_pos, current, self.theme.text, self.theme.text_scale);
+        let _ = self.draw_text_single_line_clamped(
+            text_pos,
+            current,
+            rect.size.width.saturating_sub(8),
+            self.theme.text,
+            false,
+        );
 
         if response.open {
             let pressed = self.mouse_pressed();
@@ -1558,7 +1720,7 @@ impl<'a> Ui<'a> {
             }
         }
 
-        self.layout.cursor.y = rect.origin.y + height + self.layout.spacing;
+        self.layout.cursor.y = rect.origin.y + block_size.height as i32 + self.layout.spacing;
         response
     }
 
@@ -1637,13 +1799,7 @@ impl<'a> Ui<'a> {
         let previous = *self.layout;
         self.layout.cursor = rect.origin;
         let height = control_size.height.max(1) as i32;
-        let response = self.toggle(
-            id,
-            label,
-            value,
-            rect.size.width.max(1) as i32,
-            height,
-        );
+        let response = self.toggle(id, label, value, rect.size.width.max(1) as i32, height);
         *self.layout = previous;
         response
     }
@@ -1766,8 +1922,7 @@ mod tests {
 
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
-            let response =
-                ui.knob_with_key("attack", "Attack 0.60s", &mut value, (0.0, 1.0));
+            let response = ui.knob_with_key("attack", "Attack 0.60s", &mut value, (0.0, 1.0));
             assert!(response.changed);
         }
     }
@@ -1806,6 +1961,191 @@ mod tests {
     }
 
     #[test]
+    fn knob_labels_are_clamped_to_knob_width() {
+        let mut canvas = Canvas::new(320, 240);
+        let mut layout = Layout::default();
+        let expected_width = layout.knob_size.max(1) as u32;
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState::default();
+        let mut value = 0.5;
+
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let response = ui.panel_with_key(
+            "knob-clamp",
+            PanelStyle {
+                padding: 0,
+                ..PanelStyle::default()
+            },
+            None,
+            |ui, _| {
+                let _ = ui.knob_with_key_labels(
+                    "knob",
+                    "PITCH DEPTHPITCH CURVE",
+                    "100.000000000 HZ",
+                    &mut value,
+                    (0.0, 1.0),
+                );
+            },
+        );
+
+        assert_eq!(response.measured_size.width, expected_width);
+    }
+
+    #[test]
+    fn slider_labels_are_clamped_to_control_width() {
+        let mut canvas = Canvas::new(320, 240);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState::default();
+        let mut value = 0.5;
+        let width = 90;
+        let height = 18;
+
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let response = ui.panel_with_key(
+            "slider-clamp",
+            PanelStyle {
+                padding: 0,
+                ..PanelStyle::default()
+            },
+            None,
+            |ui, _| {
+                let _ = ui.slider(
+                    WidgetId::new(201),
+                    "VERY LONG SLIDER LABEL FOR DENSE LAYOUTS",
+                    &mut value,
+                    (0.0, 1.0),
+                    width,
+                    height,
+                );
+            },
+        );
+
+        assert_eq!(response.measured_size.width, width as u32);
+    }
+
+    #[test]
+    fn toggle_labels_are_clamped_to_control_width() {
+        let mut canvas = Canvas::new(320, 240);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState::default();
+        let mut value = false;
+        let width = 96;
+        let height = 18;
+
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let response = ui.panel_with_key(
+            "toggle-clamp",
+            PanelStyle {
+                padding: 0,
+                ..PanelStyle::default()
+            },
+            None,
+            |ui, _| {
+                let _ = ui.toggle(
+                    WidgetId::new(202),
+                    "VERY LONG TOGGLE LABEL FOR DENSE LAYOUTS",
+                    &mut value,
+                    width,
+                    height,
+                );
+            },
+        );
+
+        assert_eq!(response.measured_size.width, width as u32);
+    }
+
+    #[test]
+    fn dropdown_labels_are_clamped_to_control_width() {
+        let mut canvas = Canvas::new(320, 240);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState::default();
+        let options = ["One", "Two", "Three"];
+        let mut selected = 0usize;
+        let width = 92;
+        let height = 18;
+
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let response = ui.panel_with_key(
+            "dropdown-clamp",
+            PanelStyle {
+                padding: 0,
+                ..PanelStyle::default()
+            },
+            None,
+            |ui, _| {
+                let _ = ui.dropdown(
+                    WidgetId::new(203),
+                    "VERY LONG DROPDOWN LABEL FOR DENSE LAYOUTS",
+                    &options,
+                    &mut selected,
+                    width,
+                    height,
+                );
+            },
+        );
+
+        assert_eq!(response.measured_size.width, width as u32);
+    }
+
+    #[test]
+    fn block_size_helpers_match_rendered_width_contracts() {
+        let mut canvas = Canvas::new(200, 200);
+        let mut layout = Layout::default();
+        let expected_knob_width = layout.knob_size.max(1) as u32;
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState::default();
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+
+        let knob = ui.knob_block_size("Pitch Depth", "100%");
+        assert_eq!(knob.width, expected_knob_width);
+
+        let slider = ui.slider_block_size(
+            "Drive",
+            Size {
+                width: 84,
+                height: 16,
+            },
+        );
+        assert_eq!(slider.width, 84);
+
+        let toggle = ui.toggle_block_size(
+            "Enable",
+            Size {
+                width: 70,
+                height: 18,
+            },
+        );
+        assert_eq!(toggle.width, 70);
+
+        let dropdown = ui.dropdown_block_size(
+            "Mode",
+            Size {
+                width: 112,
+                height: 18,
+            },
+        );
+        assert_eq!(dropdown.width, 112);
+
+        let button = ui.button_block_size(
+            "Apply",
+            Size {
+                width: 88,
+                height: 22,
+            },
+        );
+        assert_eq!(button.width, 88);
+        assert_eq!(button.height, 22);
+    }
+
+    #[test]
     fn slider_updates_value_on_drag() {
         let mut canvas = Canvas::new(200, 200);
         let mut layout = Layout::default();
@@ -1827,8 +2167,7 @@ mod tests {
 
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
-            let response =
-                ui.slider(WidgetId::new(2), "GAIN", &mut value, (0.0, 1.0), 100, 16);
+            let response = ui.slider(WidgetId::new(2), "GAIN", &mut value, (0.0, 1.0), 100, 16);
             assert!(response.changed);
         }
     }
@@ -1871,11 +2210,19 @@ mod tests {
         let theme = Theme::default();
         let mut ui_state = UiState::default();
         let input = InputState::default();
-        let explicit = Size { width: 123, height: 77 };
+        let explicit = Size {
+            width: 123,
+            height: 77,
+        };
 
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
-            ui.root_frame_with_key("root", RootFrameStyle::default(), Some(explicit), |_ui, _| {});
+            ui.root_frame_with_key(
+                "root",
+                RootFrameStyle::default(),
+                Some(explicit),
+                |_ui, _| {},
+            );
         }
 
         let measured = ui_state
@@ -1891,7 +2238,10 @@ mod tests {
         let theme = Theme::default();
         let mut ui_state = UiState::default();
         let input = InputState::default();
-        let explicit = Size { width: 1, height: 1 };
+        let explicit = Size {
+            width: 1,
+            height: 1,
+        };
 
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
@@ -1969,8 +2319,7 @@ mod tests {
         input.pointer_pos = Point { x: 20, y: 70 };
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
-            let response =
-                ui.dropdown(WidgetId::new(5), "Mode", &options, &mut selected, 80, 16);
+            let response = ui.dropdown(WidgetId::new(5), "Mode", &options, &mut selected, 80, 16);
             assert!(response.changed);
             assert_eq!(selected, 1);
         }
@@ -2058,7 +2407,10 @@ mod tests {
         let theme = Theme::default();
         let mut ui_state = UiState::default();
         let input = InputState::default();
-        let explicit = Size { width: 1, height: 1 };
+        let explicit = Size {
+            width: 1,
+            height: 1,
+        };
 
         let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
         let response = ui.panel_with_key(
