@@ -1,6 +1,7 @@
 //! Win32 window creation and message handling.
 
 use crate::canvas::{Canvas, Color, Point, Size};
+use crate::declarative::{render, UiSpec};
 use crate::host::{GuiError, InputState};
 use crate::logging::log_line_safe;
 use crate::renderer::{Renderer, RendererDevice};
@@ -111,8 +112,8 @@ unsafe impl Sync for SurfaceWindow {}
 
 struct WindowState<State, Init, Frame>
 where
-    Init: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
-    Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
+    Init: FnMut(&mut State) + Send + 'static,
+    Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
     State: Send + 'static,
 {
     hwnd: HWND,
@@ -143,8 +144,8 @@ where
 
 impl<State, Init, Frame> WindowState<State, Init, Frame>
 where
-    Init: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
-    Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
+    Init: FnMut(&mut State) + Send + 'static,
+    Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
     State: Send + 'static,
 {
     fn handle_message(&mut self, message: u32, wparam: WPARAM, lparam: LPARAM) -> Option<LRESULT> {
@@ -340,7 +341,7 @@ where
                 &mut self.layout,
                 &self.theme,
             );
-            (self.on_init)(&mut ui, &mut self.state);
+            (self.on_init)(&mut self.state);
             self.initialized = true;
         }
 
@@ -383,7 +384,8 @@ where
             );
             ui.reset_input_consumption();
             ui.clear_overlays();
-            (self.on_frame)(&mut ui, &mut self.state);
+            let mut spec = (self.on_frame)(&self.input, &mut self.state);
+            let _ = render(&mut spec, &mut ui, Point { x: 0, y: 0 }, &mut self.state);
             ui.draw_overlays();
         }
         if let Some(size) = self.ui_state.take_root_frame_size() {
@@ -469,8 +471,8 @@ pub fn spawn_window_thread<State, Init, Frame>(
     theme: Theme,
 ) -> Result<WindowHandle, GuiError>
 where
-    Init: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
-    Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
+    Init: FnMut(&mut State) + Send + 'static,
+    Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
     State: Send + 'static,
 {
     log_line_safe("win32: spawn_window_thread begin (using caller thread)");
@@ -509,8 +511,8 @@ fn create_window_on_thread<State, Init, Frame>(
     theme: Theme,
 ) -> Result<WindowHandle, GuiError>
 where
-    Init: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
-    Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
+    Init: FnMut(&mut State) + Send + 'static,
+    Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
     State: Send + 'static,
 {
     log_line_safe("win32: create_window_on_thread begin");
@@ -666,8 +668,8 @@ where
 
 impl<State, Init, Frame> Drop for WindowState<State, Init, Frame>
 where
-    Init: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
-    Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
+    Init: FnMut(&mut State) + Send + 'static,
+    Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
     State: Send + 'static,
 {
     fn drop(&mut self) {
@@ -684,8 +686,8 @@ unsafe extern "system" fn window_proc<State, Init, Frame>(
     lparam: LPARAM,
 ) -> LRESULT
 where
-    Init: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
-    Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
+    Init: FnMut(&mut State) + Send + 'static,
+    Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
     State: Send + 'static,
 {
     let ptr = unsafe {

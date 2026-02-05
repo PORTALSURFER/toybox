@@ -6,11 +6,7 @@ use raw_window_handle::RawWindowHandle;
 use crate::logging::log_line_safe;
 
 /// Re-export Patchbay GUI types for downstream GUI integrations.
-pub use patchbay_gui::{
-    ButtonResponse, Canvas, Color, DropdownResponse, InputState, KnobResponse, Layout,
-    OpenParentedMode, RegionResponse, RootFrameResponse, RootFrameStyle, SliderResponse, Theme,
-    ToggleResponse, Ui, WidgetId,
-};
+pub use patchbay_gui::{Canvas, Color, InputState, OpenParentedMode, Theme};
 
 /// Wrapper around a Patchbay GUI window for a CLAP editor.
 #[derive(Default)]
@@ -64,10 +60,11 @@ impl GuiHostWindow {
 
     /// Open a parented Patchbay GUI window.
     ///
-    /// The caller supplies the initial state and the GUI update callback. The
-    /// helper handles resize requests and stores the last logical size. This
-    /// recreates the window each call so new state is applied; use
-    /// `open_parented_reuse` to keep an existing window.
+    /// The caller supplies the initial state and a per-frame callback that
+    /// returns a declarative UI spec. The helper handles resize requests and
+    /// stores the last logical size. This recreates the window each call so
+    /// new state is applied; use `open_parented_reuse` to keep an existing
+    /// window.
     pub fn open_parented<State, Init, Frame>(
         &mut self,
         title: String,
@@ -77,8 +74,10 @@ impl GuiHostWindow {
         on_frame: Frame,
     ) -> Result<(), PluginError>
     where
-        Init: FnMut(&mut patchbay_gui::Ui<'_>, &mut State) + Send + 'static,
-        Frame: FnMut(&mut patchbay_gui::Ui<'_>, &mut State) + Send + 'static,
+        Init: FnMut(&mut State) + Send + 'static,
+        Frame: FnMut(&patchbay_gui::InputState, &mut State) -> patchbay_gui::UiSpec<'static, State>
+            + Send
+            + 'static,
         State: Send + 'static,
     {
         self.open_parented_with(
@@ -105,8 +104,10 @@ impl GuiHostWindow {
         on_frame: Frame,
     ) -> Result<(), PluginError>
     where
-        Init: FnMut(&mut patchbay_gui::Ui<'_>, &mut State) + Send + 'static,
-        Frame: FnMut(&mut patchbay_gui::Ui<'_>, &mut State) + Send + 'static,
+        Init: FnMut(&mut State) + Send + 'static,
+        Frame: FnMut(&patchbay_gui::InputState, &mut State) -> patchbay_gui::UiSpec<'static, State>
+            + Send
+            + 'static,
         State: Send + 'static,
     {
         self.open_parented_with(
@@ -130,8 +131,10 @@ impl GuiHostWindow {
         mode: OpenParentedMode,
     ) -> Result<(), PluginError>
     where
-        Init: FnMut(&mut patchbay_gui::Ui<'_>, &mut State) + Send + 'static,
-        Frame: FnMut(&mut patchbay_gui::Ui<'_>, &mut State) + Send + 'static,
+        Init: FnMut(&mut State) + Send + 'static,
+        Frame: FnMut(&patchbay_gui::InputState, &mut State) -> patchbay_gui::UiSpec<'static, State>
+            + Send
+            + 'static,
         State: Send + 'static,
     {
         log_line_safe(&format!(
@@ -139,7 +142,14 @@ impl GuiHostWindow {
             title, size.0, size.1
         ));
         self.inner
-            .open_parented_with(title, size, state, on_init, on_frame, mode)
+            .open_parented_with(
+                title,
+                size,
+                state,
+                on_init,
+                on_frame,
+                mode,
+            )
             .map_err(map_gui_error)
     }
 }

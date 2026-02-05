@@ -1,7 +1,8 @@
 //! Host window management and input plumbing for Patchbay GUI.
 
 use crate::canvas::Size;
-use crate::ui::{Layout, Theme, Ui, UiState};
+use crate::declarative::UiSpec;
+use crate::ui::{Layout, Theme, UiState};
 use crate::win32::{spawn_window_thread, WindowHandle};
 use crate::renderer::RendererDevice;
 use raw_window_handle::RawWindowHandle;
@@ -162,8 +163,8 @@ impl HostWindow {
     /// Open a parented Patchbay GUI window.
     ///
     /// The caller supplies initial state plus callbacks for initialization and
-    /// per-frame rendering. If a matching window is already open, this reuses
-    /// it and ignores the new state.
+    /// per-frame declarative rendering. If a matching window is already open,
+    /// this reuses it and ignores the new state.
     pub fn open_parented<State, Init, Frame>(
         &mut self,
         title: String,
@@ -173,8 +174,8 @@ impl HostWindow {
         mut on_frame: Frame,
     ) -> Result<(), GuiError>
     where
-        Init: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
-        Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
+        Init: FnMut(&mut State) + Send + 'static,
+        Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
         State: Send + 'static,
     {
         self.open_parented_with(
@@ -203,8 +204,8 @@ impl HostWindow {
         mode: OpenParentedMode,
     ) -> Result<(), GuiError>
     where
-        Init: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
-        Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
+        Init: FnMut(&mut State) + Send + 'static,
+        Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
         State: Send + 'static,
     {
         let parent = self.parent.ok_or(GuiError::NoParent)?;
@@ -244,12 +245,10 @@ impl HostWindow {
                 height: size.1,
             },
             state,
-            move |ui, state| {
-                on_init(ui, state);
+            move |state| {
+                on_init(state);
             },
-            move |ui, state| {
-                on_frame(ui, state);
-            },
+            move |input, state| on_frame(input, state),
             device_cache,
             resize_request,
             last_size,
