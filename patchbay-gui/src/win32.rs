@@ -33,9 +33,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
     LoadCursorW, RegisterClassW, SendMessageW, SetTimer, SetWindowLongPtrW, SetWindowPos, ShowWindow,
     CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA, HMENU, SWP_NOZORDER, SW_HIDE,
     SW_SHOW, WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN,
-    WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_RBUTTONDOWN,
-    WM_RBUTTONUP, WM_SIZE, WM_TIMER, WM_CHAR, WNDCLASSW, WS_CHILD,
-    WS_CLIPSIBLINGS, WS_CLIPCHILDREN, WS_VISIBLE,
+    WM_LBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_NCHITTEST,
+    WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WM_TIMER, WM_CHAR, WNDCLASSW, WS_CHILD,
+    WS_CLIPSIBLINGS, WS_CLIPCHILDREN, WS_VISIBLE, HTCLIENT, MA_ACTIVATE,
 };
 
 const TIMER_ID: usize = 1;
@@ -147,25 +147,33 @@ where
     Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
     State: Send + 'static,
 {
-    fn handle_message(&mut self, message: u32, wparam: WPARAM, lparam: LPARAM) -> bool {
+    fn handle_message(&mut self, message: u32, wparam: WPARAM, lparam: LPARAM) -> Option<LRESULT> {
         match message {
             WM_SIZE => {
                 self.on_resize();
-                true
+                Some(LRESULT(0))
+            }
+            WM_NCHITTEST => {
+                // Always treat the plugin surface as client area so it consumes mouse input.
+                Some(LRESULT(HTCLIENT as isize))
+            }
+            WM_MOUSEACTIVATE => {
+                // Activate the window and consume the click within the plugin surface.
+                Some(LRESULT(MA_ACTIVATE as isize))
             }
             WM_MOUSEMOVE => {
                 let x = (lparam.0 & 0xFFFF) as i16 as i32;
                 let y = ((lparam.0 >> 16) & 0xFFFF) as i16 as i32;
                 self.input.pointer_pos = Point { x, y };
                 self.render_frame();
-                true
+                Some(LRESULT(0))
             }
             WM_LBUTTONDOWN => {
                 self.input.mouse_down = true;
                 self.input.mouse_pressed = true;
                 unsafe { SetCapture(self.hwnd) };
                 self.render_frame();
-                true
+                Some(LRESULT(0))
             }
             WM_LBUTTONDBLCLK => {
                 self.input.mouse_double_clicked = true;
@@ -173,7 +181,7 @@ where
                 self.input.mouse_pressed = true;
                 unsafe { SetCapture(self.hwnd) };
                 self.render_frame();
-                true
+                Some(LRESULT(0))
             }
             WM_LBUTTONUP => {
                 self.input.mouse_down = false;
@@ -182,25 +190,29 @@ where
                     let _ = ReleaseCapture();
                 }
                 self.render_frame();
-                true
+                Some(LRESULT(0))
             }
             WM_RBUTTONDOWN => {
                 self.input.mouse_secondary_down = true;
                 self.input.mouse_secondary_pressed = true;
+                unsafe { SetCapture(self.hwnd) };
                 self.render_frame();
-                true
+                Some(LRESULT(0))
             }
             WM_RBUTTONUP => {
                 self.input.mouse_secondary_down = false;
                 self.input.mouse_secondary_released = true;
+                unsafe {
+                    let _ = ReleaseCapture();
+                }
                 self.render_frame();
-                true
+                Some(LRESULT(0))
             }
             WM_MOUSEWHEEL => {
                 let delta = ((wparam.0 >> 16) & 0xFFFF) as i16 as f32 / 120.0;
                 self.input.wheel_delta += delta;
                 self.render_frame();
-                true
+                Some(LRESULT(0))
             }
             WM_DROPFILES => {
                 let hdrop = HDROP(wparam.0 as *mut _);
@@ -209,7 +221,7 @@ where
                     DragFinish(hdrop);
                 }
                 self.render_frame();
-                true
+                Some(LRESULT(0))
             }
             WM_CHAR => {
                 let code = (wparam.0 & 0xFFFF) as u16;
@@ -217,7 +229,7 @@ where
                     self.input.key_pressed = Some(ch);
                 }
                 self.render_frame();
-                true
+                Some(LRESULT(0))
             }
             WM_PAINT => {
                 unsafe {
@@ -227,14 +239,14 @@ where
                     EndPaint(self.hwnd, &paint);
                 }
                 self.render_frame();
-                true
+                Some(LRESULT(0))
             }
             WM_TIMER => {
                 if wparam.0 == TIMER_ID {
                     self.render_frame();
-                    true
+                    Some(LRESULT(0))
                 } else {
-                    false
+                    None
                 }
             }
             WM_ERASEBKGND => {
@@ -253,10 +265,10 @@ where
                         let _ = ReleaseDC(Some(self.hwnd), hdc);
                     }
                 }
-                true
+                Some(LRESULT(0))
             }
-            WM_DESTROY => true,
-            _ => false,
+            WM_DESTROY => Some(LRESULT(0)),
+            _ => None,
         }
     }
 
@@ -667,8 +679,8 @@ where
     };
     if ptr != 0 {
         let state = unsafe { &mut *(ptr as *mut WindowState<State, Init, Frame>) };
-        if state.handle_message(message, wparam, lparam) {
-            return LRESULT(0);
+        if let Some(result) = state.handle_message(message, wparam, lparam) {
+            return result;
         }
     }
 
