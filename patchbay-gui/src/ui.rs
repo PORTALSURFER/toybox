@@ -7,6 +7,8 @@ use crate::host::InputState;
 
 /// Default rendered knob diameter in pixels for declarative and immediate UIs.
 pub(crate) const DEFAULT_KNOB_DIAMETER: i32 = 64;
+/// Horizontal padding reserved around knob circles and arc rings in block layouts.
+const KNOB_BLOCK_SIDE_PADDING: i32 = 8;
 
 /// Unique identifier for widgets across frames.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -528,14 +530,16 @@ impl<'a> Ui<'a> {
 
     /// Return the rendered footprint for a knob block at the current theme scale.
     ///
-    /// The name and value labels are single-line and clamped to the knob width,
-    /// so the returned width is always the current knob diameter.
+    /// The name and value labels are single-line and clamped to the knob block
+    /// width, and the width includes ring/indicator padding so adjacent knobs in
+    /// grid layouts do not overlap visually or interactively.
     pub fn knob_block_size(&self, _name_label: &str, _value_label: &str) -> Size {
         let knob_diameter = self.layout.knob_size.max(1) as u32;
         let label_height = 8 * self.theme.text_scale.max(1);
         let label_gap = 4 * self.theme.text_scale.max(1);
+        let padded_width = knob_diameter + (KNOB_BLOCK_SIDE_PADDING.max(0) * 2) as u32;
         Size {
-            width: knob_diameter,
+            width: padded_width,
             height: knob_diameter + label_height * 2 + label_gap * 2,
         }
     }
@@ -1119,8 +1123,9 @@ impl<'a> Ui<'a> {
         let block_size = self.knob_block_size(name_label, value_label);
         let label_height = 8 * self.theme.text_scale as i32;
         let label_gap = 4 * self.theme.text_scale as i32;
+        let knob_x_offset = ((block_size.width as i32 - knob_size) / 2).max(0);
         let knob_origin = Point {
-            x: self.layout.cursor.x,
+            x: self.layout.cursor.x + knob_x_offset,
             y: self.layout.cursor.y + label_height + label_gap,
         };
         let knob_rect = Rect {
@@ -1130,13 +1135,23 @@ impl<'a> Ui<'a> {
                 height: knob_size as u32,
             },
         };
-        self.track_rect_internal(knob_rect);
+        let hit_rect = Rect {
+            origin: Point {
+                x: knob_rect.origin.x - KNOB_BLOCK_SIDE_PADDING,
+                y: knob_rect.origin.y - KNOB_BLOCK_SIDE_PADDING,
+            },
+            size: Size {
+                width: (knob_size + KNOB_BLOCK_SIDE_PADDING * 2).max(1) as u32,
+                height: (knob_size + KNOB_BLOCK_SIDE_PADDING * 2).max(1) as u32,
+            },
+        };
+        self.track_rect_internal(hit_rect);
         let center = Point {
             x: knob_rect.origin.x + knob_size / 2,
             y: knob_rect.origin.y + knob_size / 2,
         };
         let radius = (knob_size / 2 - 4).max(1);
-        let hovered = knob_rect.contains(self.input.pointer_pos);
+        let hovered = hit_rect.contains(self.input.pointer_pos);
         if hovered {
             self.state.hot = Some(id);
         }
@@ -1964,7 +1979,7 @@ mod tests {
     fn knob_labels_are_clamped_to_knob_width() {
         let mut canvas = Canvas::new(320, 240);
         let mut layout = Layout::default();
-        let expected_width = layout.knob_size.max(1) as u32;
+        let expected_width = (layout.knob_size.max(1) + KNOB_BLOCK_SIDE_PADDING * 2).max(1) as u32;
         let theme = Theme::default();
         let mut ui_state = UiState::default();
         let input = InputState::default();
@@ -2098,7 +2113,8 @@ mod tests {
     fn block_size_helpers_match_rendered_width_contracts() {
         let mut canvas = Canvas::new(200, 200);
         let mut layout = Layout::default();
-        let expected_knob_width = layout.knob_size.max(1) as u32;
+        let expected_knob_width =
+            (layout.knob_size.max(1) + KNOB_BLOCK_SIDE_PADDING * 2).max(1) as u32;
         let theme = Theme::default();
         let mut ui_state = UiState::default();
         let input = InputState::default();
