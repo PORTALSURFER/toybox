@@ -2,9 +2,9 @@
 
 use crate::canvas::Size;
 use crate::declarative::UiSpec;
+use crate::renderer::RendererDevice;
 use crate::ui::{Layout, Theme, UiState};
 use crate::win32::{spawn_window_thread, WindowHandle};
-use crate::renderer::RendererDevice;
 use raw_window_handle::RawWindowHandle;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -29,6 +29,10 @@ pub struct InputState {
     pub mouse_secondary_pressed: bool,
     /// Whether the secondary mouse button was released this frame.
     pub mouse_secondary_released: bool,
+    /// Whether either Shift key is currently held.
+    pub shift_down: bool,
+    /// Whether either Alt key is currently held.
+    pub alt_down: bool,
     /// Scroll delta for this frame (positive = up).
     pub wheel_delta: f32,
     /// Key press captured this frame (ASCII).
@@ -161,7 +165,9 @@ impl HostWindow {
 
     /// Set a desired aspect ratio for host-driven resizing.
     pub fn set_aspect_ratio(&mut self, ratio: Option<f32>) {
-        let bits = ratio.filter(|value| value.is_finite() && *value > 0.0).unwrap_or(0.0);
+        let bits = ratio
+            .filter(|value| value.is_finite() && *value > 0.0)
+            .unwrap_or(0.0);
         self.aspect_ratio.store(bits.to_bits(), Ordering::Release);
     }
 
@@ -219,9 +225,7 @@ impl HostWindow {
     {
         let parent = self.parent.ok_or(GuiError::NoParent)?;
         let (parent_hwnd, parent_hinstance) = match parent {
-            RawWindowHandle::Win32(handle) => {
-                (handle.hwnd as isize, handle.hinstance as isize)
-            }
+            RawWindowHandle::Win32(handle) => (handle.hwnd as isize, handle.hinstance as isize),
             _ => return Err(GuiError::UnsupportedHandle),
         };
         if let Some(handle) = &self.handle {

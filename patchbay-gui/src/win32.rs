@@ -24,19 +24,22 @@ use windows::Win32::Graphics::Gdi::{
     BeginPaint, CreateSolidBrush, DeleteObject, EndPaint, FillRect, GetDC, ReleaseDC, HBRUSH, HDC,
     PAINTSTRUCT,
 };
-use windows::Win32::System::LibraryLoader::{GetModuleHandleExW, GetModuleHandleW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS};
-use windows::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDROP};
-use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, ReleaseCapture, SetCapture, VK_LBUTTON, VK_RBUTTON,
+use windows::Win32::System::LibraryLoader::{
+    GetModuleHandleExW, GetModuleHandleW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
 };
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    GetAsyncKeyState, ReleaseCapture, SetCapture, VK_LBUTTON, VK_MENU, VK_RBUTTON, VK_SHIFT,
+};
+use windows::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDROP};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, GetCursorPos, GetParent, GetWindowRect,
-    LoadCursorW, RegisterClassW, SendMessageW, SetTimer, SetWindowLongPtrW, SetWindowPos, ShowWindow,
-    CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA, HMENU, SWP_NOZORDER, SW_HIDE,
-    SW_SHOW, WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN,
-    WM_LBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_NCHITTEST,
-    WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WM_TIMER, WM_CHAR, WNDCLASSW, WS_CHILD,
-    WS_CLIPSIBLINGS, WS_CLIPCHILDREN, WS_VISIBLE, HTCLIENT, MA_ACTIVATE,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, GetCursorPos, GetParent,
+    GetWindowRect, LoadCursorW, RegisterClassW, SendMessageW, SetTimer, SetWindowLongPtrW,
+    SetWindowPos, ShowWindow, CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA,
+    HMENU, HTCLIENT, MA_ACTIVATE, SWP_NOZORDER, SW_HIDE, SW_SHOW, WM_CHAR, WM_DESTROY,
+    WM_DROPFILES, WM_ERASEBKGND, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEACTIVATE,
+    WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_NCHITTEST, WM_PAINT, WM_RBUTTONDOWN,
+    WM_RBUTTONUP, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
+    WS_VISIBLE,
 };
 
 const TIMER_ID: usize = 1;
@@ -300,7 +303,10 @@ where
 
         let mut client_rect = windows::Win32::Foundation::RECT::default();
         if unsafe { GetClientRect(self.hwnd, &mut client_rect) }.is_err() {
-            self.input.pointer_pos = Point { x: local_x, y: local_y };
+            self.input.pointer_pos = Point {
+                x: local_x,
+                y: local_y,
+            };
             return;
         }
         let client_width = (client_rect.right - client_rect.left).max(1) as i32;
@@ -318,6 +324,8 @@ where
     fn sync_mouse_buttons(&mut self) {
         let primary_now = unsafe { GetAsyncKeyState(VK_LBUTTON.0 as i32) } < 0;
         let secondary_now = unsafe { GetAsyncKeyState(VK_RBUTTON.0 as i32) } < 0;
+        let shift_now = unsafe { GetAsyncKeyState(VK_SHIFT.0 as i32) } < 0;
+        let alt_now = unsafe { GetAsyncKeyState(VK_MENU.0 as i32) } < 0;
 
         self.input.mouse_pressed = primary_now && !self.last_mouse_down;
         self.input.mouse_released = !primary_now && self.last_mouse_down;
@@ -326,6 +334,8 @@ where
         self.input.mouse_secondary_pressed = secondary_now && !self.last_mouse_secondary_down;
         self.input.mouse_secondary_released = !secondary_now && self.last_mouse_secondary_down;
         self.input.mouse_secondary_down = secondary_now;
+        self.input.shift_down = shift_now;
+        self.input.alt_down = alt_now;
 
         self.last_mouse_down = primary_now;
         self.last_mouse_secondary_down = secondary_now;
@@ -345,8 +355,7 @@ where
             self.initialized = true;
         }
 
-        if let Some((width, height)) = unpack_size(self.resize_request.swap(0, Ordering::AcqRel))
-        {
+        if let Some((width, height)) = unpack_size(self.resize_request.swap(0, Ordering::AcqRel)) {
             let mut width = width;
             let mut height = height;
             let aspect_bits = self.aspect_ratio.load(Ordering::Relaxed);
@@ -395,7 +404,9 @@ where
                     .store(pack_size(size.width, size.height), Ordering::Release);
             }
         } else if !self.ui_state.root_frame_used() && !self.logged_missing_root_frame {
-            log_line_safe("win32: warning: no root frame drawn in frame; window auto-resize skipped");
+            log_line_safe(
+                "win32: warning: no root frame drawn in frame; window auto-resize skipped",
+            );
             self.logged_missing_root_frame = true;
         }
         if self.debug_input {
@@ -412,7 +423,8 @@ where
                 .draw_text(Point { x: 6, y: 6 }, &text, self.theme.text, 1);
         }
 
-        self.renderer.upload(self.canvas.size(), self.canvas.pixels());
+        self.renderer
+            .upload(self.canvas.size(), self.canvas.pixels());
         let render_ok = self.renderer.render().is_ok();
         if !self.shown && render_ok {
             if self.prewarm_frames > 0 {
@@ -560,8 +572,7 @@ where
             lpfnWndProc: Some(window_proc::<State, Init, Frame>),
             hInstance: module_hinstance,
             lpszClassName: PCWSTR(class_name.as_ptr()),
-            hCursor: LoadCursorW(None, windows::Win32::UI::WindowsAndMessaging::IDC_ARROW)
-                .unwrap(),
+            hCursor: LoadCursorW(None, windows::Win32::UI::WindowsAndMessaging::IDC_ARROW).unwrap(),
             hbrBackground: HBRUSH(std::ptr::null_mut()),
             ..Default::default()
         };
@@ -610,7 +621,9 @@ where
     };
     log_line_safe("win32: creating renderer");
     let renderer_device = {
-        let mut cache = device_cache.lock().map_err(|_| GuiError::DeviceCachePoison)?;
+        let mut cache = device_cache
+            .lock()
+            .map_err(|_| GuiError::DeviceCachePoison)?;
         if let Some(device) = cache.as_ref() {
             Arc::clone(device)
         } else {
@@ -690,9 +703,8 @@ where
     Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
     State: Send + 'static,
 {
-    let ptr = unsafe {
-        windows::Win32::UI::WindowsAndMessaging::GetWindowLongPtrW(hwnd, GWLP_USERDATA)
-    };
+    let ptr =
+        unsafe { windows::Win32::UI::WindowsAndMessaging::GetWindowLongPtrW(hwnd, GWLP_USERDATA) };
     if ptr != 0 {
         let state = unsafe { &mut *(ptr as *mut WindowState<State, Init, Frame>) };
         if let Some(result) = state.handle_message(message, wparam, lparam) {
