@@ -46,6 +46,11 @@ pub enum OpenParentedMode {
     Recreate,
 }
 
+const DEFAULT_WINDOW_SIZE: Size = Size {
+    width: 640,
+    height: 360,
+};
+
 /// Errors returned by the Patchbay GUI system.
 #[derive(thiserror::Error, Debug)]
 pub enum GuiError {
@@ -163,12 +168,14 @@ impl HostWindow {
     /// Open a parented Patchbay GUI window.
     ///
     /// The caller supplies initial state plus callbacks for initialization and
-    /// per-frame declarative rendering. If a matching window is already open,
-    /// this reuses it and ignores the new state.
+    /// per-frame declarative rendering. The `size` argument is ignored and the
+    /// window uses the internal default size before auto-resizing to the root
+    /// frame measurement. If a matching window is already open, this reuses it
+    /// and ignores the new state.
     pub fn open_parented<State, Init, Frame>(
         &mut self,
         title: String,
-        size: (u32, u32),
+        _size: (u32, u32),
         state: State,
         mut on_init: Init,
         mut on_frame: Frame,
@@ -180,7 +187,7 @@ impl HostWindow {
     {
         self.open_parented_with(
             title,
-            size,
+            DEFAULT_WINDOW_SIZE,
             state,
             on_init,
             on_frame,
@@ -191,13 +198,15 @@ impl HostWindow {
     /// Open a parented Patchbay GUI window with explicit reuse policy.
     ///
     /// When `mode` is [`OpenParentedMode::ReuseIfOpen`], a matching window is
-    /// shown and resized, and the new state/callbacks are ignored. When
-    /// `mode` is [`OpenParentedMode::Recreate`], any existing window is
-    /// destroyed and a new one is created with the provided state.
+    /// shown, and the new state/callbacks are ignored. When `mode` is
+    /// [`OpenParentedMode::Recreate`], any existing window is destroyed and a
+    /// new one is created with the provided state. The `size` argument is used
+    /// as the initial window size; the declarative root frame will still drive
+    /// auto-resizing.
     pub fn open_parented_with<State, Init, Frame>(
         &mut self,
         title: String,
-        size: (u32, u32),
+        size: Size,
         state: State,
         mut on_init: Init,
         mut on_frame: Frame,
@@ -218,7 +227,6 @@ impl HostWindow {
         if let Some(handle) = &self.handle {
             if handle.is_valid() && handle.parent_matches(parent_hwnd) {
                 if mode == OpenParentedMode::ReuseIfOpen {
-                    self.request_resize(size.0, size.1);
                     self.show();
                     return Ok(());
                 }
@@ -240,10 +248,7 @@ impl HostWindow {
             parent_hwnd,
             parent_hinstance,
             title,
-            Size {
-                width: size.0,
-                height: size.1,
-            },
+            size,
             state,
             move |state| {
                 on_init(state);
