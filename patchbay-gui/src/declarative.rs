@@ -358,8 +358,6 @@ pub struct RegionEvent {
     pub response: RegionResponse,
 }
 
-const DEFAULT_KNOB_SIZE: u32 = 64;
-
 /// Measure the required size for a UI specification.
 pub fn measure<C>(spec: &UiSpec<'_, C>, theme: &Theme) -> Size {
     validate_panel_only(&spec.root.content, false);
@@ -581,9 +579,9 @@ fn measure_knob<C>(knob: &KnobSpec<'_, C>, theme: &Theme) -> Size {
         .clone()
         .unwrap_or_else(|| format_knob_value(knob.value));
     let value_size = text_size(&value_label, theme.text_scale);
-    let knob_size = DEFAULT_KNOB_SIZE as i32;
-    let width = label_size.width.max(value_size.width).max(knob_size as u32);
-    let height = knob_size as u32 + (label_height * 2 + label_gap * 2).max(0) as u32;
+    let knob_diameter = crate::ui::DEFAULT_KNOB_DIAMETER.max(1) as u32;
+    let width = label_size.width.max(value_size.width).max(knob_diameter);
+    let height = knob_diameter + (label_height * 2 + label_gap * 2).max(0) as u32;
     clamp_size_spec(knob.size, Size { width, height })
 }
 
@@ -1154,6 +1152,47 @@ mod tests {
         assert_eq!(rect.origin.y, 0);
         assert_eq!(rect.size.width, 20);
         assert_eq!(rect.size.height, 10);
+    }
+
+    #[test]
+    fn knob_measurement_matches_default_knob_diameter_contract() {
+        let label = "PITCH COUPLING";
+        let value_label = "100%";
+        let spec = UiSpec {
+            root: RootFrameSpec {
+                key: "root".to_string(),
+                title: None,
+                padding: 0,
+                content: Box::new(Node::Panel(PanelSpec {
+                    key: "panel".to_string(),
+                    title: None,
+                    padding: 0,
+                    background: None,
+                    outline: None,
+                    header_height: None,
+                    size: SizeSpec::Auto,
+                    content: Box::new(Node::Knob(KnobSpec {
+                        key: "knob".to_string(),
+                        label: label.to_string(),
+                        value_label: Some(value_label.to_string()),
+                        value: 0.5,
+                        range: (0.0, 1.0),
+                        size: SizeSpec::Auto,
+                        on_interaction: None,
+                    })),
+                })),
+            },
+        };
+        let theme = Theme::default();
+        let size = measure(&spec, &theme);
+        let expected_width = text_size(label, theme.text_scale)
+            .width
+            .max(text_size(value_label, theme.text_scale).width)
+            .max(crate::ui::DEFAULT_KNOB_DIAMETER as u32);
+        let expected_height = crate::ui::DEFAULT_KNOB_DIAMETER as u32
+            + (8 * theme.text_scale as i32 * 2 + 4 * theme.text_scale as i32 * 2).max(0) as u32;
+        assert_eq!(size.width, expected_width);
+        assert_eq!(size.height, expected_height);
     }
 
     #[test]

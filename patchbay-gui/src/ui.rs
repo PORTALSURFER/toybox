@@ -5,6 +5,9 @@ use std::collections::HashMap;
 use crate::canvas::{Canvas, Color, Point, Rect, Size};
 use crate::host::InputState;
 
+/// Default rendered knob diameter in pixels for declarative and immediate UIs.
+pub(crate) const DEFAULT_KNOB_DIAMETER: i32 = 64;
+
 /// Unique identifier for widgets across frames.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct WidgetId(u64);
@@ -145,7 +148,7 @@ impl Default for Layout {
             cursor: Point { x: 16, y: 16 },
             column_width: 180,
             spacing: 18,
-            knob_size: 64,
+            knob_size: DEFAULT_KNOB_DIAMETER,
         }
     }
 }
@@ -983,7 +986,7 @@ impl<'a> Ui<'a> {
             x: knob_rect.origin.x + knob_size / 2,
             y: knob_rect.origin.y + knob_size / 2,
         };
-        let radius = knob_size / 2 - 4;
+        let radius = (knob_size / 2 - 4).max(1);
         let hovered = knob_rect.contains(self.input.pointer_pos);
         if hovered {
             self.state.hot = Some(id);
@@ -1585,10 +1588,15 @@ impl<'a> Ui<'a> {
         let previous = *self.layout;
         let label_height = 8 * self.theme.text_scale as i32;
         let label_gap = 4 * self.theme.text_scale as i32;
-        let knob_size =
-            (rect.size.height as i32 - label_height * 2 - label_gap * 2).max(1);
+        // Keep knob rendering bounded to the default diameter so measured and
+        // rendered footprints remain consistent in dense declarative layouts.
+        let available_height = (rect.size.height as i32 - label_height * 2 - label_gap * 2).max(1);
+        let knob_size = DEFAULT_KNOB_DIAMETER
+            .min(rect.size.width as i32)
+            .min(available_height)
+            .max(1);
         self.layout.cursor = rect.origin;
-        self.layout.knob_size = knob_size.min(rect.size.width as i32);
+        self.layout.knob_size = knob_size;
         let response = self.knob_with_labels(id, name_label, value_label, value, range);
         *self.layout = previous;
         response
@@ -1762,6 +1770,39 @@ mod tests {
                 ui.knob_with_key("attack", "Attack 0.60s", &mut value, (0.0, 1.0));
             assert!(response.changed);
         }
+    }
+
+    #[test]
+    fn knob_in_rect_does_not_expand_beyond_default_diameter() {
+        let mut canvas = Canvas::new(260, 260);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let mut value = 0.5;
+        let mut input = InputState::default();
+        input.pointer_pos = Point { x: 24, y: 150 };
+
+        let rect = Rect {
+            origin: Point { x: 0, y: 0 },
+            size: Size {
+                width: 200,
+                height: 220,
+            },
+        };
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let response = ui.knob_with_labels_in_rect(
+            WidgetId::new(77),
+            "GAIN",
+            "50%",
+            &mut value,
+            (0.0, 1.0),
+            rect,
+        );
+
+        assert!(
+            !response.hovered,
+            "pointer should be below a default-sized knob, even in a tall rect"
+        );
     }
 
     #[test]
