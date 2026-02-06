@@ -22,11 +22,11 @@ mod win32;
 pub use crate::canvas::{Canvas, Color, Point, Rect, Size};
 pub use crate::declarative::{
     AbsoluteChild, AbsoluteSpec, Align, ButtonSpec, ColorTokens, ControlTokens, DeclarativeError,
-    DropdownSpec, EdgeInsets, FlexSpec, GridSpec, GridTemplate, IndicatorSpec, Justify, KnobSpec,
-    LabelSpec, LayoutBox, Length, Node, PanelSpec, RegionInteractionKind, RegionSpec, RenderResult,
-    RootFrameSpec, SliderSpec, SpacingTokens, ThemeTokens, ToggleSpec, TrackSize, TypographyTokens,
-    UiAction, UiSpec, button, column, dropdown, grid, indicator, knob, label, measure_checked,
-    panel, region, render_checked, row, slider, spacer, toggle,
+    DrawCommand, DropdownSpec, EdgeInsets, FlexSpec, GridSpec, GridTemplate, IndicatorSpec,
+    Justify, KnobSpec, LabelSpec, LayoutBox, Length, Node, PanelSpec, RegionInteractionKind,
+    RegionSpec, RenderResult, RootFrameSpec, SliderSpec, SpacingTokens, ThemeTokens, ToggleSpec,
+    TrackSize, TypographyTokens, UiAction, UiSpec, button, column, dropdown, grid, indicator, knob,
+    label, measure_checked, panel, region, render_checked, row, slider, spacer, toggle,
 };
 #[cfg(not(target_os = "windows"))]
 pub use crate::host::WindowHandle;

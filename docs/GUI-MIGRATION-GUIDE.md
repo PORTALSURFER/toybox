@@ -15,7 +15,7 @@ This guide describes how to migrate plugin UIs from legacy callback-style declar
 | `RootFrameSpec { size: SizeSpec::... }` | `RootFrameSpec::new(...).layout(LayoutBox::...)` |
 | `PanelSpec { size: SizeSpec::... }` | `PanelSpec::new(...).layout(LayoutBox::...)` |
 | `FlexSpec { size: SizeSpec::..., padding: Padding::... }` | `FlexSpec::row/column(...).layout(...).pad_all/pad_xy(...)` |
-| `Node::Widget(WidgetSpec { render: ... })` | Compose built-in nodes (`Label`, `Knob`, `Slider`, `Toggle`, `Button`, `Dropdown`, `Region`, `Grid`, `Panel`) |
+| `Node::Widget(WidgetSpec { render: ... })` | Compose built-in nodes (`Label`, `Knob`, `Slider`, `Toggle`, `Button`, `Dropdown`, `Region`, `Grid`, `Panel`) and use `RegionSpec::draw_commands(...)` for custom drawing |
 | `ButtonSpec::on_interaction` | `UiAction::ButtonPressed` in reducer |
 | `DropdownSpec::on_interaction` | `UiAction::DropdownSelected` in reducer |
 | `KnobSpec::on_interaction` | `UiAction::KnobChanged` in reducer |

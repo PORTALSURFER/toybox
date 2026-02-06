@@ -122,6 +122,67 @@ pub enum UiAction {
     },
 }
 
+/// Declarative drawing command for region rendering.
+#[derive(Clone, Debug, PartialEq)]
+pub enum DrawCommand {
+    /// Fill a rectangle at a region-relative position.
+    FillRect {
+        /// Region-relative rectangle.
+        rect: Rect,
+        /// Fill color.
+        color: Color,
+    },
+    /// Stroke a rectangle at a region-relative position.
+    StrokeRect {
+        /// Region-relative rectangle.
+        rect: Rect,
+        /// Stroke thickness in pixels.
+        thickness: u32,
+        /// Stroke color.
+        color: Color,
+    },
+    /// Fill a circle at a region-relative center.
+    FillCircle {
+        /// Region-relative center point.
+        center: Point,
+        /// Circle radius in pixels.
+        radius: i32,
+        /// Fill color.
+        color: Color,
+    },
+    /// Stroke a circle at a region-relative center.
+    StrokeCircle {
+        /// Region-relative center point.
+        center: Point,
+        /// Circle radius in pixels.
+        radius: i32,
+        /// Stroke thickness in pixels.
+        thickness: i32,
+        /// Stroke color.
+        color: Color,
+    },
+    /// Draw a line between two region-relative points.
+    Line {
+        /// Region-relative start point.
+        start: Point,
+        /// Region-relative end point.
+        end: Point,
+        /// Line color.
+        color: Color,
+    },
+    /// Draw text at a region-relative origin.
+    Text {
+        /// Region-relative text origin.
+        origin: Point,
+        /// Text content.
+        text: String,
+        /// Text color.
+        color: Color,
+        /// Bitmap text scale.
+        scale: u32,
+    },
+}
+
 /// Specific region interaction type.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RegionInteractionKind {
@@ -1240,6 +1301,8 @@ pub struct RegionSpec {
     pub key: String,
     /// Region size.
     pub size: Size,
+    /// Region-relative draw commands rendered before interaction handling.
+    pub draw: Vec<DrawCommand>,
 }
 
 impl RegionSpec {
@@ -1248,7 +1311,14 @@ impl RegionSpec {
         Self {
             key: key.into(),
             size,
+            draw: Vec::new(),
         }
+    }
+
+    /// Override region draw commands.
+    pub fn draw_commands(mut self, draw: Vec<DrawCommand>) -> Self {
+        self.draw = draw;
+        self
     }
 }
 
@@ -2457,8 +2527,70 @@ fn render_dropdown(
 
 /// Render a region node and emit interaction actions.
 fn render_region(region: &RegionSpec, rect: Rect, ui: &mut Ui<'_>, actions: &mut Vec<UiAction>) {
+    render_region_draw_commands(&region.draw, rect, ui);
     let response = ui.region_with_key(&region.key, rect);
     push_region_actions(&region.key, response, actions);
+}
+
+/// Render region-local drawing commands into absolute canvas coordinates.
+fn render_region_draw_commands(commands: &[DrawCommand], rect: Rect, ui: &mut Ui<'_>) {
+    for command in commands {
+        match command {
+            DrawCommand::FillRect { rect: local, color } => {
+                ui.canvas()
+                    .fill_rect(offset_rect(*local, rect.origin), *color);
+            }
+            DrawCommand::StrokeRect {
+                rect: local,
+                thickness,
+                color,
+            } => {
+                ui.canvas()
+                    .stroke_rect(offset_rect(*local, rect.origin), *thickness, *color);
+            }
+            DrawCommand::FillCircle {
+                center,
+                radius,
+                color,
+            } => {
+                ui.canvas()
+                    .fill_circle(offset_point(*center, rect.origin), *radius, *color);
+            }
+            DrawCommand::StrokeCircle {
+                center,
+                radius,
+                thickness,
+                color,
+            } => {
+                ui.canvas().stroke_circle(
+                    offset_point(*center, rect.origin),
+                    *radius,
+                    *thickness,
+                    *color,
+                );
+            }
+            DrawCommand::Line { start, end, color } => {
+                ui.canvas().draw_line(
+                    offset_point(*start, rect.origin),
+                    offset_point(*end, rect.origin),
+                    *color,
+                );
+            }
+            DrawCommand::Text {
+                origin,
+                text,
+                color,
+                scale,
+            } => {
+                ui.canvas().draw_text(
+                    offset_point(*origin, rect.origin),
+                    text,
+                    *color,
+                    (*scale).max(1),
+                );
+            }
+        }
+    }
 }
 
 /// Convert region responses to action list entries.
@@ -2550,6 +2682,22 @@ fn inset_rect(rect: Rect, insets: EdgeInsets) -> Rect {
             width: rect.size.width.saturating_sub(left + right),
             height: rect.size.height.saturating_sub(top + bottom),
         },
+    }
+}
+
+/// Offset a point by an origin.
+fn offset_point(point: Point, origin: Point) -> Point {
+    Point {
+        x: point.x + origin.x,
+        y: point.y + origin.y,
+    }
+}
+
+/// Offset a rectangle by an origin.
+fn offset_rect(rect: Rect, origin: Point) -> Rect {
+    Rect {
+        origin: offset_point(rect.origin, origin),
+        size: rect.size,
     }
 }
 
@@ -2978,5 +3126,58 @@ mod tests {
                 .iter()
                 .any(|action| matches!(action, UiAction::ButtonPressed { key } if key == "ok"))
         );
+    }
+
+    #[test]
+    fn render_region_draw_commands_and_emit_interaction_action() {
+        let mut canvas = Canvas::new(160, 120);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState {
+            pointer_pos: Point { x: 12, y: 12 },
+            mouse_pressed: true,
+            ..InputState::default()
+        };
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+
+        let region = RegionSpec::new(
+            "plot",
+            Size {
+                width: 64,
+                height: 48,
+            },
+        )
+        .draw_commands(vec![
+            DrawCommand::FillRect {
+                rect: Rect {
+                    origin: Point { x: 0, y: 0 },
+                    size: Size {
+                        width: 64,
+                        height: 48,
+                    },
+                },
+                color: Color::rgb(20, 30, 40),
+            },
+            DrawCommand::Line {
+                start: Point { x: 4, y: 4 },
+                end: Point { x: 20, y: 20 },
+                color: Color::rgb(230, 230, 230),
+            },
+            DrawCommand::Text {
+                origin: Point { x: 2, y: 2 },
+                text: "Hi".to_string(),
+                color: Color::rgb(200, 200, 210),
+                scale: 1,
+            },
+        ]);
+        let spec = UiSpec::new(RootFrameSpec::new("root", Node::Region(region)));
+
+        let result =
+            render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+        assert!(result.actions.iter().any(
+            |action| matches!(action, UiAction::RegionInteracted { key, kind } if key == "plot"
+                && *kind == RegionInteractionKind::Pressed)
+        ));
     }
 }

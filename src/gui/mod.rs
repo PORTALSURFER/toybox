@@ -10,7 +10,7 @@ pub use patchbay_gui::{Canvas, Color, Point, Rect, Size};
 pub mod declarative {
     pub use patchbay_gui::{
         AbsoluteChild, AbsoluteSpec, Align, ButtonSpec, ColorTokens, ControlTokens,
-        DeclarativeError, DropdownSpec, EdgeInsets, FlexSpec, GridSpec, GridTemplate,
+        DeclarativeError, DrawCommand, DropdownSpec, EdgeInsets, FlexSpec, GridSpec, GridTemplate,
         IndicatorSpec, Justify, KnobSpec, LabelSpec, LayoutBox, Length, Node, PanelSpec,
         RegionInteractionKind, RegionSpec, RenderResult, RootFrameSpec, SliderSpec, SpacingTokens,
         ThemeTokens, ToggleSpec, TrackSize, TypographyTokens, UiAction, UiSpec, button, column,

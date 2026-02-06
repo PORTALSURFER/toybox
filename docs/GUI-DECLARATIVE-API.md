@@ -18,6 +18,7 @@ No callback-bearing widget nodes are supported.
 - `GridTemplate` + `TrackSize`: grid track definitions.
 - `ThemeTokens`: declarative token overrides.
 - `UiAction`: typed interaction output consumed by reducer logic.
+- `DrawCommand`: data-only region drawing primitives (no callbacks).
 
 ## Ergonomic Constructors
 Use helper constructors for common nodes:
@@ -27,6 +28,7 @@ Use helper constructors for common nodes:
 - `label(text)`
 - `knob(...)`, `slider(...)`, `toggle(...)`, `button(...)`, `dropdown(...)`
 - `spacer(size)`, `region(key, size)`, `indicator(size, active)`
+- `RegionSpec::draw_commands(...)` for declarative custom canvas drawing.
 
 These map directly to `Node::*` variants and keep the tree callback-free.
 Most node helpers also support `.layout(...)`, `.fill()`, `.fill_width()`, and `.fill_height()`.
