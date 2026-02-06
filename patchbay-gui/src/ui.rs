@@ -2118,7 +2118,7 @@ mod tests {
         let theme = Theme::default();
         let mut ui_state = UiState::default();
         let input = InputState::default();
-        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
 
         let knob = ui.knob_block_size("Pitch Depth", "100%");
         assert_eq!(knob.width, expected_knob_width);

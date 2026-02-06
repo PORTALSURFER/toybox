@@ -1163,7 +1163,7 @@ mod tests {
 
     #[test]
     fn measures_row_with_gap_and_padding() {
-        let spec = UiSpec {
+        let spec: UiSpec<'_, ()> = UiSpec {
             root: RootFrameSpec {
                 key: "root".to_string(),
                 title: None,
@@ -1255,7 +1255,7 @@ mod tests {
     fn knob_measurement_matches_default_knob_diameter_contract() {
         let label = "PITCH COUPLING";
         let value_label = "100%";
-        let spec = UiSpec {
+        let spec: UiSpec<'_, ()> = UiSpec {
             root: RootFrameSpec {
                 key: "root".to_string(),
                 title: None,
@@ -1294,7 +1294,7 @@ mod tests {
 
     #[test]
     fn widget_outside_panel_returns_error() {
-        let spec = UiSpec {
+        let spec: UiSpec<'_, ()> = UiSpec {
             root: RootFrameSpec {
                 key: "root".to_string(),
                 title: None,
@@ -1316,7 +1316,7 @@ mod tests {
 
     #[test]
     fn legacy_measure_is_best_effort_on_invalid_tree() {
-        let spec = UiSpec {
+        let spec: UiSpec<'_, ()> = UiSpec {
             root: RootFrameSpec {
                 key: "root".to_string(),
                 title: None,
