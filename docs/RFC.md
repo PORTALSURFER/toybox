@@ -10,6 +10,7 @@
 - Provide a small, well-documented API surface for building CLAP plugins quickly.
 - Extract reusable DSP primitives and parameter/GUI scaffolding from Lilt, Cellweave, RD Field Filter, and Polyphonic Reverb.
 - Make Lilt-style effects depend on `toybox` for CLAP entry points, param metadata/value↔text, automation handling, event batching, and `.clap` bundle packaging.
+- Offer a `toybox::clap::prelude` module to reduce direct clack imports in plugin crates.
 
 ## Non-goals
 - Support VST3 in the framework.
@@ -44,6 +45,7 @@
 - `EventRouter` (or similar) to normalize CLAP input event batches and provide typed helpers for common event classes.
 - `ParamApi` helper for CLAP param metadata, value↔text conversion, and automation event application.
 - `ProcessContext` wrapper to standardize audio buffer access, sample bounds, and transport data.
+- `clap::prelude` module for a stable import surface across plugin crates.
 
 ## Decisions (Resolved)
 - Target CLAP only for v1.

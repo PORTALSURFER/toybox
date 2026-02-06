@@ -3,13 +3,11 @@
 #![deny(clippy::missing_docs_in_private_items, missing_docs, warnings)]
 
 use std::fmt::Write;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
-use clack_extensions::audio_ports::*;
-use clack_extensions::params::*;
-use clack_plugin::prelude::*;
-use toybox::clap::params::{apply_param_events, ParamBuilder};
+use toybox::clack_plugin::stream::{InputStream, OutputStream};
+use toybox::clap::prelude::*;
 
 /// CLAP parameter id for the gain control.
 const PARAM_GAIN_ID: ClapId = ClapId::new(0);
@@ -20,6 +18,10 @@ const DEFAULT_GAIN: f32 = 1.0;
 const MIN_GAIN: f32 = 0.0;
 /// Maximum gain value.
 const MAX_GAIN: f32 = 2.0;
+/// State payload magic (`MGST`).
+const STATE_MAGIC: u32 = u32::from_le_bytes(*b"MGST");
+/// State payload version.
+const STATE_VERSION: u32 = 1;
 
 /// Minimal CLAP plugin type.
 pub struct MinimalGainPlugin;
@@ -29,8 +31,11 @@ impl Plugin for MinimalGainPlugin {
     type Shared<'a> = MinimalGainShared;
     type MainThread<'a> = MinimalGainMainThread<'a>;
 
-    fn declare_extensions(builder: &mut PluginExtensions<Self>, _shared: Option<&Self::Shared<'_>>) {
-        builder.register::<PluginAudioPorts>().register::<PluginParams>();
+    fn declare_extensions(
+        builder: &mut PluginExtensions<Self>,
+        _shared: Option<&Self::Shared<'_>>,
+    ) {
+        register_default_extensions(builder);
     }
 }
 
@@ -147,6 +152,32 @@ impl PluginMainThreadParams for MinimalGainMainThread<'_> {
                 self.shared.params.set_gain(value as f32);
             }
         });
+    }
+}
+
+impl PluginStateImpl for MinimalGainMainThread<'_> {
+    fn save(&mut self, output: &mut OutputStream) -> Result<(), PluginError> {
+        let payload = self.shared.params.gain().to_le_bytes();
+        write_versioned_payload(output, STATE_MAGIC, STATE_VERSION, &payload)?;
+        Ok(())
+    }
+
+    fn load(&mut self, input: &mut InputStream) -> Result<(), PluginError> {
+        let state = read_versioned_payload(input, STATE_MAGIC, &[STATE_VERSION])?;
+        if state.payload.len() != 4 {
+            return Err(PluginError::Message("Invalid minimal-gain state payload"));
+        }
+        let value = f32::from_le_bytes([
+            state.payload[0],
+            state.payload[1],
+            state.payload[2],
+            state.payload[3],
+        ]);
+        if !value.is_finite() {
+            return Err(PluginError::Message("Invalid minimal-gain state payload"));
+        }
+        self.shared.params.set_gain(value.clamp(MIN_GAIN, MAX_GAIN));
+        Ok(())
     }
 }
 

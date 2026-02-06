@@ -237,6 +237,7 @@
 - Plan Context:
   - Goals: Provide a stable toybox prelude so downstream crates avoid direct clack dependency.
   - Decisions: Re-export only stable clack types used by plugins.
+- Status: Implemented on 2026-02-04 with additive exports and example updates.
 - Phase Constraints:
   - No behavioral changes to existing plugins.
 - Scope: `toybox::clap::prelude` module exporting core clack types (plugin/process/events/extensions/utils),

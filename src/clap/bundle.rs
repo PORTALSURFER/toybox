@@ -38,15 +38,36 @@ pub fn windows_bundle_name(name: &str, version: &str) -> String {
 /// - `target/{profile}/{name}-v{version}.clap`
 /// - `dist/{name}-v{version}.clap`
 pub fn windows_bundle_paths(name: &str, version: &str) -> WindowsBundlePaths {
-    let bundle_name = windows_bundle_name(name, version);
-    let target_dir = cargo_target_dir();
     let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".into());
-    let target_path = target_dir.join(&profile).join(&bundle_name);
-    let repo_root = cargo_manifest_dir()
-        .parent()
-        .and_then(Path::parent)
-        .unwrap_or_else(|| cargo_manifest_dir());
-    let dist_path = repo_root.join("dist").join(&bundle_name);
+    let manifest_dir = cargo_manifest_dir();
+    let target_dir = cargo_target_dir(&manifest_dir);
+    windows_bundle_paths_from(
+        &manifest_dir,
+        Some(&target_dir),
+        &profile,
+        name,
+        version,
+    )
+}
+
+/// Build the rustc link-arg used to emit a Windows `.clap` bundle.
+pub fn windows_rustc_link_arg(output_path: &Path) -> String {
+    format!("/OUT:\"{}\"", output_path.display())
+}
+
+fn windows_bundle_paths_from(
+    manifest_dir: &Path,
+    target_dir: Option<&Path>,
+    profile: &str,
+    name: &str,
+    version: &str,
+) -> WindowsBundlePaths {
+    let bundle_name = windows_bundle_name(name, version);
+    let target_dir = target_dir
+        .map(PathBuf::from)
+        .unwrap_or_else(|| manifest_dir.join("target"));
+    let target_path = target_dir.join(profile).join(&bundle_name);
+    let dist_path = manifest_dir.join("dist").join(&bundle_name);
 
     WindowsBundlePaths {
         bundle_name,
@@ -55,30 +76,24 @@ pub fn windows_bundle_paths(name: &str, version: &str) -> WindowsBundlePaths {
     }
 }
 
-/// Build the rustc link-arg used to emit a Windows `.clap` bundle.
-pub fn windows_rustc_link_arg(output_path: &Path) -> String {
-    format!("/OUT:{}", output_path.display())
-}
-
-fn cargo_target_dir() -> PathBuf {
+fn cargo_target_dir(manifest_dir: &Path) -> PathBuf {
     if let Ok(dir) = env::var("CARGO_TARGET_DIR") {
         PathBuf::from(dir)
     } else {
-        cargo_manifest_dir()
-            .parent()
-            .unwrap_or_else(|| cargo_manifest_dir())
-            .join("target")
+        manifest_dir.join("target")
     }
 }
 
-fn cargo_manifest_dir() -> &'static Path {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+fn cargo_manifest_dir() -> PathBuf {
+    env::var("CARGO_MANIFEST_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{windows_bundle_name, windows_rustc_link_arg};
-    use std::path::Path;
+    use super::{windows_bundle_name, windows_bundle_paths_from, windows_rustc_link_arg};
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn bundle_name_includes_version() {
@@ -89,5 +104,28 @@ mod tests {
     fn link_arg_prefix_matches_lilt() {
         let arg = windows_rustc_link_arg(Path::new("dist/lilt-v0.3.0.clap"));
         assert!(arg.starts_with("/OUT:"));
+        assert!(arg.contains("\"dist/lilt-v0.3.0.clap\""));
+    }
+
+    #[test]
+    fn bundle_paths_resolve_under_manifest_dir() {
+        let manifest_dir = Path::new("workspace/toybox");
+        let target_dir = Path::new("workspace/target");
+        let paths = windows_bundle_paths_from(
+            manifest_dir,
+            Some(target_dir),
+            "release",
+            "lilt",
+            "0.3.0",
+        );
+        assert_eq!(paths.bundle_name, "lilt-v0.3.0.clap");
+        assert_eq!(
+            paths.target_path,
+            PathBuf::from("workspace/target/release/lilt-v0.3.0.clap")
+        );
+        assert_eq!(
+            paths.dist_path,
+            PathBuf::from("workspace/toybox/dist/lilt-v0.3.0.clap")
+        );
     }
 }

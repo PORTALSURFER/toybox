@@ -8,6 +8,8 @@ pub mod dsp;
 pub mod clap;
 #[cfg(feature = "gui")]
 pub mod gui;
+#[cfg(feature = "gui")]
+mod logging;
 
 /// Re-exported CLAP crates so downstream plugins only depend on `toybox`.
 pub use clack_extensions;

@@ -1,8 +1,10 @@
 //! Win32 window creation and message handling.
 
-use crate::canvas::{Canvas, Point, Size};
+use crate::canvas::{Canvas, Color, Point, Size};
+use crate::declarative::{render, UiSpec};
 use crate::host::{GuiError, InputState};
-use crate::renderer::Renderer;
+use crate::logging::log_line_safe;
+use crate::renderer::{Renderer, RendererDevice};
 use crate::ui::{Layout, Theme, Ui, UiState};
 use raw_window_handle_06::{
     DisplayHandle, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
@@ -12,26 +14,38 @@ use raw_window_handle_06::{
 use std::ffi::OsStr;
 use std::num::NonZeroIsize;
 use std::os::windows::ffi::OsStrExt;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{mpsc, Arc};
-use std::thread;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, PAINTSTRUCT};
-use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
+use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Graphics::Gdi::{
+    BeginPaint, CreateSolidBrush, DeleteObject, EndPaint, FillRect, GetDC, ReleaseDC, HBRUSH, HDC,
+    PAINTSTRUCT,
+};
+use windows::Win32::System::LibraryLoader::{
+    GetModuleHandleExW, GetModuleHandleW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+};
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    GetAsyncKeyState, ReleaseCapture, SetCapture, VK_LBUTTON, VK_MENU, VK_RBUTTON, VK_SHIFT,
+};
+use windows::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDROP};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetClientRect, LoadCursorW,
-    PeekMessageW, PostQuitMessage, RegisterClassW, SetTimer, SetWindowLongPtrW, SetWindowPos,
-    TranslateMessage, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA, HMENU, MSG,
-    PM_REMOVE, SWP_NOZORDER, WM_DESTROY, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
-    WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD,
-    WS_CLIPSIBLINGS, WS_CLIPCHILDREN, WS_VISIBLE,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, GetCursorPos, GetParent,
+    GetWindowRect, LoadCursorW, RegisterClassW, SendMessageW, SetTimer, SetWindowLongPtrW,
+    SetWindowPos, ShowWindow, CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA,
+    HMENU, HTCLIENT, MA_ACTIVATE, SWP_NOZORDER, SW_HIDE, SW_SHOW, WM_CHAR, WM_DESTROY,
+    WM_DROPFILES, WM_ERASEBKGND, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEACTIVATE,
+    WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_NCHITTEST, WM_PAINT, WM_RBUTTONDOWN,
+    WM_RBUTTONUP, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
+    WS_VISIBLE,
 };
 
 const TIMER_ID: usize = 1;
 const TIMER_INTERVAL_MS: u32 = 16;
-
+const PREWARM_FRAMES: u8 = 2;
+const MIN_SHOW_DELAY_MS: u128 = 80;
 /// Thin wrapper around an HWND for cross-thread use.
 #[derive(Clone, Debug)]
 pub struct WindowHandle {
@@ -42,6 +56,30 @@ impl WindowHandle {
     /// Return the underlying HWND.
     pub fn hwnd(&self) -> HWND {
         self.hwnd
+    }
+
+    /// Show or hide the window.
+    pub fn set_visible(&self, visible: bool) {
+        unsafe {
+            ShowWindow(self.hwnd, if visible { SW_SHOW } else { SW_HIDE });
+        }
+    }
+
+    /// Return true if the HWND is still valid.
+    pub fn is_valid(&self) -> bool {
+        unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindow(Some(self.hwnd)).as_bool() }
+    }
+
+    /// Return true if the parent matches the provided HWND.
+    pub fn parent_matches(&self, parent: isize) -> bool {
+        unsafe { GetParent(self.hwnd).ok() == Some(HWND(parent as *mut _)) }
+    }
+
+    /// Destroy the underlying HWND.
+    pub fn destroy(&self) {
+        unsafe {
+            let _ = DestroyWindow(self.hwnd);
+        }
     }
 }
 
@@ -77,8 +115,8 @@ unsafe impl Sync for SurfaceWindow {}
 
 struct WindowState<State, Init, Frame>
 where
-    Init: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
-    Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
+    Init: FnMut(&mut State) + Send + 'static,
+    Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
     State: Send + 'static,
 {
     hwnd: HWND,
@@ -89,6 +127,7 @@ where
     layout: Layout,
     layout_origin: Point,
     theme: Theme,
+    background_brush: HBRUSH,
     state: State,
     on_init: Init,
     on_frame: Frame,
@@ -96,31 +135,57 @@ where
     last_size: Arc<AtomicU64>,
     aspect_ratio: Arc<AtomicU32>,
     initialized: bool,
+    shown: bool,
+    prewarm_frames: u8,
+    created_at: Instant,
+    last_mouse_down: bool,
+    last_mouse_secondary_down: bool,
+    debug_input: bool,
+    frame_counter: u64,
+    logged_missing_root_frame: bool,
 }
 
 impl<State, Init, Frame> WindowState<State, Init, Frame>
 where
-    Init: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
-    Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
+    Init: FnMut(&mut State) + Send + 'static,
+    Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
     State: Send + 'static,
 {
-    fn handle_message(&mut self, message: u32, wparam: WPARAM, lparam: LPARAM) -> bool {
+    fn handle_message(&mut self, message: u32, wparam: WPARAM, lparam: LPARAM) -> Option<LRESULT> {
         match message {
             WM_SIZE => {
                 self.on_resize();
-                true
+                Some(LRESULT(0))
+            }
+            WM_NCHITTEST => {
+                // Always treat the plugin surface as client area so it consumes mouse input.
+                Some(LRESULT(HTCLIENT as isize))
+            }
+            WM_MOUSEACTIVATE => {
+                // Activate the window and consume the click within the plugin surface.
+                Some(LRESULT(MA_ACTIVATE as isize))
             }
             WM_MOUSEMOVE => {
                 let x = (lparam.0 & 0xFFFF) as i16 as i32;
                 let y = ((lparam.0 >> 16) & 0xFFFF) as i16 as i32;
                 self.input.pointer_pos = Point { x, y };
-                true
+                self.render_frame();
+                Some(LRESULT(0))
             }
             WM_LBUTTONDOWN => {
                 self.input.mouse_down = true;
                 self.input.mouse_pressed = true;
                 unsafe { SetCapture(self.hwnd) };
-                true
+                self.render_frame();
+                Some(LRESULT(0))
+            }
+            WM_LBUTTONDBLCLK => {
+                self.input.mouse_double_clicked = true;
+                self.input.mouse_down = true;
+                self.input.mouse_pressed = true;
+                unsafe { SetCapture(self.hwnd) };
+                self.render_frame();
+                Some(LRESULT(0))
             }
             WM_LBUTTONUP => {
                 self.input.mouse_down = false;
@@ -128,35 +193,86 @@ where
                 unsafe {
                     let _ = ReleaseCapture();
                 }
-                true
+                self.render_frame();
+                Some(LRESULT(0))
+            }
+            WM_RBUTTONDOWN => {
+                self.input.mouse_secondary_down = true;
+                self.input.mouse_secondary_pressed = true;
+                unsafe { SetCapture(self.hwnd) };
+                self.render_frame();
+                Some(LRESULT(0))
+            }
+            WM_RBUTTONUP => {
+                self.input.mouse_secondary_down = false;
+                self.input.mouse_secondary_released = true;
+                unsafe {
+                    let _ = ReleaseCapture();
+                }
+                self.render_frame();
+                Some(LRESULT(0))
             }
             WM_MOUSEWHEEL => {
                 let delta = ((wparam.0 >> 16) & 0xFFFF) as i16 as f32 / 120.0;
                 self.input.wheel_delta += delta;
-                true
+                self.render_frame();
+                Some(LRESULT(0))
+            }
+            WM_DROPFILES => {
+                let hdrop = HDROP(wparam.0 as *mut _);
+                self.input.dropped_files = collect_dropped_files(hdrop);
+                unsafe {
+                    DragFinish(hdrop);
+                }
+                self.render_frame();
+                Some(LRESULT(0))
+            }
+            WM_CHAR => {
+                let code = (wparam.0 & 0xFFFF) as u16;
+                if let Some(ch) = char::from_u32(code as u32) {
+                    self.input.key_pressed = Some(ch);
+                }
+                self.render_frame();
+                Some(LRESULT(0))
             }
             WM_PAINT => {
                 unsafe {
                     let mut paint = PAINTSTRUCT::default();
-                    BeginPaint(self.hwnd, &mut paint);
+                    let hdc = BeginPaint(self.hwnd, &mut paint);
+                    FillRect(hdc, &paint.rcPaint, self.background_brush);
                     EndPaint(self.hwnd, &paint);
                 }
                 self.render_frame();
-                true
+                Some(LRESULT(0))
             }
             WM_TIMER => {
                 if wparam.0 == TIMER_ID {
                     self.render_frame();
-                    true
+                    Some(LRESULT(0))
                 } else {
-                    false
+                    None
                 }
             }
-            WM_DESTROY => {
-                unsafe { PostQuitMessage(0) };
-                true
+            WM_ERASEBKGND => {
+                let mut rect = windows::Win32::Foundation::RECT::default();
+                let hdc = if wparam.0 == 0 {
+                    unsafe { GetDC(Some(self.hwnd)) }
+                } else {
+                    HDC(wparam.0 as *mut _)
+                };
+                unsafe {
+                    GetClientRect(self.hwnd, &mut rect);
+                    FillRect(hdc, &rect, self.background_brush);
+                }
+                if wparam.0 == 0 {
+                    unsafe {
+                        let _ = ReleaseDC(Some(self.hwnd), hdc);
+                    }
+                }
+                Some(LRESULT(0))
             }
-            _ => false,
+            WM_DESTROY => Some(LRESULT(0)),
+            _ => None,
         }
     }
 
@@ -173,7 +289,60 @@ where
         self.renderer.resize(Size { width, height });
     }
 
+    fn sync_pointer_pos(&mut self) {
+        let mut point = windows::Win32::Foundation::POINT::default();
+        if unsafe { GetCursorPos(&mut point) }.is_err() {
+            return;
+        }
+        let mut window_rect = windows::Win32::Foundation::RECT::default();
+        if unsafe { GetWindowRect(self.hwnd, &mut window_rect) }.is_err() {
+            return;
+        }
+        let local_x = point.x - window_rect.left;
+        let local_y = point.y - window_rect.top;
+
+        let mut client_rect = windows::Win32::Foundation::RECT::default();
+        if unsafe { GetClientRect(self.hwnd, &mut client_rect) }.is_err() {
+            self.input.pointer_pos = Point {
+                x: local_x,
+                y: local_y,
+            };
+            return;
+        }
+        let client_width = (client_rect.right - client_rect.left).max(1) as i32;
+        let client_height = (client_rect.bottom - client_rect.top).max(1) as i32;
+        let canvas_size = self.canvas.size();
+        let scaled_x = (local_x as i64 * canvas_size.width as i64 / client_width as i64) as i32;
+        let scaled_y = (local_y as i64 * canvas_size.height as i64 / client_height as i64) as i32;
+
+        self.input.pointer_pos = Point {
+            x: scaled_x,
+            y: scaled_y,
+        };
+    }
+
+    fn sync_mouse_buttons(&mut self) {
+        let primary_now = unsafe { GetAsyncKeyState(VK_LBUTTON.0 as i32) } < 0;
+        let secondary_now = unsafe { GetAsyncKeyState(VK_RBUTTON.0 as i32) } < 0;
+        let shift_now = unsafe { GetAsyncKeyState(VK_SHIFT.0 as i32) } < 0;
+        let alt_now = unsafe { GetAsyncKeyState(VK_MENU.0 as i32) } < 0;
+
+        self.input.mouse_pressed = primary_now && !self.last_mouse_down;
+        self.input.mouse_released = !primary_now && self.last_mouse_down;
+        self.input.mouse_down = primary_now;
+
+        self.input.mouse_secondary_pressed = secondary_now && !self.last_mouse_secondary_down;
+        self.input.mouse_secondary_released = !secondary_now && self.last_mouse_secondary_down;
+        self.input.mouse_secondary_down = secondary_now;
+        self.input.shift_down = shift_now;
+        self.input.alt_down = alt_now;
+
+        self.last_mouse_down = primary_now;
+        self.last_mouse_secondary_down = secondary_now;
+    }
+
     fn render_frame(&mut self) {
+        self.frame_counter = self.frame_counter.wrapping_add(1);
         if !self.initialized {
             let mut ui = Ui::new(
                 &mut self.canvas,
@@ -182,22 +351,22 @@ where
                 &mut self.layout,
                 &self.theme,
             );
-            (self.on_init)(&mut ui, &mut self.state);
+            (self.on_init)(&mut self.state);
             self.initialized = true;
         }
 
-        if let Some((width, height)) = unpack_size(self.resize_request.swap(0, Ordering::AcqRel))
-        {
+        if let Some((width, height)) = unpack_size(self.resize_request.swap(0, Ordering::AcqRel)) {
+            let mut width = width;
             let mut height = height;
             let aspect_bits = self.aspect_ratio.load(Ordering::Relaxed);
             if aspect_bits != 0 {
                 let aspect = f32::from_bits(aspect_bits);
-                height = (width as f32 / aspect).round().max(1.0) as u32;
+                (width, height) = enforce_aspect_min(width, height, aspect);
             }
             unsafe {
                 SetWindowPos(
                     self.hwnd,
-                    HWND(std::ptr::null_mut()),
+                    None,
                     0,
                     0,
                     width as i32,
@@ -210,8 +379,11 @@ where
 
         self.layout.cursor = self.layout_origin;
         self.canvas.clear(self.theme.background);
+        self.sync_pointer_pos();
+        self.sync_mouse_buttons();
 
         {
+            self.ui_state.begin_frame();
             let mut ui = Ui::new(
                 &mut self.canvas,
                 &self.input,
@@ -219,15 +391,77 @@ where
                 &mut self.layout,
                 &self.theme,
             );
-            (self.on_frame)(&mut ui, &mut self.state);
+            ui.reset_input_consumption();
+            ui.clear_overlays();
+            let mut spec = (self.on_frame)(&self.input, &mut self.state);
+            let _ = render(&mut spec, &mut ui, Point { x: 0, y: 0 }, &mut self.state);
+            ui.draw_overlays();
+        }
+        if let Some(size) = self.ui_state.take_root_frame_size() {
+            let current = self.canvas.size();
+            if size.width != current.width || size.height != current.height {
+                self.resize_request
+                    .store(pack_size(size.width, size.height), Ordering::Release);
+            }
+        } else if !self.ui_state.root_frame_used() && !self.logged_missing_root_frame {
+            log_line_safe(
+                "win32: warning: no root frame drawn in frame; window auto-resize skipped",
+            );
+            self.logged_missing_root_frame = true;
+        }
+        if self.debug_input {
+            let text = format!(
+                "frame={} ptr=({}, {}) md={} mr={} rd={}",
+                self.frame_counter,
+                self.input.pointer_pos.x,
+                self.input.pointer_pos.y,
+                self.input.mouse_down as u8,
+                self.input.mouse_released as u8,
+                self.input.mouse_secondary_down as u8
+            );
+            self.canvas
+                .draw_text(Point { x: 6, y: 6 }, &text, self.theme.text, 1);
         }
 
-        self.renderer.upload(self.canvas.size(), self.canvas.pixels());
-        let _ = self.renderer.render();
+        self.renderer
+            .upload(self.canvas.size(), self.canvas.pixels());
+        let render_ok = self.renderer.render().is_ok();
+        if !self.shown && render_ok {
+            if self.prewarm_frames > 0 {
+                self.prewarm_frames = self.prewarm_frames.saturating_sub(1);
+            }
+            let elapsed_ms = self.created_at.elapsed().as_millis();
+            if self.prewarm_frames == 0 && elapsed_ms >= MIN_SHOW_DELAY_MS {
+                log_line_safe("win32: render ok, showing window");
+                unsafe {
+                    ShowWindow(self.hwnd, SW_SHOW);
+                }
+                self.shown = true;
+                let _ = self.renderer.render();
+            }
+        }
 
         self.input.mouse_pressed = false;
         self.input.mouse_released = false;
+        self.input.mouse_double_clicked = false;
+        self.input.mouse_secondary_pressed = false;
+        self.input.mouse_secondary_released = false;
         self.input.wheel_delta = 0.0;
+        self.input.key_pressed = None;
+        self.input.dropped_files.clear();
+    }
+}
+
+fn enforce_aspect_min(width: u32, height: u32, aspect: f32) -> (u32, u32) {
+    if !aspect.is_finite() || aspect <= 0.0 {
+        return (width.max(1), height.max(1));
+    }
+    let width_from_height = (height as f32 * aspect).ceil().max(1.0) as u32;
+    let height_from_width = (width as f32 / aspect).ceil().max(1.0) as u32;
+    if width_from_height >= width {
+        (width_from_height, height.max(1))
+    } else {
+        (width.max(1), height_from_width)
     }
 }
 
@@ -240,6 +474,7 @@ pub fn spawn_window_thread<State, Init, Frame>(
     state: State,
     on_init: Init,
     on_frame: Frame,
+    device_cache: Arc<Mutex<Option<Arc<RendererDevice>>>>,
     resize_request: Arc<AtomicU64>,
     last_size: Arc<AtomicU64>,
     aspect_ratio: Arc<AtomicU32>,
@@ -248,39 +483,30 @@ pub fn spawn_window_thread<State, Init, Frame>(
     theme: Theme,
 ) -> Result<WindowHandle, GuiError>
 where
-    Init: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
-    Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
+    Init: FnMut(&mut State) + Send + 'static,
+    Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
     State: Send + 'static,
 {
-    let (tx, rx) = mpsc::channel();
-
-    thread::Builder::new()
-        .name("patchbay-gui".to_string())
-        .spawn(move || {
-            let result = run_window_loop(
-                parent_hwnd,
-                parent_hinstance,
-                title,
-                size,
-                state,
-                on_init,
-                on_frame,
-                resize_request,
-                last_size,
-                aspect_ratio,
-                ui_state,
-                layout,
-                theme,
-                &tx,
-            );
-            let _ = tx.send(result);
-        })
-        .map_err(|_| GuiError::ThreadSpawn)?;
-
-    rx.recv().map_err(|_| GuiError::ThreadSpawn)?
+    log_line_safe("win32: spawn_window_thread begin (using caller thread)");
+    create_window_on_thread(
+        parent_hwnd,
+        parent_hinstance,
+        title,
+        size,
+        state,
+        on_init,
+        on_frame,
+        device_cache,
+        resize_request,
+        last_size,
+        aspect_ratio,
+        ui_state,
+        layout,
+        theme,
+    )
 }
 
-fn run_window_loop<State, Init, Frame>(
+fn create_window_on_thread<State, Init, Frame>(
     parent_hwnd: isize,
     parent_hinstance: isize,
     title: String,
@@ -288,61 +514,128 @@ fn run_window_loop<State, Init, Frame>(
     mut state: State,
     mut on_init: Init,
     mut on_frame: Frame,
+    device_cache: Arc<Mutex<Option<Arc<RendererDevice>>>>,
     resize_request: Arc<AtomicU64>,
     last_size: Arc<AtomicU64>,
     aspect_ratio: Arc<AtomicU32>,
     ui_state: UiState,
     layout: Layout,
     theme: Theme,
-    ready: &mpsc::Sender<Result<WindowHandle, GuiError>>,
 ) -> Result<WindowHandle, GuiError>
 where
-    Init: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
-    Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
+    Init: FnMut(&mut State) + Send + 'static,
+    Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
     State: Send + 'static,
 {
+    log_line_safe("win32: create_window_on_thread begin");
     let class_name = to_wide("PatchbayGuiWindow");
     let parent_hwnd = HWND(parent_hwnd as *mut _);
     let parent_hinstance = HINSTANCE(parent_hinstance as *mut _);
+    let module_hinstance = if parent_hinstance.0.is_null() {
+        let mut module = windows::Win32::Foundation::HMODULE::default();
+        let proc_addr = window_proc::<State, Init, Frame> as *const () as *const u16;
+        let got_module = unsafe {
+            GetModuleHandleExW(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                windows::core::PCWSTR(proc_addr),
+                &mut module,
+            )
+        }
+        .is_ok();
+        if got_module {
+            HINSTANCE(module.0)
+        } else {
+            unsafe { GetModuleHandleW(None).unwrap_or_default().into() }
+        }
+    } else {
+        parent_hinstance
+    };
+    if parent_hinstance.0.is_null() {
+        log_line_safe(&format!(
+            "win32: parent hinstance was null, using module hinstance={:?}",
+            module_hinstance
+        ));
+    }
+    unsafe {
+        if !windows::Win32::UI::WindowsAndMessaging::IsWindow(Some(parent_hwnd)).as_bool() {
+            log_line_safe(&format!(
+                "win32: invalid parent hwnd={:?}; aborting CreateWindowExW",
+                parent_hwnd
+            ));
+            return Err(GuiError::WindowCreateFailed);
+        }
+    }
 
     unsafe {
         let wnd_class = WNDCLASSW {
-            style: CS_HREDRAW | CS_VREDRAW,
+            style: CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS,
             lpfnWndProc: Some(window_proc::<State, Init, Frame>),
-            hInstance: parent_hinstance,
+            hInstance: module_hinstance,
             lpszClassName: PCWSTR(class_name.as_ptr()),
-            hCursor: LoadCursorW(None, windows::Win32::UI::WindowsAndMessaging::IDC_ARROW)
-                .unwrap(),
+            hCursor: LoadCursorW(None, windows::Win32::UI::WindowsAndMessaging::IDC_ARROW).unwrap(),
+            hbrBackground: HBRUSH(std::ptr::null_mut()),
             ..Default::default()
         };
         RegisterClassW(&wnd_class);
     }
+    log_line_safe("win32: RegisterClassW completed");
 
     let title_w = to_wide(&title);
+    log_line_safe(&format!(
+        "win32: CreateWindowExW begin title=\"{}\" size={}x{} parent_hwnd={:?} parent_hinstance={:?} module_hinstance={:?}",
+        title,
+        size.width,
+        size.height,
+        parent_hwnd,
+        parent_hinstance,
+        module_hinstance
+    ));
     let child_hwnd = unsafe {
         CreateWindowExW(
             Default::default(),
             PCWSTR(class_name.as_ptr()),
             PCWSTR(title_w.as_ptr()),
-            WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
+            WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
             size.width as i32,
             size.height as i32,
-            parent_hwnd,
-            HMENU(std::ptr::null_mut()),
-            parent_hinstance,
+            Some(parent_hwnd),
+            Some(HMENU(std::ptr::null_mut())),
+            Some(module_hinstance),
             None,
         )
     }
-    .map_err(|_| GuiError::WindowCreateFailed)?;
+    .map_err(|err| {
+        log_line_safe(&format!("win32: CreateWindowExW error: {err:?}"));
+        GuiError::WindowCreateFailed
+    })?;
+    log_line_safe(&format!("win32: CreateWindowExW ok hwnd={:?}", child_hwnd));
+    unsafe {
+        ShowWindow(child_hwnd, SW_HIDE);
+    }
 
     let window = SurfaceWindow {
         hwnd: child_hwnd,
-        hinstance: parent_hinstance,
+        hinstance: module_hinstance,
     };
-    let renderer = Renderer::new(window, size)?;
+    log_line_safe("win32: creating renderer");
+    let renderer_device = {
+        let mut cache = device_cache
+            .lock()
+            .map_err(|_| GuiError::DeviceCachePoison)?;
+        if let Some(device) = cache.as_ref() {
+            Arc::clone(device)
+        } else {
+            let device = Arc::new(RendererDevice::new()?);
+            *cache = Some(Arc::clone(&device));
+            device
+        }
+    };
+    let renderer = Renderer::new_with_device(renderer_device, window, size)?;
+    log_line_safe("win32: renderer created");
     let canvas = Canvas::new(size.width, size.height);
+    let background_brush = unsafe { CreateSolidBrush(colorref_from_theme(theme.background)) };
 
     let mut window_state = Box::new(WindowState {
         hwnd: child_hwnd,
@@ -353,6 +646,7 @@ where
         layout,
         layout_origin: layout.cursor,
         theme,
+        background_brush,
         state,
         on_init,
         on_frame,
@@ -360,39 +654,42 @@ where
         last_size,
         aspect_ratio,
         initialized: false,
+        shown: false,
+        prewarm_frames: PREWARM_FRAMES,
+        created_at: Instant::now(),
+        last_mouse_down: false,
+        last_mouse_secondary_down: false,
+        debug_input: std::env::var_os("PATCHBAY_DEBUG_INPUT").is_some(),
+        frame_counter: 0,
+        logged_missing_root_frame: false,
     });
 
     unsafe {
-        SetWindowLongPtrW(child_hwnd, GWLP_USERDATA, &mut *window_state as *mut _ as isize);
-        SetTimer(child_hwnd, TIMER_ID, TIMER_INTERVAL_MS, None);
+        let state_ptr = Box::into_raw(window_state);
+        SetWindowLongPtrW(child_hwnd, GWLP_USERDATA, state_ptr as isize);
+        SetTimer(Some(child_hwnd), TIMER_ID, TIMER_INTERVAL_MS, None);
+        DragAcceptFiles(child_hwnd, true);
+        log_line_safe("win32: initial window hidden; waiting for show gate");
+        // Render once; on success it will reveal the window.
+        let state = &mut *(state_ptr as *mut WindowState<State, Init, Frame>);
+        state.render_frame();
     }
 
     let handle = WindowHandle { hwnd: child_hwnd };
-    let _ = ready.send(Ok(handle.clone()));
-
-    let mut msg = MSG::default();
-    loop {
-        unsafe {
-            while PeekMessageW(&mut msg, HWND(std::ptr::null_mut()), 0, 0, PM_REMOVE).into() {
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
-        }
-        if msg.message == WM_NCDESTROY {
-            break;
-        }
-        if msg.message == windows::Win32::UI::WindowsAndMessaging::WM_QUIT {
-            break;
-        }
-        thread::sleep(std::time::Duration::from_millis(1));
-    }
-
-    unsafe {
-        SetWindowLongPtrW(child_hwnd, GWLP_USERDATA, 0);
-    }
-    drop(window_state);
-
     Ok(handle)
+}
+
+impl<State, Init, Frame> Drop for WindowState<State, Init, Frame>
+where
+    Init: FnMut(&mut State) + Send + 'static,
+    Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
+    State: Send + 'static,
+{
+    fn drop(&mut self) {
+        unsafe {
+            let _ = DeleteObject(self.background_brush.into());
+        }
+    }
 }
 
 unsafe extern "system" fn window_proc<State, Init, Frame>(
@@ -402,23 +699,29 @@ unsafe extern "system" fn window_proc<State, Init, Frame>(
     lparam: LPARAM,
 ) -> LRESULT
 where
-    Init: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
-    Frame: FnMut(&mut Ui<'_>, &mut State) + Send + 'static,
+    Init: FnMut(&mut State) + Send + 'static,
+    Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
     State: Send + 'static,
 {
-    let ptr = windows::Win32::UI::WindowsAndMessaging::GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+    let ptr =
+        unsafe { windows::Win32::UI::WindowsAndMessaging::GetWindowLongPtrW(hwnd, GWLP_USERDATA) };
     if ptr != 0 {
-        let state = &mut *(ptr as *mut WindowState<State, Init, Frame>);
-        if state.handle_message(message, wparam, lparam) {
-            return LRESULT(0);
+        let state = unsafe { &mut *(ptr as *mut WindowState<State, Init, Frame>) };
+        if let Some(result) = state.handle_message(message, wparam, lparam) {
+            return result;
         }
     }
 
     if message == WM_NCDESTROY {
-        PostQuitMessage(0);
+        if ptr != 0 {
+            unsafe {
+                windows::Win32::UI::WindowsAndMessaging::SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+                drop(Box::from_raw(ptr as *mut WindowState<State, Init, Frame>));
+            }
+        }
     }
 
-    DefWindowProcW(hwnd, message, wparam, lparam)
+    unsafe { DefWindowProcW(hwnd, message, wparam, lparam) }
 }
 
 fn pack_size(width: u32, height: u32) -> u64 {
@@ -436,4 +739,55 @@ fn unpack_size(value: u64) -> Option<(u32, u32)> {
 
 fn to_wide(text: &str) -> Vec<u16> {
     OsStr::new(text).encode_wide().chain(Some(0)).collect()
+}
+
+fn colorref_from_theme(color: Color) -> COLORREF {
+    COLORREF(color.r as u32 | ((color.g as u32) << 8) | ((color.b as u32) << 16))
+}
+
+fn collect_dropped_files(hdrop: HDROP) -> Vec<PathBuf> {
+    let count = unsafe { DragQueryFileW(hdrop, 0xFFFF_FFFF, None) };
+    let mut paths = Vec::new();
+    for index in 0..count {
+        let len = unsafe { DragQueryFileW(hdrop, index, None) };
+        if len == 0 {
+            continue;
+        }
+        let mut buffer = vec![0u16; (len + 1) as usize];
+        let written = unsafe { DragQueryFileW(hdrop, index, Some(&mut buffer)) };
+        if written == 0 {
+            continue;
+        }
+        if let Some(path) = wide_to_path(&buffer[..written as usize]) {
+            paths.push(path);
+        }
+    }
+    paths
+}
+
+fn wide_to_path(buffer: &[u16]) -> Option<PathBuf> {
+    let string = String::from_utf16(buffer).ok()?;
+    if string.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(string))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::enforce_aspect_min;
+
+    #[test]
+    fn aspect_enforces_min_dimensions() {
+        let (w, h) = enforce_aspect_min(400, 300, 1.5);
+        assert!(w >= 400);
+        assert!(h >= 300);
+        assert!((w as f32 / h as f32 - 1.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn aspect_noop_for_invalid_ratio() {
+        assert_eq!(enforce_aspect_min(100, 80, 0.0), (100, 80));
+    }
 }
