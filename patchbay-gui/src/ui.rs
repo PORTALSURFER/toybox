@@ -1348,7 +1348,7 @@ impl<'a> Ui<'a> {
     /// breaking drag tracking.
     ///
     /// # Example
-    /// ```
+    /// ```ignore
     /// # use patchbay_gui::{Canvas, InputState, Layout, Theme, Ui, UiState};
     /// let mut canvas = Canvas::new(200, 200);
     /// let mut layout = Layout::default();

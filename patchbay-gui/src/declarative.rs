@@ -2627,7 +2627,7 @@ mod tests {
         ]);
         let spec = UiSpec::new(RootFrameSpec::new(
             "root",
-            panel("main", content).layout(LayoutBox::fill()),
+            Node::Panel(PanelSpec::new("main", content).layout(LayoutBox::fill())),
         ));
         let measured = measure_checked(&spec).expect("helper-composed tree should validate");
         assert!(measured.width > 0);
