@@ -258,7 +258,9 @@ impl Canvas {
                 let dy = y - center.y;
                 let dist2 = dx * dx + dy * dy;
                 if dist2 <= outer && dist2 >= inner2 {
-                    let angle = normalize_angle((dy as f32).atan2(dx as f32));
+                    // Convert screen-space Y (downward-positive) to mathematical
+                    // coordinates so angles remain counter-clockwise.
+                    let angle = normalize_angle((-(dy as f32)).atan2(dx as f32));
                     if angle_in_range(angle, start, end) {
                         self.blend_pixel(x as u32, y as u32, color);
                     }
