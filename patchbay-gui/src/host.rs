@@ -212,8 +212,8 @@ impl HostWindow {
         title: String,
         size: Size,
         state: State,
-        on_init: Init,
-        on_frame: Frame,
+        mut on_init: Init,
+        mut on_frame: Frame,
         mode: OpenParentedMode,
     ) -> Result<(), GuiError>
     where
