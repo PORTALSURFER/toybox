@@ -8,7 +8,7 @@ use crate::canvas::{Color, Point, Rect, Size};
 use crate::ui::{RegionResponse, RootFrameStyle, Ui, WidgetId};
 
 /// Validation errors produced by declarative UI helpers.
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, thiserror::Error)]
 pub enum DeclarativeError {
     /// An interactive node was declared with an empty key.
     #[error("declarative node `{node_kind}` requires a non-empty key")]
@@ -58,6 +58,22 @@ pub enum DeclarativeError {
         width: u32,
         /// Invalid height value.
         height: u32,
+    },
+    /// A control has a non-finite or out-of-range current value.
+    #[error(
+        "declarative node `{node_kind}` key `{key}` value {value} must be finite and inside [{min}, {max}]"
+    )]
+    InvalidControlValue {
+        /// Concrete node variant that failed validation.
+        node_kind: &'static str,
+        /// Stable key associated with the control.
+        key: String,
+        /// Invalid value.
+        value: f32,
+        /// Lower range bound.
+        min: f32,
+        /// Upper range bound.
+        max: f32,
     },
 }
 
@@ -523,6 +539,12 @@ pub enum Justify {
     Center,
     /// Pack items at the end.
     End,
+    /// Distribute remaining space between items.
+    SpaceBetween,
+    /// Distribute remaining space around items.
+    SpaceAround,
+    /// Distribute remaining space evenly, including edges.
+    SpaceEvenly,
 }
 
 /// Flex container specification.
@@ -648,6 +670,24 @@ impl FlexSpec {
     /// Pack children at the main-axis end.
     pub fn justify_end(mut self) -> Self {
         self.justify = Justify::End;
+        self
+    }
+
+    /// Distribute available space between items.
+    pub fn justify_space_between(mut self) -> Self {
+        self.justify = Justify::SpaceBetween;
+        self
+    }
+
+    /// Distribute available space around items.
+    pub fn justify_space_around(mut self) -> Self {
+        self.justify = Justify::SpaceAround;
+        self
+    }
+
+    /// Distribute available space evenly across edges and gaps.
+    pub fn justify_space_evenly(mut self) -> Self {
+        self.justify = Justify::SpaceEvenly;
         self
     }
 }
@@ -1348,6 +1388,7 @@ fn validate_spec(spec: &UiSpec) -> Result<(), DeclarativeError> {
         });
     }
     let mut seen = std::collections::HashSet::new();
+    validate_unique_key(&spec.root.key, &mut seen)?;
     validate_node(&spec.root.content, &mut seen)
 }
 
@@ -1385,11 +1426,13 @@ fn validate_node(
             validate_non_empty_key(&knob.key, "Knob")?;
             validate_unique_key(&knob.key, seen_keys)?;
             validate_value_range("Knob", &knob.key, knob.range)?;
+            validate_control_value("Knob", &knob.key, knob.value, knob.range)?;
         }
         Node::Slider(slider) => {
             validate_non_empty_key(&slider.key, "Slider")?;
             validate_unique_key(&slider.key, seen_keys)?;
             validate_value_range("Slider", &slider.key, slider.range)?;
+            validate_control_value("Slider", &slider.key, slider.value, slider.range)?;
             if let Some(control_size) = slider.control_size {
                 validate_control_size("Slider", &slider.key, control_size)?;
             }
@@ -1485,6 +1528,26 @@ fn validate_dropdown_selection(dropdown: &DropdownSpec) -> Result<(), Declarativ
             key: dropdown.key.clone(),
             selected: dropdown.selected,
             options_len: dropdown.options.len(),
+        });
+    }
+    Ok(())
+}
+
+/// Validate control value finiteness and in-range constraints.
+fn validate_control_value(
+    node_kind: &'static str,
+    key: &str,
+    value: f32,
+    range: (f32, f32),
+) -> Result<(), DeclarativeError> {
+    let (min, max) = range;
+    if !value.is_finite() || value < min || value > max {
+        return Err(DeclarativeError::InvalidControlValue {
+            node_kind,
+            key: key.to_string(),
+            value,
+            min,
+            max,
         });
     }
     Ok(())
@@ -1899,11 +1962,16 @@ fn render_flex(
     }
 
     let occupied_main = resolved_main.iter().copied().sum::<i32>() + total_gap;
-    let mut cursor_main = match flex.justify {
-        Justify::Start => axis.origin_main(inner.origin),
-        Justify::Center => axis.origin_main(inner.origin) + (available_main - occupied_main) / 2,
-        Justify::End => axis.origin_main(inner.origin) + (available_main - occupied_main),
-    };
+    let free_main = (available_main - occupied_main).max(0);
+    let space_weights = justify_space_weights(flex.justify, child_count);
+    let extra_spaces = distribute_space(free_main, &space_weights);
+    let mut gaps = vec![gap; child_count.saturating_sub(1)];
+    for (index, gap_value) in gaps.iter_mut().enumerate() {
+        *gap_value += extra_spaces.get(index + 1).copied().unwrap_or(0);
+    }
+
+    let mut cursor_main =
+        axis.origin_main(inner.origin) + extra_spaces.first().copied().unwrap_or(0);
 
     for (index, child) in flex.children.iter().enumerate() {
         let layout = node_layout(child);
@@ -1936,8 +2004,98 @@ fn render_flex(
         };
 
         render_node(child, child_rect, ui, tokens, actions);
-        cursor_main += resolved_main[index] + gap;
+        let next_gap = gaps.get(index).copied().unwrap_or(0);
+        cursor_main += resolved_main[index] + next_gap;
     }
+}
+
+/// Return per-space weighting for flex main-axis justification.
+///
+/// The returned vector length is always `child_count + 1`, where:
+/// - index `0` is leading edge space
+/// - index `child_count` is trailing edge space
+/// - interior indices represent gaps between children
+fn justify_space_weights(justify: Justify, child_count: usize) -> Vec<u32> {
+    let mut weights = vec![0u32; child_count.saturating_add(1)];
+    if child_count == 0 {
+        return weights;
+    }
+
+    match justify {
+        Justify::Start => {
+            if let Some(last) = weights.last_mut() {
+                *last = 1;
+            }
+        }
+        Justify::Center => {
+            weights[0] = 1;
+            if let Some(last) = weights.last_mut() {
+                *last = 1;
+            }
+        }
+        Justify::End => {
+            weights[0] = 1;
+        }
+        Justify::SpaceBetween => {
+            if child_count > 1 {
+                for weight in weights.iter_mut().skip(1).take(child_count - 1) {
+                    *weight = 1;
+                }
+            }
+        }
+        Justify::SpaceAround => {
+            weights[0] = 1;
+            if let Some(last) = weights.last_mut() {
+                *last = 1;
+            }
+            if child_count > 1 {
+                for weight in weights.iter_mut().skip(1).take(child_count - 1) {
+                    *weight = 2;
+                }
+            }
+        }
+        Justify::SpaceEvenly => {
+            weights.fill(1);
+        }
+    }
+
+    weights
+}
+
+/// Distribute integer space across weighted slots.
+fn distribute_space(total: i32, weights: &[u32]) -> Vec<i32> {
+    if total <= 0 || weights.is_empty() {
+        return vec![0; weights.len()];
+    }
+    let weight_sum: u32 = weights.iter().copied().sum();
+    if weight_sum == 0 {
+        return vec![0; weights.len()];
+    }
+
+    let mut distributed = vec![0i32; weights.len()];
+    let mut used = 0i64;
+    let total_i64 = total as i64;
+    let weight_sum_i64 = weight_sum as i64;
+    for (index, weight) in weights.iter().copied().enumerate() {
+        if weight == 0 {
+            continue;
+        }
+        let value = (total_i64 * weight as i64 / weight_sum_i64) as i32;
+        distributed[index] = value;
+        used += value as i64;
+    }
+
+    let mut remainder = (total_i64 - used).max(0) as i32;
+    let mut cursor = 0usize;
+    while remainder > 0 {
+        if weights[cursor] > 0 {
+            distributed[cursor] += 1;
+            remainder -= 1;
+        }
+        cursor = (cursor + 1) % weights.len();
+    }
+
+    distributed
 }
 
 /// Render a grid container.
@@ -2488,6 +2646,16 @@ mod tests {
     }
 
     #[test]
+    fn rejects_root_key_collision_with_child() {
+        let spec = UiSpec::new(RootFrameSpec::new(
+            "dup",
+            Node::Panel(PanelSpec::new("dup", label("content"))),
+        ));
+        let error = measure_checked(&spec).expect_err("expected duplicate key error");
+        assert!(matches!(error, DeclarativeError::DuplicateNodeKey { key } if key == "dup"));
+    }
+
+    #[test]
     fn measures_grid_from_template_and_children() {
         let grid = GridSpec::new(
             GridTemplate::new(vec![TrackSize::Px(32), TrackSize::Fr(1)]),
@@ -2531,6 +2699,20 @@ mod tests {
         assert!(matches!(
             error,
             DeclarativeError::InvalidValueRange { node_kind, .. } if node_kind == "Slider"
+        ));
+    }
+
+    #[test]
+    fn rejects_out_of_range_control_value() {
+        let spec = UiSpec::new(RootFrameSpec::new(
+            "root",
+            Node::Slider(SliderSpec::new("s", "Shape", 1.5, (0.0, 1.0))),
+        ));
+        let error = measure_checked(&spec).expect_err("expected invalid control value");
+        assert!(matches!(
+            error,
+            DeclarativeError::InvalidControlValue { node_kind, key, .. }
+                if node_kind == "Slider" && key == "s"
         ));
     }
 
@@ -2587,6 +2769,34 @@ mod tests {
         assert_eq!(layout.min_height, Some(20));
         assert_eq!(layout.max_width, Some(200));
         assert_eq!(layout.max_height, Some(30));
+    }
+
+    #[test]
+    fn helper_justify_methods_apply_expected_distribution_modes() {
+        let flex = FlexSpec::row(vec![label("A"), label("B")]).justify_space_between();
+        assert_eq!(flex.justify, Justify::SpaceBetween);
+
+        let flex = FlexSpec::row(vec![label("A"), label("B")]).justify_space_around();
+        assert_eq!(flex.justify, Justify::SpaceAround);
+
+        let flex = FlexSpec::row(vec![label("A"), label("B")]).justify_space_evenly();
+        assert_eq!(flex.justify, Justify::SpaceEvenly);
+    }
+
+    #[test]
+    fn justify_weighting_and_distribution_cover_new_modes() {
+        let between = justify_space_weights(Justify::SpaceBetween, 3);
+        assert_eq!(between, vec![0, 1, 1, 0]);
+
+        let around = justify_space_weights(Justify::SpaceAround, 3);
+        assert_eq!(around, vec![1, 2, 2, 1]);
+
+        let evenly = justify_space_weights(Justify::SpaceEvenly, 3);
+        assert_eq!(evenly, vec![1, 1, 1, 1]);
+
+        let distributed = distribute_space(7, &[1, 2, 0, 1]);
+        assert_eq!(distributed.iter().sum::<i32>(), 7);
+        assert_eq!(distributed[2], 0);
     }
 
     #[test]

@@ -33,6 +33,7 @@ These map directly to `Node::*` variants and keep the tree callback-free.
 ## Layout Ergonomics
 Use fluent helpers to reduce boilerplate:
 - `FlexSpec`: `gap`, `pad_all`, `pad_xy`, `align_*`, `justify_*`
+- `justify_*` covers `start`, `center`, `end`, `space_between`, `space_around`, and `space_evenly`.
 - `GridTemplate`: `columns_fr`, `rows_fr`, `gap`, `pad_all`, `pad_xy`
 - `LayoutBox`: `fill`, `fill_width`, `fill_height`, `fixed`, `fixed_width`, `fixed_height`, `min`, `max`
 
@@ -47,17 +48,19 @@ This keeps rendering deterministic and centralizes state mutation in one reducer
 `measure_checked` and `render_checked` validate trees and return `DeclarativeError` on invalid specs.
 
 Validation includes:
+- non-empty root frame key
 - non-empty keys for interactive keyed nodes
-- unique keys across interactive keyed nodes
+- unique keys across root + interactive keyed nodes
 - non-empty grid columns
 - finite, increasing control ranges (`min < max`) for knobs/sliders
+- finite, in-range control values for knobs/sliders
 - dropdown selected index in bounds
 - non-zero explicit `control_size` overrides
 
 ## Example
 ```rust
 use toybox::gui::declarative::{
-    button, column, panel, row, ButtonSpec, LayoutBox, RootFrameSpec, UiAction, UiSpec,
+    button, column, panel, FlexSpec, LayoutBox, Node, RootFrameSpec, UiAction, UiSpec,
 };
 
 #[derive(Default)]
@@ -65,17 +68,18 @@ struct GuiState {
     count: u32,
 }
 
-fn build(_input: &toybox::clap::gui::InputState, state: &GuiState) -> UiSpec {
-    let controls = row(vec![
+fn build(_input: &toybox::clap::gui::InputState, _state: &GuiState) -> UiSpec {
+    let controls = FlexSpec::row(vec![
         button("inc", "Increment"),
         button("dec", "Decrement"),
-    ]);
+    ])
+    .justify_space_between();
 
     UiSpec::new(
         RootFrameSpec::new(
             "root",
             panel("main", column(vec![
-                controls,
+                Node::Row(controls),
             ])),
         )
         .layout(LayoutBox::fill()),
