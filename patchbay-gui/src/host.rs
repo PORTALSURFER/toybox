@@ -178,8 +178,8 @@ impl HostWindow {
         title: String,
         size: (u32, u32),
         state: State,
-        mut on_init: Init,
-        mut on_frame: Frame,
+        on_init: Init,
+        on_frame: Frame,
     ) -> Result<(), GuiError>
     where
         Init: FnMut(&mut State) + Send + 'static,
@@ -212,8 +212,8 @@ impl HostWindow {
         title: String,
         size: Size,
         state: State,
-        mut on_init: Init,
-        mut on_frame: Frame,
+        on_init: Init,
+        on_frame: Frame,
         mode: OpenParentedMode,
     ) -> Result<(), GuiError>
     where

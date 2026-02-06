@@ -33,13 +33,12 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use windows::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDROP};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, GetCursorPos, GetParent,
-    GetWindowRect, LoadCursorW, RegisterClassW, SendMessageW, SetTimer, SetWindowLongPtrW,
-    SetWindowPos, ShowWindow, CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA,
-    HMENU, HTCLIENT, MA_ACTIVATE, SWP_NOZORDER, SW_HIDE, SW_SHOW, WM_CHAR, WM_DESTROY,
-    WM_DROPFILES, WM_ERASEBKGND, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEACTIVATE,
-    WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_NCHITTEST, WM_PAINT, WM_RBUTTONDOWN,
-    WM_RBUTTONUP, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
-    WS_VISIBLE,
+    GetWindowRect, LoadCursorW, RegisterClassW, SetTimer, SetWindowLongPtrW, SetWindowPos,
+    ShowWindow, CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA, HMENU, HTCLIENT,
+    MA_ACTIVATE, SWP_NOZORDER, SW_HIDE, SW_SHOW, WM_CHAR, WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND,
+    WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_MOUSEWHEEL,
+    WM_NCDESTROY, WM_NCHITTEST, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WM_TIMER,
+    WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
 };
 
 const TIMER_ID: usize = 1;
@@ -61,7 +60,7 @@ impl WindowHandle {
     /// Show or hide the window.
     pub fn set_visible(&self, visible: bool) {
         unsafe {
-            ShowWindow(self.hwnd, if visible { SW_SHOW } else { SW_HIDE });
+            let _ = ShowWindow(self.hwnd, if visible { SW_SHOW } else { SW_HIDE });
         }
     }
 
@@ -240,7 +239,7 @@ where
                     let mut paint = PAINTSTRUCT::default();
                     let hdc = BeginPaint(self.hwnd, &mut paint);
                     FillRect(hdc, &paint.rcPaint, self.background_brush);
-                    EndPaint(self.hwnd, &paint);
+                    let _ = EndPaint(self.hwnd, &paint);
                 }
                 self.render_frame();
                 Some(LRESULT(0))
@@ -261,7 +260,9 @@ where
                     HDC(wparam.0 as *mut _)
                 };
                 unsafe {
-                    GetClientRect(self.hwnd, &mut rect);
+                    if GetClientRect(self.hwnd, &mut rect).is_err() {
+                        log_line_safe("win32: GetClientRect failed in WM_ERASEBKGND");
+                    }
                     FillRect(hdc, &rect, self.background_brush);
                 }
                 if wparam.0 == 0 {
@@ -279,7 +280,10 @@ where
     fn on_resize(&mut self) {
         let mut rect = windows::Win32::Foundation::RECT::default();
         unsafe {
-            GetClientRect(self.hwnd, &mut rect);
+            if GetClientRect(self.hwnd, &mut rect).is_err() {
+                log_line_safe("win32: GetClientRect failed in on_resize");
+                return;
+            }
         }
         let width = (rect.right - rect.left).max(1) as u32;
         let height = (rect.bottom - rect.top).max(1) as u32;
@@ -344,13 +348,6 @@ where
     fn render_frame(&mut self) {
         self.frame_counter = self.frame_counter.wrapping_add(1);
         if !self.initialized {
-            let mut ui = Ui::new(
-                &mut self.canvas,
-                &self.input,
-                &mut self.ui_state,
-                &mut self.layout,
-                &self.theme,
-            );
             (self.on_init)(&mut self.state);
             self.initialized = true;
         }
@@ -364,7 +361,7 @@ where
                 (width, height) = enforce_aspect_min(width, height, aspect);
             }
             unsafe {
-                SetWindowPos(
+                if let Err(err) = SetWindowPos(
                     self.hwnd,
                     None,
                     0,
@@ -372,7 +369,9 @@ where
                     width as i32,
                     height as i32,
                     SWP_NOZORDER,
-                );
+                ) {
+                    log_line_safe(&format!("win32: SetWindowPos failed: {err:?}"));
+                }
             }
             self.on_resize();
         }
@@ -440,7 +439,7 @@ where
             if self.prewarm_frames == 0 && elapsed_ms >= MIN_SHOW_DELAY_MS {
                 log_line_safe("win32: render ok, showing window");
                 unsafe {
-                    ShowWindow(self.hwnd, SW_SHOW);
+                    let _ = ShowWindow(self.hwnd, SW_SHOW);
                 }
                 self.shown = true;
                 let _ = self.renderer.render();
@@ -517,9 +516,9 @@ fn create_window_on_thread<State, Init, Frame>(
     parent_hinstance: isize,
     title: String,
     size: Size,
-    mut state: State,
-    mut on_init: Init,
-    mut on_frame: Frame,
+    state: State,
+    on_init: Init,
+    on_frame: Frame,
     device_cache: Arc<Mutex<Option<Arc<RendererDevice>>>>,
     resize_request: Arc<AtomicU64>,
     last_size: Arc<AtomicU64>,
@@ -613,7 +612,7 @@ where
     })?;
     log_line_safe(&format!("win32: CreateWindowExW ok hwnd={:?}", child_hwnd));
     unsafe {
-        ShowWindow(child_hwnd, SW_HIDE);
+        let _ = ShowWindow(child_hwnd, SW_HIDE);
     }
 
     let window = SurfaceWindow {
@@ -638,7 +637,7 @@ where
     let canvas = Canvas::new(size.width, size.height);
     let background_brush = unsafe { CreateSolidBrush(colorref_from_theme(theme.background)) };
 
-    let mut window_state = Box::new(WindowState {
+    let window_state = Box::new(WindowState {
         hwnd: child_hwnd,
         renderer,
         canvas,
