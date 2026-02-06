@@ -355,6 +355,172 @@ impl Node {
     pub fn fill_height(self) -> Self {
         self.layout(LayoutBox::auto().fill_height())
     }
+
+    /// Set container gap for row/column/grid nodes.
+    ///
+    /// For grid nodes this sets both column and row gaps. Other node kinds are
+    /// returned unchanged.
+    pub fn gap(mut self, gap: i32) -> Self {
+        match &mut self {
+            Self::Row(flex) | Self::Column(flex) => {
+                flex.gap = gap;
+            }
+            Self::Grid(grid) => {
+                grid.template.column_gap = gap;
+                grid.template.row_gap = gap;
+            }
+            _ => {}
+        }
+        self
+    }
+
+    /// Set independent column/row gaps for grid nodes.
+    ///
+    /// Non-grid node kinds are returned unchanged.
+    pub fn gap_xy(mut self, column_gap: i32, row_gap: i32) -> Self {
+        if let Self::Grid(grid) = &mut self {
+            grid.template.column_gap = column_gap;
+            grid.template.row_gap = row_gap;
+        }
+        self
+    }
+
+    /// Set uniform padding for panel/flex/grid nodes.
+    ///
+    /// Non-container node kinds are returned unchanged.
+    pub fn pad_all(mut self, value: i32) -> Self {
+        match &mut self {
+            Self::Panel(panel) => panel.padding = value,
+            Self::Row(flex) | Self::Column(flex) => flex.padding = EdgeInsets::all(value),
+            Self::Grid(grid) => grid.template.padding = EdgeInsets::all(value),
+            _ => {}
+        }
+        self
+    }
+
+    /// Set horizontal/vertical padding for flex/grid nodes.
+    ///
+    /// Panel and non-container node kinds are returned unchanged.
+    pub fn pad_xy(mut self, horizontal: i32, vertical: i32) -> Self {
+        match &mut self {
+            Self::Row(flex) | Self::Column(flex) => {
+                flex.padding = EdgeInsets::symmetric(horizontal, vertical)
+            }
+            Self::Grid(grid) => grid.template.padding = EdgeInsets::symmetric(horizontal, vertical),
+            _ => {}
+        }
+        self
+    }
+
+    /// Set cross-axis alignment for row/column nodes.
+    ///
+    /// Non-flex node kinds are returned unchanged.
+    pub fn align(mut self, align: Align) -> Self {
+        if let Self::Row(flex) | Self::Column(flex) = &mut self {
+            flex.align = align;
+        }
+        self
+    }
+
+    /// Align row/column children to cross-axis start.
+    pub fn align_start(self) -> Self {
+        self.align(Align::Start)
+    }
+
+    /// Center row/column children on the cross-axis.
+    pub fn align_center(self) -> Self {
+        self.align(Align::Center)
+    }
+
+    /// Align row/column children to cross-axis end.
+    pub fn align_end(self) -> Self {
+        self.align(Align::End)
+    }
+
+    /// Stretch row/column children across the cross-axis.
+    pub fn align_stretch(self) -> Self {
+        self.align(Align::Stretch)
+    }
+
+    /// Set main-axis distribution for row/column nodes.
+    ///
+    /// Non-flex node kinds are returned unchanged.
+    pub fn justify(mut self, justify: Justify) -> Self {
+        if let Self::Row(flex) | Self::Column(flex) = &mut self {
+            flex.justify = justify;
+        }
+        self
+    }
+
+    /// Pack row/column children at main-axis start.
+    pub fn justify_start(self) -> Self {
+        self.justify(Justify::Start)
+    }
+
+    /// Center row/column children on the main axis.
+    pub fn justify_center(self) -> Self {
+        self.justify(Justify::Center)
+    }
+
+    /// Pack row/column children at main-axis end.
+    pub fn justify_end(self) -> Self {
+        self.justify(Justify::End)
+    }
+
+    /// Distribute row/column spacing between children.
+    pub fn justify_space_between(self) -> Self {
+        self.justify(Justify::SpaceBetween)
+    }
+
+    /// Distribute row/column spacing around children.
+    pub fn justify_space_around(self) -> Self {
+        self.justify(Justify::SpaceAround)
+    }
+
+    /// Distribute row/column spacing evenly including edges.
+    pub fn justify_space_evenly(self) -> Self {
+        self.justify(Justify::SpaceEvenly)
+    }
+
+    /// Set title for panel nodes.
+    ///
+    /// Non-panel node kinds are returned unchanged.
+    pub fn title(mut self, title: impl Into<String>) -> Self {
+        if let Self::Panel(panel) = &mut self {
+            panel.title = Some(title.into());
+        }
+        self
+    }
+
+    /// Set background color for panel nodes.
+    ///
+    /// Non-panel node kinds are returned unchanged.
+    pub fn background(mut self, color: Color) -> Self {
+        if let Self::Panel(panel) = &mut self {
+            panel.background = Some(color);
+        }
+        self
+    }
+
+    /// Set outline color for panel nodes.
+    ///
+    /// Non-panel node kinds are returned unchanged.
+    pub fn outline(mut self, color: Color) -> Self {
+        if let Self::Panel(panel) = &mut self {
+            panel.outline = Some(color);
+        }
+        self
+    }
+
+    /// Set text color for label nodes.
+    ///
+    /// Non-label node kinds are returned unchanged.
+    pub fn text_color(mut self, color: Color) -> Self {
+        if let Self::Label(label) = &mut self {
+            label.color = Some(color);
+        }
+        self
+    }
 }
 
 /// Create a row container node.
@@ -3049,6 +3215,63 @@ mod tests {
         })
         .fill();
         assert!(matches!(spacer_node, Node::Spacer(_)));
+    }
+
+    #[test]
+    fn node_fluent_helpers_apply_container_and_style_fields() {
+        let panel_node = panel("main", label("x"))
+            .title("Main")
+            .pad_all(14)
+            .background(Color::rgb(12, 16, 22))
+            .outline(Color::rgb(44, 52, 68));
+        match panel_node {
+            Node::Panel(panel) => {
+                assert_eq!(panel.title.as_deref(), Some("Main"));
+                assert_eq!(panel.padding, 14);
+                assert_eq!(panel.background, Some(Color::rgb(12, 16, 22)));
+                assert_eq!(panel.outline, Some(Color::rgb(44, 52, 68)));
+            }
+            _ => panic!("expected panel node"),
+        }
+
+        let row_node = row(vec![label("a"), label("b")])
+            .gap(6)
+            .pad_xy(10, 8)
+            .align_center()
+            .justify_space_between();
+        match row_node {
+            Node::Row(flex) => {
+                assert_eq!(flex.gap, 6);
+                assert_eq!(flex.padding, EdgeInsets::symmetric(10, 8));
+                assert_eq!(flex.align, Align::Center);
+                assert_eq!(flex.justify, Justify::SpaceBetween);
+            }
+            _ => panic!("expected row node"),
+        }
+
+        let grid_node = grid(
+            GridTemplate::columns_fr(2),
+            vec![spacer(Size {
+                width: 8,
+                height: 8,
+            })],
+        )
+        .gap_xy(3, 9)
+        .pad_all(5);
+        match grid_node {
+            Node::Grid(grid) => {
+                assert_eq!(grid.template.column_gap, 3);
+                assert_eq!(grid.template.row_gap, 9);
+                assert_eq!(grid.template.padding, EdgeInsets::all(5));
+            }
+            _ => panic!("expected grid node"),
+        }
+
+        let label_node = label("name").text_color(Color::rgb(200, 180, 90));
+        match label_node {
+            Node::Label(label) => assert_eq!(label.color, Some(Color::rgb(200, 180, 90))),
+            _ => panic!("expected label node"),
+        }
     }
 
     #[test]

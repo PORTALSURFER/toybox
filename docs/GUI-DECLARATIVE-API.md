@@ -31,7 +31,12 @@ Use helper constructors for common nodes:
 - `RegionSpec::draw_commands(...)` for declarative custom canvas drawing.
 
 These map directly to `Node::*` variants and keep the tree callback-free.
-Most node helpers also support `.layout(...)`, `.fill()`, `.fill_width()`, and `.fill_height()`.
+Most node helpers also support fluent node chaining:
+- layout: `.layout(...)`, `.fill()`, `.fill_width()`, `.fill_height()`
+- container spacing: `.gap(...)`, `.gap_xy(...)`, `.pad_all(...)`, `.pad_xy(...)`
+- flex distribution: `.align_*()` and `.justify_*()` on row/column nodes
+- panel styling: `.title(...)`, `.background(...)`, `.outline(...)`
+- label styling: `.text_color(...)`
 
 ## Layout Ergonomics
 Use fluent helpers to reduce boilerplate:
@@ -63,7 +68,7 @@ Validation includes:
 ## Example
 ```rust
 use toybox::gui::declarative::{
-    button, panel, FlexSpec, LayoutBox, Node, RootFrameSpec, UiAction, UiSpec,
+    button, panel, row, LayoutBox, RootFrameSpec, UiAction, UiSpec,
 };
 
 #[derive(Default)]
@@ -72,13 +77,11 @@ struct GuiState {
 }
 
 fn build(_input: &toybox::clap::gui::InputState, _state: &GuiState) -> UiSpec {
-    let controls = Node::Row(
-        FlexSpec::row(vec![
-            button("inc", "Increment"),
-            button("dec", "Decrement"),
-        ])
-        .justify_space_between(),
-    );
+    let controls = row(vec![
+        button("inc", "Increment"),
+        button("dec", "Decrement"),
+    ])
+    .justify_space_between();
 
     UiSpec::new(
         RootFrameSpec::new(

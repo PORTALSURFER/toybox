@@ -9,14 +9,12 @@ Use a root frame that fills host space, then stack panels in a column.
 ```rust
 let root = RootFrameSpec::new(
     "root",
-    Node::Column(
-        FlexSpec::column(vec![
-            Node::Panel(PanelSpec::new("header", label("Header")).layout(LayoutBox::fill_width())),
-            Node::Panel(PanelSpec::new("body", body_node).layout(LayoutBox::fill())),
-        ])
-        .gap(12)
-        .pad_xy(16, 12),
-    ),
+    column(vec![
+        panel("header", label("Header")).fill_width(),
+        panel("body", body_node).fill(),
+    ])
+    .gap(12)
+    .pad_xy(16, 12),
 )
 .layout(LayoutBox::fill());
 ```
@@ -25,16 +23,14 @@ let root = RootFrameSpec::new(
 Use `Fill` widths and `justify_space_between` when parent width is larger than content.
 
 ```rust
-let row = Node::Row(
-    FlexSpec::row(vec![
-        slider("mix", "Mix", 0.5, (0.0, 1.0)),
-        slider("tone", "Tone", 0.3, (0.0, 1.0)),
-        slider("drive", "Drive", 0.2, (0.0, 1.0)),
-    ])
-    .justify_space_between()
-    .gap(8)
-    .layout(LayoutBox::fill_width()),
-);
+let row = row(vec![
+    slider("mix", "Mix", 0.5, (0.0, 1.0)),
+    slider("tone", "Tone", 0.3, (0.0, 1.0)),
+    slider("drive", "Drive", 0.2, (0.0, 1.0)),
+])
+.justify_space_between()
+.gap(8)
+.fill_width();
 ```
 
 ## Parameter Grid
@@ -73,10 +69,10 @@ Use a region for pointer interaction and a control rail beneath it.
 ```rust
 let graph_section = column(vec![
     region("graph", Size { width: 520, height: 240 }),
-    Node::Row(FlexSpec::row(vec![
+    row(vec![
         toggle("snap", "Snap", true),
         button("reset", "Reset"),
-    ]).gap(8)),
+    ]).gap(8),
 ]);
 ```
 
