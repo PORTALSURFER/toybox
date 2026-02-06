@@ -67,7 +67,9 @@ impl Rect {
 
 /// CPU-side RGBA canvas with simple drawing helpers.
 pub struct Canvas {
+    /// Current canvas dimensions.
     size: Size,
+    /// Packed RGBA pixel data in row-major order.
     pixels: Vec<u8>,
 }
 
@@ -189,7 +191,7 @@ impl Canvas {
         if radius <= 0 {
             return;
         }
-        let r2 = (radius * radius) as i32;
+        let r2 = radius * radius;
         let y0 = max(center.y - radius, 0);
         let y1 = min(center.y + radius, self.size.height as i32 - 1);
         let x0 = max(center.x - radius, 0);
@@ -357,7 +359,7 @@ impl Canvas {
             for (row, bits) in glyph.iter().enumerate() {
                 for col in 0..5 {
                     if (bits >> (4 - col)) & 1 == 1 {
-                        let x = cursor.x + col as i32 * scale;
+                        let x = cursor.x + col * scale;
                         let y = cursor.y + row as i32 * scale;
                         for dy in 0..scale {
                             for dx in 0..scale {
@@ -379,6 +381,7 @@ impl Canvas {
         }
     }
 
+    /// Alpha-blend a single source color into the destination pixel.
     fn blend_pixel(&mut self, x: u32, y: u32, color: Color) {
         let idx = ((y as usize) * (self.size.width as usize) + (x as usize)) * 4;
         let dst = &mut self.pixels[idx..idx + 4];
@@ -387,10 +390,11 @@ impl Canvas {
         dst[0] = ((color.r as u32 * src_a + dst[0] as u32 * inv_a) / 255) as u8;
         dst[1] = ((color.g as u32 * src_a + dst[1] as u32 * inv_a) / 255) as u8;
         dst[2] = ((color.b as u32 * src_a + dst[2] as u32 * inv_a) / 255) as u8;
-        dst[3] = min(255, (dst[3] as u32 + src_a) as u32) as u8;
+        dst[3] = min(255, dst[3] as u32 + src_a) as u8;
     }
 }
 
+/// Normalize an angle to the `[0, 2π)` range.
 fn normalize_angle(angle: f32) -> f32 {
     let mut normalized = angle % std::f32::consts::TAU;
     if normalized < 0.0 {
@@ -399,6 +403,7 @@ fn normalize_angle(angle: f32) -> f32 {
     normalized
 }
 
+/// Return true when `angle` lies in the inclusive start/end arc interval.
 fn angle_in_range(angle: f32, start: f32, end: f32) -> bool {
     if start <= end {
         angle >= start && angle <= end
@@ -407,9 +412,11 @@ fn angle_in_range(angle: f32, start: f32, end: f32) -> bool {
     }
 }
 
+/// Built-in 5x7 bitmap font used by [`Canvas::draw_text`].
 struct BitmapFont;
 
 impl BitmapFont {
+    /// Return the 5x7 glyph bitmap for a character.
     fn glyph(ch: char) -> [u8; 7] {
         match ch {
             '0' => [

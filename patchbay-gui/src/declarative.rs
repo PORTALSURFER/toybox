@@ -117,20 +117,15 @@ impl Padding {
 }
 
 /// Cross-axis alignment for flex containers.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub enum Align {
     /// Align to the start of the cross axis.
+    #[default]
     Start,
     /// Center on the cross axis.
     Center,
     /// Align to the end of the cross axis.
     End,
-}
-
-impl Default for Align {
-    fn default() -> Self {
-        Self::Start
-    }
 }
 
 /// Row/column layout specification.
@@ -146,6 +141,23 @@ pub struct FlexSpec<'a, C> {
     /// Child nodes.
     pub children: Vec<Node<'a, C>>,
 }
+
+/// Render callback type used by custom declarative widgets.
+type WidgetRenderFn<'a, C> = dyn FnMut(&mut Ui<'_>, Rect, &mut C) + 'a;
+/// Interaction callback type for knob widgets.
+type KnobInteractionFn<'a, C> = dyn FnMut(&mut C, KnobEvent) + 'a;
+/// Interaction callback type for slider widgets.
+type SliderInteractionFn<'a, C> = dyn FnMut(&mut C, SliderEvent) + 'a;
+/// Interaction callback type for toggle widgets.
+type ToggleInteractionFn<'a, C> = dyn FnMut(&mut C, ToggleEvent) + 'a;
+/// Interaction callback type for button widgets.
+type ButtonInteractionFn<'a, C> = dyn FnMut(&mut C, ButtonEvent) + 'a;
+/// Interaction callback type for dropdown widgets.
+type DropdownInteractionFn<'a, C> = dyn FnMut(&mut C, DropdownEvent) + 'a;
+/// Interaction callback type for custom region widgets.
+type RegionInteractionFn<'a, C> = dyn FnMut(&mut C, RegionEvent) + 'a;
+/// Drawing callback type for custom region widgets.
+type RegionDrawFn<'a, C> = dyn FnMut(&mut crate::canvas::Canvas, Rect, &mut C, RegionResponse) + 'a;
 
 /// Grid layout specification.
 pub struct GridSpec<'a, C> {
@@ -222,7 +234,7 @@ pub struct WidgetSpec<'a, C> {
     /// Optional explicit size for the widget.
     pub size: SizeSpec,
     /// Render callback invoked with the resolved rectangle.
-    pub render: Box<dyn FnMut(&mut Ui<'_>, Rect, &mut C) + 'a>,
+    pub render: Box<WidgetRenderFn<'a, C>>,
 }
 
 /// Knob widget specification.
@@ -240,7 +252,7 @@ pub struct KnobSpec<'a, C> {
     /// Optional explicit size for the widget.
     pub size: SizeSpec,
     /// Optional callback invoked after interaction.
-    pub on_interaction: Option<Box<dyn FnMut(&mut C, KnobEvent) + 'a>>,
+    pub on_interaction: Option<Box<KnobInteractionFn<'a, C>>>,
 }
 
 /// Slider widget specification.
@@ -258,7 +270,7 @@ pub struct SliderSpec<'a, C> {
     /// Optional explicit size for the widget.
     pub size: SizeSpec,
     /// Optional callback invoked after interaction.
-    pub on_interaction: Option<Box<dyn FnMut(&mut C, SliderEvent) + 'a>>,
+    pub on_interaction: Option<Box<SliderInteractionFn<'a, C>>>,
 }
 
 /// Toggle widget specification.
@@ -274,7 +286,7 @@ pub struct ToggleSpec<'a, C> {
     /// Optional explicit size for the widget.
     pub size: SizeSpec,
     /// Optional callback invoked after interaction.
-    pub on_interaction: Option<Box<dyn FnMut(&mut C, ToggleEvent) + 'a>>,
+    pub on_interaction: Option<Box<ToggleInteractionFn<'a, C>>>,
 }
 
 /// Button widget specification.
@@ -288,7 +300,7 @@ pub struct ButtonSpec<'a, C> {
     /// Optional explicit size for the widget.
     pub size: SizeSpec,
     /// Optional callback invoked after interaction.
-    pub on_interaction: Option<Box<dyn FnMut(&mut C, ButtonEvent) + 'a>>,
+    pub on_interaction: Option<Box<ButtonInteractionFn<'a, C>>>,
 }
 
 /// Dropdown widget specification.
@@ -306,7 +318,7 @@ pub struct DropdownSpec<'a, C> {
     /// Optional explicit size for the widget.
     pub size: SizeSpec,
     /// Optional callback invoked after interaction.
-    pub on_interaction: Option<Box<dyn FnMut(&mut C, DropdownEvent) + 'a>>,
+    pub on_interaction: Option<Box<DropdownInteractionFn<'a, C>>>,
 }
 
 /// Interactive region widget specification.
@@ -316,9 +328,9 @@ pub struct RegionSpec<'a, C> {
     /// Explicit size for the region.
     pub size: Size,
     /// Optional callback invoked after interaction.
-    pub on_interaction: Option<Box<dyn FnMut(&mut C, RegionEvent) + 'a>>,
+    pub on_interaction: Option<Box<RegionInteractionFn<'a, C>>>,
     /// Optional custom drawing callback.
-    pub draw: Option<Box<dyn FnMut(&mut crate::canvas::Canvas, Rect, &mut C, RegionResponse) + 'a>>,
+    pub draw: Option<Box<RegionDrawFn<'a, C>>>,
 }
 
 /// Indicator widget specification.
@@ -430,6 +442,7 @@ pub fn render_checked<C>(
     Ok(render_impl(spec, ui, origin, ctx, &theme))
 }
 
+/// Shared implementation for `render` and `render_checked`.
 fn render_impl<C>(
     spec: &mut UiSpec<'_, C>,
     ui: &mut Ui<'_>,
@@ -456,6 +469,7 @@ fn render_impl<C>(
     measured
 }
 
+/// Validate that all widget-like nodes are nested under a panel.
 fn validate_panel_only<C>(node: &Node<'_, C>, in_panel: bool) -> Result<(), DeclarativeError> {
     match node {
         Node::Panel(panel) => validate_panel_only(&panel.content, true)?,
@@ -499,6 +513,7 @@ fn validate_panel_only<C>(node: &Node<'_, C>, in_panel: bool) -> Result<(), Decl
     Ok(())
 }
 
+/// Return a stable display name for a declarative node variant.
 fn node_kind<C>(node: &Node<'_, C>) -> &'static str {
     match node {
         Node::Panel(_) => "Panel",
@@ -519,6 +534,7 @@ fn node_kind<C>(node: &Node<'_, C>) -> &'static str {
     }
 }
 
+/// Render a single declarative node into the provided rectangle.
 fn render_node<C>(node: &mut Node<'_, C>, rect: Rect, ui: &mut Ui<'_>, theme: &Theme, ctx: &mut C) {
     match node {
         Node::Panel(panel) => render_panel(panel, rect, ui, theme, ctx),
@@ -539,6 +555,7 @@ fn render_node<C>(node: &mut Node<'_, C>, rect: Rect, ui: &mut Ui<'_>, theme: &T
     }
 }
 
+/// Measure a node's preferred size before layout.
 fn measure_node<C>(node: &Node<'_, C>, theme: &Theme) -> Size {
     match node {
         Node::Panel(panel) => measure_panel(panel, theme),
@@ -565,6 +582,7 @@ fn measure_node<C>(node: &Node<'_, C>, theme: &Theme) -> Size {
     }
 }
 
+/// Measure the root frame including title/padding overhead.
 fn measure_root_frame<C>(frame: &RootFrameSpec<'_, C>, theme: &Theme) -> Size {
     let content = measure_node(&frame.content, theme);
     let header_height = panel_header_height(frame.title.as_deref(), theme);
@@ -573,6 +591,7 @@ fn measure_root_frame<C>(frame: &RootFrameSpec<'_, C>, theme: &Theme) -> Size {
     Size { width, height }
 }
 
+/// Measure a panel node and clamp against explicit size constraints.
 fn measure_panel<C>(panel: &PanelSpec<'_, C>, theme: &Theme) -> Size {
     let content = measure_node(&panel.content, theme);
     let header_height = panel
@@ -583,6 +602,7 @@ fn measure_panel<C>(panel: &PanelSpec<'_, C>, theme: &Theme) -> Size {
     clamp_size_spec(panel.size, Size { width, height })
 }
 
+/// Measure a row/column container along the provided axis.
 fn measure_flex<C>(flex: &FlexSpec<'_, C>, theme: &Theme, axis: Axis) -> Size {
     let mut total_main = 0i32;
     let mut max_cross = 0i32;
@@ -622,6 +642,7 @@ fn measure_flex<C>(flex: &FlexSpec<'_, C>, theme: &Theme, axis: Axis) -> Size {
     clamp_size_spec(flex.size, measured)
 }
 
+/// Measure a grid node including child-derived minimum cell sizes.
 fn measure_grid<C>(grid: &GridSpec<'_, C>, theme: &Theme) -> Size {
     let (cell_width, cell_height) = grid_cell_minimums(grid, theme);
     let columns = grid.columns.max(1);
@@ -639,11 +660,13 @@ fn measure_grid<C>(grid: &GridSpec<'_, C>, theme: &Theme) -> Size {
     clamp_size_spec(grid.size, measured)
 }
 
+/// Measure a label node at the current theme text scale.
 fn measure_label(label: &LabelSpec, theme: &Theme) -> Size {
     let measured = text_size(&label.text, theme.text_scale);
     clamp_size_spec(label.size, measured)
 }
 
+/// Measure an absolute-positioned container.
 fn measure_absolute<C>(absolute: &AbsoluteSpec<'_, C>, theme: &Theme) -> Size {
     let mut max_x = 0i32;
     let mut max_y = 0i32;
@@ -661,6 +684,7 @@ fn measure_absolute<C>(absolute: &AbsoluteSpec<'_, C>, theme: &Theme) -> Size {
     clamp_size_spec(absolute.size, measured)
 }
 
+/// Measure a knob control node.
 fn measure_knob<C>(knob: &KnobSpec<'_, C>, theme: &Theme) -> Size {
     let label_height = 8 * theme.text_scale as i32;
     let label_gap = 4 * theme.text_scale as i32;
@@ -676,6 +700,7 @@ fn measure_knob<C>(knob: &KnobSpec<'_, C>, theme: &Theme) -> Size {
     clamp_size_spec(knob.size, Size { width, height })
 }
 
+/// Measure a slider control node.
 fn measure_slider<C>(slider: &SliderSpec<'_, C>, theme: &Theme) -> Size {
     let label_height = if slider.label.is_empty() {
         0
@@ -688,6 +713,7 @@ fn measure_slider<C>(slider: &SliderSpec<'_, C>, theme: &Theme) -> Size {
     clamp_size_spec(slider.size, Size { width, height })
 }
 
+/// Measure a toggle control node.
 fn measure_toggle<C>(toggle: &ToggleSpec<'_, C>, theme: &Theme) -> Size {
     let label_height = if toggle.label.is_empty() {
         0
@@ -700,6 +726,7 @@ fn measure_toggle<C>(toggle: &ToggleSpec<'_, C>, theme: &Theme) -> Size {
     clamp_size_spec(toggle.size, Size { width, height })
 }
 
+/// Measure a button control node.
 fn measure_button<C>(button: &ButtonSpec<'_, C>, theme: &Theme) -> Size {
     let label_size = text_size(&button.label, theme.text_scale);
     let width = button.control_size.width.max(label_size.width + 8);
@@ -707,6 +734,7 @@ fn measure_button<C>(button: &ButtonSpec<'_, C>, theme: &Theme) -> Size {
     clamp_size_spec(button.size, Size { width, height })
 }
 
+/// Measure a dropdown control node.
 fn measure_dropdown<C>(dropdown: &DropdownSpec<'_, C>, theme: &Theme) -> Size {
     let label_height = if dropdown.label.is_empty() {
         0
@@ -719,6 +747,7 @@ fn measure_dropdown<C>(dropdown: &DropdownSpec<'_, C>, theme: &Theme) -> Size {
     clamp_size_spec(dropdown.size, Size { width, height })
 }
 
+/// Clamp a measured size to an explicit fixed size when requested.
 fn clamp_size_spec(spec: SizeSpec, measured: Size) -> Size {
     match spec {
         SizeSpec::Fixed(size) => Size {
@@ -729,6 +758,7 @@ fn clamp_size_spec(spec: SizeSpec, measured: Size) -> Size {
     }
 }
 
+/// Compute the minimum cell size needed to fit all grid children.
 fn grid_cell_minimums<C>(grid: &GridSpec<'_, C>, theme: &Theme) -> (u32, u32) {
     let mut max_child = Size {
         width: 0,
@@ -745,6 +775,7 @@ fn grid_cell_minimums<C>(grid: &GridSpec<'_, C>, theme: &Theme) -> (u32, u32) {
     )
 }
 
+/// Render a panel container and then its content node.
 fn render_panel<C>(
     panel: &mut PanelSpec<'_, C>,
     rect: Rect,
@@ -789,6 +820,7 @@ fn render_panel<C>(
     render_node(&mut panel.content, content_rect, ui, theme, ctx);
 }
 
+/// Render a flex container and place children along the requested axis.
 fn render_flex<C>(
     flex: &mut FlexSpec<'_, C>,
     rect: Rect,
@@ -845,7 +877,7 @@ fn render_flex<C>(
             Axis::Vertical => size.height as i32,
         };
         if matches!(child_size_spec(child), SizeSpec::Fill) {
-            main = main + fill_extra;
+            main += fill_extra;
         }
         let cross = match axis {
             Axis::Horizontal => size.height as i32,
@@ -901,6 +933,7 @@ fn render_flex<C>(
     }
 }
 
+/// Render a fixed-cell grid container.
 fn render_grid<C>(
     grid: &mut GridSpec<'_, C>,
     rect: Rect,
@@ -933,6 +966,7 @@ fn render_grid<C>(
     }
 }
 
+/// Render a text label node.
 fn render_label(label: &LabelSpec, rect: Rect, ui: &mut Ui<'_>, theme: &Theme) {
     let color = label.color.unwrap_or(theme.text);
     let pos = rect.origin;
@@ -940,6 +974,7 @@ fn render_label(label: &LabelSpec, rect: Rect, ui: &mut Ui<'_>, theme: &Theme) {
         .draw_text(pos, &label.text, color, theme.text_scale);
 }
 
+/// Render an absolute-positioned container.
 fn render_absolute<C>(
     absolute: &mut AbsoluteSpec<'_, C>,
     rect: Rect,
@@ -960,6 +995,7 @@ fn render_absolute<C>(
     }
 }
 
+/// Render a knob control node and emit interaction callbacks.
 fn render_knob<C>(
     knob: &mut KnobSpec<'_, C>,
     rect: Rect,
@@ -980,6 +1016,7 @@ fn render_knob<C>(
     }
 }
 
+/// Render a slider control node and emit interaction callbacks.
 fn render_slider<C>(
     slider: &mut SliderSpec<'_, C>,
     rect: Rect,
@@ -1002,6 +1039,7 @@ fn render_slider<C>(
     }
 }
 
+/// Render a toggle control node and emit interaction callbacks.
 fn render_toggle<C>(
     toggle: &mut ToggleSpec<'_, C>,
     rect: Rect,
@@ -1017,6 +1055,7 @@ fn render_toggle<C>(
     }
 }
 
+/// Render a button control node and emit interaction callbacks.
 fn render_button<C>(
     button: &mut ButtonSpec<'_, C>,
     rect: Rect,
@@ -1031,6 +1070,7 @@ fn render_button<C>(
     }
 }
 
+/// Render a dropdown control node and emit interaction callbacks.
 fn render_dropdown<C>(
     dropdown: &mut DropdownSpec<'_, C>,
     rect: Rect,
@@ -1054,6 +1094,7 @@ fn render_dropdown<C>(
     }
 }
 
+/// Render an interactive region node and optional custom draw callback.
 fn render_region<C>(
     region: &mut RegionSpec<'_, C>,
     rect: Rect,
@@ -1070,10 +1111,12 @@ fn render_region<C>(
     }
 }
 
+/// Render a non-interactive indicator node.
 fn render_indicator(indicator: &IndicatorSpec, rect: Rect, ui: &mut Ui<'_>, _theme: &Theme) {
     ui.indicator(rect, indicator.active);
 }
 
+/// Compute panel/header height for a given optional title.
 fn panel_header_height(title: Option<&str>, theme: &Theme) -> i32 {
     if title.is_some() {
         (8 * theme.text_scale as i32 + 4).max(0)
@@ -1082,6 +1125,7 @@ fn panel_header_height(title: Option<&str>, theme: &Theme) -> i32 {
     }
 }
 
+/// Format a knob value into a compact display string.
 fn format_knob_value(value: f32) -> String {
     let mut text = if value.abs() >= 1.0 {
         format!("{value:.2}")
@@ -1104,6 +1148,7 @@ fn format_knob_value(value: f32) -> String {
     text
 }
 
+/// Measure monospaced bitmap text bounds at a specific scale.
 fn text_size(text: &str, scale: u32) -> Size {
     let scale = scale.max(1) as i32;
     let mut max_cols = 0i32;
@@ -1125,6 +1170,7 @@ fn text_size(text: &str, scale: u32) -> Size {
     }
 }
 
+/// Extract the `SizeSpec` associated with a node variant.
 fn child_size_spec<C>(node: &Node<'_, C>) -> SizeSpec {
     match node {
         Node::Panel(panel) => panel.size,
@@ -1148,9 +1194,12 @@ fn child_size_spec<C>(node: &Node<'_, C>) -> SizeSpec {
     }
 }
 
+/// Major layout axis for flex measurement/rendering.
 #[derive(Clone, Copy)]
 enum Axis {
+    /// Horizontal flow (row layout).
     Horizontal,
+    /// Vertical flow (column layout).
     Vertical,
 }
 

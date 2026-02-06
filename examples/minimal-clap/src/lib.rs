@@ -277,6 +277,12 @@ impl GainParams {
     }
 }
 
+impl Default for GainParams {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// An atomic `f32` backed by an `AtomicU32`.
 struct AtomicF32 {
     /// Packed float bits stored atomically.

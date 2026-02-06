@@ -74,29 +74,42 @@ impl Default for Theme {
 /// Input and stateful data for widget interaction.
 #[derive(Debug, Default)]
 pub struct UiState {
+    /// Currently active widget id (pressed/dragging).
     active: Option<WidgetId>,
+    /// Widget id currently under pointer hover.
     hot: Option<WidgetId>,
+    /// Pointer position at the start of a drag gesture.
     drag_start: Option<Point>,
+    /// Value captured when dragging begins.
     drag_value: f32,
+    /// Dropdown currently opened this frame, if any.
     open_dropdown: Option<WidgetId>,
+    /// Cached layout measurements keyed by container id.
     layout: LayoutState,
+    /// Deferred dropdown overlays to render after widgets.
     overlays: Vec<DropdownOverlay>,
+    /// Tracks whether this frame already consumed mouse-press input.
     consume_mouse_pressed: bool,
+    /// Most recently measured root frame size.
     root_frame_size: Option<Size>,
+    /// Whether root frame sizing was updated this frame.
     root_frame_used: bool,
 }
 
 /// Cached container sizes for auto layout.
 #[derive(Debug, Default)]
 struct LayoutState {
+    /// Last measured size for each keyed layout container.
     sizes: HashMap<WidgetId, Size>,
 }
 
 impl LayoutState {
+    /// Return the cached size for a container id.
     fn get(&self, id: WidgetId) -> Option<Size> {
         self.sizes.get(&id).copied()
     }
 
+    /// Update the cached size for a container id.
     fn set(&mut self, id: WidgetId, size: Size) {
         self.sizes.insert(id, size);
     }
@@ -104,22 +117,26 @@ impl LayoutState {
 
 impl UiState {
     #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    /// Start a new frame and reset one-frame root-size tracking.
     pub(crate) fn begin_frame(&mut self) {
         self.root_frame_used = false;
         self.root_frame_size = None;
     }
 
+    /// Store the latest measured root frame size for host resize requests.
     pub(crate) fn set_root_frame_size(&mut self, size: Size) {
         self.root_frame_used = true;
         self.root_frame_size = Some(size);
     }
 
     #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    /// Return whether a root frame size was recorded this frame.
     pub(crate) fn root_frame_used(&self) -> bool {
         self.root_frame_used
     }
 
     #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    /// Take and clear the most recent root frame size.
     pub(crate) fn take_root_frame_size(&mut self) -> Option<Size> {
         self.root_frame_size.take()
     }
@@ -128,9 +145,13 @@ impl UiState {
 /// Deferred dropdown overlay drawing data.
 #[derive(Clone, Debug)]
 struct DropdownOverlay {
+    /// Rectangle of the closed dropdown control.
     base_rect: Rect,
+    /// Option labels rendered in the overlay menu.
     options: Vec<String>,
+    /// Option index currently hovered by the pointer.
     hovered: Option<usize>,
+    /// Whether overlay options render upward instead of downward.
     open_up: bool,
 }
 
@@ -260,12 +281,16 @@ pub struct GridResponse {
 
 /// Helper context for addressing grid cells.
 pub struct GridContext {
+    /// Top-left origin of the grid in window coordinates.
     origin: Point,
+    /// Grid spacing and cell size specification.
     spec: GridSpec,
+    /// Maximum referenced cell index for bounds reporting.
     max_index: i32,
 }
 
 impl GridContext {
+    /// Create a new grid context at a given origin.
     fn new(origin: Point, spec: GridSpec) -> Self {
         Self {
             origin,
@@ -303,6 +328,7 @@ impl GridContext {
     }
 }
 
+/// Return the axis-aligned union of two rectangles.
 fn rect_union(a: Rect, b: Rect) -> Rect {
     let min_x = a.origin.x.min(b.origin.x);
     let min_y = a.origin.y.min(b.origin.y);
@@ -317,6 +343,7 @@ fn rect_union(a: Rect, b: Rect) -> Rect {
     }
 }
 
+/// Measure monospaced bitmap text bounds at the given scale.
 fn text_size(text: &str, scale: u32) -> Size {
     let scale = scale.max(1) as i32;
     let mut max_cols = 0i32;
@@ -338,6 +365,7 @@ fn text_size(text: &str, scale: u32) -> Size {
     }
 }
 
+/// Fit a string to a single line, appending ellipsis when truncated.
 fn fit_text_single_line_ellipsis(text: &str, max_width: u32, scale: u32) -> String {
     if max_width == 0 {
         return String::new();
@@ -351,7 +379,7 @@ fn fit_text_single_line_ellipsis(text: &str, max_width: u32, scale: u32) -> Stri
         return single_line;
     }
 
-    let char_width = (6 * scale.max(1)) as u32;
+    let char_width = 6 * scale.max(1);
     if char_width == 0 {
         return String::new();
     }
@@ -440,12 +468,19 @@ pub struct DropdownResponse {
 
 /// UI frame context used to draw widgets and handle input.
 pub struct Ui<'a> {
+    /// Destination canvas for all widget drawing.
     canvas: &'a mut Canvas,
+    /// Immutable input snapshot for the current frame.
     input: &'a InputState,
+    /// Mutable per-window UI interaction state.
     state: &'a mut UiState,
+    /// Sequential layout cursor and sizing configuration.
     layout: &'a mut Layout,
+    /// Theme colors and typography values.
     theme: &'a Theme,
+    /// Saved layout scopes used by `with_layout`.
     layout_stack: Vec<Layout>,
+    /// Nested bounds tracking stack for auto-size containers.
     bounds_stack: Vec<Option<Rect>>,
 }
 
@@ -628,6 +663,7 @@ impl<'a> Ui<'a> {
         }
     }
 
+    /// Queue a dropdown overlay for deferred draw order.
     fn push_dropdown_overlay(
         &mut self,
         base_rect: Rect,
@@ -693,14 +729,17 @@ impl<'a> Ui<'a> {
         self.state.consume_mouse_pressed = false;
     }
 
+    /// Return true when a primary-button press is still available this frame.
     fn mouse_pressed(&self) -> bool {
         self.input.mouse_pressed && !self.state.consume_mouse_pressed
     }
 
+    /// Consume the frame's primary-button press.
     fn consume_mouse_pressed(&mut self) {
         self.state.consume_mouse_pressed = true;
     }
 
+    /// Draw a single-line label with ellipsis truncation.
     fn draw_text_single_line_clamped(
         &mut self,
         origin: Point,
@@ -725,14 +764,17 @@ impl<'a> Ui<'a> {
         size
     }
 
+    /// Push a new empty bounds union for nested layout tracking.
     fn push_bounds(&mut self) {
         self.bounds_stack.push(None);
     }
 
+    /// Pop the current bounds union.
     fn pop_bounds(&mut self) -> Option<Rect> {
         self.bounds_stack.pop().flatten()
     }
 
+    /// Merge a rendered rectangle into the current bounds union.
     fn track_rect_internal(&mut self, rect: Rect) {
         if let Some(entry) = self.bounds_stack.last_mut() {
             *entry = Some(match *entry {
@@ -1078,6 +1120,7 @@ impl<'a> Ui<'a> {
         response
     }
 
+    /// Format a knob value using compact decimal precision.
     fn format_knob_value(value: f32) -> String {
         let mut text = format!("{value:.2}");
         if text.contains('.') {
@@ -1178,15 +1221,16 @@ impl<'a> Ui<'a> {
             response.active = false;
         }
 
-        if self.state.active == Some(id) && self.input.mouse_down {
-            if let Some(start) = self.state.drag_start {
-                let dy = (self.input.pointer_pos.y - start.y) as f32;
-                let delta = -dy * 0.005 * (range.1 - range.0);
-                let new_value = (self.state.drag_value + delta).clamp(range.0, range.1);
-                if (*value - new_value).abs() > f32::EPSILON {
-                    *value = new_value;
-                    response.changed = true;
-                }
+        if self.state.active == Some(id)
+            && self.input.mouse_down
+            && let Some(start) = self.state.drag_start
+        {
+            let dy = (self.input.pointer_pos.y - start.y) as f32;
+            let delta = -dy * 0.005 * (range.1 - range.0);
+            let new_value = (self.state.drag_value + delta).clamp(range.0, range.1);
+            if (*value - new_value).abs() > f32::EPSILON {
+                *value = new_value;
+                response.changed = true;
             }
         }
 
@@ -1753,6 +1797,7 @@ impl<'a> Ui<'a> {
         self.dropdown(id, label, options, selected, width, height)
     }
 
+    /// Render a knob in a fixed rectangle without affecting surrounding layout.
     pub(crate) fn knob_with_labels_in_rect(
         &mut self,
         id: WidgetId,
@@ -1779,6 +1824,7 @@ impl<'a> Ui<'a> {
         response
     }
 
+    /// Render a slider in a fixed rectangle without affecting surrounding layout.
     pub(crate) fn slider_in_rect(
         &mut self,
         id: WidgetId,
@@ -1803,6 +1849,7 @@ impl<'a> Ui<'a> {
         response
     }
 
+    /// Render a toggle in a fixed rectangle without affecting surrounding layout.
     pub(crate) fn toggle_in_rect(
         &mut self,
         id: WidgetId,
@@ -1819,6 +1866,7 @@ impl<'a> Ui<'a> {
         response
     }
 
+    /// Render a button in a fixed rectangle without affecting surrounding layout.
     pub(crate) fn button_in_rect(
         &mut self,
         id: WidgetId,
@@ -1838,6 +1886,7 @@ impl<'a> Ui<'a> {
         response
     }
 
+    /// Render a dropdown in a fixed rectangle without affecting surrounding layout.
     pub(crate) fn dropdown_in_rect(
         &mut self,
         id: WidgetId,
@@ -1896,10 +1945,12 @@ mod tests {
         let theme = Theme::default();
         let mut ui_state = UiState::default();
         let mut value = 0.5;
-        let mut input = InputState::default();
-        input.pointer_pos = Point { x: 40, y: 60 };
-        input.mouse_pressed = true;
-        input.mouse_down = true;
+        let mut input = InputState {
+            pointer_pos: Point { x: 40, y: 60 },
+            mouse_pressed: true,
+            mouse_down: true,
+            ..InputState::default()
+        };
 
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
@@ -1925,10 +1976,12 @@ mod tests {
         let theme = Theme::default();
         let mut ui_state = UiState::default();
         let mut value = 0.5;
-        let mut input = InputState::default();
-        input.pointer_pos = Point { x: 40, y: 60 };
-        input.mouse_pressed = true;
-        input.mouse_down = true;
+        let mut input = InputState {
+            pointer_pos: Point { x: 40, y: 60 },
+            mouse_pressed: true,
+            mouse_down: true,
+            ..InputState::default()
+        };
 
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
@@ -1953,8 +2006,10 @@ mod tests {
         let theme = Theme::default();
         let mut ui_state = UiState::default();
         let mut value = 0.5;
-        let mut input = InputState::default();
-        input.pointer_pos = Point { x: 24, y: 150 };
+        let input = InputState {
+            pointer_pos: Point { x: 24, y: 150 },
+            ..InputState::default()
+        };
 
         let rect = Rect {
             origin: Point { x: 0, y: 0 },
@@ -2172,10 +2227,12 @@ mod tests {
         let theme = Theme::default();
         let mut ui_state = UiState::default();
         let mut value = 0.0;
-        let mut input = InputState::default();
-        input.pointer_pos = Point { x: 20, y: 40 };
-        input.mouse_pressed = true;
-        input.mouse_down = true;
+        let mut input = InputState {
+            pointer_pos: Point { x: 20, y: 40 },
+            mouse_pressed: true,
+            mouse_down: true,
+            ..InputState::default()
+        };
 
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
@@ -2293,9 +2350,11 @@ mod tests {
         let theme = Theme::default();
         let mut ui_state = UiState::default();
         let mut value = false;
-        let mut input = InputState::default();
-        input.pointer_pos = Point { x: 20, y: 40 };
-        input.mouse_pressed = true;
+        let input = InputState {
+            pointer_pos: Point { x: 20, y: 40 },
+            mouse_pressed: true,
+            ..InputState::default()
+        };
 
         let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
         let response = ui.toggle(WidgetId::new(3), "Toggle", &mut value, 40, 16);
@@ -2309,9 +2368,11 @@ mod tests {
         let mut layout = Layout::default();
         let theme = Theme::default();
         let mut ui_state = UiState::default();
-        let mut input = InputState::default();
-        input.pointer_pos = Point { x: 20, y: 20 };
-        input.mouse_pressed = true;
+        let input = InputState {
+            pointer_pos: Point { x: 20, y: 20 },
+            mouse_pressed: true,
+            ..InputState::default()
+        };
 
         let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
         let response = ui.button(WidgetId::new(4), "OK", 40, 16);
@@ -2325,12 +2386,13 @@ mod tests {
         let layout_origin = layout.cursor;
         let theme = Theme::default();
         let mut ui_state = UiState::default();
-        let mut input = InputState::default();
+        let mut input = InputState {
+            pointer_pos: Point { x: 20, y: 40 },
+            mouse_pressed: true,
+            ..InputState::default()
+        };
         let options = ["Off", "Mono", "Poly"];
         let mut selected = 0;
-
-        input.pointer_pos = Point { x: 20, y: 40 };
-        input.mouse_pressed = true;
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
             ui.dropdown(WidgetId::new(5), "Mode", &options, &mut selected, 80, 16);
@@ -2358,9 +2420,11 @@ mod tests {
         let mut selected = 0;
 
         ui_state.consume_mouse_pressed = true;
-        let mut input = InputState::default();
-        input.pointer_pos = Point { x: 20, y: 40 };
-        input.mouse_pressed = true;
+        let input = InputState {
+            pointer_pos: Point { x: 20, y: 40 },
+            mouse_pressed: true,
+            ..InputState::default()
+        };
 
         let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
         let response = ui.dropdown(WidgetId::new(9), "Mode", &options, &mut selected, 80, 16);
@@ -2474,8 +2538,8 @@ mod tests {
         };
         let response = ui.grid_with_key("grid", spec, origin, |_ui, grid| {
             let rect = grid.cell_rect(5);
-            assert_eq!(rect.origin.x, origin.x + (10 + 2) * 1);
-            assert_eq!(rect.origin.y, origin.y + (12 + 2) * 1);
+            assert_eq!(rect.origin.x, origin.x + (10 + 2));
+            assert_eq!(rect.origin.y, origin.y + (12 + 2));
         });
 
         assert_eq!(response.rows, 2);

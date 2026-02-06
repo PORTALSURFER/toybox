@@ -110,10 +110,15 @@ impl WindowHandle {
 /// Handle to an open GUI window.
 #[derive(Clone, Debug)]
 pub struct HostWindow {
+    /// Last parent handle provided by the host.
     parent: Option<RawWindowHandle>,
+    /// Placeholder native window handle (always `None` on non-Windows).
     handle: Option<WindowHandle>,
+    /// Packed width/height resize request shared with callers.
     resize_request: Arc<AtomicU64>,
+    /// Packed width/height last observed size.
     last_size: Arc<AtomicU64>,
+    /// Packed aspect ratio bits requested by callers.
     aspect_ratio: Arc<AtomicU32>,
 }
 

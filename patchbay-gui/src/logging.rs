@@ -38,7 +38,9 @@ impl From<std::io::Error> for LogError {
     }
 }
 
+/// Global process log sink created on first write.
 static LOG_FILE: OnceLock<Mutex<File>> = OnceLock::new();
+/// Best-effort buffer of logging failures for later diagnostics.
 static LOG_ERRORS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
 
 /// Return the on-disk log file path for this process.
@@ -84,6 +86,7 @@ pub(crate) fn record_failure(context: &str, err: LogError) {
     }
 }
 
+/// Open or create the on-disk log file.
 fn open_log_file(path: &Path) -> Result<File, LogError> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -91,6 +94,7 @@ fn open_log_file(path: &Path) -> Result<File, LogError> {
     Ok(OpenOptions::new().create(true).append(true).open(path)?)
 }
 
+/// Return a unix timestamp in milliseconds for log entries.
 fn timestamp_ms() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
