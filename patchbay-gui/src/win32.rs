@@ -7,7 +7,7 @@ use crate::logging::log_line_safe;
 use crate::renderer::{Renderer, RendererDevice};
 use crate::ui::{Layout, Theme, Ui, UiState};
 use raw_window_handle_06::{
-    DisplayHandle, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
+    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
     RawWindowHandle as RawWindowHandle06, Win32WindowHandle, WindowHandle as WindowHandle06,
     WindowsDisplayHandle,
 };
@@ -93,7 +93,9 @@ pub struct SurfaceWindow {
 
 impl HasWindowHandle for SurfaceWindow {
     fn window_handle(&self) -> Result<WindowHandle06<'_>, raw_window_handle_06::HandleError> {
-        let hwnd = NonZeroIsize::new(self.hwnd.0 as isize).expect("HWND must be non-null");
+        let Some(hwnd) = NonZeroIsize::new(self.hwnd.0 as isize) else {
+            return Err(HandleError::Unavailable);
+        };
         let mut handle = Win32WindowHandle::new(hwnd);
         if let Some(hinstance) = NonZeroIsize::new(self.hinstance.0 as isize) {
             handle.hinstance = Some(hinstance);
@@ -571,13 +573,18 @@ where
         }
     }
 
+    let cursor = unsafe { LoadCursorW(None, windows::Win32::UI::WindowsAndMessaging::IDC_ARROW) }
+        .map_err(|err| {
+        log_line_safe(&format!("win32: LoadCursorW error: {err:?}"));
+        GuiError::WindowCreateFailed
+    })?;
     unsafe {
         let wnd_class = WNDCLASSW {
             style: CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS,
             lpfnWndProc: Some(window_proc::<State, Init, Frame>),
             hInstance: module_hinstance,
             lpszClassName: PCWSTR(class_name.as_ptr()),
-            hCursor: LoadCursorW(None, windows::Win32::UI::WindowsAndMessaging::IDC_ARROW).unwrap(),
+            hCursor: cursor,
             hbrBackground: HBRUSH(std::ptr::null_mut()),
             ..Default::default()
         };

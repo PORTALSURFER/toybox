@@ -7,7 +7,6 @@ pub use patchbay_gui::{Canvas, Color, Point, Rect, Size, Theme};
 
 /// Declarative layout helpers for Patchbay GUI.
 pub mod declarative {
-    //! Declarative layout helpers re-exported from patchbay-gui.
     pub use patchbay_gui::{
         AbsoluteChild, AbsoluteSpec, Align, ButtonEvent, ButtonSpec, DeclarativeError,
         DeclarativeGridSpec, DropdownEvent, DropdownSpec, FlexSpec, IndicatorSpec, KnobEvent,

@@ -11,6 +11,7 @@ pub use patchbay_gui::{Canvas, Color, InputState, OpenParentedMode, Theme};
 /// Wrapper around a Patchbay GUI window for a CLAP editor.
 #[derive(Default)]
 pub struct GuiHostWindow {
+    /// Underlying host window adapter from `patchbay-gui`.
     inner: HostWindow,
 }
 
@@ -160,6 +161,7 @@ impl GuiHostWindow {
     }
 }
 
+/// Convert a Patchbay GUI error into a stable host-facing plugin error message.
 fn map_gui_error(err: GuiError) -> PluginError {
     log_line_safe(&format!("toybox/gui: open_parented error: {err:?}"));
     PluginError::Message(match err {

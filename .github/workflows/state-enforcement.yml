@@ -25,7 +25,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
       - name: Run toybox state helper tests
         run: cargo test -p toybox clap::state
@@ -47,3 +47,9 @@ jobs:
 
       - name: Build toybox with GUI feature
         run: cargo check -p toybox --all-features
+
+      - name: Test patchbay-gui
+        run: cargo test -p patchbay-gui
+
+      - name: Test toybox with GUI feature
+        run: cargo test -p toybox --all-features
