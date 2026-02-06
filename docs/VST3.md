@@ -57,6 +57,7 @@ For VST3-specific wiring, implement Steinberg interfaces using types from
 When building with `features = ["vst3", "gui"]`, Toybox exposes:
 
 - `parent_to_raw_window_handle(parent, platform)` in `toybox::vst3::gui`
+- `Vst3HostedGui` + `HostedVst3View` in `toybox::vst3::gui`
 
 This helper converts the host-provided VST3 `IPlugView::attached` parent
 pointer and platform id into a `raw_window_handle::RawWindowHandle` suitable
@@ -67,6 +68,16 @@ Current support:
 - Windows (`kPlatformTypeHWND`) is supported.
 - Non-Windows currently returns `None`; plugins should fail attach or skip
   custom UI on unsupported targets.
+
+## Reusable VST3 hosted view
+
+For Patchbay-backed editors, use the shared hosted view lifecycle helper:
+
+- Implement `Vst3HostedGui` for your plugin-specific GUI adapter.
+- Return `HostedVst3View::new(adapter, width, height)` from `createView`.
+
+This centralizes attach/open/remove/size logic so plugins do not duplicate
+custom `IPlugViewTrait` boilerplate.
 
 ## Minimal example
 

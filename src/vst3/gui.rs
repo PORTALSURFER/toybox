@@ -2,6 +2,14 @@
 
 use std::ffi::{CStr, c_char};
 
+#[cfg(feature = "gui")]
+use raw_window_handle::RawWindowHandle;
+#[cfg(feature = "gui")]
+use std::cell::Cell;
+#[cfg(feature = "gui")]
+use std::sync::Mutex;
+#[cfg(feature = "gui")]
+use toybox_vst3_ffi::Class;
 use toybox_vst3_ffi::Steinberg::Vst::TChar;
 #[cfg(target_os = "macos")]
 use toybox_vst3_ffi::Steinberg::kPlatformTypeNSView;
@@ -9,6 +17,10 @@ use toybox_vst3_ffi::Steinberg::kPlatformTypeNSView;
 use toybox_vst3_ffi::Steinberg::kPlatformTypeX11EmbedWindowID;
 use toybox_vst3_ffi::Steinberg::{
     FIDString, ViewRect, kPlatformTypeHWND, kResultFalse, kResultTrue, tresult,
+};
+#[cfg(feature = "gui")]
+use toybox_vst3_ffi::Steinberg::{
+    IPlugFrame, IPlugView, IPlugViewTrait, TBool, char16, int16, kInvalidArgument, kResultOk,
 };
 
 /// Copy a UTF-8 Rust string into a fixed UTF-16 `TChar` destination buffer.
@@ -116,6 +128,189 @@ pub unsafe fn parent_to_raw_window_handle(
     }
 }
 
+/// GUI contract for reusable host-parented VST3 views backed by Patchbay windows.
+#[cfg(feature = "gui")]
+pub trait Vst3HostedGui {
+    /// Attach the host-provided raw parent window handle.
+    fn set_parent_raw(&mut self, parent: RawWindowHandle);
+
+    /// Open the GUI for the already configured host parent.
+    fn open(&mut self) -> bool;
+
+    /// Close the GUI if it is currently open.
+    fn close(&mut self);
+
+    /// Return the latest known GUI logical size.
+    fn last_size(&self) -> Option<(u32, u32)>;
+
+    /// Request a GUI resize from the host.
+    fn request_resize(&self, width: u32, height: u32);
+}
+
+/// Reusable VST3 `IPlugView` implementation for host-parented Patchbay GUIs.
+#[cfg(feature = "gui")]
+pub struct HostedVst3View<G: Vst3HostedGui> {
+    rect: Cell<ViewRect>,
+    attached: Cell<bool>,
+    default_size: (i32, i32),
+    gui: Mutex<G>,
+}
+
+#[cfg(feature = "gui")]
+impl<G: Vst3HostedGui> HostedVst3View<G> {
+    /// Create a new host-parented view with default logical dimensions.
+    pub fn new(gui: G, default_width: u32, default_height: u32) -> Self {
+        let width = default_width.max(1) as i32;
+        let height = default_height.max(1) as i32;
+        Self {
+            rect: Cell::new(view_rect(width, height)),
+            attached: Cell::new(false),
+            default_size: (width, height),
+            gui: Mutex::new(gui),
+        }
+    }
+
+    fn sync_rect_from_gui(&self) {
+        let Ok(gui) = self.gui.lock() else {
+            return;
+        };
+        if let Some((width, height)) = gui.last_size() {
+            self.rect.set(view_rect(width as i32, height as i32));
+        }
+    }
+
+    fn desired_size(&self) -> (i32, i32) {
+        let Ok(gui) = self.gui.lock() else {
+            return self.default_size;
+        };
+        if let Some((width, height)) = gui.last_size() {
+            (width as i32, height as i32)
+        } else {
+            self.default_size
+        }
+    }
+}
+
+#[cfg(feature = "gui")]
+impl<G: Vst3HostedGui> Class for HostedVst3View<G> {
+    type Interfaces = (IPlugView,);
+}
+
+#[cfg(feature = "gui")]
+impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
+    unsafe fn isPlatformTypeSupported(&self, r#type: FIDString) -> tresult {
+        #[cfg(target_os = "windows")]
+        {
+            bool_to_tresult(platform_type_matches(r#type, kPlatformTypeHWND))
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = r#type;
+            kResultFalse
+        }
+    }
+
+    unsafe fn attached(&self, parent: *mut std::ffi::c_void, r#type: FIDString) -> tresult {
+        if parent.is_null() {
+            return kInvalidArgument;
+        }
+
+        let Some(parent_handle) = (unsafe { parent_to_raw_window_handle(parent, r#type) }) else {
+            return kResultFalse;
+        };
+
+        let Ok(mut gui) = self.gui.lock() else {
+            return kResultFalse;
+        };
+        gui.set_parent_raw(parent_handle);
+        if !gui.open() {
+            return kResultFalse;
+        }
+        if let Some((width, height)) = gui.last_size() {
+            self.rect.set(view_rect(width as i32, height as i32));
+        }
+
+        self.attached.set(true);
+        kResultOk
+    }
+
+    unsafe fn removed(&self) -> tresult {
+        if let Ok(mut gui) = self.gui.lock() {
+            gui.close();
+        }
+        self.attached.set(false);
+        kResultOk
+    }
+
+    unsafe fn onWheel(&self, _distance: f32) -> tresult {
+        kResultFalse
+    }
+
+    unsafe fn onKeyDown(&self, _key: char16, _key_code: int16, _modifiers: int16) -> tresult {
+        kResultFalse
+    }
+
+    unsafe fn onKeyUp(&self, _key: char16, _key_code: int16, _modifiers: int16) -> tresult {
+        kResultFalse
+    }
+
+    unsafe fn getSize(&self, size: *mut ViewRect) -> tresult {
+        if size.is_null() {
+            return kInvalidArgument;
+        }
+        self.sync_rect_from_gui();
+        unsafe { *size = self.rect.get() };
+        kResultOk
+    }
+
+    unsafe fn onSize(&self, new_size: *mut ViewRect) -> tresult {
+        if new_size.is_null() {
+            return kInvalidArgument;
+        }
+
+        let requested = unsafe { *new_size };
+        let requested_width = (requested.right - requested.left).max(1);
+        let requested_height = (requested.bottom - requested.top).max(1);
+        let (desired_width, desired_height) = self.desired_size();
+
+        if let Ok(gui) = self.gui.lock() {
+            gui.request_resize(requested_width as u32, requested_height as u32);
+        }
+
+        if requested_width != desired_width || requested_height != desired_height {
+            self.rect.set(view_rect(desired_width, desired_height));
+            return kResultFalse;
+        }
+
+        self.rect.set(requested);
+        kResultOk
+    }
+
+    unsafe fn onFocus(&self, _state: TBool) -> tresult {
+        kResultOk
+    }
+
+    unsafe fn setFrame(&self, _frame: *mut IPlugFrame) -> tresult {
+        kResultOk
+    }
+
+    unsafe fn canResize(&self) -> tresult {
+        kResultFalse
+    }
+
+    unsafe fn checkSizeConstraint(&self, rect: *mut ViewRect) -> tresult {
+        if rect.is_null() {
+            return kInvalidArgument;
+        }
+        let rect = unsafe { &mut *rect };
+        let (desired_width, desired_height) = self.desired_size();
+        rect.right = rect.left + desired_width;
+        rect.bottom = rect.top + desired_height;
+        kResultOk
+    }
+}
+
 /// Convert a boolean into a VST3 `tresult` success/failure code.
 pub const fn bool_to_tresult(value: bool) -> tresult {
     if value { kResultTrue } else { kResultFalse }
@@ -135,6 +330,26 @@ pub const fn view_rect(width: i32, height: i32) -> ViewRect {
 mod tests {
     use super::*;
 
+    struct MockHostedGui {
+        last_size: Option<(u32, u32)>,
+    }
+
+    impl Vst3HostedGui for MockHostedGui {
+        fn set_parent_raw(&mut self, _parent: RawWindowHandle) {}
+
+        fn open(&mut self) -> bool {
+            true
+        }
+
+        fn close(&mut self) {}
+
+        fn last_size(&self) -> Option<(u32, u32)> {
+            self.last_size
+        }
+
+        fn request_resize(&self, _width: u32, _height: u32) {}
+    }
+
     #[test]
     fn platform_type_matches_expected_constant() {
         assert!(platform_type_matches(kPlatformTypeHWND, kPlatformTypeHWND));
@@ -153,6 +368,39 @@ mod tests {
         let parent = 1usize as *mut std::ffi::c_void;
         let converted = unsafe { parent_to_raw_window_handle(parent, bogus_platform) };
         assert!(converted.is_none());
+    }
+
+    #[test]
+    fn hosted_view_reports_default_size_before_attach() {
+        let view = HostedVst3View::new(MockHostedGui { last_size: None }, 420, 240);
+        let mut size = view_rect(0, 0);
+        let result = unsafe { view.getSize(&mut size) };
+        assert_eq!(result, kResultOk);
+        assert_eq!(size.right - size.left, 420);
+        assert_eq!(size.bottom - size.top, 240);
+    }
+
+    #[test]
+    fn hosted_view_size_constraint_uses_gui_last_size() {
+        let view = HostedVst3View::new(
+            MockHostedGui {
+                last_size: Some((777, 333)),
+            },
+            420,
+            240,
+        );
+        let mut rect = view_rect(100, 100);
+        let result = unsafe { view.checkSizeConstraint(&mut rect) };
+        assert_eq!(result, kResultOk);
+        assert_eq!(rect.right - rect.left, 777);
+        assert_eq!(rect.bottom - rect.top, 333);
+    }
+
+    #[test]
+    fn hosted_view_attach_rejects_null_parent() {
+        let view = HostedVst3View::new(MockHostedGui { last_size: None }, 320, 240);
+        let result = unsafe { view.attached(std::ptr::null_mut(), kPlatformTypeHWND) };
+        assert_eq!(result, kInvalidArgument);
     }
 
     #[cfg(target_os = "windows")]
