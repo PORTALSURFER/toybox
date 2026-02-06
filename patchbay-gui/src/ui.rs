@@ -2306,7 +2306,7 @@ mod tests {
         let theme = Theme::default();
         let mut ui_state = UiState::default();
         let mut input = InputState::default();
-        input.pointer_pos = Point { x: 20, y: 40 };
+        input.pointer_pos = Point { x: 20, y: 20 };
         input.mouse_pressed = true;
 
         let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
@@ -2335,6 +2335,7 @@ mod tests {
         input.pointer_pos = Point { x: 20, y: 70 };
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+            ui.reset_input_consumption();
             let response = ui.dropdown(WidgetId::new(5), "Mode", &options, &mut selected, 80, 16);
             assert!(response.changed);
             assert_eq!(selected, 1);
