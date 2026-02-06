@@ -1,7 +1,22 @@
 //! Declarative layout primitives for Patchbay GUI widgets.
 
 use crate::canvas::{Color, Point, Rect, Size};
-use crate::ui::{ButtonResponse, DropdownResponse, KnobResponse, RegionResponse, SliderResponse, Theme, ToggleResponse, Ui, WidgetId};
+use crate::logging::log_line_safe;
+use crate::ui::{
+    ButtonResponse, DropdownResponse, KnobResponse, RegionResponse, SliderResponse, Theme,
+    ToggleResponse, Ui, WidgetId,
+};
+
+/// Validation errors produced by declarative UI helpers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum DeclarativeError {
+    /// A widget-like node was placed outside of a panel container.
+    #[error("declarative node `{node_kind}` must be nested inside a panel")]
+    WidgetOutsidePanel {
+        /// The concrete node type that violated the panel-only rule.
+        node_kind: &'static str,
+    },
+}
 
 /// Declarative UI tree describing a window.
 pub struct UiSpec<'a, C> {
@@ -359,9 +374,27 @@ pub struct RegionEvent {
 }
 
 /// Measure the required size for a UI specification.
+///
+/// This helper preserves backward compatibility by logging validation failures
+/// and still returning a best-effort measurement. Use [`measure_checked`] when
+/// callers need explicit error handling.
 pub fn measure<C>(spec: &UiSpec<'_, C>, theme: &Theme) -> Size {
-    validate_panel_only(&spec.root.content, false);
+    if let Err(err) = validate_panel_only(&spec.root.content, false) {
+        log_line_safe(&format!(
+            "declarative: measure fallback after validation error: {err}"
+        ));
+    }
     measure_root_frame(&spec.root, theme)
+}
+
+/// Measure the required size for a UI specification, validating panel-only rules.
+///
+/// # Errors
+/// Returns [`DeclarativeError::WidgetOutsidePanel`] when a widget-like node is
+/// not nested inside a panel.
+pub fn measure_checked<C>(spec: &UiSpec<'_, C>, theme: &Theme) -> Result<Size, DeclarativeError> {
+    validate_panel_only(&spec.root.content, false)?;
+    Ok(measure_root_frame(&spec.root, theme))
 }
 
 /// Render a UI specification and return the measured size.
@@ -370,12 +403,45 @@ pub fn measure<C>(spec: &UiSpec<'_, C>, theme: &Theme) -> Size {
 /// parameter is ignored.
 pub fn render<C>(spec: &mut UiSpec<'_, C>, ui: &mut Ui<'_>, origin: Point, ctx: &mut C) -> Size {
     let theme = ui.theme().clone();
-    validate_panel_only(&spec.root.content, false);
-    let measured = measure_root_frame(&spec.root, &theme);
+    if let Err(err) = validate_panel_only(&spec.root.content, false) {
+        log_line_safe(&format!(
+            "declarative: render fallback after validation error: {err}"
+        ));
+    }
+    render_impl(spec, ui, origin, ctx, &theme)
+}
+
+/// Render a UI specification and return the measured size.
+///
+/// This variant validates the declarative tree and returns a
+/// [`DeclarativeError`] instead of panicking.
+///
+/// # Errors
+/// Returns [`DeclarativeError::WidgetOutsidePanel`] when a widget-like node is
+/// not nested inside a panel.
+pub fn render_checked<C>(
+    spec: &mut UiSpec<'_, C>,
+    ui: &mut Ui<'_>,
+    origin: Point,
+    ctx: &mut C,
+) -> Result<Size, DeclarativeError> {
+    let theme = ui.theme().clone();
+    validate_panel_only(&spec.root.content, false)?;
+    Ok(render_impl(spec, ui, origin, ctx, &theme))
+}
+
+fn render_impl<C>(
+    spec: &mut UiSpec<'_, C>,
+    ui: &mut Ui<'_>,
+    origin: Point,
+    ctx: &mut C,
+    theme: &Theme,
+) -> Size {
+    let measured = measure_root_frame(&spec.root, theme);
     let content = &mut *spec.root.content;
     let frame_padding = spec.root.padding;
     let title = spec.root.title.as_deref();
-    let header_height = panel_header_height(title, &theme);
+    let header_height = panel_header_height(title, theme);
     let style = crate::ui::RootFrameStyle {
         title,
         padding: frame_padding,
@@ -385,32 +451,32 @@ pub fn render<C>(spec: &mut UiSpec<'_, C>, ui: &mut Ui<'_>, origin: Point, ctx: 
     };
     let _ = origin;
     ui.root_frame_with_key(&spec.root.key, style, Some(measured), |ui, rect| {
-        render_node(content, rect, ui, &theme, ctx);
+        render_node(content, rect, ui, theme, ctx);
     });
     measured
 }
 
-fn validate_panel_only<C>(node: &Node<'_, C>, in_panel: bool) {
+fn validate_panel_only<C>(node: &Node<'_, C>, in_panel: bool) -> Result<(), DeclarativeError> {
     match node {
-        Node::Panel(panel) => validate_panel_only(&panel.content, true),
+        Node::Panel(panel) => validate_panel_only(&panel.content, true)?,
         Node::Row(flex) => {
             for child in &flex.children {
-                validate_panel_only(child, in_panel);
+                validate_panel_only(child, in_panel)?;
             }
         }
         Node::Column(flex) => {
             for child in &flex.children {
-                validate_panel_only(child, in_panel);
+                validate_panel_only(child, in_panel)?;
             }
         }
         Node::Grid(grid) => {
             for child in &grid.children {
-                validate_panel_only(child, in_panel);
+                validate_panel_only(child, in_panel)?;
             }
         }
         Node::Absolute(absolute) => {
             for child in &absolute.children {
-                validate_panel_only(&child.node, in_panel);
+                validate_panel_only(&child.node, in_panel)?;
             }
         }
         Node::Label(_)
@@ -424,9 +490,32 @@ fn validate_panel_only<C>(node: &Node<'_, C>, in_panel: bool) {
         | Node::Indicator(_)
         | Node::Widget(_) => {
             if !in_panel {
-                panic!("declarative widgets must be nested inside a panel");
+                return Err(DeclarativeError::WidgetOutsidePanel {
+                    node_kind: node_kind(node),
+                });
             }
         }
+    }
+    Ok(())
+}
+
+fn node_kind<C>(node: &Node<'_, C>) -> &'static str {
+    match node {
+        Node::Panel(_) => "Panel",
+        Node::Row(_) => "Row",
+        Node::Column(_) => "Column",
+        Node::Grid(_) => "Grid",
+        Node::Absolute(_) => "Absolute",
+        Node::Label(_) => "Label",
+        Node::Spacer(_) => "Spacer",
+        Node::Knob(_) => "Knob",
+        Node::Slider(_) => "Slider",
+        Node::Toggle(_) => "Toggle",
+        Node::Button(_) => "Button",
+        Node::Dropdown(_) => "Dropdown",
+        Node::Region(_) => "Region",
+        Node::Indicator(_) => "Indicator",
+        Node::Widget(_) => "Widget",
     }
 }
 
@@ -468,7 +557,10 @@ fn measure_node<C>(node: &Node<'_, C>, theme: &Theme) -> Size {
         Node::Indicator(indicator) => indicator.size,
         Node::Widget(widget) => match widget.size {
             SizeSpec::Fixed(size) => size,
-            _ => Size { width: 0, height: 0 },
+            _ => Size {
+                width: 0,
+                height: 0,
+            },
         },
     }
 }
@@ -477,18 +569,17 @@ fn measure_root_frame<C>(frame: &RootFrameSpec<'_, C>, theme: &Theme) -> Size {
     let content = measure_node(&frame.content, theme);
     let header_height = panel_header_height(frame.title.as_deref(), theme);
     let width = content.width + (frame.padding.max(0) * 2) as u32;
-    let height =
-        content.height + (frame.padding.max(0) * 2 + header_height) as u32;
+    let height = content.height + (frame.padding.max(0) * 2 + header_height) as u32;
     Size { width, height }
 }
 
 fn measure_panel<C>(panel: &PanelSpec<'_, C>, theme: &Theme) -> Size {
     let content = measure_node(&panel.content, theme);
-    let header_height =
-        panel.header_height.unwrap_or_else(|| panel_header_height(panel.title.as_deref(), theme));
+    let header_height = panel
+        .header_height
+        .unwrap_or_else(|| panel_header_height(panel.title.as_deref(), theme));
     let width = content.width + (panel.padding.max(0) * 2) as u32;
-    let height =
-        content.height + (panel.padding.max(0) * 2 + header_height) as u32;
+    let height = content.height + (panel.padding.max(0) * 2 + header_height) as u32;
     clamp_size_spec(panel.size, Size { width, height })
 }
 
@@ -639,7 +730,10 @@ fn clamp_size_spec(spec: SizeSpec, measured: Size) -> Size {
 }
 
 fn grid_cell_minimums<C>(grid: &GridSpec<'_, C>, theme: &Theme) -> (u32, u32) {
-    let mut max_child = Size { width: 0, height: 0 };
+    let mut max_child = Size {
+        width: 0,
+        height: 0,
+    };
     for child in &grid.children {
         let size = measure_node(child, theme);
         max_child.width = max_child.width.max(size.width);
@@ -731,9 +825,7 @@ fn render_flex<C>(
         Axis::Horizontal => flex.padding.left + flex.padding.right,
         Axis::Vertical => flex.padding.top + flex.padding.bottom,
     };
-    let available_main = available_main
-        - gap_total
-        - main_padding;
+    let available_main = available_main - gap_total - main_padding;
     let remaining = (available_main - min_total).max(0);
     let fill_extra = if fill_count > 0 {
         remaining / fill_count
@@ -772,9 +864,7 @@ fn render_flex<C>(
                 Axis::Horizontal => {
                     rect.origin.y + flex.padding.top + (cross_available - cross) / 2
                 }
-                Axis::Vertical => {
-                    rect.origin.x + flex.padding.left + (cross_available - cross) / 2
-                }
+                Axis::Vertical => rect.origin.x + flex.padding.left + (cross_available - cross) / 2,
             },
             Align::End => match axis {
                 Axis::Horizontal => rect.origin.y + flex.padding.top + (cross_available - cross),
@@ -846,7 +936,8 @@ fn render_grid<C>(
 fn render_label(label: &LabelSpec, rect: Rect, ui: &mut Ui<'_>, theme: &Theme) {
     let color = label.color.unwrap_or(theme.text);
     let pos = rect.origin;
-    ui.canvas().draw_text(pos, &label.text, color, theme.text_scale);
+    ui.canvas()
+        .draw_text(pos, &label.text, color, theme.text_scale);
 }
 
 fn render_absolute<C>(
@@ -920,13 +1011,7 @@ fn render_toggle<C>(
 ) {
     let id = WidgetId::from_label(&toggle.key);
     let mut value = toggle.value;
-    let response = ui.toggle_in_rect(
-        id,
-        &toggle.label,
-        &mut value,
-        toggle.control_size,
-        rect,
-    );
+    let response = ui.toggle_in_rect(id, &toggle.label, &mut value, toggle.control_size, rect);
     if let Some(callback) = toggle.on_interaction.as_mut() {
         callback(ctx, ToggleEvent { value, response });
     }
@@ -1048,7 +1133,10 @@ fn child_size_spec<C>(node: &Node<'_, C>) -> SizeSpec {
         Node::Grid(grid) => grid.size,
         Node::Absolute(absolute) => absolute.size,
         Node::Label(label) => label.size,
-        Node::Spacer(_) => SizeSpec::Fixed(Size { width: 0, height: 0 }),
+        Node::Spacer(_) => SizeSpec::Fixed(Size {
+            width: 0,
+            height: 0,
+        }),
         Node::Knob(knob) => knob.size,
         Node::Slider(slider) => slider.size,
         Node::Toggle(toggle) => toggle.size,
@@ -1095,10 +1183,16 @@ mod tests {
                         align: Align::Start,
                         children: vec![
                             Node::Spacer(SpacerSpec {
-                                size: Size { width: 10, height: 8 },
+                                size: Size {
+                                    width: 10,
+                                    height: 8,
+                                },
                             }),
                             Node::Spacer(SpacerSpec {
-                                size: Size { width: 6, height: 12 },
+                                size: Size {
+                                    width: 6,
+                                    height: 12,
+                                },
                             }),
                         ],
                     })),
@@ -1129,7 +1223,10 @@ mod tests {
                     size: SizeSpec::Auto,
                     content: Box::new(Node::Widget(WidgetSpec {
                         key: "widget".to_string(),
-                        size: SizeSpec::Fixed(Size { width: 20, height: 10 }),
+                        size: SizeSpec::Fixed(Size {
+                            width: 20,
+                            height: 10,
+                        }),
                         render: Box::new(|_ui, rect, _ctx: &mut ()| {
                             rect_seen.set(Some(rect));
                         }),
@@ -1196,8 +1293,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "declarative widgets must be nested inside a panel")]
-    fn widget_outside_panel_panics() {
+    fn widget_outside_panel_returns_error() {
         let spec = UiSpec {
             root: RootFrameSpec {
                 key: "root".to_string(),
@@ -1211,6 +1307,30 @@ mod tests {
             },
         };
         let theme = Theme::default();
-        let _ = measure(&spec, &theme);
+        let error = measure_checked(&spec, &theme).expect_err("expected validation error");
+        assert_eq!(
+            error,
+            DeclarativeError::WidgetOutsidePanel { node_kind: "Label" }
+        );
+    }
+
+    #[test]
+    fn legacy_measure_is_best_effort_on_invalid_tree() {
+        let spec = UiSpec {
+            root: RootFrameSpec {
+                key: "root".to_string(),
+                title: None,
+                padding: 0,
+                content: Box::new(Node::Label(LabelSpec {
+                    text: "Fallback".to_string(),
+                    size: SizeSpec::Auto,
+                    color: None,
+                })),
+            },
+        };
+        let theme = Theme::default();
+        let size = measure(&spec, &theme);
+        assert!(size.width > 0);
+        assert!(size.height > 0);
     }
 }

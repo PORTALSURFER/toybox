@@ -26,16 +26,26 @@ pub struct VersionedStatePayload {
 /// Write a versioned state payload to a CLAP output stream.
 ///
 /// # Errors
-/// Returns an error if the stream write fails.
+/// Returns an error if the stream write fails, the payload exceeds
+/// [`MAX_STATE_PAYLOAD_BYTES`], or the payload length does not fit into a
+/// `u32` header.
 pub fn write_versioned_payload(
     output: &mut OutputStream,
     magic: u32,
     version: u32,
     payload: &[u8],
 ) -> Result<(), PluginError> {
+    if payload.len() > MAX_STATE_PAYLOAD_BYTES {
+        return Err(PluginError::Message(
+            "Plugin state payload exceeds max size",
+        ));
+    }
+    let payload_len = u32::try_from(payload.len())
+        .map_err(|_| PluginError::Message("Plugin state payload exceeds u32 header size"))?;
+
     output.write_all(&magic.to_le_bytes())?;
     output.write_all(&version.to_le_bytes())?;
-    output.write_all(&(payload.len() as u32).to_le_bytes())?;
+    output.write_all(&payload_len.to_le_bytes())?;
     output.write_all(payload)?;
     Ok(())
 }
@@ -84,8 +94,9 @@ fn read_u32(input: &mut InputStream) -> Result<u32, PluginError> {
 #[cfg(test)]
 mod tests {
     use clack_common::stream::{InputStream, OutputStream};
+    use clack_plugin::plugin::PluginError;
 
-    use super::{read_versioned_payload, write_versioned_payload};
+    use super::{read_versioned_payload, write_versioned_payload, MAX_STATE_PAYLOAD_BYTES};
 
     #[test]
     fn versioned_payload_roundtrip() {
@@ -101,5 +112,20 @@ mod tests {
             .expect("should read payload");
         assert_eq!(decoded.version, 3);
         assert_eq!(decoded.payload, payload);
+    }
+
+    #[test]
+    fn write_rejects_oversized_payload() {
+        let mut data = Vec::new();
+        let mut output = OutputStream::from_writer(&mut data);
+        let payload = vec![0u8; MAX_STATE_PAYLOAD_BYTES + 1];
+        let error = write_versioned_payload(&mut output, u32::from_le_bytes(*b"TEST"), 1, &payload)
+            .expect_err("expected payload size check");
+        match error {
+            PluginError::Message(message) => {
+                assert_eq!(message, "Plugin state payload exceeds max size");
+            }
+            other => panic!("unexpected error variant: {other:?}"),
+        }
     }
 }

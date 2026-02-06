@@ -1,7 +1,7 @@
 //! Win32 window creation and message handling.
 
 use crate::canvas::{Canvas, Color, Point, Size};
-use crate::declarative::{render, UiSpec};
+use crate::declarative::{render_checked, UiSpec};
 use crate::host::{GuiError, InputState};
 use crate::logging::log_line_safe;
 use crate::renderer::{Renderer, RendererDevice};
@@ -394,7 +394,13 @@ where
             ui.reset_input_consumption();
             ui.clear_overlays();
             let mut spec = (self.on_frame)(&self.input, &mut self.state);
-            let _ = render(&mut spec, &mut ui, Point { x: 0, y: 0 }, &mut self.state);
+            if let Err(err) =
+                render_checked(&mut spec, &mut ui, Point { x: 0, y: 0 }, &mut self.state)
+            {
+                log_line_safe(&format!(
+                    "win32: declarative render validation error: {err}"
+                ));
+            }
             ui.draw_overlays();
         }
         if let Some(size) = self.ui_state.take_root_frame_size() {
@@ -583,12 +589,7 @@ where
     let title_w = to_wide(&title);
     log_line_safe(&format!(
         "win32: CreateWindowExW begin title=\"{}\" size={}x{} parent_hwnd={:?} parent_hinstance={:?} module_hinstance={:?}",
-        title,
-        size.width,
-        size.height,
-        parent_hwnd,
-        parent_hinstance,
-        module_hinstance
+        title, size.width, size.height, parent_hwnd, parent_hinstance, module_hinstance
     ));
     let child_hwnd = unsafe {
         CreateWindowExW(

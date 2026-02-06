@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  state-enforcement:
+  state-enforcement-linux:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -26,3 +26,18 @@ jobs:
 
       - name: Run toybox docs tests
         run: cargo test -p toybox --doc
+
+  gui-build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build patchbay-gui
+        run: cargo check -p patchbay-gui
+
+      - name: Build toybox with GUI feature
+        run: cargo check -p toybox --all-features

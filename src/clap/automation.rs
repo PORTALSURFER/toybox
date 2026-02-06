@@ -41,6 +41,17 @@ pub enum AutomationEvent {
     Value(ClapId, f64),
 }
 
+/// Status returned when enqueueing automation events.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AutomationEnqueueStatus {
+    /// The event was accepted by the queue.
+    Enqueued,
+    /// The parameter was disabled in the automation config.
+    Disabled,
+    /// The queue mutex was poisoned and the event could not be enqueued.
+    QueuePoisoned,
+}
+
 /// Configuration for which parameters should emit automation events.
 #[derive(Clone, Debug)]
 pub struct AutomationConfig {
@@ -138,34 +149,68 @@ impl AutomationDrainBuffer {
 }
 
 impl AutomationQueue {
+    /// Try to enqueue a parameter value update and return the enqueue status.
+    pub fn try_push_value(
+        &self,
+        config: &AutomationConfig,
+        param_id: ClapId,
+        value: f64,
+    ) -> AutomationEnqueueStatus {
+        if !config.is_enabled(param_id) {
+            return AutomationEnqueueStatus::Disabled;
+        }
+        let Ok(mut events) = self.events.lock() else {
+            return AutomationEnqueueStatus::QueuePoisoned;
+        };
+        events.push(AutomationEvent::Value(param_id, value));
+        AutomationEnqueueStatus::Enqueued
+    }
+
     /// Enqueue a parameter value update if automation is enabled.
     pub fn push_value(&self, config: &AutomationConfig, param_id: ClapId, value: f64) {
+        let _ = self.try_push_value(config, param_id, value);
+    }
+
+    /// Try to enqueue a gesture begin event and return the enqueue status.
+    pub fn try_push_gesture_begin(
+        &self,
+        config: &AutomationConfig,
+        param_id: ClapId,
+    ) -> AutomationEnqueueStatus {
         if !config.is_enabled(param_id) {
-            return;
+            return AutomationEnqueueStatus::Disabled;
         }
-        if let Ok(mut events) = self.events.lock() {
-            events.push(AutomationEvent::Value(param_id, value));
-        }
+        let Ok(mut events) = self.events.lock() else {
+            return AutomationEnqueueStatus::QueuePoisoned;
+        };
+        events.push(AutomationEvent::GestureBegin(param_id));
+        AutomationEnqueueStatus::Enqueued
     }
 
     /// Enqueue a gesture begin event if automation is enabled.
     pub fn push_gesture_begin(&self, config: &AutomationConfig, param_id: ClapId) {
+        let _ = self.try_push_gesture_begin(config, param_id);
+    }
+
+    /// Try to enqueue a gesture end event and return the enqueue status.
+    pub fn try_push_gesture_end(
+        &self,
+        config: &AutomationConfig,
+        param_id: ClapId,
+    ) -> AutomationEnqueueStatus {
         if !config.is_enabled(param_id) {
-            return;
+            return AutomationEnqueueStatus::Disabled;
         }
-        if let Ok(mut events) = self.events.lock() {
-            events.push(AutomationEvent::GestureBegin(param_id));
-        }
+        let Ok(mut events) = self.events.lock() else {
+            return AutomationEnqueueStatus::QueuePoisoned;
+        };
+        events.push(AutomationEvent::GestureEnd(param_id));
+        AutomationEnqueueStatus::Enqueued
     }
 
     /// Enqueue a gesture end event if automation is enabled.
     pub fn push_gesture_end(&self, config: &AutomationConfig, param_id: ClapId) {
-        if !config.is_enabled(param_id) {
-            return;
-        }
-        if let Ok(mut events) = self.events.lock() {
-            events.push(AutomationEvent::GestureEnd(param_id));
-        }
+        let _ = self.try_push_gesture_end(config, param_id);
     }
 
     /// Drain queued automation events into an output buffer.
@@ -290,5 +335,37 @@ mod tests {
 
         let drained = drain_buffer.drain(&queue, &mut output);
         assert!(drained);
+    }
+
+    #[test]
+    fn try_push_respects_disabled_params() {
+        let queue = AutomationQueue::default();
+        let mut config = AutomationConfig::default();
+        let param_id = ClapId::new(9);
+        config.disable_param(param_id);
+
+        let status = queue.try_push_value(&config, param_id, 0.7);
+        assert_eq!(status, AutomationEnqueueStatus::Disabled);
+
+        let mut output_buffer = EventBuffer::new();
+        let mut output = output_buffer.as_output();
+        let mut scratch = Vec::new();
+        let stats = queue.drain_to_output_with_stats(&mut output, &mut scratch);
+        assert_eq!(stats.attempted, 0);
+    }
+
+    #[test]
+    fn try_push_reports_poisoned_queue() {
+        let queue = AutomationQueue::default();
+        let config = AutomationConfig::default();
+        let param_id = ClapId::new(3);
+
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = queue.events.lock().expect("lock should succeed");
+            panic!("poison queue");
+        }));
+
+        let status = queue.try_push_value(&config, param_id, 0.25);
+        assert_eq!(status, AutomationEnqueueStatus::QueuePoisoned);
     }
 }
