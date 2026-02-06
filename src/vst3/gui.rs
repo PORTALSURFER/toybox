@@ -75,6 +75,46 @@ pub fn platform_type_matches(requested: *const c_char, expected: FIDString) -> b
     requested.to_bytes() == expected.to_bytes()
 }
 
+/// Convert a VST3 parent pointer and platform id into a raw window handle.
+///
+/// This helper is intended for plugins that host Patchbay GUI windows in a
+/// VST3 `IPlugView::attached` callback.
+///
+/// On Windows, this accepts `kPlatformTypeHWND` and maps the parent pointer to
+/// `RawWindowHandle::Win32`. On other platforms this currently returns `None`.
+///
+/// # Safety
+///
+/// `parent` and `platform` must come directly from the host-provided VST3
+/// `IPlugView::attached` callback and remain valid for handle construction.
+#[cfg(feature = "gui")]
+pub unsafe fn parent_to_raw_window_handle(
+    parent: *mut std::ffi::c_void,
+    platform: FIDString,
+) -> Option<raw_window_handle::RawWindowHandle> {
+    if parent.is_null() {
+        return None;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if !platform_type_matches(platform, kPlatformTypeHWND) {
+            return None;
+        }
+
+        let mut handle = raw_window_handle::Win32WindowHandle::empty();
+        handle.hwnd = parent;
+        handle.hinstance = std::ptr::null_mut();
+        Some(raw_window_handle::RawWindowHandle::Win32(handle))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = platform;
+        None
+    }
+}
+
 /// Convert a boolean into a VST3 `tresult` success/failure code.
 pub const fn bool_to_tresult(value: bool) -> tresult {
     if value { kResultTrue } else { kResultFalse }
@@ -87,5 +127,44 @@ pub const fn view_rect(width: i32, height: i32) -> ViewRect {
         top: 0,
         right: width,
         bottom: height,
+    }
+}
+
+#[cfg(all(test, feature = "gui"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn platform_type_matches_expected_constant() {
+        assert!(platform_type_matches(kPlatformTypeHWND, kPlatformTypeHWND));
+    }
+
+    #[test]
+    fn parent_handle_conversion_rejects_null_parent() {
+        let converted =
+            unsafe { parent_to_raw_window_handle(std::ptr::null_mut(), kPlatformTypeHWND) };
+        assert!(converted.is_none());
+    }
+
+    #[test]
+    fn parent_handle_conversion_rejects_unsupported_platform() {
+        let bogus_platform = c"bogus".as_ptr();
+        let parent = 1usize as *mut std::ffi::c_void;
+        let converted = unsafe { parent_to_raw_window_handle(parent, bogus_platform) };
+        assert!(converted.is_none());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn parent_handle_conversion_maps_hwnd() {
+        let parent = 0x1234usize as *mut std::ffi::c_void;
+        let converted = unsafe { parent_to_raw_window_handle(parent, kPlatformTypeHWND) }
+            .expect("expected handle");
+        match converted {
+            raw_window_handle::RawWindowHandle::Win32(handle) => {
+                assert_eq!(handle.hwnd, parent);
+            }
+            _ => panic!("expected Win32 raw window handle"),
+        }
     }
 }

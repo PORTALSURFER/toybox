@@ -19,6 +19,8 @@ pub use crate::vst3::component::{
     write_class_info, write_class_info_many, write_wide_name,
 };
 pub use crate::vst3::entry::PluginClassIds;
+#[cfg(feature = "gui")]
+pub use crate::vst3::gui::parent_to_raw_window_handle;
 pub use crate::vst3::gui::{
     bool_to_tresult, copy_wstring, default_platform_type, platform_type_matches, tchar_len,
     view_rect,
