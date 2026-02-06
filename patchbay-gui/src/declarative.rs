@@ -720,8 +720,10 @@ pub struct GridTemplate {
     pub columns: Vec<TrackSize>,
     /// Optional row tracks. Missing rows default to `Auto`.
     pub rows: Vec<TrackSize>,
-    /// Track gap in pixels.
-    pub gap: i32,
+    /// Gap between columns in pixels.
+    pub column_gap: i32,
+    /// Gap between rows in pixels.
+    pub row_gap: i32,
     /// Grid padding.
     pub padding: EdgeInsets,
 }
@@ -732,7 +734,8 @@ impl GridTemplate {
         Self {
             columns,
             rows: Vec::new(),
-            gap: 12,
+            column_gap: 12,
+            row_gap: 12,
             padding: EdgeInsets::default(),
         }
     }
@@ -770,7 +773,15 @@ impl GridTemplate {
 
     /// Override track gap.
     pub fn gap(mut self, gap: i32) -> Self {
-        self.gap = gap;
+        self.column_gap = gap;
+        self.row_gap = gap;
+        self
+    }
+
+    /// Override column and row gaps.
+    pub fn gap_xy(mut self, column_gap: i32, row_gap: i32) -> Self {
+        self.column_gap = column_gap;
+        self.row_gap = row_gap;
         self
     }
 
@@ -1682,13 +1693,14 @@ fn measure_grid(grid: &GridSpec, tokens: &ThemeTokens) -> Size {
         }
     }
 
-    let gap = grid.template.gap.max(0) as u32;
+    let column_gap = grid.template.column_gap.max(0) as u32;
+    let row_gap = grid.template.row_gap.max(0) as u32;
     let width = column_widths.iter().copied().sum::<u32>()
-        + gap.saturating_mul(column_widths.len().saturating_sub(1) as u32)
+        + column_gap.saturating_mul(column_widths.len().saturating_sub(1) as u32)
         + grid.template.padding.left.max(0) as u32
         + grid.template.padding.right.max(0) as u32;
     let height = row_heights.iter().copied().sum::<u32>()
-        + gap.saturating_mul(row_heights.len().saturating_sub(1) as u32)
+        + row_gap.saturating_mul(row_heights.len().saturating_sub(1) as u32)
         + grid.template.padding.top.max(0) as u32
         + grid.template.padding.bottom.max(0) as u32;
 
@@ -2127,7 +2139,7 @@ fn render_grid(
         &grid.template.columns,
         columns,
         rows,
-        grid.template.gap.max(0),
+        grid.template.column_gap.max(0),
         inner.size.width,
         true,
         &intrinsic,
@@ -2145,13 +2157,14 @@ fn render_grid(
         &row_tracks,
         columns,
         rows,
-        grid.template.gap.max(0),
+        grid.template.row_gap.max(0),
         inner.size.height,
         false,
         &intrinsic,
     );
 
-    let gap = grid.template.gap.max(0);
+    let column_gap = grid.template.column_gap.max(0);
+    let row_gap = grid.template.row_gap.max(0);
     let mut y = inner.origin.y;
     for (row, row_height) in row_heights.iter().copied().enumerate().take(rows) {
         let mut x = inner.origin.x;
@@ -2179,9 +2192,9 @@ fn render_grid(
                     actions,
                 );
             }
-            x += col_width as i32 + gap;
+            x += col_width as i32 + column_gap;
         }
-        y += row_height as i32 + gap;
+        y += row_height as i32 + row_gap;
     }
 }
 
@@ -2674,6 +2687,42 @@ mod tests {
         let measured = measure_checked(&spec).expect("measurement should succeed");
         assert!(measured.width >= 32);
         assert!(measured.height >= 14);
+    }
+
+    #[test]
+    fn grid_gap_xy_affects_measured_width_and_height_independently() {
+        let grid = GridSpec::new(
+            GridTemplate::columns_fr(2).gap_xy(3, 7),
+            vec![
+                spacer(Size {
+                    width: 10,
+                    height: 10,
+                }),
+                spacer(Size {
+                    width: 10,
+                    height: 10,
+                }),
+                spacer(Size {
+                    width: 10,
+                    height: 10,
+                }),
+                spacer(Size {
+                    width: 10,
+                    height: 10,
+                }),
+            ],
+        );
+        let spec = UiSpec::new(RootFrameSpec::new("root", Node::Grid(grid)));
+        let measured = measure_checked(&spec).expect("measurement should succeed");
+        assert_eq!(measured.width, 23);
+        assert_eq!(measured.height, 27);
+    }
+
+    #[test]
+    fn grid_gap_sets_both_axes() {
+        let template = GridTemplate::columns_fr(2).gap(9);
+        assert_eq!(template.column_gap, 9);
+        assert_eq!(template.row_gap, 9);
     }
 
     #[test]

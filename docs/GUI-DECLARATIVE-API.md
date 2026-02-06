@@ -34,7 +34,7 @@ These map directly to `Node::*` variants and keep the tree callback-free.
 Use fluent helpers to reduce boilerplate:
 - `FlexSpec`: `gap`, `pad_all`, `pad_xy`, `align_*`, `justify_*`
 - `justify_*` covers `start`, `center`, `end`, `space_between`, `space_around`, and `space_evenly`.
-- `GridTemplate`: `columns_fr`, `rows_fr`, `gap`, `pad_all`, `pad_xy`
+- `GridTemplate`: `columns_fr`, `rows_fr`, `gap`, `gap_xy`, `pad_all`, `pad_xy`
 - `LayoutBox`: `fill`, `fill_width`, `fill_height`, `fixed`, `fixed_width`, `fixed_height`, `min`, `max`
 
 ## Host Integration Pattern

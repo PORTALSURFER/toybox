@@ -42,7 +42,7 @@ Use fractional columns for adaptive control grids.
 
 ```rust
 let controls = grid(
-    GridTemplate::columns_fr(4).gap(10).pad_all(8),
+    GridTemplate::columns_fr(4).gap_xy(10, 14).pad_all(8),
     vec![
         knob("k1", "A", 0.4, (0.0, 1.0)),
         knob("k2", "B", 0.5, (0.0, 1.0)),
