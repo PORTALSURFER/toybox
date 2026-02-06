@@ -5,9 +5,10 @@ use std::ffi::{CStr, c_char};
 use toybox_vst3_ffi::Steinberg::Vst::TChar;
 #[cfg(target_os = "macos")]
 use toybox_vst3_ffi::Steinberg::kPlatformTypeNSView;
+#[cfg(all(unix, not(target_os = "macos")))]
+use toybox_vst3_ffi::Steinberg::kPlatformTypeX11EmbedWindowID;
 use toybox_vst3_ffi::Steinberg::{
-    FIDString, ViewRect, kPlatformTypeHWND, kPlatformTypeX11EmbedWindowID, kResultFalse,
-    kResultTrue, tresult,
+    FIDString, ViewRect, kPlatformTypeHWND, kResultFalse, kResultTrue, tresult,
 };
 
 /// Copy a UTF-8 Rust string into a fixed UTF-16 `TChar` destination buffer.
