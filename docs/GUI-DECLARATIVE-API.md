@@ -29,6 +29,7 @@ Use helper constructors for common nodes:
 - `spacer(size)`, `region(key, size)`, `indicator(size, active)`
 
 These map directly to `Node::*` variants and keep the tree callback-free.
+Most node helpers also support `.layout(...)`, `.fill()`, `.fill_width()`, and `.fill_height()`.
 
 ## Layout Ergonomics
 Use fluent helpers to reduce boilerplate:
@@ -60,7 +61,7 @@ Validation includes:
 ## Example
 ```rust
 use toybox::gui::declarative::{
-    button, column, panel, FlexSpec, LayoutBox, Node, RootFrameSpec, UiAction, UiSpec,
+    button, panel, FlexSpec, LayoutBox, Node, RootFrameSpec, UiAction, UiSpec,
 };
 
 #[derive(Default)]
@@ -69,18 +70,18 @@ struct GuiState {
 }
 
 fn build(_input: &toybox::clap::gui::InputState, _state: &GuiState) -> UiSpec {
-    let controls = FlexSpec::row(vec![
-        button("inc", "Increment"),
-        button("dec", "Decrement"),
-    ])
-    .justify_space_between();
+    let controls = Node::Row(
+        FlexSpec::row(vec![
+            button("inc", "Increment"),
+            button("dec", "Decrement"),
+        ])
+        .justify_space_between(),
+    );
 
     UiSpec::new(
         RootFrameSpec::new(
             "root",
-            panel("main", column(vec![
-                Node::Row(controls),
-            ])),
+            panel("main", controls).fill(),
         )
         .layout(LayoutBox::fill()),
     )

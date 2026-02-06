@@ -258,6 +258,42 @@ impl Node {
     pub fn column(children: Vec<Node>) -> Self {
         Self::Column(FlexSpec::column(children))
     }
+
+    /// Apply layout constraints to nodes that support [`LayoutBox`].
+    ///
+    /// Nodes with intrinsic fixed size (`Spacer`, `Region`, `Indicator`) ignore
+    /// this request and are returned unchanged.
+    pub fn layout(mut self, layout: LayoutBox) -> Self {
+        match &mut self {
+            Self::Panel(panel) => panel.layout = layout,
+            Self::Row(flex) | Self::Column(flex) => flex.layout = layout,
+            Self::Grid(grid) => grid.layout = layout,
+            Self::Absolute(absolute) => absolute.layout = layout,
+            Self::Label(label) => label.layout = layout,
+            Self::Knob(knob) => knob.layout = layout,
+            Self::Slider(slider) => slider.layout = layout,
+            Self::Toggle(toggle) => toggle.layout = layout,
+            Self::Button(button) => button.layout = layout,
+            Self::Dropdown(dropdown) => dropdown.layout = layout,
+            Self::Spacer(_) | Self::Region(_) | Self::Indicator(_) => {}
+        }
+        self
+    }
+
+    /// Set node layout to fill available width and height where supported.
+    pub fn fill(self) -> Self {
+        self.layout(LayoutBox::fill())
+    }
+
+    /// Set node layout to fill available width where supported.
+    pub fn fill_width(self) -> Self {
+        self.layout(LayoutBox::auto().fill_width())
+    }
+
+    /// Set node layout to fill available height where supported.
+    pub fn fill_height(self) -> Self {
+        self.layout(LayoutBox::auto().fill_height())
+    }
 }
 
 /// Create a row container node.
@@ -2849,6 +2885,25 @@ mod tests {
     }
 
     #[test]
+    fn node_layout_helpers_apply_constraints_when_supported() {
+        let node = panel("main", label("x")).fill_width();
+        match node {
+            Node::Panel(panel) => {
+                assert_eq!(panel.layout.width, Length::Fill(1));
+                assert_eq!(panel.layout.height, Length::Auto);
+            }
+            _ => panic!("expected panel node"),
+        }
+
+        let spacer_node = spacer(Size {
+            width: 10,
+            height: 10,
+        })
+        .fill();
+        assert!(matches!(spacer_node, Node::Spacer(_)));
+    }
+
+    #[test]
     fn helper_node_constructors_build_valid_spec() {
         let controls = row(vec![
             knob("drive", "Drive", 0.5, (0.0, 1.0)),
@@ -2886,7 +2941,7 @@ mod tests {
         ]);
         let spec = UiSpec::new(RootFrameSpec::new(
             "root",
-            Node::Panel(PanelSpec::new("main", content).layout(LayoutBox::fill())),
+            panel("main", content).layout(LayoutBox::fill()),
         ));
         let measured = measure_checked(&spec).expect("helper-composed tree should validate");
         assert!(measured.width > 0);
