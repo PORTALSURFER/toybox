@@ -1,14 +1,14 @@
-//! Host window management and input plumbing for Patchbay GUI.
+//! Non-Windows host window stubs for Patchbay GUI.
+//!
+//! This module keeps the crate buildable on platforms where the native window
+//! backend is unavailable. GUI opening APIs return [`GuiError::UnsupportedHandle`].
 
 use crate::canvas::Size;
 use crate::declarative::UiSpec;
-use crate::renderer::RendererDevice;
-use crate::ui::{Layout, Theme, UiState};
-use crate::win32::{WindowHandle, spawn_window_thread};
 use raw_window_handle::RawWindowHandle;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 
 /// Input snapshot delivered to UI widgets for a single frame.
 #[derive(Clone, Debug, Default)]
@@ -85,13 +85,33 @@ pub enum GuiError {
     DeviceCachePoison,
 }
 
+/// Opaque non-Windows placeholder for the native window handle.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WindowHandle;
+
+impl WindowHandle {
+    /// Return false because no native window is created on this platform.
+    pub fn is_valid(&self) -> bool {
+        false
+    }
+
+    /// Return false because there is no native parent relationship.
+    pub fn parent_matches(&self, _parent: isize) -> bool {
+        false
+    }
+
+    /// No-op on unsupported platforms.
+    pub fn destroy(&self) {}
+
+    /// No-op on unsupported platforms.
+    pub fn set_visible(&self, _visible: bool) {}
+}
+
 /// Handle to an open GUI window.
 #[derive(Clone, Debug)]
 pub struct HostWindow {
     parent: Option<RawWindowHandle>,
-    parent_hwnd: Option<isize>,
     handle: Option<WindowHandle>,
-    device_cache: Arc<Mutex<Option<Arc<RendererDevice>>>>,
     resize_request: Arc<AtomicU64>,
     last_size: Arc<AtomicU64>,
     aspect_ratio: Arc<AtomicU32>,
@@ -101,9 +121,7 @@ impl Default for HostWindow {
     fn default() -> Self {
         Self {
             parent: None,
-            parent_hwnd: None,
             handle: None,
-            device_cache: Arc::new(Mutex::new(None)),
             resize_request: Arc::new(AtomicU64::new(0)),
             last_size: Arc::new(AtomicU64::new(0)),
             aspect_ratio: Arc::new(AtomicU32::new(0)),
@@ -114,17 +132,6 @@ impl Default for HostWindow {
 impl HostWindow {
     /// Assign the raw parent handle supplied by the CLAP host.
     pub fn set_parent(&mut self, parent: RawWindowHandle) {
-        let new_parent_hwnd = match parent {
-            RawWindowHandle::Win32(handle) => Some(handle.hwnd as isize),
-            _ => None,
-        };
-        if self.parent_hwnd != new_parent_hwnd {
-            if let Some(handle) = &self.handle {
-                handle.destroy();
-            }
-            self.handle = None;
-            self.parent_hwnd = new_parent_hwnd;
-        }
         self.parent = Some(parent);
     }
 
@@ -168,11 +175,8 @@ impl HostWindow {
 
     /// Open a parented Patchbay GUI window.
     ///
-    /// The caller supplies initial state plus callbacks for initialization and
-    /// per-frame declarative rendering. The `size` argument is used as the
-    /// initial window size; the declarative root frame still drives
-    /// auto-resizing each frame. If a matching window is already open, this
-    /// reuses it and ignores the new state.
+    /// This always returns [`GuiError::UnsupportedHandle`] on non-Windows
+    /// platforms. The method exists so clients compile cross-platform.
     pub fn open_parented<State, Init, Frame>(
         &mut self,
         title: String,
@@ -201,72 +205,28 @@ impl HostWindow {
 
     /// Open a parented Patchbay GUI window with explicit reuse policy.
     ///
-    /// When `mode` is [`OpenParentedMode::ReuseIfOpen`], a matching window is
-    /// shown, and the new state/callbacks are ignored. When `mode` is
-    /// [`OpenParentedMode::Recreate`], any existing window is destroyed and a
-    /// new one is created with the provided state. The `size` argument is used
-    /// as the initial window size; the declarative root frame will still drive
-    /// auto-resizing.
+    /// This always returns [`GuiError::UnsupportedHandle`] on non-Windows
+    /// platforms. The method exists so clients compile cross-platform.
     pub fn open_parented_with<State, Init, Frame>(
         &mut self,
-        title: String,
+        _title: String,
         size: Size,
-        state: State,
-        mut on_init: Init,
-        mut on_frame: Frame,
-        mode: OpenParentedMode,
+        _state: State,
+        _on_init: Init,
+        _on_frame: Frame,
+        _mode: OpenParentedMode,
     ) -> Result<(), GuiError>
     where
         Init: FnMut(&mut State) + Send + 'static,
         Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
         State: Send + 'static,
     {
-        let parent = self.parent.ok_or(GuiError::NoParent)?;
-        let (parent_hwnd, parent_hinstance) = match parent {
-            RawWindowHandle::Win32(handle) => (handle.hwnd as isize, handle.hinstance as isize),
-            _ => return Err(GuiError::UnsupportedHandle),
-        };
-        if let Some(handle) = &self.handle {
-            if handle.is_valid() && handle.parent_matches(parent_hwnd) {
-                if mode == OpenParentedMode::ReuseIfOpen {
-                    self.show();
-                    return Ok(());
-                }
-            }
-            handle.destroy();
-            self.handle = None;
+        if self.parent.is_none() {
+            return Err(GuiError::NoParent);
         }
-
-        let resize_request = self.resize_request.clone();
-        let last_size = self.last_size.clone();
-        let aspect_ratio = self.aspect_ratio.clone();
-        let device_cache = self.device_cache.clone();
-
-        let theme = Theme::default();
-        let layout = Layout::default();
-        let ui_state = UiState::default();
-
-        let handle = spawn_window_thread(
-            parent_hwnd,
-            parent_hinstance,
-            title,
-            size,
-            state,
-            move |state| {
-                on_init(state);
-            },
-            move |input, state| on_frame(input, state),
-            device_cache,
-            resize_request,
-            last_size,
-            aspect_ratio,
-            ui_state,
-            layout,
-            theme,
-        )?;
-
-        self.handle = Some(handle);
-        Ok(())
+        self.last_size
+            .store(pack_size(size.width, size.height), Ordering::Release);
+        Err(GuiError::UnsupportedHandle)
     }
 
     /// Access the OS-level window handle if one exists.
@@ -275,10 +235,12 @@ impl HostWindow {
     }
 }
 
+/// Pack a size into a compact atomic payload.
 fn pack_size(width: u32, height: u32) -> u64 {
     ((width as u64) << 32) | (height as u64)
 }
 
+/// Decode an atomic size payload.
 fn unpack_size(value: u64) -> Option<(u32, u32)> {
     if value == 0 {
         return None;
@@ -296,5 +258,35 @@ mod tests {
     fn pack_unpack_roundtrip() {
         let packed = pack_size(640, 480);
         assert_eq!(unpack_size(packed), Some((640, 480)));
+    }
+
+    #[test]
+    fn open_parented_reports_unsupported_after_parent() {
+        let mut host = HostWindow::default();
+        host.set_parent(raw_window_handle::RawWindowHandle::AppKit(
+            raw_window_handle::AppKitWindowHandle::empty(),
+        ));
+        let result = host.open_parented(
+            "Stub".into(),
+            (320, 200),
+            (),
+            |_state| {},
+            |_input, _state| UiSpec {
+                root: crate::declarative::RootFrameSpec {
+                    key: "root".into(),
+                    title: None,
+                    padding: 0,
+                    content: Box::new(crate::declarative::Node::Spacer(
+                        crate::declarative::SpacerSpec {
+                            size: Size {
+                                width: 1,
+                                height: 1,
+                            },
+                        },
+                    )),
+                },
+            },
+        );
+        assert!(matches!(result, Err(GuiError::UnsupportedHandle)));
     }
 }

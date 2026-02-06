@@ -2,12 +2,13 @@
 
 use std::ops::Bound;
 
+use clack_plugin::events::UnknownEvent;
 use clack_plugin::events::io::{EventBatch, EventBatcher, InputEvents, InputEventsIter};
 use clack_plugin::events::spaces::CoreEventSpace;
-use clack_plugin::events::UnknownEvent;
 
 /// Provides CLAP input event batching and common range conversions.
 pub struct EventRouter<'a> {
+    /// Source CLAP input events for a single process call.
     input: &'a InputEvents<'a>,
 }
 
@@ -79,9 +80,7 @@ pub fn bounds_to_range(
         (Bound::Included(start), Bound::Included(end)) => (start, end.saturating_add(1)),
         (Bound::Unbounded, Bound::Excluded(end)) => (0, end),
         (Bound::Unbounded, Bound::Included(end)) => (0, end.saturating_add(1)),
-        (Bound::Excluded(start), Bound::Excluded(end)) => {
-            (start.saturating_add(1), end)
-        }
+        (Bound::Excluded(start), Bound::Excluded(end)) => (start.saturating_add(1), end),
         (Bound::Excluded(start), Bound::Included(end)) => {
             (start.saturating_add(1), end.saturating_add(1))
         }
@@ -99,18 +98,21 @@ pub fn bounds_to_range(
 
 #[cfg(test)]
 mod tests {
-    use super::{bounds_to_range, EventRouter};
+    use super::{EventRouter, bounds_to_range};
     use std::ops::Bound;
 
+    use clack_plugin::events::Pckn;
     use clack_plugin::events::event_types::ParamValueEvent;
     use clack_plugin::events::io::InputEvents;
     use clack_plugin::events::spaces::CoreEventSpace;
-    use clack_plugin::events::Pckn;
     use clack_plugin::utils::{ClapId, Cookie};
 
     #[test]
     fn bounds_to_range_handles_empty_buffer() {
-        assert_eq!(None, bounds_to_range((Bound::Unbounded, Bound::Unbounded), 0));
+        assert_eq!(
+            None,
+            bounds_to_range((Bound::Unbounded, Bound::Unbounded), 0)
+        );
     }
 
     #[test]

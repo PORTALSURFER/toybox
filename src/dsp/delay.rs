@@ -3,8 +3,11 @@
 /// A fixed-size delay line with adjustable delay length.
 #[derive(Debug, Clone)]
 pub struct DelayLine {
+    /// Circular sample buffer storing delayed samples.
     buffer: Vec<f32>,
+    /// Current write position inside the circular buffer.
     write_idx: usize,
+    /// Active delay length in samples.
     delay_samples: usize,
 }
 
@@ -51,8 +54,11 @@ impl DelayLine {
 /// A delay line that supports fractional delay lengths with linear interpolation.
 #[derive(Debug, Clone)]
 pub struct FractionalDelayLine {
+    /// Circular sample buffer storing delayed samples.
     buffer: Vec<f32>,
+    /// Current write position inside the circular buffer.
     write_idx: usize,
+    /// Active fractional delay length in samples.
     delay_samples: f32,
 }
 
@@ -109,8 +115,11 @@ impl FractionalDelayLine {
 /// A feedback comb filter used for late reverb tails.
 #[derive(Debug, Clone)]
 pub struct FeedbackComb {
+    /// Delay line used for comb feedback.
     delay: DelayLine,
+    /// Feedback gain applied to the damped delayed sample.
     feedback: f32,
+    /// Damping low-pass filter inside the feedback path.
     damping: super::filters::OnePole,
 }
 
@@ -152,7 +161,9 @@ impl FeedbackComb {
 /// A stereo pair of feedback comb filters for widening effects.
 #[derive(Debug, Clone)]
 pub struct StereoComb {
+    /// Left comb filter instance.
     left: FeedbackComb,
+    /// Right comb filter instance.
     right: FeedbackComb,
 }
 

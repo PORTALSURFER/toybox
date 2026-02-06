@@ -24,8 +24,8 @@ use std::collections::HashSet;
 use std::mem;
 use std::sync::Mutex;
 
-use clack_plugin::events::io::OutputEvents;
 use clack_plugin::events::Pckn;
+use clack_plugin::events::io::OutputEvents;
 use clack_plugin::utils::{ClapId, Cookie};
 
 use crate::clap::params::{push_param_gesture_begin, push_param_gesture_end, push_param_value};
@@ -55,8 +55,11 @@ pub enum AutomationEnqueueStatus {
 /// Configuration for which parameters should emit automation events.
 #[derive(Clone, Debug)]
 pub struct AutomationConfig {
+    /// Fallback enable state used when a parameter has no explicit override.
     default_enabled: bool,
+    /// Parameter ids that are always automation-enabled.
     enabled: HashSet<ClapId>,
+    /// Parameter ids that are always automation-disabled.
     disabled: HashSet<ClapId>,
 }
 
@@ -103,6 +106,7 @@ impl Default for AutomationConfig {
 /// Thread-safe queue for GUI-originated automation events.
 #[derive(Default)]
 pub struct AutomationQueue {
+    /// Pending automation events in enqueue order.
     events: Mutex<Vec<AutomationEvent>>,
 }
 
@@ -127,6 +131,7 @@ pub struct AutomationDrainStats {
 /// draining queued GUI automation events.
 #[derive(Default)]
 pub struct AutomationDrainBuffer {
+    /// Reusable scratch storage used to drain queued events without reallocating.
     scratch: Vec<AutomationEvent>,
 }
 

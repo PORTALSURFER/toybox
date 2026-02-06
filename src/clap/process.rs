@@ -3,7 +3,7 @@
 use clack_plugin::events::io::{EventBatch, InputEvents, OutputEvents};
 use clack_plugin::process::{Audio, Events, Process};
 
-use crate::clap::events::{bounds_to_range, EventRouter};
+use crate::clap::events::{EventRouter, bounds_to_range};
 
 /// Bundles the CLAP process data passed to `PluginAudioProcessor::process`.
 pub struct ProcessContext<'a> {
@@ -41,11 +41,7 @@ impl<'a> ProcessContext<'a> {
     }
 
     /// Convert a batch's sample bounds to a concrete range for a buffer length.
-    pub fn batch_range(
-        &self,
-        batch: &EventBatch<'_>,
-        buffer_len: usize,
-    ) -> Option<(usize, usize)> {
+    pub fn batch_range(&self, batch: &EventBatch<'_>, buffer_len: usize) -> Option<(usize, usize)> {
         bounds_to_range(batch.sample_bounds(), buffer_len)
     }
 }

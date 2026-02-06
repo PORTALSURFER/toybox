@@ -58,6 +58,7 @@ pub fn windows_rustc_link_arg(output_path: &Path) -> String {
     format!("/OUT:\"{}\"", output_path.display())
 }
 
+/// Resolve bundle paths from explicit root/target/profile inputs.
 fn windows_bundle_paths_from(
     root_dir: &Path,
     target_dir: Option<&Path>,
@@ -79,21 +80,25 @@ fn windows_bundle_paths_from(
     }
 }
 
+/// Resolve the active Cargo target directory for the current process.
 fn cargo_target_dir(root_dir: &Path) -> PathBuf {
     let target_dir = env::var("CARGO_TARGET_DIR").ok().map(PathBuf::from);
     cargo_target_dir_from(root_dir, target_dir)
 }
 
+/// Resolve the target directory, honoring an explicit override when supplied.
 fn cargo_target_dir_from(root_dir: &Path, target_dir: Option<PathBuf>) -> PathBuf {
     target_dir.unwrap_or_else(|| root_dir.join("target"))
 }
 
+/// Return the current `CARGO_MANIFEST_DIR`, falling back to crate compile-time metadata.
 fn cargo_manifest_dir() -> PathBuf {
     env::var("CARGO_MANIFEST_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
 }
 
+/// Walk ancestors from a manifest directory to find the nearest workspace root.
 fn workspace_root_from_manifest_dir(manifest_dir: &Path) -> PathBuf {
     for ancestor in manifest_dir.ancestors() {
         if cargo_manifest_declares_workspace(ancestor.join("Cargo.toml")) {
@@ -103,6 +108,7 @@ fn workspace_root_from_manifest_dir(manifest_dir: &Path) -> PathBuf {
     manifest_dir.to_path_buf()
 }
 
+/// Return true when a Cargo manifest includes a `[workspace]` section.
 fn cargo_manifest_declares_workspace(path: PathBuf) -> bool {
     let Ok(contents) = fs::read_to_string(path) else {
         return false;

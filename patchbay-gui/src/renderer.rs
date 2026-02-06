@@ -453,7 +453,7 @@ fn should_reconfigure_surface(err: &wgpu::SurfaceError) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{should_reconfigure_surface, Renderer};
+    use super::{Renderer, should_reconfigure_surface};
 
     #[test]
     fn pad_rows_rgba_zeroes_padding_bytes() {

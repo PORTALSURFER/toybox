@@ -9,10 +9,10 @@ pub use patchbay_gui::{Canvas, Color, Point, Rect, Size, Theme};
 pub mod declarative {
     //! Declarative layout helpers re-exported from patchbay-gui.
     pub use patchbay_gui::{
-        measure, measure_checked, render, render_checked, AbsoluteChild, AbsoluteSpec, Align,
-        ButtonEvent, ButtonSpec, DeclarativeError, DeclarativeGridSpec, DropdownEvent,
-        DropdownSpec, FlexSpec, IndicatorSpec, KnobEvent, KnobSpec, LabelSpec, Node, Padding,
-        PanelSpec, RegionEvent, RegionSpec, RootFrameSpec, SizeSpec, SliderEvent, SliderSpec,
-        SpacerSpec, ToggleEvent, ToggleSpec, UiSpec, WidgetSpec,
+        AbsoluteChild, AbsoluteSpec, Align, ButtonEvent, ButtonSpec, DeclarativeError,
+        DeclarativeGridSpec, DropdownEvent, DropdownSpec, FlexSpec, IndicatorSpec, KnobEvent,
+        KnobSpec, LabelSpec, Node, Padding, PanelSpec, RegionEvent, RegionSpec, RootFrameSpec,
+        SizeSpec, SliderEvent, SliderSpec, SpacerSpec, ToggleEvent, ToggleSpec, UiSpec, WidgetSpec,
+        measure, measure_checked, render, render_checked,
     };
 }

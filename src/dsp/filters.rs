@@ -5,7 +5,9 @@ use std::f32::consts::PI;
 /// A simple one-pole low-pass filter used for smoothing and damping.
 #[derive(Debug, Clone, Copy)]
 pub struct OnePole {
+    /// Smoothing coefficient in the range `0.0..=1.0`.
     coefficient: f32,
+    /// Internal filter state from the previous sample.
     state: f32,
 }
 

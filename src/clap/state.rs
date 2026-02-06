@@ -85,6 +85,7 @@ pub fn read_versioned_payload(
     Ok(VersionedStatePayload { version, payload })
 }
 
+/// Read a little-endian `u32` from a CLAP input stream.
 fn read_u32(input: &mut InputStream) -> Result<u32, PluginError> {
     let mut bytes = [0u8; 4];
     input.read_exact(&mut bytes)?;
@@ -96,7 +97,7 @@ mod tests {
     use clack_common::stream::{InputStream, OutputStream};
     use clack_plugin::plugin::PluginError;
 
-    use super::{read_versioned_payload, write_versioned_payload, MAX_STATE_PAYLOAD_BYTES};
+    use super::{MAX_STATE_PAYLOAD_BYTES, read_versioned_payload, write_versioned_payload};
 
     #[test]
     fn versioned_payload_roundtrip() {

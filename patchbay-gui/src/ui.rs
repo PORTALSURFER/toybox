@@ -103,6 +103,7 @@ impl LayoutState {
 }
 
 impl UiState {
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     pub(crate) fn begin_frame(&mut self) {
         self.root_frame_used = false;
         self.root_frame_size = None;
@@ -113,10 +114,12 @@ impl UiState {
         self.root_frame_size = Some(size);
     }
 
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     pub(crate) fn root_frame_used(&self) -> bool {
         self.root_frame_used
     }
 
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     pub(crate) fn take_root_frame_size(&mut self) -> Option<Size> {
         self.root_frame_size.take()
     }
@@ -1284,10 +1287,7 @@ impl<'a> Ui<'a> {
     ///
     /// # Example
     /// ```
-    /// # use patchbay_gui::Ui;
-    /// # use patchbay_gui::canvas::Canvas;
-    /// # use patchbay_gui::host::InputState;
-    /// # use patchbay_gui::ui::{Layout, Theme, UiState};
+    /// # use patchbay_gui::{Canvas, InputState, Layout, Theme, Ui, UiState};
     /// let mut canvas = Canvas::new(200, 200);
     /// let mut layout = Layout::default();
     /// let theme = Theme::default();

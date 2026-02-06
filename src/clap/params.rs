@@ -51,12 +51,19 @@ impl ParamSpec<'_> {
 ///
 /// This keeps param definitions compact while still producing a concrete [`ParamSpec`].
 pub struct ParamBuilder<'a> {
+    /// Stable CLAP parameter identifier.
     id: ClapId,
+    /// CLAP parameter flags accumulated by builder methods.
     flags: ParamInfoFlags,
+    /// Parameter display name bytes.
     name: &'a [u8],
+    /// Parameter module/group name bytes.
     module: &'a [u8],
+    /// Minimum parameter value.
     min_value: f64,
+    /// Maximum parameter value.
     max_value: f64,
+    /// Default parameter value.
     default_value: f64,
 }
 
