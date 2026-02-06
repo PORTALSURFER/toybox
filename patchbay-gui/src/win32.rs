@@ -1,7 +1,7 @@
 //! Win32 window creation and message handling.
 
 use crate::canvas::{Canvas, Color, Point, Size};
-use crate::declarative::{UiSpec, render_checked};
+use crate::declarative::{UiAction, UiSpec, render_checked};
 use crate::host::{GuiError, InputState};
 use crate::logging::log_line_safe;
 use crate::renderer::{Renderer, RendererDevice};
@@ -114,10 +114,11 @@ impl HasDisplayHandle for SurfaceWindow {
 unsafe impl Send for SurfaceWindow {}
 unsafe impl Sync for SurfaceWindow {}
 
-struct WindowState<State, Init, Frame>
+struct WindowState<State, Init, Build, Reduce>
 where
     Init: FnMut(&mut State) + Send + 'static,
-    Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
+    Build: FnMut(&InputState, &State) -> UiSpec + Send + 'static,
+    Reduce: FnMut(&mut State, UiAction) + Send + 'static,
     State: Send + 'static,
 {
     hwnd: HWND,
@@ -131,7 +132,8 @@ where
     background_brush: HBRUSH,
     state: State,
     on_init: Init,
-    on_frame: Frame,
+    build_spec: Build,
+    reduce_action: Reduce,
     resize_request: Arc<AtomicU64>,
     last_size: Arc<AtomicU64>,
     aspect_ratio: Arc<AtomicU32>,
@@ -146,10 +148,11 @@ where
     logged_missing_root_frame: bool,
 }
 
-impl<State, Init, Frame> WindowState<State, Init, Frame>
+impl<State, Init, Build, Reduce> WindowState<State, Init, Build, Reduce>
 where
     Init: FnMut(&mut State) + Send + 'static,
-    Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
+    Build: FnMut(&InputState, &State) -> UiSpec + Send + 'static,
+    Reduce: FnMut(&mut State, UiAction) + Send + 'static,
     State: Send + 'static,
 {
     fn handle_message(&mut self, message: u32, wparam: WPARAM, lparam: LPARAM) -> Option<LRESULT> {
@@ -394,13 +397,18 @@ where
             );
             ui.reset_input_consumption();
             ui.clear_overlays();
-            let mut spec = (self.on_frame)(&self.input, &mut self.state);
-            if let Err(err) =
-                render_checked(&mut spec, &mut ui, Point { x: 0, y: 0 }, &mut self.state)
-            {
-                log_line_safe(&format!(
-                    "win32: declarative render validation error: {err}"
-                ));
+            let spec = (self.build_spec)(&self.input, &self.state);
+            match render_checked(&spec, &mut ui, Point { x: 0, y: 0 }) {
+                Ok(result) => {
+                    for action in result.actions {
+                        (self.reduce_action)(&mut self.state, action);
+                    }
+                }
+                Err(err) => {
+                    log_line_safe(&format!(
+                        "win32: declarative render validation error: {err}"
+                    ));
+                }
             }
             ui.draw_overlays();
         }
@@ -473,14 +481,15 @@ fn enforce_aspect_min(width: u32, height: u32, aspect: f32) -> (u32, u32) {
 }
 
 /// Spawn a GUI thread that owns the Win32 window and render loop.
-pub fn spawn_window_thread<State, Init, Frame>(
+pub fn spawn_window_thread<State, Init, Build, Reduce>(
     parent_hwnd: isize,
     parent_hinstance: isize,
     title: String,
     size: Size,
     state: State,
     on_init: Init,
-    on_frame: Frame,
+    build: Build,
+    reduce: Reduce,
     device_cache: Arc<Mutex<Option<Arc<RendererDevice>>>>,
     resize_request: Arc<AtomicU64>,
     last_size: Arc<AtomicU64>,
@@ -491,7 +500,8 @@ pub fn spawn_window_thread<State, Init, Frame>(
 ) -> Result<WindowHandle, GuiError>
 where
     Init: FnMut(&mut State) + Send + 'static,
-    Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
+    Build: FnMut(&InputState, &State) -> UiSpec + Send + 'static,
+    Reduce: FnMut(&mut State, UiAction) + Send + 'static,
     State: Send + 'static,
 {
     log_line_safe("win32: spawn_window_thread begin (using caller thread)");
@@ -502,7 +512,8 @@ where
         size,
         state,
         on_init,
-        on_frame,
+        build,
+        reduce,
         device_cache,
         resize_request,
         last_size,
@@ -513,14 +524,15 @@ where
     )
 }
 
-fn create_window_on_thread<State, Init, Frame>(
+fn create_window_on_thread<State, Init, Build, Reduce>(
     parent_hwnd: isize,
     parent_hinstance: isize,
     title: String,
     size: Size,
     state: State,
     on_init: Init,
-    on_frame: Frame,
+    build: Build,
+    reduce: Reduce,
     device_cache: Arc<Mutex<Option<Arc<RendererDevice>>>>,
     resize_request: Arc<AtomicU64>,
     last_size: Arc<AtomicU64>,
@@ -531,7 +543,8 @@ fn create_window_on_thread<State, Init, Frame>(
 ) -> Result<WindowHandle, GuiError>
 where
     Init: FnMut(&mut State) + Send + 'static,
-    Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
+    Build: FnMut(&InputState, &State) -> UiSpec + Send + 'static,
+    Reduce: FnMut(&mut State, UiAction) + Send + 'static,
     State: Send + 'static,
 {
     log_line_safe("win32: create_window_on_thread begin");
@@ -540,7 +553,7 @@ where
     let parent_hinstance = HINSTANCE(parent_hinstance as *mut _);
     let module_hinstance = if parent_hinstance.0.is_null() {
         let mut module = windows::Win32::Foundation::HMODULE::default();
-        let proc_addr = window_proc::<State, Init, Frame> as *const () as *const u16;
+        let proc_addr = window_proc::<State, Init, Build, Reduce> as *const () as *const u16;
         let got_module = unsafe {
             GetModuleHandleExW(
                 GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
@@ -581,7 +594,7 @@ where
     unsafe {
         let wnd_class = WNDCLASSW {
             style: CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS,
-            lpfnWndProc: Some(window_proc::<State, Init, Frame>),
+            lpfnWndProc: Some(window_proc::<State, Init, Build, Reduce>),
             hInstance: module_hinstance,
             lpszClassName: PCWSTR(class_name.as_ptr()),
             hCursor: cursor,
@@ -656,7 +669,8 @@ where
         background_brush,
         state,
         on_init,
-        on_frame,
+        build_spec: build,
+        reduce_action: reduce,
         resize_request,
         last_size,
         aspect_ratio,
@@ -678,7 +692,7 @@ where
         DragAcceptFiles(child_hwnd, true);
         log_line_safe("win32: initial window hidden; waiting for show gate");
         // Render once; on success it will reveal the window.
-        let state = &mut *(state_ptr as *mut WindowState<State, Init, Frame>);
+        let state = &mut *(state_ptr as *mut WindowState<State, Init, Build, Reduce>);
         state.render_frame();
     }
 
@@ -686,10 +700,11 @@ where
     Ok(handle)
 }
 
-impl<State, Init, Frame> Drop for WindowState<State, Init, Frame>
+impl<State, Init, Build, Reduce> Drop for WindowState<State, Init, Build, Reduce>
 where
     Init: FnMut(&mut State) + Send + 'static,
-    Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
+    Build: FnMut(&InputState, &State) -> UiSpec + Send + 'static,
+    Reduce: FnMut(&mut State, UiAction) + Send + 'static,
     State: Send + 'static,
 {
     fn drop(&mut self) {
@@ -699,7 +714,7 @@ where
     }
 }
 
-unsafe extern "system" fn window_proc<State, Init, Frame>(
+unsafe extern "system" fn window_proc<State, Init, Build, Reduce>(
     hwnd: HWND,
     message: u32,
     wparam: WPARAM,
@@ -707,13 +722,14 @@ unsafe extern "system" fn window_proc<State, Init, Frame>(
 ) -> LRESULT
 where
     Init: FnMut(&mut State) + Send + 'static,
-    Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
+    Build: FnMut(&InputState, &State) -> UiSpec + Send + 'static,
+    Reduce: FnMut(&mut State, UiAction) + Send + 'static,
     State: Send + 'static,
 {
     let ptr =
         unsafe { windows::Win32::UI::WindowsAndMessaging::GetWindowLongPtrW(hwnd, GWLP_USERDATA) };
     if ptr != 0 {
-        let state = unsafe { &mut *(ptr as *mut WindowState<State, Init, Frame>) };
+        let state = unsafe { &mut *(ptr as *mut WindowState<State, Init, Build, Reduce>) };
         if let Some(result) = state.handle_message(message, wparam, lparam) {
             return result;
         }
@@ -723,7 +739,9 @@ where
         if ptr != 0 {
             unsafe {
                 windows::Win32::UI::WindowsAndMessaging::SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-                drop(Box::from_raw(ptr as *mut WindowState<State, Init, Frame>));
+                drop(Box::from_raw(
+                    ptr as *mut WindowState<State, Init, Build, Reduce>,
+                ));
             }
         }
     }

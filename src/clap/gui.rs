@@ -2,11 +2,11 @@
 
 use crate::logging::log_line_safe;
 use clack_plugin::plugin::PluginError;
-use patchbay_gui::{GuiError, HostWindow, Size};
+use patchbay_gui::{GuiError, HostWindow, Size, UiAction, UiSpec};
 use raw_window_handle::RawWindowHandle;
 
 /// Re-export Patchbay GUI types for downstream GUI integrations.
-pub use patchbay_gui::{Canvas, Color, InputState, OpenParentedMode, Theme};
+pub use patchbay_gui::{Canvas, Color, InputState, OpenParentedMode, ThemeTokens};
 
 /// Wrapper around a Patchbay GUI window for a CLAP editor.
 #[derive(Default)]
@@ -61,24 +61,22 @@ impl GuiHostWindow {
 
     /// Open a parented Patchbay GUI window.
     ///
-    /// The caller supplies the initial state and a per-frame callback that
-    /// returns a declarative UI spec. The helper handles resize requests and
-    /// stores the last logical size. This recreates the window each call so
-    /// new state is applied; use `open_parented_reuse` to keep an existing
-    /// window.
-    pub fn open_parented<State, Init, Frame>(
+    /// The caller supplies the initial state, a declarative UI builder, and an
+    /// action reducer. The helper handles resize requests and stores the last
+    /// logical size.
+    pub fn open_parented<State, Init, Build, Reduce>(
         &mut self,
         title: String,
         size: (u32, u32),
         state: State,
         on_init: Init,
-        on_frame: Frame,
+        build: Build,
+        reduce: Reduce,
     ) -> Result<(), PluginError>
     where
         Init: FnMut(&mut State) + Send + 'static,
-        Frame: FnMut(&patchbay_gui::InputState, &mut State) -> patchbay_gui::UiSpec<'static, State>
-            + Send
-            + 'static,
+        Build: FnMut(&patchbay_gui::InputState, &State) -> UiSpec + Send + 'static,
+        Reduce: FnMut(&mut State, UiAction) + Send + 'static,
         State: Send + 'static,
     {
         self.open_parented_with(
@@ -86,7 +84,8 @@ impl GuiHostWindow {
             size,
             state,
             on_init,
-            on_frame,
+            build,
+            reduce,
             OpenParentedMode::Recreate,
         )
     }
@@ -96,19 +95,19 @@ impl GuiHostWindow {
     /// This mirrors Patchbay's default behavior: if a window is already open
     /// and attached to the same parent, the new state is ignored and the
     /// existing window is shown.
-    pub fn open_parented_reuse<State, Init, Frame>(
+    pub fn open_parented_reuse<State, Init, Build, Reduce>(
         &mut self,
         title: String,
         size: (u32, u32),
         state: State,
         on_init: Init,
-        on_frame: Frame,
+        build: Build,
+        reduce: Reduce,
     ) -> Result<(), PluginError>
     where
         Init: FnMut(&mut State) + Send + 'static,
-        Frame: FnMut(&patchbay_gui::InputState, &mut State) -> patchbay_gui::UiSpec<'static, State>
-            + Send
-            + 'static,
+        Build: FnMut(&patchbay_gui::InputState, &State) -> UiSpec + Send + 'static,
+        Reduce: FnMut(&mut State, UiAction) + Send + 'static,
         State: Send + 'static,
     {
         self.open_parented_with(
@@ -116,7 +115,8 @@ impl GuiHostWindow {
             size,
             state,
             on_init,
-            on_frame,
+            build,
+            reduce,
             OpenParentedMode::ReuseIfOpen,
         )
     }
@@ -125,20 +125,21 @@ impl GuiHostWindow {
     ///
     /// The `size` argument is used as the initial window size before
     /// declarative auto-resize takes over.
-    pub fn open_parented_with<State, Init, Frame>(
+    #[allow(clippy::too_many_arguments)]
+    pub fn open_parented_with<State, Init, Build, Reduce>(
         &mut self,
         title: String,
         size: (u32, u32),
         state: State,
         on_init: Init,
-        on_frame: Frame,
+        build: Build,
+        reduce: Reduce,
         mode: OpenParentedMode,
     ) -> Result<(), PluginError>
     where
         Init: FnMut(&mut State) + Send + 'static,
-        Frame: FnMut(&patchbay_gui::InputState, &mut State) -> patchbay_gui::UiSpec<'static, State>
-            + Send
-            + 'static,
+        Build: FnMut(&patchbay_gui::InputState, &State) -> UiSpec + Send + 'static,
+        Reduce: FnMut(&mut State, UiAction) + Send + 'static,
         State: Send + 'static,
     {
         log_line_safe(&format!(
@@ -154,7 +155,8 @@ impl GuiHostWindow {
                 },
                 state,
                 on_init,
-                on_frame,
+                build,
+                reduce,
                 mode,
             )
             .map_err(map_gui_error)

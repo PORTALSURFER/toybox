@@ -804,6 +804,25 @@ impl<'a> Ui<'a> {
     where
         F: FnMut(&mut Ui<'_>, Rect),
     {
+        self.root_frame_with_key_at(key, style, size, Point { x: 0, y: 0 }, |ui, rect| {
+            f(ui, rect);
+        })
+    }
+
+    /// Draw a root frame at an explicit origin.
+    ///
+    /// The measured root size is still reported for host auto-resize.
+    pub fn root_frame_with_key_at<F>(
+        &mut self,
+        key: &str,
+        style: RootFrameStyle<'_>,
+        size: Option<Size>,
+        origin: Point,
+        mut f: F,
+    ) -> RootFrameResponse
+    where
+        F: FnMut(&mut Ui<'_>, Rect),
+    {
         let id = WidgetId::from_label(key);
         let header_height = style.header_height.unwrap_or_else(|| {
             if style.title.is_some() {
@@ -820,7 +839,6 @@ impl<'a> Ui<'a> {
         let requested_size = size;
         let cached = self.state.layout.get(id);
         let size = requested_size.or(cached).unwrap_or(fallback);
-        let origin = Point { x: 0, y: 0 };
         let outer_rect = Rect { origin, size };
         let background = style.background.unwrap_or(self.theme.knob_fill);
         let outline = style.outline.unwrap_or(self.theme.knob_outline);

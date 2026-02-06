@@ -1,17 +1,19 @@
 //! Patchbay GUI re-exports for plugin UIs.
 //!
-//! The module mirrors the Patchbay GUI API so downstream plugins can depend on
-//! `toybox` and keep GUI integrations consistent.
+//! The module exposes the strict declarative GUI surface so plugin crates can
+//! build UI specs and reduce typed actions without depending on `patchbay-gui`
+//! directly.
 
-pub use patchbay_gui::{Canvas, Color, Point, Rect, Size, Theme};
+pub use patchbay_gui::{Canvas, Color, Point, Rect, Size};
 
-/// Declarative layout helpers for Patchbay GUI.
+/// Strict declarative GUI types and rendering helpers.
 pub mod declarative {
     pub use patchbay_gui::{
-        AbsoluteChild, AbsoluteSpec, Align, ButtonEvent, ButtonSpec, DeclarativeError,
-        DeclarativeGridSpec, DropdownEvent, DropdownSpec, FlexSpec, IndicatorSpec, KnobEvent,
-        KnobSpec, LabelSpec, Node, Padding, PanelSpec, RegionEvent, RegionSpec, RootFrameSpec,
-        SizeSpec, SliderEvent, SliderSpec, SpacerSpec, ToggleEvent, ToggleSpec, UiSpec, WidgetSpec,
-        measure, measure_checked, render, render_checked,
+        AbsoluteChild, AbsoluteSpec, Align, ButtonSpec, ColorTokens, ControlTokens,
+        DeclarativeError, DropdownSpec, EdgeInsets, FlexSpec, GridSpec, GridTemplate,
+        IndicatorSpec, Justify, KnobSpec, LabelSpec, LayoutBox, Length, Node, PanelSpec,
+        RegionInteractionKind, RegionSpec, RenderResult, RootFrameSpec, SliderSpec, SpacingTokens,
+        ThemeTokens, ToggleSpec, TrackSize, TypographyTokens, UiAction, UiSpec, measure_checked,
+        render_checked,
     };
 }

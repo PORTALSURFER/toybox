@@ -6,9 +6,11 @@
 use toybox_process_log::ProcessFileLogger;
 
 /// Process-local logger used for Patchbay GUI diagnostics.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 static LOGGER: ProcessFileLogger = ProcessFileLogger::with_default_capacity("patchbay_gui");
 
 /// Write a log line and ignore any failures.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub(crate) fn log_line_safe(message: &str) {
     LOGGER.log_line_safe("patchbay-gui log", message);
 }

@@ -4,7 +4,7 @@
 //! backend is unavailable. GUI opening APIs return [`GuiError::UnsupportedHandle`].
 
 use crate::canvas::Size;
-use crate::declarative::UiSpec;
+use crate::declarative::{UiAction, UiSpec};
 use raw_window_handle::RawWindowHandle;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -182,17 +182,19 @@ impl HostWindow {
     ///
     /// This always returns [`GuiError::UnsupportedHandle`] on non-Windows
     /// platforms. The method exists so clients compile cross-platform.
-    pub fn open_parented<State, Init, Frame>(
+    pub fn open_parented<State, Init, Build, Reduce>(
         &mut self,
         title: String,
         size: (u32, u32),
         state: State,
         on_init: Init,
-        on_frame: Frame,
+        build: Build,
+        reduce: Reduce,
     ) -> Result<(), GuiError>
     where
         Init: FnMut(&mut State) + Send + 'static,
-        Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
+        Build: FnMut(&InputState, &State) -> UiSpec + Send + 'static,
+        Reduce: FnMut(&mut State, UiAction) + Send + 'static,
         State: Send + 'static,
     {
         self.open_parented_with(
@@ -203,7 +205,8 @@ impl HostWindow {
             },
             state,
             on_init,
-            on_frame,
+            build,
+            reduce,
             OpenParentedMode::ReuseIfOpen,
         )
     }
@@ -212,18 +215,21 @@ impl HostWindow {
     ///
     /// This always returns [`GuiError::UnsupportedHandle`] on non-Windows
     /// platforms. The method exists so clients compile cross-platform.
-    pub fn open_parented_with<State, Init, Frame>(
+    #[allow(clippy::too_many_arguments)]
+    pub fn open_parented_with<State, Init, Build, Reduce>(
         &mut self,
         _title: String,
         size: Size,
         _state: State,
         _on_init: Init,
-        _on_frame: Frame,
+        _build: Build,
+        _reduce: Reduce,
         _mode: OpenParentedMode,
     ) -> Result<(), GuiError>
     where
         Init: FnMut(&mut State) + Send + 'static,
-        Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
+        Build: FnMut(&InputState, &State) -> UiSpec + Send + 'static,
+        Reduce: FnMut(&mut State, UiAction) + Send + 'static,
         State: Send + 'static,
     {
         if self.parent.is_none() {
@@ -276,21 +282,16 @@ mod tests {
             (320, 200),
             (),
             |_state| {},
-            |_input, _state| UiSpec {
-                root: crate::declarative::RootFrameSpec {
-                    key: "root".into(),
-                    title: None,
-                    padding: 0,
-                    content: Box::new(crate::declarative::Node::Spacer(
-                        crate::declarative::SpacerSpec {
-                            size: Size {
-                                width: 1,
-                                height: 1,
-                            },
-                        },
-                    )),
-                },
+            |_input, _state| {
+                UiSpec::new(crate::declarative::RootFrameSpec::new(
+                    "root",
+                    crate::declarative::Node::Spacer(crate::declarative::SpacerSpec::new(Size {
+                        width: 1,
+                        height: 1,
+                    })),
+                ))
             },
+            |_state, _action| {},
         );
         assert!(matches!(result, Err(GuiError::UnsupportedHandle)));
     }

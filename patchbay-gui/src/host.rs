@@ -1,7 +1,7 @@
 //! Host window management and input plumbing for Patchbay GUI.
 
 use crate::canvas::Size;
-use crate::declarative::UiSpec;
+use crate::declarative::{UiAction, UiSpec};
 use crate::renderer::RendererDevice;
 use crate::ui::{Layout, Theme, UiState};
 use crate::win32::{WindowHandle, spawn_window_thread};
@@ -168,22 +168,24 @@ impl HostWindow {
 
     /// Open a parented Patchbay GUI window.
     ///
-    /// The caller supplies initial state plus callbacks for initialization and
-    /// per-frame declarative rendering. The `size` argument is used as the
-    /// initial window size; the declarative root frame still drives
-    /// auto-resizing each frame. If a matching window is already open, this
-    /// reuses it and ignores the new state.
-    pub fn open_parented<State, Init, Frame>(
+    /// The caller supplies initial state plus callbacks for initialization,
+    /// per-frame declarative spec building, and action reduction.
+    ///
+    /// The `size` argument is used as the initial window size; the declarative
+    /// root frame still drives auto-resizing each frame.
+    pub fn open_parented<State, Init, Build, Reduce>(
         &mut self,
         title: String,
         size: (u32, u32),
         state: State,
         on_init: Init,
-        on_frame: Frame,
+        build: Build,
+        reduce: Reduce,
     ) -> Result<(), GuiError>
     where
         Init: FnMut(&mut State) + Send + 'static,
-        Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
+        Build: FnMut(&InputState, &State) -> UiSpec + Send + 'static,
+        Reduce: FnMut(&mut State, UiAction) + Send + 'static,
         State: Send + 'static,
     {
         self.open_parented_with(
@@ -194,7 +196,8 @@ impl HostWindow {
             },
             state,
             on_init,
-            on_frame,
+            build,
+            reduce,
             OpenParentedMode::ReuseIfOpen,
         )
     }
@@ -207,18 +210,21 @@ impl HostWindow {
     /// new one is created with the provided state. The `size` argument is used
     /// as the initial window size; the declarative root frame will still drive
     /// auto-resizing.
-    pub fn open_parented_with<State, Init, Frame>(
+    #[allow(clippy::too_many_arguments)]
+    pub fn open_parented_with<State, Init, Build, Reduce>(
         &mut self,
         title: String,
         size: Size,
         state: State,
         mut on_init: Init,
-        mut on_frame: Frame,
+        mut build: Build,
+        mut reduce: Reduce,
         mode: OpenParentedMode,
     ) -> Result<(), GuiError>
     where
         Init: FnMut(&mut State) + Send + 'static,
-        Frame: FnMut(&InputState, &mut State) -> UiSpec<'static, State> + Send + 'static,
+        Build: FnMut(&InputState, &State) -> UiSpec + Send + 'static,
+        Reduce: FnMut(&mut State, UiAction) + Send + 'static,
         State: Send + 'static,
     {
         let parent = self.parent.ok_or(GuiError::NoParent)?;
@@ -255,7 +261,8 @@ impl HostWindow {
             move |state| {
                 on_init(state);
             },
-            move |input, state| on_frame(input, state),
+            move |input, state| build(input, state),
+            move |state, action| reduce(state, action),
             device_cache,
             resize_request,
             last_size,
