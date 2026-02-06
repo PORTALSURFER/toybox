@@ -521,6 +521,40 @@ impl Node {
         }
         self
     }
+
+    /// Set explicit control size for slider/toggle/button/dropdown nodes.
+    ///
+    /// Non-control node kinds and knobs are returned unchanged.
+    pub fn control_size(mut self, size: Size) -> Self {
+        match &mut self {
+            Self::Slider(slider) => slider.control_size = Some(size),
+            Self::Toggle(toggle) => toggle.control_size = Some(size),
+            Self::Button(button) => button.control_size = Some(size),
+            Self::Dropdown(dropdown) => dropdown.control_size = Some(size),
+            _ => {}
+        }
+        self
+    }
+
+    /// Set value label text for knob nodes.
+    ///
+    /// Non-knob node kinds are returned unchanged.
+    pub fn value_label(mut self, value_label: impl Into<String>) -> Self {
+        if let Self::Knob(knob) = &mut self {
+            knob.value_label = Some(value_label.into());
+        }
+        self
+    }
+
+    /// Set selected option index for dropdown nodes.
+    ///
+    /// Non-dropdown node kinds are returned unchanged.
+    pub fn selected(mut self, selected: usize) -> Self {
+        if let Self::Dropdown(dropdown) = &mut self {
+            dropdown.selected = selected;
+        }
+        self
+    }
 }
 
 /// Create a row container node.
@@ -3271,6 +3305,52 @@ mod tests {
         match label_node {
             Node::Label(label) => assert_eq!(label.color, Some(Color::rgb(200, 180, 90))),
             _ => panic!("expected label node"),
+        }
+
+        let knob_node = knob("k", "Drive", 0.5, (0.0, 1.0)).value_label("50%");
+        match knob_node {
+            Node::Knob(knob) => assert_eq!(knob.value_label.as_deref(), Some("50%")),
+            _ => panic!("expected knob node"),
+        }
+
+        let slider_node = slider("mix", "Mix", 0.3, (0.0, 1.0)).control_size(Size {
+            width: 140,
+            height: 24,
+        });
+        match slider_node {
+            Node::Slider(slider) => assert_eq!(
+                slider.control_size,
+                Some(Size {
+                    width: 140,
+                    height: 24
+                })
+            ),
+            _ => panic!("expected slider node"),
+        }
+
+        let dropdown_node = dropdown(
+            "mode",
+            "Mode",
+            vec!["A".to_string(), "B".to_string(), "C".to_string()],
+            0,
+        )
+        .selected(2)
+        .control_size(Size {
+            width: 160,
+            height: 24,
+        });
+        match dropdown_node {
+            Node::Dropdown(dropdown) => {
+                assert_eq!(dropdown.selected, 2);
+                assert_eq!(
+                    dropdown.control_size,
+                    Some(Size {
+                        width: 160,
+                        height: 24
+                    })
+                );
+            }
+            _ => panic!("expected dropdown node"),
         }
     }
 

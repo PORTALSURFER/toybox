@@ -37,6 +37,7 @@ Most node helpers also support fluent node chaining:
 - flex distribution: `.align_*()` and `.justify_*()` on row/column nodes
 - panel styling: `.title(...)`, `.background(...)`, `.outline(...)`
 - label styling: `.text_color(...)`
+- control helpers: `.control_size(...)` for slider/toggle/button/dropdown, `.value_label(...)` for knobs, `.selected(...)` for dropdown
 
 ## Layout Ergonomics
 Use fluent helpers to reduce boilerplate:
