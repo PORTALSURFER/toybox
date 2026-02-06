@@ -18,8 +18,6 @@ pub use clack_plugin;
 /// Re-export MTS-ESP for shared tuning support across plugins.
 pub use mts_esp;
 
-/// Re-export GUI dependencies behind the `gui` feature flag.
-#[cfg(feature = "gui")]
-pub use patchbay_gui;
+/// Re-export raw-window-handle for host parent integration code.
 #[cfg(feature = "gui")]
 pub use raw_window_handle;

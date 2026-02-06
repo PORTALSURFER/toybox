@@ -25,6 +25,40 @@ pub enum DeclarativeError {
     /// The grid template does not define any columns.
     #[error("grid template must define at least one column track")]
     EmptyGridColumns,
+    /// A value range is malformed for a parameterized control.
+    #[error("declarative node `{node_kind}` key `{key}` must have min < max and finite bounds")]
+    InvalidValueRange {
+        /// Concrete node variant that failed validation.
+        node_kind: &'static str,
+        /// Stable key associated with the control.
+        key: String,
+    },
+    /// A dropdown selected index is out of bounds.
+    #[error(
+        "declarative node `Dropdown` key `{key}` selected index {selected} is out of bounds for {options_len} options"
+    )]
+    InvalidDropdownSelection {
+        /// Stable dropdown key.
+        key: String,
+        /// Requested selected index.
+        selected: usize,
+        /// Number of options provided.
+        options_len: usize,
+    },
+    /// A control was given a zero-sized explicit control box.
+    #[error(
+        "declarative node `{node_kind}` key `{key}` control_size must be non-zero (got {width}x{height})"
+    )]
+    InvalidControlSize {
+        /// Concrete node variant that failed validation.
+        node_kind: &'static str,
+        /// Stable key associated with the control.
+        key: String,
+        /// Invalid width value.
+        width: u32,
+        /// Invalid height value.
+        height: u32,
+    },
 }
 
 /// Typed interaction actions emitted by declarative rendering.
@@ -210,6 +244,86 @@ impl Node {
     }
 }
 
+/// Create a row container node.
+pub fn row(children: Vec<Node>) -> Node {
+    Node::row(children)
+}
+
+/// Create a column container node.
+pub fn column(children: Vec<Node>) -> Node {
+    Node::column(children)
+}
+
+/// Create a grid container node.
+pub fn grid(template: GridTemplate, children: Vec<Node>) -> Node {
+    Node::Grid(GridSpec::new(template, children))
+}
+
+/// Create a panel container node.
+pub fn panel(key: impl Into<String>, content: Node) -> Node {
+    Node::Panel(PanelSpec::new(key, content))
+}
+
+/// Create a text label node.
+pub fn label(text: impl Into<String>) -> Node {
+    Node::Label(LabelSpec::new(text))
+}
+
+/// Create a fixed-size spacer node.
+pub fn spacer(size: Size) -> Node {
+    Node::Spacer(SpacerSpec::new(size))
+}
+
+/// Create a knob control node.
+pub fn knob(
+    key: impl Into<String>,
+    label: impl Into<String>,
+    value: f32,
+    range: (f32, f32),
+) -> Node {
+    Node::Knob(KnobSpec::new(key, label, value, range))
+}
+
+/// Create a slider control node.
+pub fn slider(
+    key: impl Into<String>,
+    label: impl Into<String>,
+    value: f32,
+    range: (f32, f32),
+) -> Node {
+    Node::Slider(SliderSpec::new(key, label, value, range))
+}
+
+/// Create a toggle control node.
+pub fn toggle(key: impl Into<String>, label: impl Into<String>, value: bool) -> Node {
+    Node::Toggle(ToggleSpec::new(key, label, value))
+}
+
+/// Create a button control node.
+pub fn button(key: impl Into<String>, label: impl Into<String>) -> Node {
+    Node::Button(ButtonSpec::new(key, label))
+}
+
+/// Create a dropdown control node.
+pub fn dropdown(
+    key: impl Into<String>,
+    label: impl Into<String>,
+    options: Vec<String>,
+    selected: usize,
+) -> Node {
+    Node::Dropdown(DropdownSpec::new(key, label, options, selected))
+}
+
+/// Create an interactive region node.
+pub fn region(key: impl Into<String>, size: Size) -> Node {
+    Node::Region(RegionSpec::new(key, size))
+}
+
+/// Create an indicator node.
+pub fn indicator(size: Size, active: bool) -> Node {
+    Node::Indicator(IndicatorSpec::new(size, active))
+}
+
 /// Length value for constrained layout.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Length {
@@ -297,6 +411,34 @@ impl LayoutBox {
         self
     }
 
+    /// Set width to fill available space.
+    pub const fn fill_width(mut self) -> Self {
+        self.width = Length::Fill(1);
+        self
+    }
+
+    /// Set height to fill available space.
+    pub const fn fill_height(mut self) -> Self {
+        self.height = Length::Fill(1);
+        self
+    }
+
+    /// Set a fixed width while preserving current height behavior.
+    pub const fn fixed_width(mut self, width: u32) -> Self {
+        self.width = Length::Px(width);
+        self.min_width = Some(width);
+        self.max_width = Some(width);
+        self
+    }
+
+    /// Set a fixed height while preserving current width behavior.
+    pub const fn fixed_height(mut self, height: u32) -> Self {
+        self.height = Length::Px(height);
+        self.min_height = Some(height);
+        self.max_height = Some(height);
+        self
+    }
+
     /// Set minimum size.
     pub const fn with_min(mut self, min_width: u32, min_height: u32) -> Self {
         self.min_width = Some(min_width);
@@ -304,11 +446,21 @@ impl LayoutBox {
         self
     }
 
+    /// Set minimum size constraints.
+    pub const fn min(self, min_width: u32, min_height: u32) -> Self {
+        self.with_min(min_width, min_height)
+    }
+
     /// Set maximum size.
     pub const fn with_max(mut self, max_width: u32, max_height: u32) -> Self {
         self.max_width = Some(max_width);
         self.max_height = Some(max_height);
         self
+    }
+
+    /// Set maximum size constraints.
+    pub const fn max(self, max_width: u32, max_height: u32) -> Self {
+        self.with_max(max_width, max_height)
     }
 }
 
@@ -433,6 +585,18 @@ impl FlexSpec {
         self
     }
 
+    /// Set uniform container padding.
+    pub fn pad_all(mut self, value: i32) -> Self {
+        self.padding = EdgeInsets::all(value);
+        self
+    }
+
+    /// Set horizontal and vertical container padding.
+    pub fn pad_xy(mut self, horizontal: i32, vertical: i32) -> Self {
+        self.padding = EdgeInsets::symmetric(horizontal, vertical);
+        self
+    }
+
     /// Override cross-axis alignment.
     pub fn align(mut self, align: Align) -> Self {
         self.align = align;
@@ -442,6 +606,48 @@ impl FlexSpec {
     /// Override main-axis distribution.
     pub fn justify(mut self, justify: Justify) -> Self {
         self.justify = justify;
+        self
+    }
+
+    /// Align children to the cross-axis start.
+    pub fn align_start(mut self) -> Self {
+        self.align = Align::Start;
+        self
+    }
+
+    /// Center children on the cross-axis.
+    pub fn align_center(mut self) -> Self {
+        self.align = Align::Center;
+        self
+    }
+
+    /// Align children to the cross-axis end.
+    pub fn align_end(mut self) -> Self {
+        self.align = Align::End;
+        self
+    }
+
+    /// Stretch children across the cross-axis.
+    pub fn align_stretch(mut self) -> Self {
+        self.align = Align::Stretch;
+        self
+    }
+
+    /// Pack children at the main-axis start.
+    pub fn justify_start(mut self) -> Self {
+        self.justify = Justify::Start;
+        self
+    }
+
+    /// Center children on the main axis.
+    pub fn justify_center(mut self) -> Self {
+        self.justify = Justify::Center;
+        self
+    }
+
+    /// Pack children at the main-axis end.
+    pub fn justify_end(mut self) -> Self {
+        self.justify = Justify::End;
         self
     }
 }
@@ -491,9 +697,34 @@ impl GridTemplate {
         }
     }
 
+    /// Build a template with `count` equal fractional columns.
+    pub fn columns_fr(count: usize) -> Self {
+        let count = count.max(1);
+        Self::new(vec![TrackSize::Fr(1); count])
+    }
+
     /// Override row tracks.
     pub fn rows(mut self, rows: Vec<TrackSize>) -> Self {
         self.rows = rows;
+        self
+    }
+
+    /// Override rows with equal fractional tracks.
+    pub fn rows_fr(mut self, count: usize) -> Self {
+        let count = count.max(1);
+        self.rows = vec![TrackSize::Fr(1); count];
+        self
+    }
+
+    /// Set uniform grid padding.
+    pub fn pad_all(mut self, value: i32) -> Self {
+        self.padding = EdgeInsets::all(value);
+        self
+    }
+
+    /// Set horizontal and vertical grid padding.
+    pub fn pad_xy(mut self, horizontal: i32, vertical: i32) -> Self {
+        self.padding = EdgeInsets::symmetric(horizontal, vertical);
         self
     }
 
@@ -583,6 +814,24 @@ impl PanelSpec {
     /// Override panel padding.
     pub fn padding(mut self, padding: i32) -> Self {
         self.padding = padding;
+        self
+    }
+
+    /// Override panel background color.
+    pub fn background(mut self, background: Color) -> Self {
+        self.background = Some(background);
+        self
+    }
+
+    /// Override panel outline color.
+    pub fn outline(mut self, outline: Color) -> Self {
+        self.outline = Some(outline);
+        self
+    }
+
+    /// Override panel header height.
+    pub fn header_height(mut self, header_height: i32) -> Self {
+        self.header_height = Some(header_height);
         self
     }
 
@@ -1135,22 +1384,37 @@ fn validate_node(
         Node::Knob(knob) => {
             validate_non_empty_key(&knob.key, "Knob")?;
             validate_unique_key(&knob.key, seen_keys)?;
+            validate_value_range("Knob", &knob.key, knob.range)?;
         }
         Node::Slider(slider) => {
             validate_non_empty_key(&slider.key, "Slider")?;
             validate_unique_key(&slider.key, seen_keys)?;
+            validate_value_range("Slider", &slider.key, slider.range)?;
+            if let Some(control_size) = slider.control_size {
+                validate_control_size("Slider", &slider.key, control_size)?;
+            }
         }
         Node::Toggle(toggle) => {
             validate_non_empty_key(&toggle.key, "Toggle")?;
             validate_unique_key(&toggle.key, seen_keys)?;
+            if let Some(control_size) = toggle.control_size {
+                validate_control_size("Toggle", &toggle.key, control_size)?;
+            }
         }
         Node::Button(button) => {
             validate_non_empty_key(&button.key, "Button")?;
             validate_unique_key(&button.key, seen_keys)?;
+            if let Some(control_size) = button.control_size {
+                validate_control_size("Button", &button.key, control_size)?;
+            }
         }
         Node::Dropdown(dropdown) => {
             validate_non_empty_key(&dropdown.key, "Dropdown")?;
             validate_unique_key(&dropdown.key, seen_keys)?;
+            validate_dropdown_selection(dropdown)?;
+            if let Some(control_size) = dropdown.control_size {
+                validate_control_size("Dropdown", &dropdown.key, control_size)?;
+            }
         }
         Node::Region(region) => {
             validate_non_empty_key(&region.key, "Region")?;
@@ -1176,6 +1440,51 @@ fn validate_unique_key(
     if !seen_keys.insert(key.to_string()) {
         return Err(DeclarativeError::DuplicateNodeKey {
             key: key.to_string(),
+        });
+    }
+    Ok(())
+}
+
+/// Validate a numeric value range.
+fn validate_value_range(
+    node_kind: &'static str,
+    key: &str,
+    range: (f32, f32),
+) -> Result<(), DeclarativeError> {
+    let (min, max) = range;
+    if !min.is_finite() || !max.is_finite() || min >= max {
+        return Err(DeclarativeError::InvalidValueRange {
+            node_kind,
+            key: key.to_string(),
+        });
+    }
+    Ok(())
+}
+
+/// Validate an explicit control size override.
+fn validate_control_size(
+    node_kind: &'static str,
+    key: &str,
+    control_size: Size,
+) -> Result<(), DeclarativeError> {
+    if control_size.width == 0 || control_size.height == 0 {
+        return Err(DeclarativeError::InvalidControlSize {
+            node_kind,
+            key: key.to_string(),
+            width: control_size.width,
+            height: control_size.height,
+        });
+    }
+    Ok(())
+}
+
+/// Validate that dropdown selection references an existing option.
+fn validate_dropdown_selection(dropdown: &DropdownSpec) -> Result<(), DeclarativeError> {
+    if dropdown.selected >= dropdown.options.len() {
+        return Err(DeclarativeError::InvalidDropdownSelection {
+            key: dropdown.key.clone(),
+            selected: dropdown.selected,
+            options_len: dropdown.options.len(),
         });
     }
     Ok(())
@@ -2197,6 +2506,132 @@ mod tests {
         let measured = measure_checked(&spec).expect("measurement should succeed");
         assert!(measured.width >= 32);
         assert!(measured.height >= 14);
+    }
+
+    #[test]
+    fn rejects_invalid_knob_range() {
+        let spec = UiSpec::new(RootFrameSpec::new(
+            "root",
+            Node::Knob(KnobSpec::new("k", "Drive", 0.5, (1.0, 1.0))),
+        ));
+        let error = measure_checked(&spec).expect_err("expected invalid range error");
+        assert!(matches!(
+            error,
+            DeclarativeError::InvalidValueRange { node_kind, .. } if node_kind == "Knob"
+        ));
+    }
+
+    #[test]
+    fn rejects_invalid_slider_range() {
+        let spec = UiSpec::new(RootFrameSpec::new(
+            "root",
+            Node::Slider(SliderSpec::new("s", "Shape", 0.5, (0.8, 0.2))),
+        ));
+        let error = measure_checked(&spec).expect_err("expected invalid range error");
+        assert!(matches!(
+            error,
+            DeclarativeError::InvalidValueRange { node_kind, .. } if node_kind == "Slider"
+        ));
+    }
+
+    #[test]
+    fn rejects_dropdown_selection_out_of_bounds() {
+        let spec = UiSpec::new(RootFrameSpec::new(
+            "root",
+            Node::Dropdown(DropdownSpec::new(
+                "mode",
+                "Mode",
+                vec!["A".to_string(), "B".to_string()],
+                2,
+            )),
+        ));
+        let error = measure_checked(&spec).expect_err("expected invalid dropdown selection");
+        assert!(matches!(
+            error,
+            DeclarativeError::InvalidDropdownSelection {
+                key,
+                selected,
+                options_len
+            } if key == "mode" && selected == 2 && options_len == 2
+        ));
+    }
+
+    #[test]
+    fn rejects_zero_control_size() {
+        let spec = UiSpec::new(RootFrameSpec::new(
+            "root",
+            Node::Slider(
+                SliderSpec::new("s", "Shape", 0.5, (0.0, 1.0)).control_size(Size {
+                    width: 0,
+                    height: 24,
+                }),
+            ),
+        ));
+        let error = measure_checked(&spec).expect_err("expected invalid control size");
+        assert!(matches!(
+            error,
+            DeclarativeError::InvalidControlSize { node_kind, .. } if node_kind == "Slider"
+        ));
+    }
+
+    #[test]
+    fn helper_layout_box_methods_apply_expected_constraints() {
+        let layout = LayoutBox::auto()
+            .fill_width()
+            .fixed_height(24)
+            .min(10, 20)
+            .max(200, 30);
+        assert_eq!(layout.width, Length::Fill(1));
+        assert_eq!(layout.height, Length::Px(24));
+        assert_eq!(layout.min_width, Some(10));
+        assert_eq!(layout.min_height, Some(20));
+        assert_eq!(layout.max_width, Some(200));
+        assert_eq!(layout.max_height, Some(30));
+    }
+
+    #[test]
+    fn helper_node_constructors_build_valid_spec() {
+        let controls = row(vec![
+            knob("drive", "Drive", 0.5, (0.0, 1.0)),
+            slider("mix", "Mix", 0.25, (0.0, 1.0)),
+            toggle("sync", "Sync", false),
+            button("ping", "Ping"),
+            dropdown("mode", "Mode", vec!["A".to_string(), "B".to_string()], 1),
+        ]);
+        let content = column(vec![
+            label("Header"),
+            controls,
+            grid(
+                GridTemplate::columns_fr(2).rows_fr(1).pad_all(4).gap(8),
+                vec![
+                    spacer(Size {
+                        width: 8,
+                        height: 8,
+                    }),
+                    indicator(
+                        Size {
+                            width: 8,
+                            height: 8,
+                        },
+                        true,
+                    ),
+                ],
+            ),
+            region(
+                "plot",
+                Size {
+                    width: 120,
+                    height: 40,
+                },
+            ),
+        ]);
+        let spec = UiSpec::new(RootFrameSpec::new(
+            "root",
+            panel("main", content).layout(LayoutBox::fill()),
+        ));
+        let measured = measure_checked(&spec).expect("helper-composed tree should validate");
+        assert!(measured.width > 0);
+        assert!(measured.height > 0);
     }
 
     #[test]

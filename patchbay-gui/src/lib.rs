@@ -1,8 +1,9 @@
 //! Patchbay GUI: a minimal, Vulkan-backed UI toolkit for CLAP plugin windows.
 //!
-//! The crate provides a declarative UI surface (containers + widgets) rendered
-//! via a CPU canvas that is presented using wgpu. The focus is embedding into a
-//! host-provided window handle on Windows.
+//! The crate provides a strict declarative UI surface (containers + widgets)
+//! rendered via a CPU canvas that is presented using wgpu. The public API
+//! exports only declarative authoring primitives and host integration helpers.
+//! The focus is embedding into a host-provided window handle on Windows.
 
 mod canvas;
 mod declarative;
@@ -24,15 +25,11 @@ pub use crate::declarative::{
     DropdownSpec, EdgeInsets, FlexSpec, GridSpec, GridTemplate, IndicatorSpec, Justify, KnobSpec,
     LabelSpec, LayoutBox, Length, Node, PanelSpec, RegionInteractionKind, RegionSpec, RenderResult,
     RootFrameSpec, SliderSpec, SpacingTokens, ThemeTokens, ToggleSpec, TrackSize, TypographyTokens,
-    UiAction, UiSpec, measure_checked, render_checked,
+    UiAction, UiSpec, button, column, dropdown, grid, indicator, knob, label, measure_checked,
+    panel, region, render_checked, row, slider, spacer, toggle,
 };
 #[cfg(not(target_os = "windows"))]
 pub use crate::host::WindowHandle;
 pub use crate::host::{GuiError, HostWindow, InputState, OpenParentedMode};
-pub use crate::ui::{
-    ButtonResponse, DropdownResponse, GridContext, GridResponse, GridSpec as ImmediateGridSpec,
-    KnobResponse, Layout, PanelResponse, PanelStyle, RegionResponse, RootFrameResponse,
-    RootFrameStyle, SliderResponse, Theme, ToggleResponse, Ui, UiState, WidgetId,
-};
 #[cfg(target_os = "windows")]
 pub use crate::win32::WindowHandle;

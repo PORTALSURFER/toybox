@@ -1,12 +1,12 @@
-//! Patchbay GUI helpers for CLAP plugins.
+//! Strict declarative Patchbay GUI helpers for CLAP plugins.
 
 use crate::logging::log_line_safe;
 use clack_plugin::plugin::PluginError;
 use patchbay_gui::{GuiError, HostWindow, Size, UiAction, UiSpec};
 use raw_window_handle::RawWindowHandle;
 
-/// Re-export Patchbay GUI types for downstream GUI integrations.
-pub use patchbay_gui::{Canvas, Color, InputState, OpenParentedMode, ThemeTokens};
+/// Re-export Patchbay GUI types for downstream declarative GUI integrations.
+pub use patchbay_gui::{Color, InputState, OpenParentedMode, ThemeTokens};
 
 /// Wrapper around a Patchbay GUI window for a CLAP editor.
 #[derive(Default)]

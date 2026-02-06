@@ -1,8 +1,8 @@
-//! Patchbay GUI re-exports for plugin UIs.
+//! Strict declarative Patchbay GUI re-exports for plugin UIs.
 //!
 //! The module exposes the strict declarative GUI surface so plugin crates can
 //! build UI specs and reduce typed actions without depending on `patchbay-gui`
-//! directly.
+//! directly. Immediate-mode authoring APIs are intentionally not re-exported.
 
 pub use patchbay_gui::{Canvas, Color, Point, Rect, Size};
 
@@ -13,7 +13,8 @@ pub mod declarative {
         DeclarativeError, DropdownSpec, EdgeInsets, FlexSpec, GridSpec, GridTemplate,
         IndicatorSpec, Justify, KnobSpec, LabelSpec, LayoutBox, Length, Node, PanelSpec,
         RegionInteractionKind, RegionSpec, RenderResult, RootFrameSpec, SliderSpec, SpacingTokens,
-        ThemeTokens, ToggleSpec, TrackSize, TypographyTokens, UiAction, UiSpec, measure_checked,
-        render_checked,
+        ThemeTokens, ToggleSpec, TrackSize, TypographyTokens, UiAction, UiSpec, button, column,
+        dropdown, grid, indicator, knob, label, measure_checked, panel, region, render_checked,
+        row, slider, spacer, toggle,
     };
 }
