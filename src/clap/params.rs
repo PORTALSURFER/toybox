@@ -4,12 +4,12 @@ use std::ffi::CStr;
 use std::fmt::Write;
 
 use clack_extensions::params::{ParamDisplayWriter, ParamInfo, ParamInfoFlags, ParamInfoWriter};
+use clack_plugin::events::Pckn;
 use clack_plugin::events::event_types::{
     ParamGestureBeginEvent, ParamGestureEndEvent, ParamModEvent, ParamValueEvent,
 };
 use clack_plugin::events::io::{InputEvents, OutputEvents, TryPushError};
 use clack_plugin::events::spaces::CoreEventSpace;
-use clack_plugin::events::Pckn;
 use clack_plugin::prelude::UnknownEvent;
 use clack_plugin::utils::{ClapId, Cookie};
 
@@ -125,10 +125,10 @@ where
     F: FnMut(ClapId, f64),
 {
     for event in input {
-        if let Some(CoreEventSpace::ParamValue(param)) = event.as_core_event() {
-            if let Some(param_id) = param.param_id() {
-                apply(param_id, param.value());
-            }
+        if let Some(CoreEventSpace::ParamValue(param)) = event.as_core_event()
+            && let Some(param_id) = param.param_id()
+        {
+            apply(param_id, param.value());
         }
     }
 }
@@ -139,10 +139,10 @@ where
     F: FnMut(ClapId, f64),
 {
     for event in events {
-        if let Some(CoreEventSpace::ParamValue(param)) = event.as_core_event() {
-            if let Some(param_id) = param.param_id() {
-                apply(param_id, param.value());
-            }
+        if let Some(CoreEventSpace::ParamValue(param)) = event.as_core_event()
+            && let Some(param_id) = param.param_id()
+        {
+            apply(param_id, param.value());
         }
     }
 }
@@ -228,13 +228,13 @@ pub fn push_param_gesture_end(
 #[cfg(test)]
 mod tests {
     use super::{
-        push_param_gesture_begin, push_param_gesture_end, push_param_mod, push_param_value,
-        ParamBuilder,
+        ParamBuilder, push_param_gesture_begin, push_param_gesture_end, push_param_mod,
+        push_param_value,
     };
 
+    use clack_plugin::events::Pckn;
     use clack_plugin::events::io::EventBuffer;
     use clack_plugin::events::spaces::CoreEventSpace;
-    use clack_plugin::events::Pckn;
     use clack_plugin::utils::{ClapId, Cookie};
 
     #[test]
@@ -300,7 +300,13 @@ mod tests {
         assert_eq!(spec.min_value, 0.0);
         assert_eq!(spec.max_value, 10.0);
         assert_eq!(spec.default_value, 1.0);
-        assert!(spec.flags.contains(clack_extensions::params::ParamInfoFlags::IS_AUTOMATABLE));
-        assert!(spec.flags.contains(clack_extensions::params::ParamInfoFlags::IS_STEPPED));
+        assert!(
+            spec.flags
+                .contains(clack_extensions::params::ParamInfoFlags::IS_AUTOMATABLE)
+        );
+        assert!(
+            spec.flags
+                .contains(clack_extensions::params::ParamInfoFlags::IS_STEPPED)
+        );
     }
 }

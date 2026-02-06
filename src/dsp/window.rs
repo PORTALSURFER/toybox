@@ -41,7 +41,7 @@ pub fn overlap_normalization(window: &[f32], hop_size: usize) -> Vec<f32> {
 /// overlap-add reconstruction.
 pub fn overlap_normalization_checked(window: &[f32], hop_size: usize) -> Option<Vec<f32>> {
     let size = window.len();
-    if hop_size == 0 || size == 0 || size % hop_size != 0 {
+    if hop_size == 0 || size == 0 || !size.is_multiple_of(hop_size) {
         return None;
     }
     Some(overlap_normalization(window, hop_size))

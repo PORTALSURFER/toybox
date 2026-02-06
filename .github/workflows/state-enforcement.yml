@@ -21,6 +21,12 @@ jobs:
       - name: Build minimal CLAP example
         run: cargo check -p toybox-minimal-clap
 
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy -p toybox --all-targets -- -D warnings
+
       - name: Run toybox state helper tests
         run: cargo test -p toybox clap::state
 

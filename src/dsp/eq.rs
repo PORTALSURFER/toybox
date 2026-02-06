@@ -5,12 +5,7 @@
 /// The `bands` argument controls how many active bands should be filled. If it
 /// exceeds `out.len()`, it is clamped to the output length. Remaining values
 /// are filled with the last valid band center to keep arrays stable.
-pub fn fill_log_spaced_frequencies(
-    out: &mut [f32],
-    min_hz: f32,
-    max_hz: f32,
-    bands: usize,
-) {
+pub fn fill_log_spaced_frequencies(out: &mut [f32], min_hz: f32, max_hz: f32, bands: usize) {
     if out.is_empty() {
         return;
     }
@@ -19,13 +14,13 @@ pub fn fill_log_spaced_frequencies(
     let log_min = min_hz.max(1.0).ln();
     let log_max = max_hz.max(min_hz + 1.0).ln();
 
-    for index in 0..bands {
+    for (index, freq) in out.iter_mut().enumerate().take(bands) {
         let t = if bands > 1 {
             index as f32 / (bands - 1) as f32
         } else {
             0.0
         };
-        out[index] = (log_min + (log_max - log_min) * t).exp();
+        *freq = (log_min + (log_max - log_min) * t).exp();
     }
 
     if bands < out.len() {
@@ -92,8 +87,14 @@ mod tests {
 
     #[test]
     fn band_frequency_update_uses_thresholds() {
-        assert!(!band_frequencies_need_update(100.0, 1_000.0, 100.1, 1_000.1, 1.0, 0.01));
-        assert!(band_frequencies_need_update(100.0, 1_000.0, 102.0, 1_000.0, 1.0, 0.01));
-        assert!(band_frequencies_need_update(100.0, 1_000.0, 100.0, 1_050.0, 1.0, 0.01));
+        assert!(!band_frequencies_need_update(
+            100.0, 1_000.0, 100.1, 1_000.1, 1.0, 0.01
+        ));
+        assert!(band_frequencies_need_update(
+            100.0, 1_000.0, 102.0, 1_000.0, 1.0, 0.01
+        ));
+        assert!(band_frequencies_need_update(
+            100.0, 1_000.0, 100.0, 1_050.0, 1.0, 0.01
+        ));
     }
 }

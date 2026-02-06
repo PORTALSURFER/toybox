@@ -8,8 +8,10 @@ The recommended Windows flow mirrors the Lilt reference:
 - Emit a `.clap` bundle directly via the linker `/OUT:` argument.
 - For release builds, write bundles into `dist/`.
 - For non-release builds, write bundles into `target/{profile}/`.
+- Resolve `dist/` and `target/` from the workspace root.
 
 The minimal example plugin includes a `build.rs` that follows this layout.
+On non-Windows targets it performs a no-op and prints an informational warning.
 
 ### Example (minimal plugin)
 
