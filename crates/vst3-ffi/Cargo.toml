@@ -1,0 +1,12 @@
+[package]
+name = "toybox-vst3-ffi"
+version = "0.1.0"
+edition = "2024"
+publish = false
+build = "build.rs"
+
+[dependencies]
+vst3 = "0.3.0"
+
+[lints]
+workspace = true
