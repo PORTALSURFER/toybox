@@ -1892,11 +1892,12 @@ mod tests {
     fn knob_updates_value_on_drag() {
         let mut canvas = Canvas::new(200, 200);
         let mut layout = Layout::default();
+        let layout_origin = layout.cursor;
         let theme = Theme::default();
         let mut ui_state = UiState::default();
         let mut value = 0.5;
         let mut input = InputState::default();
-        input.pointer_pos = Point { x: 30, y: 30 };
+        input.pointer_pos = Point { x: 40, y: 60 };
         input.mouse_pressed = true;
         input.mouse_down = true;
 
@@ -1906,7 +1907,8 @@ mod tests {
         }
 
         input.mouse_pressed = false;
-        input.pointer_pos = Point { x: 30, y: 10 };
+        input.pointer_pos = Point { x: 40, y: 20 };
+        layout.cursor = layout_origin;
 
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
@@ -1919,11 +1921,12 @@ mod tests {
     fn knob_with_key_allows_dynamic_labels() {
         let mut canvas = Canvas::new(200, 200);
         let mut layout = Layout::default();
+        let layout_origin = layout.cursor;
         let theme = Theme::default();
         let mut ui_state = UiState::default();
         let mut value = 0.5;
         let mut input = InputState::default();
-        input.pointer_pos = Point { x: 30, y: 30 };
+        input.pointer_pos = Point { x: 40, y: 60 };
         input.mouse_pressed = true;
         input.mouse_down = true;
 
@@ -1933,7 +1936,8 @@ mod tests {
         }
 
         input.mouse_pressed = false;
-        input.pointer_pos = Point { x: 30, y: 10 };
+        input.pointer_pos = Point { x: 40, y: 20 };
+        layout.cursor = layout_origin;
 
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
@@ -2318,6 +2322,7 @@ mod tests {
     fn dropdown_selects_option() {
         let mut canvas = Canvas::new(200, 200);
         let mut layout = Layout::default();
+        let layout_origin = layout.cursor;
         let theme = Theme::default();
         let mut ui_state = UiState::default();
         let mut input = InputState::default();
@@ -2333,6 +2338,7 @@ mod tests {
 
         input.mouse_pressed = true;
         input.pointer_pos = Point { x: 20, y: 70 };
+        layout.cursor = layout_origin;
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
             ui.reset_input_consumption();
