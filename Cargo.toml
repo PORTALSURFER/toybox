@@ -15,5 +15,18 @@ raw-window-handle = { version = "0.5.2", optional = true }
 default = []
 gui = ["dep:patchbay-gui", "dep:raw-window-handle"]
 
+[lints]
+workspace = true
+
 [workspace]
 members = ["patchbay-gui", "examples/minimal-clap"]
+
+[workspace.lints.rust]
+warnings = "deny"
+missing_docs = "deny"
+
+[workspace.lints.rustdoc]
+missing_crate_level_docs = "deny"
+
+[workspace.lints.clippy]
+missing_docs_in_private_items = "deny"

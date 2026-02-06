@@ -1,3 +1,5 @@
+//! Build script that emits a Windows `.clap` bundle output path.
+
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -43,6 +45,7 @@ fn main() {
     }
 }
 
+/// Walk upward from the crate manifest directory to find the workspace root.
 fn workspace_root_from_manifest_dir(manifest_dir: &Path) -> PathBuf {
     for ancestor in manifest_dir.ancestors() {
         if cargo_manifest_declares_workspace(ancestor.join("Cargo.toml")) {
@@ -52,6 +55,7 @@ fn workspace_root_from_manifest_dir(manifest_dir: &Path) -> PathBuf {
     manifest_dir.to_path_buf()
 }
 
+/// Returns `true` when the manifest file declares a Cargo workspace section.
 fn cargo_manifest_declares_workspace(path: PathBuf) -> bool {
     let Ok(contents) = fs::read_to_string(path) else {
         return false;
