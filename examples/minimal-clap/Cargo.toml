@@ -9,8 +9,8 @@ build = "build.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-clack-plugin = { git = "https://github.com/prokopyl/clack.git", package = "clack-plugin" }
-clack-extensions = { git = "https://github.com/prokopyl/clack.git", package = "clack-extensions", features = ["audio-ports", "params"] }
+clack-plugin = { git = "https://github.com/prokopyl/clack.git", rev = "36602d61bb192e2779a68fddf985e7664f161fb1", package = "clack-plugin" }
+clack-extensions = { git = "https://github.com/prokopyl/clack.git", rev = "36602d61bb192e2779a68fddf985e7664f161fb1", package = "clack-extensions", features = ["audio-ports", "params"] }
 toybox = { path = "../.." }
 
 [build-dependencies]

@@ -28,8 +28,9 @@ pub use clack_plugin::prelude::*;
 pub use clack_plugin::utils::{ClapId, Cookie};
 
 pub use crate::clap::automation::{
-    AutomationConfig, AutomationDrainBuffer, AutomationDrainStats, AutomationEnqueueStatus,
-    AutomationEvent, AutomationQueue,
+    AutomationConfig, AutomationDrainBuffer, AutomationDrainStats, AutomationDropPolicy,
+    AutomationEnqueueStatus, AutomationEvent, AutomationQueue, AutomationQueueConfig,
+    DEFAULT_AUTOMATION_QUEUE_MAX_EVENTS,
 };
 pub use crate::clap::entry::PluginEntry;
 pub use crate::clap::events::{EventRouter, bounds_to_range};

@@ -1,5 +1,9 @@
 //! Automation helpers for routing GUI parameter edits to the host.
 //!
+//! The automation queue is bounded by default
+//! ([`DEFAULT_AUTOMATION_QUEUE_MAX_EVENTS`]) to avoid unbounded memory growth
+//! when GUI producers outpace host event drains.
+//!
 //! # Example
 //! ```
 //! use toybox::clack_plugin::utils::ClapId;
@@ -20,8 +24,7 @@
 //! drain_buffer.drain(&queue, &mut output);
 //! ```
 
-use std::collections::HashSet;
-use std::mem;
+use std::collections::{HashSet, VecDeque};
 use std::sync::Mutex;
 
 use clack_plugin::events::Pckn;
@@ -46,11 +49,55 @@ pub enum AutomationEvent {
 pub enum AutomationEnqueueStatus {
     /// The event was accepted by the queue.
     Enqueued,
+    /// The queue reached its configured capacity and dropped/rejected the event.
+    QueueFull,
     /// The parameter was disabled in the automation config.
     Disabled,
     /// The queue mutex was poisoned and the event could not be enqueued.
     QueuePoisoned,
 }
+
+/// Policy for handling automation events when the queue reaches capacity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AutomationDropPolicy {
+    /// Reject the newly enqueued event and keep older queued events.
+    DropNewest,
+    /// Drop the oldest queued event and keep the newly enqueued event.
+    DropOldest,
+}
+
+/// Queue configuration used to bound automation memory growth.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AutomationQueueConfig {
+    /// Maximum number of queued automation events.
+    ///
+    /// When this value is `0`, all incoming events are treated as overflow.
+    pub max_events: usize,
+    /// Overflow strategy used when `max_events` has been reached.
+    pub drop_policy: AutomationDropPolicy,
+}
+
+impl AutomationQueueConfig {
+    /// Build a new queue config with explicit capacity and overflow policy.
+    pub fn new(max_events: usize, drop_policy: AutomationDropPolicy) -> Self {
+        Self {
+            max_events,
+            drop_policy,
+        }
+    }
+}
+
+impl Default for AutomationQueueConfig {
+    fn default() -> Self {
+        Self {
+            max_events: DEFAULT_AUTOMATION_QUEUE_MAX_EVENTS,
+            drop_policy: AutomationDropPolicy::DropNewest,
+        }
+    }
+}
+
+/// Default maximum number of queued automation events.
+pub const DEFAULT_AUTOMATION_QUEUE_MAX_EVENTS: usize = 4096;
 
 /// Configuration for which parameters should emit automation events.
 #[derive(Clone, Debug)]
@@ -104,10 +151,14 @@ impl Default for AutomationConfig {
 }
 
 /// Thread-safe queue for GUI-originated automation events.
-#[derive(Default)]
+///
+/// The queue is bounded and enforces an overflow policy from
+/// [`AutomationQueueConfig`].
 pub struct AutomationQueue {
     /// Pending automation events in enqueue order.
-    events: Mutex<Vec<AutomationEvent>>,
+    events: Mutex<VecDeque<AutomationEvent>>,
+    /// Immutable queue sizing and overflow policy.
+    config: AutomationQueueConfig,
 }
 
 /// Summary information from draining automation events.
@@ -154,6 +205,44 @@ impl AutomationDrainBuffer {
 }
 
 impl AutomationQueue {
+    /// Create an automation queue with the supplied bounded queue config.
+    pub fn with_config(config: AutomationQueueConfig) -> Self {
+        Self {
+            events: Mutex::new(VecDeque::new()),
+            config,
+        }
+    }
+
+    /// Return the queue configuration.
+    pub fn config(&self) -> AutomationQueueConfig {
+        self.config
+    }
+
+    /// Try to enqueue an automation event according to queue policy.
+    fn try_enqueue(&self, event: AutomationEvent) -> AutomationEnqueueStatus {
+        let Ok(mut events) = self.events.lock() else {
+            return AutomationEnqueueStatus::QueuePoisoned;
+        };
+
+        if self.config.max_events == 0 {
+            return AutomationEnqueueStatus::QueueFull;
+        }
+
+        if events.len() >= self.config.max_events {
+            match self.config.drop_policy {
+                AutomationDropPolicy::DropNewest => {
+                    return AutomationEnqueueStatus::QueueFull;
+                }
+                AutomationDropPolicy::DropOldest => {
+                    let _ = events.pop_front();
+                }
+            }
+        }
+
+        events.push_back(event);
+        AutomationEnqueueStatus::Enqueued
+    }
+
     /// Try to enqueue a parameter value update and return the enqueue status.
     pub fn try_push_value(
         &self,
@@ -164,11 +253,7 @@ impl AutomationQueue {
         if !config.is_enabled(param_id) {
             return AutomationEnqueueStatus::Disabled;
         }
-        let Ok(mut events) = self.events.lock() else {
-            return AutomationEnqueueStatus::QueuePoisoned;
-        };
-        events.push(AutomationEvent::Value(param_id, value));
-        AutomationEnqueueStatus::Enqueued
+        self.try_enqueue(AutomationEvent::Value(param_id, value))
     }
 
     /// Enqueue a parameter value update if automation is enabled.
@@ -185,11 +270,7 @@ impl AutomationQueue {
         if !config.is_enabled(param_id) {
             return AutomationEnqueueStatus::Disabled;
         }
-        let Ok(mut events) = self.events.lock() else {
-            return AutomationEnqueueStatus::QueuePoisoned;
-        };
-        events.push(AutomationEvent::GestureBegin(param_id));
-        AutomationEnqueueStatus::Enqueued
+        self.try_enqueue(AutomationEvent::GestureBegin(param_id))
     }
 
     /// Enqueue a gesture begin event if automation is enabled.
@@ -206,11 +287,7 @@ impl AutomationQueue {
         if !config.is_enabled(param_id) {
             return AutomationEnqueueStatus::Disabled;
         }
-        let Ok(mut events) = self.events.lock() else {
-            return AutomationEnqueueStatus::QueuePoisoned;
-        };
-        events.push(AutomationEvent::GestureEnd(param_id));
-        AutomationEnqueueStatus::Enqueued
+        self.try_enqueue(AutomationEvent::GestureEnd(param_id))
     }
 
     /// Enqueue a gesture end event if automation is enabled.
@@ -254,7 +331,7 @@ impl AutomationQueue {
             return AutomationDrainStats::default();
         }
         scratch.clear();
-        mem::swap(scratch, &mut events);
+        scratch.extend(events.drain(..));
         drop(events);
 
         let mut stats = AutomationDrainStats {
@@ -291,10 +368,17 @@ impl AutomationQueue {
     }
 }
 
+impl Default for AutomationQueue {
+    fn default() -> Self {
+        Self::with_config(AutomationQueueConfig::default())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use clack_plugin::events::io::EventBuffer;
+    use clack_plugin::events::spaces::CoreEventSpace;
 
     #[test]
     fn config_respects_overrides() {
@@ -372,5 +456,75 @@ mod tests {
 
         let status = queue.try_push_value(&config, param_id, 0.25);
         assert_eq!(status, AutomationEnqueueStatus::QueuePoisoned);
+    }
+
+    #[test]
+    fn queue_full_drop_newest_rejects_extra_events() {
+        let queue = AutomationQueue::with_config(AutomationQueueConfig::new(
+            1,
+            AutomationDropPolicy::DropNewest,
+        ));
+        let config = AutomationConfig::default();
+        let param_id = ClapId::new(13);
+
+        assert_eq!(
+            queue.try_push_value(&config, param_id, 0.1),
+            AutomationEnqueueStatus::Enqueued
+        );
+        assert_eq!(
+            queue.try_push_value(&config, param_id, 0.2),
+            AutomationEnqueueStatus::QueueFull
+        );
+
+        let mut output_buffer = EventBuffer::new();
+        let mut output = output_buffer.as_output();
+        let mut scratch = Vec::new();
+        let stats = queue.drain_to_output_with_stats(&mut output, &mut scratch);
+        assert_eq!(stats.attempted, 1);
+        assert_eq!(stats.pushed, 1);
+        assert_eq!(output_buffer.len(), 1);
+    }
+
+    #[test]
+    fn queue_full_drop_oldest_keeps_newest_events() {
+        let queue = AutomationQueue::with_config(AutomationQueueConfig::new(
+            2,
+            AutomationDropPolicy::DropOldest,
+        ));
+        let config = AutomationConfig::default();
+        let first = ClapId::new(21);
+        let second = ClapId::new(22);
+        let third = ClapId::new(23);
+
+        assert_eq!(
+            queue.try_push_value(&config, first, 0.1),
+            AutomationEnqueueStatus::Enqueued
+        );
+        assert_eq!(
+            queue.try_push_value(&config, second, 0.2),
+            AutomationEnqueueStatus::Enqueued
+        );
+        assert_eq!(
+            queue.try_push_value(&config, third, 0.3),
+            AutomationEnqueueStatus::Enqueued
+        );
+
+        let mut output_buffer = EventBuffer::new();
+        let mut output = output_buffer.as_output();
+        let mut scratch = Vec::new();
+        let stats = queue.drain_to_output_with_stats(&mut output, &mut scratch);
+        assert_eq!(stats.attempted, 2);
+        assert_eq!(stats.pushed, 2);
+
+        let mut observed_ids = Vec::new();
+        for index in 0..output_buffer.len() {
+            let event = output_buffer.get(index as u32).expect("event should exist");
+            if let Some(CoreEventSpace::ParamValue(value)) = event.as_core_event()
+                && let Some(param_id) = value.param_id()
+            {
+                observed_ids.push(param_id);
+            }
+        }
+        assert_eq!(observed_ids, vec![second, third]);
     }
 }
