@@ -130,6 +130,8 @@ pub enum UiAction {
         kind: RegionInteractionKind,
         /// Pointer position relative to the interacted region.
         local_pointer: Point,
+        /// Whether Alt was held during this interaction frame.
+        alt_down: bool,
     },
 }
 
@@ -2817,6 +2819,7 @@ fn push_region_actions(key: &str, response: RegionResponse, actions: &mut Vec<Ui
             key: key.to_string(),
             kind: RegionInteractionKind::Pressed,
             local_pointer: response.local_pointer,
+            alt_down: response.alt_down,
         });
     }
     if response.released {
@@ -2824,6 +2827,7 @@ fn push_region_actions(key: &str, response: RegionResponse, actions: &mut Vec<Ui
             key: key.to_string(),
             kind: RegionInteractionKind::Released,
             local_pointer: response.local_pointer,
+            alt_down: response.alt_down,
         });
     }
     if response.dragged {
@@ -2831,6 +2835,7 @@ fn push_region_actions(key: &str, response: RegionResponse, actions: &mut Vec<Ui
             key: key.to_string(),
             kind: RegionInteractionKind::Dragged,
             local_pointer: response.local_pointer,
+            alt_down: response.alt_down,
         });
     }
     if response.secondary_clicked {
@@ -2838,6 +2843,7 @@ fn push_region_actions(key: &str, response: RegionResponse, actions: &mut Vec<Ui
             key: key.to_string(),
             kind: RegionInteractionKind::SecondaryClicked,
             local_pointer: response.local_pointer,
+            alt_down: response.alt_down,
         });
     }
     if response.double_clicked {
@@ -2845,6 +2851,7 @@ fn push_region_actions(key: &str, response: RegionResponse, actions: &mut Vec<Ui
             key: key.to_string(),
             kind: RegionInteractionKind::DoubleClicked,
             local_pointer: response.local_pointer,
+            alt_down: response.alt_down,
         });
     }
 }
@@ -3521,7 +3528,8 @@ mod tests {
                 UiAction::RegionInteracted {
                     key,
                     kind,
-                    local_pointer
+                    local_pointer,
+                    ..
                 } if key == "plot"
                     && *kind == RegionInteractionKind::Pressed
                     && local_pointer.x >= 0

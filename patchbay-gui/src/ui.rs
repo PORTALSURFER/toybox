@@ -443,6 +443,8 @@ pub struct RegionResponse {
     pub hovered: bool,
     /// Pointer position relative to region bounds.
     pub local_pointer: Point,
+    /// Whether Alt was held during this frame.
+    pub alt_down: bool,
     /// The region is actively being dragged.
     pub active: bool,
     /// The primary button was pressed on the region.
@@ -1105,6 +1107,7 @@ impl<'a> Ui<'a> {
         let mut response = RegionResponse {
             hovered,
             local_pointer,
+            alt_down: self.input.alt_down,
             active: self.state.active == Some(id),
             pressed: false,
             released: false,
