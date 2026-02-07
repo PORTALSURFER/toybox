@@ -2156,17 +2156,7 @@ fn resolve_root_scale(root: &RootFrameSpec, measured: Size, viewport: Size) -> f
             let design_height = design.height.max(1) as f32;
             let fit_width = viewport.width.max(1) as f32 / design_width;
             let fit_height = viewport.height.max(1) as f32 / design_height;
-            // When host resizing is aspect-constrained, integer rounding causes
-            // tiny ratio drift (often 1 px), which can make `min()` alternate
-            // between width/height-driven scales frame-to-frame. That appears
-            // as sliding/snap layout jitter. If the viewport aspect is already
-            // close to the design aspect, lock to width ratio for stability.
-            let aspect_epsilon = 1.5f32 / design.width.max(design.height).max(1) as f32;
-            if (fit_width - fit_height).abs() <= aspect_epsilon {
-                fit_width
-            } else {
-                fit_width.min(fit_height)
-            }
+            fit_width.min(fit_height)
         }
     };
     (base * zoom_override).clamp(0.1, 8.0)

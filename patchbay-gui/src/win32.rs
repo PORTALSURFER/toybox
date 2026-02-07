@@ -124,6 +124,7 @@ where
     hwnd: HWND,
     renderer: Renderer,
     canvas: Canvas,
+    canonical_layout_size: Size,
     input: InputState,
     ui_state: UiState,
     layout: Layout,
@@ -154,6 +155,55 @@ where
     Reduce: FnMut(&mut State, UiAction) + Send + 'static,
     State: Send + 'static,
 {
+    fn configured_aspect_ratio(&self) -> Option<f32> {
+        let bits = self.aspect_ratio.load(Ordering::Relaxed);
+        if bits == 0 {
+            return None;
+        }
+        let ratio = f32::from_bits(bits);
+        if ratio.is_finite() && ratio > 0.0 {
+            Some(ratio)
+        } else {
+            None
+        }
+    }
+
+    fn is_aspect_close(width: u32, height: u32, aspect: f32) -> bool {
+        if !aspect.is_finite() || aspect <= 0.0 {
+            return true;
+        }
+        let width = width.max(1) as i32;
+        let height = height.max(1) as i32;
+        let expected_height = ((width as f32) / aspect).round() as i32;
+        let expected_width = ((height as f32) * aspect).round() as i32;
+        (expected_height - height).abs() <= 1 || (expected_width - width).abs() <= 1
+    }
+
+    fn should_adopt_client_size(&self, width: u32, height: u32) -> bool {
+        match self.configured_aspect_ratio() {
+            Some(aspect) => Self::is_aspect_close(width, height, aspect),
+            None => true,
+        }
+    }
+
+    fn apply_layout_size(&mut self, size: Size, sync_pointer: bool) {
+        let size = Size {
+            width: size.width.max(1),
+            height: size.height.max(1),
+        };
+        self.canonical_layout_size = size;
+        self.last_size
+            .store(pack_size(size.width, size.height), Ordering::Release);
+        self.input.window_size = size;
+        if self.canvas.size() != size {
+            self.canvas.resize(size.width, size.height);
+            self.renderer.resize(size);
+        }
+        if sync_pointer {
+            self.sync_pointer_pos();
+        }
+    }
+
     fn handle_message(&mut self, message: u32, wparam: WPARAM, lparam: LPARAM) -> Option<LRESULT> {
         match message {
             WM_SIZE => {
@@ -291,11 +341,9 @@ where
         }
         let width = (rect.right - rect.left).max(1) as u32;
         let height = (rect.bottom - rect.top).max(1) as u32;
-        self.last_size
-            .store(pack_size(width, height), Ordering::Release);
-        self.input.window_size = Size { width, height };
-        self.canvas.resize(width, height);
-        self.renderer.resize(Size { width, height });
+        if self.should_adopt_client_size(width, height) {
+            self.apply_layout_size(Size { width, height }, false);
+        }
     }
 
     /// Keep renderer state aligned with the current host-provided client size.
@@ -311,14 +359,12 @@ where
         }
         let width = (rect.right - rect.left).max(1) as u32;
         let height = (rect.bottom - rect.top).max(1) as u32;
-        let current = self.input.window_size;
+        if !self.should_adopt_client_size(width, height) {
+            return;
+        }
+        let current = self.canonical_layout_size;
         if current.width != width || current.height != height {
-            self.last_size
-                .store(pack_size(width, height), Ordering::Release);
-            self.input.window_size = Size { width, height };
-            self.canvas.resize(width, height);
-            self.renderer.resize(Size { width, height });
-            self.sync_pointer_pos();
+            self.apply_layout_size(Size { width, height }, true);
         }
     }
 
@@ -381,8 +427,6 @@ where
             self.initialized = true;
         }
 
-        self.sync_client_size_if_needed();
-
         if let Some((width, height)) = unpack_size(self.resize_request.swap(0, Ordering::AcqRel)) {
             let width = width;
             let height = height;
@@ -412,8 +456,10 @@ where
                     }
                 }
             }
-            self.on_resize();
+            self.apply_layout_size(Size { width, height }, true);
         }
+
+        self.sync_client_size_if_needed();
 
         self.layout.cursor = self.layout_origin;
         self.canvas.clear(self.theme.background);
@@ -686,6 +732,7 @@ where
         hwnd: child_hwnd,
         renderer,
         canvas,
+        canonical_layout_size: size,
         input: InputState {
             window_size: size,
             ..InputState::default()
