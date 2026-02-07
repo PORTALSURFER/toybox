@@ -214,12 +214,6 @@ impl UiState {
     }
 
     #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-    /// Return whether a root frame size was recorded this frame.
-    pub(crate) fn root_frame_used(&self) -> bool {
-        self.root_frame_used
-    }
-
-    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     /// Take and clear the most recent root frame size.
     pub(crate) fn take_root_frame_size(&mut self) -> Option<Size> {
         self.root_frame_size.take()

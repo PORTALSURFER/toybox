@@ -541,6 +541,7 @@ fn resolved_layout_size_for_resize_request(
     }
 }
 
+#[cfg(test)]
 fn enforce_aspect_min(width: u32, height: u32, aspect: f32) -> (u32, u32) {
     if !aspect.is_finite() || aspect <= 0.0 {
         return (width.max(1), height.max(1));
