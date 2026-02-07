@@ -231,6 +231,8 @@ struct DropdownOverlay {
     hovered: Option<usize>,
     /// Whether overlay options render upward instead of downward.
     open_up: bool,
+    /// Clip rectangle inherited from the owning layout section.
+    clip_rect: Rect,
 }
 
 /// Layout state for sequential widgets.
@@ -419,6 +421,24 @@ fn rect_union(a: Rect, b: Rect) -> Rect {
             height: (max_y - min_y).max(0) as u32,
         },
     }
+}
+
+/// Return the intersection rectangle if `a` and `b` overlap.
+fn rect_intersection(a: Rect, b: Rect) -> Option<Rect> {
+    let x0 = a.origin.x.max(b.origin.x);
+    let y0 = a.origin.y.max(b.origin.y);
+    let x1 = (a.origin.x + a.size.width as i32).min(b.origin.x + b.size.width as i32);
+    let y1 = (a.origin.y + a.size.height as i32).min(b.origin.y + b.size.height as i32);
+    if x1 <= x0 || y1 <= y0 {
+        return None;
+    }
+    Some(Rect {
+        origin: Point { x: x0, y: y0 },
+        size: Size {
+            width: (x1 - x0) as u32,
+            height: (y1 - y0) as u32,
+        },
+    })
 }
 
 /// Measure monospaced bitmap text bounds at the given scale.
@@ -619,6 +639,8 @@ pub struct Ui<'a> {
     theme: Theme,
     /// Saved layout scopes used by `with_layout`.
     layout_stack: Vec<Layout>,
+    /// Active clip rectangles inherited from declarative container bounds.
+    clip_stack: Vec<Rect>,
     /// Nested bounds tracking stack for auto-size containers.
     bounds_stack: Vec<Option<Rect>>,
     /// Vector draw commands collected for the renderer overlay pass.
@@ -643,6 +665,7 @@ impl<'a> Ui<'a> {
             layout,
             theme: theme.clone(),
             layout_stack: Vec::new(),
+            clip_stack: Vec::new(),
             bounds_stack: Vec::new(),
             vector_commands: Vec::new(),
             vector_text_enabled: false,
@@ -691,6 +714,20 @@ impl<'a> Ui<'a> {
         self.canvas.draw_text(position, text, color, scale);
     }
 
+    /// Fill a rectangle constrained by the current clip stack.
+    fn fill_rect_clipped(&mut self, rect: Rect, color: Color) {
+        if let Some(clipped) = self.clipped_rect(rect) {
+            self.canvas.fill_rect(clipped, color);
+        }
+    }
+
+    /// Stroke a rectangle constrained by the current clip stack.
+    fn stroke_rect_clipped(&mut self, rect: Rect, thickness: u32, color: Color) {
+        if let Some(clipped) = self.clipped_rect(rect) {
+            self.canvas.stroke_rect(clipped, thickness, color);
+        }
+    }
+
     /// Draw a label at the given position.
     pub fn text(&mut self, position: Point, text: &str) {
         self.draw_text_internal(position, text, self.theme.text, self.theme.text_scale);
@@ -725,6 +762,46 @@ impl<'a> Ui<'a> {
     /// Access the input snapshot for this frame.
     pub fn input(&self) -> &InputState {
         self.input
+    }
+
+    /// Return the current effective clip rectangle.
+    fn current_clip_rect(&self) -> Option<Rect> {
+        self.clip_stack.last().copied()
+    }
+
+    /// Intersect a rectangle with the current clip bounds.
+    pub(crate) fn clipped_rect(&self, rect: Rect) -> Option<Rect> {
+        if let Some(clip) = self.current_clip_rect() {
+            rect_intersection(clip, rect)
+        } else {
+            Some(rect)
+        }
+    }
+
+    /// Return true when the pointer lies inside the currently visible portion
+    /// of `rect`.
+    fn pointer_inside_clipped_rect(&self, rect: Rect) -> bool {
+        self.clipped_rect(rect)
+            .map(|clipped| clipped.contains(self.input.pointer_pos))
+            .unwrap_or(false)
+    }
+
+    /// Run a closure with an additional rectangular clip constraint.
+    pub(crate) fn with_clip<F>(&mut self, rect: Rect, mut f: F)
+    where
+        F: FnMut(&mut Ui<'_>),
+    {
+        let next_clip = if let Some(parent) = self.current_clip_rect() {
+            rect_intersection(parent, rect)
+        } else {
+            Some(rect)
+        };
+        let Some(next_clip) = next_clip else {
+            return;
+        };
+        self.clip_stack.push(next_clip);
+        f(self);
+        self.clip_stack.pop();
     }
 
     /// Return the key pressed this frame, if any.
@@ -844,12 +921,14 @@ impl<'a> Ui<'a> {
         options: &[&str],
         hovered: Option<usize>,
         open_up: bool,
+        clip_rect: Rect,
     ) {
         self.state.overlays.push(DropdownOverlay {
             base_rect,
             options: options.iter().map(|option| (*option).to_string()).collect(),
             hovered,
             open_up,
+            clip_rect,
         });
     }
 
@@ -871,21 +950,24 @@ impl<'a> Ui<'a> {
                     },
                     size: rect.size,
                 };
+                let Some(visible_rect) = rect_intersection(option_rect, overlay.clip_rect) else {
+                    continue;
+                };
                 let option_fill = if overlay.hovered == Some(index) {
                     self.theme.knob_hover
                 } else {
                     self.theme.knob_fill
                 };
-                self.canvas.fill_rect(option_rect, option_fill);
+                self.canvas.fill_rect(visible_rect, option_fill);
                 self.canvas
-                    .stroke_rect(option_rect, 1, self.theme.knob_outline);
+                    .stroke_rect(visible_rect, 1, self.theme.knob_outline);
                 let option_text = Point {
-                    x: option_rect.origin.x + 4,
-                    y: option_rect.origin.y + (height - (7 * self.theme.text_scale as i32)) / 2,
+                    x: visible_rect.origin.x + 4,
+                    y: visible_rect.origin.y + (height - (7 * self.theme.text_scale as i32)) / 2,
                 };
                 let fitted = fit_text_single_line_ellipsis(
                     option,
-                    option_rect.size.width.saturating_sub(8),
+                    visible_rect.size.width.saturating_sub(8),
                     self.theme.text_scale,
                 );
                 self.draw_text_internal(
@@ -1124,8 +1206,8 @@ impl<'a> Ui<'a> {
         let background = style.background.unwrap_or(self.theme.knob_fill);
         let outline = style.outline.unwrap_or(self.theme.knob_outline);
 
-        self.canvas.fill_rect(outer_rect, background);
-        self.canvas.stroke_rect(outer_rect, 1, outline);
+        self.fill_rect_clipped(outer_rect, background);
+        self.stroke_rect_clipped(outer_rect, 1, outline);
 
         if let Some(title) = style.title {
             let title_pos = Point {
@@ -1238,8 +1320,8 @@ impl<'a> Ui<'a> {
         let background = style.background.unwrap_or(self.theme.knob_fill);
         let outline = style.outline.unwrap_or(self.theme.knob_outline);
 
-        self.canvas.fill_rect(outer_rect, background);
-        self.canvas.stroke_rect(outer_rect, 1, outline);
+        self.fill_rect_clipped(outer_rect, background);
+        self.stroke_rect_clipped(outer_rect, 1, outline);
 
         if let Some(title) = style.title {
             let title_pos = Point {
@@ -1372,7 +1454,7 @@ impl<'a> Ui<'a> {
     /// The `key` must be stable across frames.
     pub fn region_with_key(&mut self, key: &str, rect: Rect) -> RegionResponse {
         let id = WidgetId::from_label(key);
-        let hovered = rect.contains(self.input.pointer_pos);
+        let hovered = self.pointer_inside_clipped_rect(rect);
         let local_pointer = local_pointer_in_rect(self.input.pointer_pos, rect);
         let raw_local_pointer = raw_local_pointer_in_rect(self.input.pointer_pos, rect);
         if hovered {
@@ -1475,8 +1557,7 @@ impl<'a> Ui<'a> {
             origin: self.layout.cursor,
             size: block_size,
         };
-        self.canvas
-            .stroke_rect(block_rect, 1, self.theme.knob_outline);
+        self.stroke_rect_clipped(block_rect, 1, self.theme.knob_outline);
         self.track_rect_internal(block_rect);
         let knob_x_offset = ((block_size.width as i32 - knob_size) / 2).max(0);
         let knob_origin = Point {
@@ -1500,15 +1581,14 @@ impl<'a> Ui<'a> {
                 height: (knob_size + KNOB_BLOCK_SIDE_PADDING * 2).max(1) as u32,
             },
         };
-        self.canvas
-            .stroke_rect(hit_rect, 1, self.theme.knob_outline);
+        self.stroke_rect_clipped(hit_rect, 1, self.theme.knob_outline);
         self.track_rect_internal(hit_rect);
         let center = Point {
             x: knob_rect.origin.x + knob_size / 2,
             y: knob_rect.origin.y + knob_size / 2,
         };
         let radius = (knob_size / 2 - 4).max(1);
-        let hovered = hit_rect.contains(self.input.pointer_pos);
+        let hovered = self.pointer_inside_clipped_rect(hit_rect);
         if hovered {
             self.state.hot = Some(id);
         }
@@ -1707,7 +1787,7 @@ impl<'a> Ui<'a> {
             size: control_size,
         };
         self.track_rect_internal(rect);
-        let hovered = rect.contains(self.input.pointer_pos);
+        let hovered = self.pointer_inside_clipped_rect(rect);
         if hovered {
             self.state.hot = Some(id);
         }
@@ -1779,10 +1859,9 @@ impl<'a> Ui<'a> {
         } else {
             self.theme.knob_fill
         };
-        self.canvas.fill_rect(track_rect, fill);
-        self.canvas
-            .stroke_rect(track_rect, 1, self.theme.knob_outline);
-        self.canvas.fill_rect(fill_rect, self.theme.knob_indicator);
+        self.fill_rect_clipped(track_rect, fill);
+        self.stroke_rect_clipped(track_rect, 1, self.theme.knob_outline);
+        self.fill_rect_clipped(fill_rect, self.theme.knob_indicator);
 
         let handle_x = rect.origin.x + (rect.size.width as f32 * t) as i32;
         let handle_center = Point {
@@ -1845,7 +1924,7 @@ impl<'a> Ui<'a> {
             size: control_size,
         };
         self.track_rect_internal(rect);
-        let hovered = rect.contains(self.input.pointer_pos);
+        let hovered = self.pointer_inside_clipped_rect(rect);
         if hovered {
             self.state.hot = Some(id);
         }
@@ -1864,8 +1943,8 @@ impl<'a> Ui<'a> {
         } else {
             self.theme.knob_fill
         };
-        self.canvas.fill_rect(rect, fill);
-        self.canvas.stroke_rect(rect, 1, self.theme.knob_outline);
+        self.fill_rect_clipped(rect, fill);
+        self.stroke_rect_clipped(rect, 1, self.theme.knob_outline);
 
         let thumb_radius = (height / 2).max(3);
         let thumb_x = if *value {
@@ -1910,7 +1989,7 @@ impl<'a> Ui<'a> {
             size: control_size,
         };
         self.track_rect_internal(rect);
-        let hovered = rect.contains(self.input.pointer_pos);
+        let hovered = self.pointer_inside_clipped_rect(rect);
         if hovered {
             self.state.hot = Some(id);
         }
@@ -1926,8 +2005,8 @@ impl<'a> Ui<'a> {
         } else {
             self.theme.knob_fill
         };
-        self.canvas.fill_rect(rect, fill);
-        self.canvas.stroke_rect(rect, 1, self.theme.knob_outline);
+        self.fill_rect_clipped(rect, fill);
+        self.stroke_rect_clipped(rect, 1, self.theme.knob_outline);
         let text_pos = Point {
             x: rect.origin.x + 4,
             y: rect.origin.y + (height - (7 * self.theme.text_scale as i32)) / 2,
@@ -1992,7 +2071,7 @@ impl<'a> Ui<'a> {
             size: control_size,
         };
         self.track_rect_internal(rect);
-        let hovered = rect.contains(self.input.pointer_pos);
+        let hovered = self.pointer_inside_clipped_rect(rect);
         if hovered {
             self.state.hot = Some(id);
         }
@@ -2019,8 +2098,8 @@ impl<'a> Ui<'a> {
         } else {
             self.theme.knob_fill
         };
-        self.canvas.fill_rect(rect, fill);
-        self.canvas.stroke_rect(rect, 1, self.theme.knob_outline);
+        self.fill_rect_clipped(rect, fill);
+        self.stroke_rect_clipped(rect, 1, self.theme.knob_outline);
         let current = options.get(*selected).copied().unwrap_or("-");
         let text_pos = Point {
             x: rect.origin.x + 4,
@@ -2054,7 +2133,7 @@ impl<'a> Ui<'a> {
                     },
                     size: rect.size,
                 };
-                let option_hovered = option_rect.contains(self.input.pointer_pos);
+                let option_hovered = self.pointer_inside_clipped_rect(option_rect);
                 if option_hovered {
                     any_hovered = true;
                     hovered_index = Some(index);
@@ -2073,7 +2152,8 @@ impl<'a> Ui<'a> {
             }
 
             if response.open {
-                self.push_dropdown_overlay(rect, options, hovered_index, open_up);
+                let clip_rect = self.clipped_rect(rect).unwrap_or(rect);
+                self.push_dropdown_overlay(rect, options, hovered_index, open_up, clip_rect);
             }
 
             if pressed {
@@ -2113,16 +2193,24 @@ impl<'a> Ui<'a> {
         let previous = *self.layout;
         let label_height = knob_label_height(self.theme.text_scale) as i32;
         let label_gap = knob_label_gap(self.theme.text_scale) as i32;
+        let side_padding = KNOB_BLOCK_SIDE_PADDING.max(0);
         // Keep knob rendering bounded to the resolved declarative diameter so
         // measured and rendered footprints remain consistent.
         let available_height = (rect.size.height as i32 - label_height * 2 - label_gap * 2).max(1);
+        let available_width = (rect.size.width as i32 - side_padding * 2).max(1);
         let knob_size = (desired_diameter.max(1) as i32)
-            .min(rect.size.width as i32)
+            .min(available_width)
             .min(available_height)
             .max(1);
         self.layout.cursor = rect.origin;
         self.layout.knob_size = knob_size;
-        let response = self.knob_with_labels(id, name_label, value_label, value, range);
+        let response = {
+            let mut response = KnobResponse::default();
+            self.with_clip(rect, |ui| {
+                response = ui.knob_with_labels(id, name_label, value_label, value, range);
+            });
+            response
+        };
         *self.layout = previous;
         response
     }
@@ -2167,14 +2255,20 @@ impl<'a> Ui<'a> {
         let previous = *self.layout;
         self.layout.cursor = rect.origin;
         let height = control_size.height.max(1) as i32;
-        let response = self.slider(
-            id,
-            label,
-            value,
-            range,
-            rect.size.width.max(1) as i32,
-            height,
-        );
+        let response = {
+            let mut response = SliderResponse::default();
+            self.with_clip(rect, |ui| {
+                response = ui.slider(
+                    id,
+                    label,
+                    value,
+                    range,
+                    rect.size.width.max(1) as i32,
+                    height,
+                );
+            });
+            response
+        };
         *self.layout = previous;
         response
     }
@@ -2209,7 +2303,13 @@ impl<'a> Ui<'a> {
         let previous = *self.layout;
         self.layout.cursor = rect.origin;
         let height = control_size.height.max(1) as i32;
-        let response = self.toggle(id, label, value, rect.size.width.max(1) as i32, height);
+        let response = {
+            let mut response = ToggleResponse::default();
+            self.with_clip(rect, |ui| {
+                response = ui.toggle(id, label, value, rect.size.width.max(1) as i32, height);
+            });
+            response
+        };
         *self.layout = previous;
         response
     }
@@ -2241,12 +2341,18 @@ impl<'a> Ui<'a> {
     ) -> ButtonResponse {
         let previous = *self.layout;
         self.layout.cursor = rect.origin;
-        let response = self.button(
-            id,
-            label,
-            rect.size.width.max(1) as i32,
-            rect.size.height.max(1) as i32,
-        );
+        let response = {
+            let mut response = ButtonResponse::default();
+            self.with_clip(rect, |ui| {
+                response = ui.button(
+                    id,
+                    label,
+                    rect.size.width.max(1) as i32,
+                    rect.size.height.max(1) as i32,
+                );
+            });
+            response
+        };
         *self.layout = previous;
         response
     }
@@ -2280,14 +2386,20 @@ impl<'a> Ui<'a> {
         let previous = *self.layout;
         self.layout.cursor = rect.origin;
         let height = control_size.height.max(1) as i32;
-        let response = self.dropdown(
-            id,
-            label,
-            options,
-            selected,
-            rect.size.width.max(1) as i32,
-            height,
-        );
+        let response = {
+            let mut response = DropdownResponse::default();
+            self.with_clip(rect, |ui| {
+                response = ui.dropdown(
+                    id,
+                    label,
+                    options,
+                    selected,
+                    rect.size.width.max(1) as i32,
+                    height,
+                );
+            });
+            response
+        };
         *self.layout = previous;
         response
     }
@@ -2324,8 +2436,8 @@ impl<'a> Ui<'a> {
         } else {
             self.theme.knob_fill
         };
-        self.canvas.fill_rect(rect, fill);
-        self.canvas.stroke_rect(rect, 1, self.theme.knob_outline);
+        self.fill_rect_clipped(rect, fill);
+        self.stroke_rect_clipped(rect, 1, self.theme.knob_outline);
         self.track_rect_internal(rect);
     }
 }
