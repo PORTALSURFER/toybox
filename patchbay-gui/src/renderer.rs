@@ -1,35 +1,13 @@
-//! Wgpu renderer that presents the CPU canvas to a window surface.
+//! Vello-backed renderer that presents the CPU canvas to a window surface.
 
 use crate::canvas::Size;
 use crate::host::GuiError;
 use crate::logging::log_line_safe;
 use crate::win32::SurfaceWindow;
-use bytemuck::{Pod, Zeroable};
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use wgpu::util::DeviceExt;
-
-#[derive(Clone, Copy, Debug, Pod, Zeroable)]
-#[repr(C)]
-struct Vertex {
-    pos: [f32; 2],
-    uv: [f32; 2],
-}
-
-const VERTICES: [Vertex; 3] = [
-    Vertex {
-        pos: [-1.0, -3.0],
-        uv: [0.0, 2.0],
-    },
-    Vertex {
-        pos: [3.0, 1.0],
-        uv: [2.0, 0.0],
-    },
-    Vertex {
-        pos: [-1.0, 1.0],
-        uv: [0.0, 0.0],
-    },
-];
+use std::sync::Arc;
+use vello::kurbo::Affine;
+use vello::peniko::{Color as VelloColor, ImageData};
+use vello::{AaConfig, RenderParams, Renderer as VelloRenderer, RendererOptions, Scene};
 
 /// Cached GPU device resources shared across window surfaces.
 #[derive(Debug)]
@@ -38,11 +16,6 @@ pub struct RendererDevice {
     adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    texture_bind_group_layout: wgpu::BindGroupLayout,
-    pipeline_layout: wgpu::PipelineLayout,
-    shader: wgpu::ShaderModule,
-    vertex_buffer: wgpu::Buffer,
-    pipelines: Mutex<HashMap<wgpu::TextureFormat, wgpu::RenderPipeline>>,
 }
 
 impl RendererDevice {
@@ -79,116 +52,27 @@ impl RendererDevice {
         })?;
         log_line_safe("renderer_device: device created");
 
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("patchbay-gui-texture-layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
-
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("patchbay-gui-shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
-        });
-
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("patchbay-gui-pipeline-layout"),
-            bind_group_layouts: &[&texture_bind_group_layout],
-            immediate_size: 0,
-        });
-
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("patchbay-gui-vertex-buffer"),
-            contents: bytemuck::cast_slice(&VERTICES),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
         Ok(Self {
             instance,
             adapter,
             device,
             queue,
-            texture_bind_group_layout,
-            pipeline_layout,
-            shader,
-            vertex_buffer,
-            pipelines: Mutex::new(HashMap::new()),
         })
-    }
-
-    fn pipeline_for(&self, format: wgpu::TextureFormat) -> Result<wgpu::RenderPipeline, GuiError> {
-        let mut cache = self
-            .pipelines
-            .lock()
-            .map_err(|_| GuiError::DeviceCachePoison)?;
-        if let Some(pipeline) = cache.get(&format) {
-            return Ok(pipeline.clone());
-        }
-        let pipeline = self
-            .device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("patchbay-gui-pipeline"),
-                layout: Some(&self.pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &self.shader,
-                    entry_point: Some("vs_main"),
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    buffers: &[wgpu::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2],
-                    }],
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &self.shader,
-                    entry_point: Some("fs_main"),
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format,
-                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    ..Default::default()
-                },
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState::default(),
-                multiview_mask: None,
-                cache: None,
-            });
-        cache.insert(format, pipeline.clone());
-        Ok(pipeline)
     }
 }
 
-/// GPU renderer that uploads a CPU canvas into a surface texture.
+/// GPU renderer that uploads a CPU canvas and presents it through Vello.
 pub struct Renderer {
     device: Arc<RendererDevice>,
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
-    texture: wgpu::Texture,
-    texture_view: wgpu::TextureView,
-    sampler: wgpu::Sampler,
-    bind_group: wgpu::BindGroup,
-    pipeline: wgpu::RenderPipeline,
+    vello_renderer: VelloRenderer,
+    scene: Scene,
+    render_target_view: wgpu::TextureView,
+    blitter: wgpu::util::TextureBlitter,
+    canvas_texture: wgpu::Texture,
+    canvas_image: ImageData,
+    canvas_size: Size,
     upload_scratch: Vec<u8>,
 }
 
@@ -211,7 +95,7 @@ impl Renderer {
             .formats
             .iter()
             .copied()
-            .find(|format| format.is_srgb())
+            .find(|candidate| candidate.is_srgb())
             .unwrap_or_else(|| capabilities.formats[0]);
         let present_mode = capabilities
             .present_modes
@@ -234,73 +118,67 @@ impl Renderer {
         surface.configure(&device.device, &config);
         log_line_safe("renderer: surface configured");
 
-        let (texture, texture_view, sampler) = Self::create_texture(&device.device, size);
-        let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("patchbay-gui-texture-bind-group"),
-            layout: &device.texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-        });
-        let pipeline = device.pipeline_for(format)?;
+        let mut vello_renderer = VelloRenderer::new(&device.device, RendererOptions::default())
+            .map_err(map_vello_init_error)?;
+        let initial_canvas_size = Size {
+            width: size.width.max(1),
+            height: size.height.max(1),
+        };
+        let render_target_view = Self::create_render_target_view(
+            &device.device,
+            Size {
+                width: config.width,
+                height: config.height,
+            },
+        );
+        let blitter = wgpu::util::TextureBlitter::new(&device.device, config.format);
+        let canvas_texture = Self::create_canvas_texture(&device.device, initial_canvas_size);
+        let canvas_image = vello_renderer.register_texture(canvas_texture.clone());
 
         Ok(Self {
             device,
             surface,
             config,
-            texture,
-            texture_view,
-            sampler,
-            bind_group,
-            pipeline,
+            vello_renderer,
+            scene: Scene::new(),
+            render_target_view,
+            blitter,
+            canvas_texture,
+            canvas_image,
+            canvas_size: initial_canvas_size,
             upload_scratch: Vec::new(),
         })
     }
 
-    /// Resize the surface and backing texture.
+    /// Resize the surface and backing Vello render target.
     pub fn resize(&mut self, size: Size) {
         self.config.width = size.width.max(1);
         self.config.height = size.height.max(1);
         self.surface.configure(&self.device.device, &self.config);
-        let (texture, texture_view, sampler) = Self::create_texture(&self.device.device, size);
-        self.texture = texture;
-        self.texture_view = texture_view;
-        self.sampler = sampler;
-        self.bind_group = self
-            .device
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("patchbay-gui-texture-bind-group"),
-                layout: &self.device.texture_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&self.texture_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&self.sampler),
-                    },
-                ],
-            });
+        self.render_target_view = Self::create_render_target_view(
+            &self.device.device,
+            Size {
+                width: self.config.width,
+                height: self.config.height,
+            },
+        );
     }
 
-    /// Upload the latest canvas pixels to the GPU texture.
+    /// Upload the latest canvas pixels to the GPU texture used by Vello.
     pub fn upload(&mut self, size: Size, pixels: &[u8]) {
+        let size = Size {
+            width: size.width.max(1),
+            height: size.height.max(1),
+        };
+        self.ensure_canvas_texture(size);
+
         let bytes_per_pixel = 4u32;
         let bytes_per_row = bytes_per_pixel * size.width;
         let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u32;
         let padded_bytes_per_row = ((bytes_per_row + alignment - 1) / alignment) * alignment;
 
         if padded_bytes_per_row == bytes_per_row {
-            self.write_texture(size, pixels, bytes_per_row);
+            self.write_canvas_texture(size, pixels, bytes_per_row);
             return;
         }
 
@@ -314,10 +192,10 @@ impl Renderer {
             required,
         );
 
-        self.write_texture(size, &self.upload_scratch, padded_bytes_per_row);
+        self.write_canvas_texture(size, &self.upload_scratch, padded_bytes_per_row);
     }
 
-    /// Render the canvas to the surface.
+    /// Render the uploaded canvas texture to the current surface frame.
     pub fn render(&mut self) -> Result<(), GuiError> {
         let output = match self.surface.get_current_texture() {
             Ok(output) => output,
@@ -336,50 +214,84 @@ impl Renderer {
                 }
             }
         };
-        let view = output
+        let surface_view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+
+        self.scene.reset();
+        let scale_x = self.config.width as f64 / self.canvas_size.width.max(1) as f64;
+        let scale_y = self.config.height as f64 / self.canvas_size.height.max(1) as f64;
+        self.scene.draw_image(
+            &self.canvas_image,
+            Affine::scale_non_uniform(scale_x, scale_y),
+        );
+
+        if let Err(err) = self.vello_renderer.render_to_texture(
+            &self.device.device,
+            &self.device.queue,
+            &self.scene,
+            &self.render_target_view,
+            &RenderParams {
+                base_color: VelloColor::BLACK,
+                width: self.config.width,
+                height: self.config.height,
+                antialiasing_method: AaConfig::Area,
+            },
+        ) {
+            log_line_safe(&format!("renderer: vello render_to_texture error: {err:?}"));
+            return Err(GuiError::SurfaceAcquire(wgpu::SurfaceError::Other));
+        }
 
         let mut encoder =
             self.device
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("patchbay-gui-encoder"),
+                    label: Some("patchbay-gui-present-blit"),
                 });
-
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("patchbay-gui-pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-                multiview_mask: None,
-            });
-            pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, &self.bind_group, &[]);
-            pass.set_vertex_buffer(0, self.device.vertex_buffer.slice(..));
-            pass.draw(0..3, 0..1);
-        }
-
+        self.blitter.copy(
+            &self.device.device,
+            &mut encoder,
+            &self.render_target_view,
+            &surface_view,
+        );
         self.device.queue.submit(Some(encoder.finish()));
         output.present();
         Ok(())
     }
 
-    fn create_texture(
-        device: &wgpu::Device,
-        size: Size,
-    ) -> (wgpu::Texture, wgpu::TextureView, wgpu::Sampler) {
+    fn ensure_canvas_texture(&mut self, size: Size) {
+        if self.canvas_size == size {
+            return;
+        }
+        let old_image = self.canvas_image.clone();
+        self.canvas_texture = Self::create_canvas_texture(&self.device.device, size);
+        self.canvas_image = self
+            .vello_renderer
+            .register_texture(self.canvas_texture.clone());
+        self.vello_renderer.unregister_texture(old_image);
+        self.canvas_size = size;
+    }
+
+    fn create_render_target_view(device: &wgpu::Device, size: Size) -> wgpu::TextureView {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("patchbay-gui-vello-target"),
+            size: wgpu::Extent3d {
+                width: size.width.max(1),
+                height: size.height.max(1),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        texture.create_view(&wgpu::TextureViewDescriptor::default())
+    }
+
+    fn create_canvas_texture(device: &wgpu::Device, size: Size) -> wgpu::Texture {
+        device.create_texture(&wgpu::TextureDescriptor {
             label: Some("patchbay-gui-canvas-texture"),
             size: wgpu::Extent3d {
                 width: size.width.max(1),
@@ -389,25 +301,18 @@ impl Renderer {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
-        });
-        let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("patchbay-gui-sampler"),
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
-            ..Default::default()
-        });
-        (texture, texture_view, sampler)
+        })
     }
 
-    fn write_texture(&self, size: Size, pixels: &[u8], bytes_per_row: u32) {
+    fn write_canvas_texture(&self, size: Size, pixels: &[u8], bytes_per_row: u32) {
         self.device.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
-                texture: &self.texture,
+                texture: &self.canvas_texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
@@ -444,6 +349,15 @@ impl Renderer {
             scratch[dst_offset..dst_offset + src_row]
                 .copy_from_slice(&pixels[src_offset..src_offset + src_row]);
         }
+    }
+}
+
+fn map_vello_init_error(err: vello::Error) -> GuiError {
+    log_line_safe(&format!("renderer: vello init error: {err:?}"));
+    match err {
+        vello::Error::NoCompatibleDevice => GuiError::AdapterNotFound,
+        vello::Error::UnsupportedSurfaceFormat => GuiError::SurfaceFormat,
+        _ => GuiError::SurfaceFormat,
     }
 }
 
@@ -523,5 +437,6 @@ mod tests {
         assert!(!should_reconfigure_surface(
             &wgpu::SurfaceError::OutOfMemory
         ));
+        assert!(!should_reconfigure_surface(&wgpu::SurfaceError::Other));
     }
 }

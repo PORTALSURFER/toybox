@@ -1,7 +1,8 @@
-//! Patchbay GUI: a minimal, Vulkan-backed UI toolkit for CLAP plugin windows.
+//! Patchbay GUI: a minimal, Vello-backed UI toolkit for CLAP plugin windows.
 //!
 //! The crate provides a strict declarative UI surface (containers + widgets)
-//! rendered via a CPU canvas that is presented using wgpu. The public API
+//! rendered via a CPU canvas that is presented through Vello on top of wgpu.
+//! The public API
 //! exports only declarative authoring primitives and host integration helpers.
 //! The focus is embedding into a host-provided window handle on Windows.
 

@@ -53,5 +53,5 @@
 ## Dependencies
 - CLAP: `clack-plugin`, `clack-extensions`, `clack-common`.
 - VST3: `VST3_SDK_DIR` SDK location (validated at build time) plus generated Rust bindings from `vst3`.
-- GUI: `patchbay-gui` + `wgpu`.
+- GUI: `patchbay-gui` + `vello` (on top of `wgpu`).
 - DSP/spectral use-cases: `rustfft` in plugin crates that need it.

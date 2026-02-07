@@ -2,14 +2,14 @@
 name = "patchbay-gui"
 version = "0.1.0"
 edition = "2024"
-description = "Minimal CLAP plugin GUI toolkit with a Vulkan-backed renderer"
+description = "Minimal CLAP plugin GUI toolkit with a Vello-backed renderer"
 
 [dependencies]
 raw-window-handle = "0.5.2"
 raw-window-handle-06 = { package = "raw-window-handle", version = "0.6" }
-wgpu = { version = "28.0.0", default-features = false, features = ["std", "parking_lot", "wgsl", "vulkan"] }
+wgpu = { version = "27.0.1", default-features = false, features = ["std", "parking_lot", "wgsl", "vulkan"] }
+vello = "0.7.0"
 pollster = "0.3"
-bytemuck = { version = "1.15", features = ["derive"] }
 thiserror = "1.0"
 toybox-process-log = { path = "../crates/process-log" }
 
