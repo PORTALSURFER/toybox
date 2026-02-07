@@ -443,6 +443,8 @@ pub struct RegionResponse {
     pub hovered: bool,
     /// Pointer position relative to region bounds.
     pub local_pointer: Point,
+    /// Pointer position relative to region origin without bounds clamping.
+    pub raw_local_pointer: Point,
     /// Whether Alt was held during this frame.
     pub alt_down: bool,
     /// The region is actively being dragged.
@@ -1100,6 +1102,7 @@ impl<'a> Ui<'a> {
         let id = WidgetId::from_label(key);
         let hovered = rect.contains(self.input.pointer_pos);
         let local_pointer = local_pointer_in_rect(self.input.pointer_pos, rect);
+        let raw_local_pointer = raw_local_pointer_in_rect(self.input.pointer_pos, rect);
         if hovered {
             self.state.hot = Some(id);
         }
@@ -1107,6 +1110,7 @@ impl<'a> Ui<'a> {
         let mut response = RegionResponse {
             hovered,
             local_pointer,
+            raw_local_pointer,
             alt_down: self.input.alt_down,
             active: self.state.active == Some(id),
             pressed: false,
@@ -1971,6 +1975,13 @@ fn local_pointer_in_rect(pointer: Point, rect: Rect) -> Point {
     Point {
         x: (pointer.x - rect.origin.x).clamp(0, max_x.max(0)),
         y: (pointer.y - rect.origin.y).clamp(0, max_y.max(0)),
+    }
+}
+
+fn raw_local_pointer_in_rect(pointer: Point, rect: Rect) -> Point {
+    Point {
+        x: pointer.x - rect.origin.x,
+        y: pointer.y - rect.origin.y,
     }
 }
 
