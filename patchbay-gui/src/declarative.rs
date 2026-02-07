@@ -1841,12 +1841,23 @@ fn container_debug_border_color(kind: ContainerKind, depth: usize) -> Option<Col
 
 /// Draw a layout debug border for a container when the feature is enabled.
 fn draw_container_debug_border(ui: &mut Ui<'_>, rect: Rect, kind: ContainerKind, depth: usize) {
-    if kind == ContainerKind::RootFrame || !rect.contains(ui.input().pointer_pos) {
+    // Skip root-level wrappers so debug outlines focus on meaningful inner
+    // layout partitions instead of the full-window container.
+    if !should_draw_container_debug_border(kind, depth, rect.contains(ui.input().pointer_pos)) {
         return;
     }
     if let Some(color) = container_debug_border_color(kind, depth) {
         ui.debug_stroke_rect(rect, 1, color);
     }
+}
+
+/// Return whether a hovered container should render the debug layout border.
+fn should_draw_container_debug_border(
+    kind: ContainerKind,
+    depth: usize,
+    pointer_inside: bool,
+) -> bool {
+    kind != ContainerKind::RootFrame && depth > 1 && pointer_inside
 }
 
 /// Validate the top-level UI specification.
@@ -3224,7 +3235,10 @@ mod tests {
     #[cfg(feature = "layout-debug-borders")]
     #[test]
     fn debug_border_palette_is_available_when_feature_enabled() {
-        assert_eq!(container_debug_border_color(ContainerKind::RootFrame, 0), None);
+        assert_eq!(
+            container_debug_border_color(ContainerKind::RootFrame, 0),
+            None
+        );
         let expected = Some(Color::rgb(245, 98, 98));
         for kind in [
             ContainerKind::Panel,
@@ -3244,6 +3258,30 @@ mod tests {
             container_debug_border_color(ContainerKind::RootFrame, 0),
             None
         );
+    }
+
+    #[test]
+    fn debug_border_is_not_drawn_for_root_or_top_level_containers() {
+        assert!(!should_draw_container_debug_border(
+            ContainerKind::RootFrame,
+            0,
+            true
+        ));
+        assert!(!should_draw_container_debug_border(
+            ContainerKind::Flex,
+            1,
+            true
+        ));
+        assert!(should_draw_container_debug_border(
+            ContainerKind::Panel,
+            2,
+            true
+        ));
+        assert!(!should_draw_container_debug_border(
+            ContainerKind::Panel,
+            2,
+            false
+        ));
     }
 
     #[test]
