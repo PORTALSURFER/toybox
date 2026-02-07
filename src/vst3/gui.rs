@@ -152,17 +152,8 @@ pub trait Vst3HostedGui {
 pub struct HostedVst3View<G: Vst3HostedGui> {
     rect: Cell<ViewRect>,
     attached: Cell<bool>,
-    resize_axis: Cell<ResizeAxis>,
-    last_requested_size: Cell<(i32, i32)>,
     default_size: (i32, i32),
     gui: Mutex<G>,
-}
-
-#[cfg(feature = "gui")]
-#[derive(Clone, Copy)]
-enum ResizeAxis {
-    Width,
-    Height,
 }
 
 #[cfg(feature = "gui")]
@@ -174,8 +165,6 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
         Self {
             rect: Cell::new(view_rect(width, height)),
             attached: Cell::new(false),
-            resize_axis: Cell::new(ResizeAxis::Width),
-            last_requested_size: Cell::new((width, height)),
             default_size: (width, height),
             gui: Mutex::new(gui),
         }
@@ -186,10 +175,7 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
             return;
         };
         if let Some((width, height)) = gui.last_size() {
-            let width = width as i32;
-            let height = height as i32;
-            self.rect.set(view_rect(width, height));
-            self.last_requested_size.set((width, height));
+            self.rect.set(view_rect(width as i32, height as i32));
         }
     }
 
@@ -201,59 +187,27 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
         self.default_size.0 as f32 / self.default_size.1.max(1) as f32
     }
 
-    fn dominant_resize_axis(&self, requested_width: i32, requested_height: i32) -> ResizeAxis {
-        let requested_width = requested_width.max(1);
-        let requested_height = requested_height.max(1);
-        let (last_width, last_height) = self.last_requested_size.get();
-        let width_delta = (requested_width - last_width).abs();
-        let height_delta = (requested_height - last_height).abs();
-        let previous = self.resize_axis.get();
-        // Follow the axis that changed most relative to the previous host
-        // request to avoid oscillating against already-constrained rects.
-        // Keep previous axis on near ties to avoid corner-drag oscillation.
-        let chosen = if width_delta > height_delta + 1 {
-            ResizeAxis::Width
-        } else if height_delta > width_delta + 1 {
-            ResizeAxis::Height
-        } else {
-            previous
-        };
-        self.last_requested_size
-            .set((requested_width, requested_height));
-        self.resize_axis.set(chosen);
-        chosen
-    }
-
-    fn constrain_uniform_size(
-        &self,
-        requested_width: i32,
-        requested_height: i32,
-        axis: ResizeAxis,
-    ) -> (i32, i32) {
+    fn constrain_uniform_size(&self, requested_width: i32, requested_height: i32) -> (i32, i32) {
         let (min_width, min_height) = self.minimum_size();
         let ratio = self.uniform_ratio();
         let clamped_width = requested_width.max(min_width).max(1);
         let clamped_height = requested_height.max(min_height).max(1);
 
-        match axis {
-            ResizeAxis::Width => {
-                let mut width = clamped_width;
-                let mut height = ((width as f32) / ratio).round() as i32;
-                if height < min_height {
-                    height = min_height;
-                    width = ((height as f32) * ratio).round() as i32;
-                }
-                (width.max(min_width).max(1), height.max(min_height).max(1))
-            }
-            ResizeAxis::Height => {
-                let mut height = clamped_height;
-                let mut width = ((height as f32) * ratio).round() as i32;
-                if width < min_width {
-                    width = min_width;
-                    height = ((width as f32) / ratio).round() as i32;
-                }
-                (width.max(min_width).max(1), height.max(min_height).max(1))
-            }
+        let height_from_width = ((clamped_width as f32) / ratio).round() as i32;
+        let width_from_height = ((clamped_height as f32) * ratio).round() as i32;
+
+        let width_driven_width = clamped_width.max(min_width).max(1);
+        let width_driven_height = height_from_width.max(min_height).max(1);
+        let height_driven_width = width_from_height.max(min_width).max(1);
+        let height_driven_height = clamped_height.max(min_height).max(1);
+
+        let width_driven_error = (width_driven_height - clamped_height).abs();
+        let height_driven_error = (height_driven_width - clamped_width).abs();
+
+        if width_driven_error <= height_driven_error {
+            (width_driven_width, width_driven_height)
+        } else {
+            (height_driven_width, height_driven_height)
         }
     }
 
@@ -301,9 +255,8 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
         } else {
             (min_width, min_height)
         };
-        let axis = self.dominant_resize_axis(requested_width, requested_height);
         let (constrained_width, constrained_height) =
-            self.constrain_uniform_size(requested_width, requested_height, axis);
+            self.constrain_uniform_size(requested_width, requested_height);
         if constrained_width != requested_width || constrained_height != requested_height {
             gui.request_resize(constrained_width as u32, constrained_height as u32);
         }
@@ -351,9 +304,8 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
         let requested = unsafe { *new_size };
         let requested_width = (requested.right - requested.left).max(1);
         let requested_height = (requested.bottom - requested.top).max(1);
-        let axis = self.dominant_resize_axis(requested_width, requested_height);
         let (constrained_width, constrained_height) =
-            self.constrain_uniform_size(requested_width, requested_height, axis);
+            self.constrain_uniform_size(requested_width, requested_height);
         let constrained = view_rect(constrained_width, constrained_height);
         unsafe { *new_size = constrained };
         // Always propagate the accepted size to the embedded child window so
@@ -390,9 +342,8 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
         let rect = unsafe { &mut *rect };
         let requested_width = (rect.right - rect.left).max(1);
         let requested_height = (rect.bottom - rect.top).max(1);
-        let axis = self.dominant_resize_axis(requested_width, requested_height);
         let (constrained_width, constrained_height) =
-            self.constrain_uniform_size(requested_width, requested_height, axis);
+            self.constrain_uniform_size(requested_width, requested_height);
         rect.right = rect.left + constrained_width;
         rect.bottom = rect.top + constrained_height;
         kResultOk
