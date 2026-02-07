@@ -113,6 +113,15 @@ pub enum UiAction {
         /// Selected option index.
         index: usize,
     },
+    /// Region hover state update.
+    RegionHover {
+        /// Stable widget key.
+        key: String,
+        /// True when the pointer is currently inside the region.
+        hovered: bool,
+        /// Pointer position relative to the region bounds.
+        local_pointer: Point,
+    },
     /// Region interaction event.
     RegionInteracted {
         /// Stable widget key.
@@ -2797,6 +2806,12 @@ fn render_region_draw_commands(commands: &[DrawCommand], rect: Rect, ui: &mut Ui
 
 /// Convert region responses to action list entries.
 fn push_region_actions(key: &str, response: RegionResponse, actions: &mut Vec<UiAction>) {
+    actions.push(UiAction::RegionHover {
+        key: key.to_string(),
+        hovered: response.hovered,
+        local_pointer: response.local_pointer,
+    });
+
     if response.pressed {
         actions.push(UiAction::RegionInteracted {
             key: key.to_string(),
@@ -3488,6 +3503,21 @@ mod tests {
         assert!(result.actions.iter().any(|action| {
             matches!(
                 action,
+                UiAction::RegionHover {
+                    key,
+                    hovered,
+                    local_pointer
+                } if key == "plot"
+                    && *hovered
+                    && local_pointer.x >= 0
+                    && local_pointer.y >= 0
+                    && local_pointer.x < 64
+                    && local_pointer.y < 48
+            )
+        }));
+        assert!(result.actions.iter().any(|action| {
+            matches!(
+                action,
                 UiAction::RegionInteracted {
                     key,
                     kind,
@@ -3498,6 +3528,39 @@ mod tests {
                     && local_pointer.y >= 0
                     && local_pointer.x < 64
                     && local_pointer.y < 48
+            )
+        }));
+    }
+
+    #[test]
+    fn render_region_emits_hover_false_when_pointer_is_outside() {
+        let mut canvas = Canvas::new(160, 120);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState {
+            pointer_pos: Point { x: 150, y: 110 },
+            ..InputState::default()
+        };
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+
+        let spec = UiSpec::new(RootFrameSpec::new(
+            "root",
+            Node::Region(RegionSpec::new(
+                "plot",
+                Size {
+                    width: 64,
+                    height: 48,
+                },
+            )),
+        ));
+
+        let result =
+            render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+        assert!(result.actions.iter().any(|action| {
+            matches!(
+                action,
+                UiAction::RegionHover { key, hovered, .. } if key == "plot" && !hovered
             )
         }));
     }
