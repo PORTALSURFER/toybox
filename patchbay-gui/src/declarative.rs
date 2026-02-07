@@ -1847,7 +1847,9 @@ fn draw_container_debug_border(ui: &mut Ui<'_>, rect: Rect, kind: ContainerKind,
         return;
     }
     if let Some(color) = container_debug_border_color(kind, depth) {
-        ui.debug_stroke_rect(rect, 1, color);
+        if let Some(draw_rect) = debug_border_draw_rect(rect, 1) {
+            ui.debug_stroke_rect(draw_rect, 1, color);
+        }
     }
 }
 
@@ -1858,6 +1860,24 @@ fn should_draw_container_debug_border(
     pointer_inside: bool,
 ) -> bool {
     kind != ContainerKind::RootFrame && depth > 1 && pointer_inside
+}
+
+/// Return a pixel-safe debug border rectangle that stays inside viewport bounds.
+///
+/// The debug stroke helper can lose bottom/right edges when a container reaches
+/// the viewport edge. Shrinking the border box by one stroke thickness on the
+/// max edges keeps all four lines visible.
+fn debug_border_draw_rect(rect: Rect, thickness: u32) -> Option<Rect> {
+    if thickness == 0 || rect.size.width <= thickness || rect.size.height <= thickness {
+        return None;
+    }
+    Some(Rect {
+        origin: rect.origin,
+        size: Size {
+            width: rect.size.width.saturating_sub(thickness),
+            height: rect.size.height.saturating_sub(thickness),
+        },
+    })
 }
 
 /// Validate the top-level UI specification.
@@ -3282,6 +3302,38 @@ mod tests {
             2,
             false
         ));
+    }
+
+    #[test]
+    fn debug_border_draw_rect_shrinks_max_edges_by_thickness() {
+        let rect = Rect {
+            origin: Point { x: 10, y: 20 },
+            size: Size {
+                width: 100,
+                height: 50,
+            },
+        };
+        let draw = debug_border_draw_rect(rect, 1).expect("draw rect");
+        assert_eq!(draw.origin, rect.origin);
+        assert_eq!(
+            draw.size,
+            Size {
+                width: 99,
+                height: 49
+            }
+        );
+    }
+
+    #[test]
+    fn debug_border_draw_rect_rejects_too_small_rectangles() {
+        let rect = Rect {
+            origin: Point { x: 0, y: 0 },
+            size: Size {
+                width: 1,
+                height: 1,
+            },
+        };
+        assert!(debug_border_draw_rect(rect, 1).is_none());
     }
 
     #[test]
