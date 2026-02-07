@@ -77,6 +77,31 @@ pub enum DeclarativeError {
         /// Upper range bound.
         max: f32,
     },
+    /// Root content must be a container node.
+    #[error("root content must be a container node (got `{node_kind}`)")]
+    InvalidRootContent {
+        /// Concrete node variant at root content position.
+        node_kind: &'static str,
+    },
+    /// Section containers only accept container children.
+    #[error("section child must be a container node (got `{node_kind}`)")]
+    InvalidSectionChild {
+        /// Concrete section-child node kind.
+        node_kind: &'static str,
+    },
+    /// Section tracks must use fraction/fill sizing only.
+    #[error("section tracks must use Fraction or Fill definitions")]
+    InvalidSectionTrack,
+    /// Section percentage definitions are malformed.
+    #[error(
+        "invalid section fractions: total percent {total_percent}, fill_count {fill_count} (require total <= 100 and total == 100 when fill_count == 0)"
+    )]
+    InvalidSectionFractions {
+        /// Sum of fraction percentages in the section.
+        total_percent: u16,
+        /// Number of fill tracks in the section.
+        fill_count: usize,
+    },
 }
 
 /// Typed interaction actions emitted by declarative rendering.
@@ -723,26 +748,51 @@ pub fn column(children: Vec<Node>) -> Node {
     Node::column(children)
 }
 
-/// Child node paired with a relative section weight.
-///
-/// Weights are interpreted as fractions of available main-axis space inside
-/// section helpers like [`column_sections`] and [`row_sections`].
-#[derive(Clone, Debug)]
-pub struct WeightedChild {
-    /// Child node rendered inside the section.
-    pub node: Node,
-    /// Relative share of available section space.
+/// Section sizing mode for canonical row/column section layouts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SectionSize {
+    /// Fractional section sized as a percentage of parent bounds.
     ///
-    /// Values are clamped to at least `1` when constructed via [`weighted`].
-    pub weight: u16,
+    /// Percentages are resolved first against the total parent extent.
+    Fraction(u8),
+    /// Fill section that shares remaining space with other fill siblings.
+    Fill,
 }
 
-/// Create a weighted section child.
-pub fn weighted(node: Node, weight: u16) -> WeightedChild {
-    WeightedChild {
+/// Child node paired with a section sizing definition.
+#[derive(Clone, Debug)]
+pub struct SectionChild {
+    /// Child node rendered inside the section.
+    pub node: Node,
+    /// Section sizing definition.
+    pub size: SectionSize,
+}
+
+/// Backward-compatible alias for section children.
+pub type WeightedChild = SectionChild;
+
+/// Create a fraction-based section child.
+pub fn fraction(node: Node, percent: u8) -> SectionChild {
+    SectionChild {
         node,
-        weight: weight.max(1),
+        size: SectionSize::Fraction(percent),
     }
+}
+
+/// Create a fill section child.
+pub fn fill_section(node: Node) -> SectionChild {
+    SectionChild {
+        node,
+        size: SectionSize::Fill,
+    }
+}
+
+/// Backward-compatible weighted section helper.
+///
+/// This maps weights into fractional percentages for strict section sizing.
+pub fn weighted(node: Node, weight: u16) -> WeightedChild {
+    let percent = weight.clamp(1, 100) as u8;
+    fraction(node, percent)
 }
 
 /// Resolve weighted section lengths that exactly consume the available space.
@@ -753,57 +803,69 @@ pub fn weighted(node: Node, weight: u16) -> WeightedChild {
 ///
 /// Weights are clamped to at least `1` to match [`weighted`].
 pub fn weighted_section_lengths(total: u32, weights: &[u16]) -> Vec<u32> {
-    let normalized: Vec<u32> = weights
-        .iter()
-        .map(|weight| u32::from((*weight).max(1)))
-        .collect();
-    distribute_weighted_u32(total, &normalized)
+    let total_percent: u16 = weights.iter().copied().sum();
+    if total_percent == 0 {
+        return vec![0; weights.len()];
+    }
+    let target_total = total
+        .saturating_mul(total_percent as u32)
+        .saturating_div(100);
+    let normalized: Vec<u32> = weights.iter().map(|weight| u32::from(*weight)).collect();
+    distribute_weighted_u32(target_total, &normalized)
 }
 
 /// Create a weighted full-size column section layout.
 ///
 /// Children fill width and split available height by relative `weight`.
-pub fn column_sections(children: Vec<WeightedChild>) -> Node {
+pub fn column_sections(children: Vec<SectionChild>) -> Node {
     let rows: Vec<TrackSize> = children
         .iter()
-        .map(|child| TrackSize::Fr(child.weight.max(1)))
+        .map(|child| match child.size {
+            SectionSize::Fraction(percent) => TrackSize::Percent(percent),
+            SectionSize::Fill => TrackSize::Fill,
+        })
         .collect();
     let nodes: Vec<Node> = children
         .into_iter()
         .map(|child| child.node.layout(LayoutBox::fill()))
         .collect();
-    grid(
+    let mut spec = GridSpec::new(
         GridTemplate::new(vec![TrackSize::Fr(1)])
             .rows(rows)
             .gap(0)
             .pad_all(0)
             .justify_start(),
         nodes,
-    )
-    .layout(LayoutBox::fill())
+    );
+    spec.kind = GridKind::SectionColumn;
+    Node::Grid(spec).layout(LayoutBox::fill())
 }
 
 /// Create a weighted full-size row section layout.
 ///
 /// Children fill height and split available width by relative `weight`.
-pub fn row_sections(children: Vec<WeightedChild>) -> Node {
+pub fn row_sections(children: Vec<SectionChild>) -> Node {
     let columns: Vec<TrackSize> = children
         .iter()
-        .map(|child| TrackSize::Fr(child.weight.max(1)))
+        .map(|child| match child.size {
+            SectionSize::Fraction(percent) => TrackSize::Percent(percent),
+            SectionSize::Fill => TrackSize::Fill,
+        })
         .collect();
     let nodes: Vec<Node> = children
         .into_iter()
         .map(|child| child.node.layout(LayoutBox::fill()))
         .collect();
-    grid(
+    let mut spec = GridSpec::new(
         GridTemplate::new(columns)
             .rows(vec![TrackSize::Fr(1)])
             .gap(0)
             .pad_all(0)
             .justify_start(),
         nodes,
-    )
-    .layout(LayoutBox::fill())
+    );
+    spec.kind = GridKind::SectionRow;
+    Node::Grid(spec).layout(LayoutBox::fill())
 }
 
 /// Create a grid container node.
@@ -1245,6 +1307,10 @@ pub enum TrackSize {
     Px(u32),
     /// Track size from intrinsic content.
     Auto,
+    /// Track size as a percentage of parent axis space.
+    Percent(u8),
+    /// Track that receives equal shares of remaining axis space.
+    Fill,
     /// Fractional track fill weight.
     Fr(u16),
 }
@@ -1274,6 +1340,17 @@ pub struct GridTemplate {
     pub justify_x: Justify,
     /// Grid padding.
     pub padding: EdgeInsets,
+}
+
+/// Grid semantic role for strict declarative validation and sizing rules.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GridKind {
+    /// General-purpose grid with legacy track behavior.
+    Standard,
+    /// Canonical vertical section container.
+    SectionColumn,
+    /// Canonical horizontal section container.
+    SectionRow,
 }
 
 impl GridTemplate {
@@ -1386,6 +1463,8 @@ pub struct GridSpec {
     pub template: GridTemplate,
     /// Child nodes in row-major order.
     pub children: Vec<Node>,
+    /// Grid semantic role.
+    pub kind: GridKind,
 }
 
 impl GridSpec {
@@ -1395,6 +1474,7 @@ impl GridSpec {
             layout: LayoutBox::auto(),
             template,
             children,
+            kind: GridKind::Standard,
         }
     }
 
@@ -2276,6 +2356,11 @@ fn validate_spec(spec: &UiSpec) -> Result<(), DeclarativeError> {
             node_kind: "RootFrame",
         });
     }
+    if !is_container_node(&spec.root.content) {
+        return Err(DeclarativeError::InvalidRootContent {
+            node_kind: node_kind_name(&spec.root.content),
+        });
+    }
     let mut seen = std::collections::HashSet::new();
     validate_unique_key(&spec.root.key, &mut seen)?;
     validate_node(&spec.root.content, &mut seen)
@@ -2300,6 +2385,16 @@ fn validate_node(
         Node::Grid(grid) => {
             if grid.template.columns.is_empty() {
                 return Err(DeclarativeError::EmptyGridColumns);
+            }
+            if matches!(grid.kind, GridKind::SectionColumn | GridKind::SectionRow) {
+                validate_section_tracks(grid)?;
+                for child in &grid.children {
+                    if !is_container_node(child) {
+                        return Err(DeclarativeError::InvalidSectionChild {
+                            node_kind: node_kind_name(child),
+                        });
+                    }
+                }
             }
             for child in &grid.children {
                 validate_node(child, seen_keys)?;
@@ -2352,6 +2447,65 @@ fn validate_node(
             validate_non_empty_key(&region.key, "Region")?;
             validate_unique_key(&region.key, seen_keys)?;
         }
+    }
+    Ok(())
+}
+
+/// Return true when a node acts as a layout container.
+fn is_container_node(node: &Node) -> bool {
+    matches!(
+        node,
+        Node::Panel(_) | Node::Row(_) | Node::Column(_) | Node::Grid(_) | Node::Absolute(_)
+    )
+}
+
+/// Return a stable node-kind name for diagnostics.
+fn node_kind_name(node: &Node) -> &'static str {
+    match node {
+        Node::Panel(_) => "Panel",
+        Node::Row(_) => "Row",
+        Node::Column(_) => "Column",
+        Node::Grid(_) => "Grid",
+        Node::Absolute(_) => "Absolute",
+        Node::Label(_) => "Label",
+        Node::Spacer(_) => "Spacer",
+        Node::Knob(_) => "Knob",
+        Node::Slider(_) => "Slider",
+        Node::Toggle(_) => "Toggle",
+        Node::Button(_) => "Button",
+        Node::Dropdown(_) => "Dropdown",
+        Node::Region(_) => "Region",
+        Node::Indicator(_) => "Indicator",
+    }
+}
+
+/// Validate strict section-track definitions for canonical section grids.
+fn validate_section_tracks(grid: &GridSpec) -> Result<(), DeclarativeError> {
+    let tracks = match grid.kind {
+        GridKind::SectionColumn => &grid.template.rows,
+        GridKind::SectionRow => &grid.template.columns,
+        GridKind::Standard => return Ok(()),
+    };
+    if tracks.is_empty() {
+        return Err(DeclarativeError::InvalidSectionTrack);
+    }
+
+    let mut total_percent = 0u16;
+    let mut fill_count = 0usize;
+    for track in tracks {
+        match *track {
+            TrackSize::Percent(percent) => {
+                total_percent = total_percent.saturating_add(percent as u16);
+            }
+            TrackSize::Fill => fill_count = fill_count.saturating_add(1),
+            _ => return Err(DeclarativeError::InvalidSectionTrack),
+        }
+    }
+    if total_percent > 100 || (fill_count == 0 && total_percent != 100) {
+        return Err(DeclarativeError::InvalidSectionFractions {
+            total_percent,
+            fill_count,
+        });
     }
     Ok(())
 }
@@ -2724,7 +2878,7 @@ fn resolve_axis(
     let base = match length {
         Length::Auto => measured,
         Length::Px(px) => px.max(measured),
-        Length::Fill(_) => available.max(measured),
+        Length::Fill(_) => available,
     };
     let min_applied = base.max(min.unwrap_or(0));
     if let Some(max_value) = max {
@@ -2881,7 +3035,8 @@ fn render_flex(
         let measured_main = axis.main(intrinsic[index]) as i32;
         let value = match axis.main_length(layout) {
             Length::Px(px) => px as i32,
-            Length::Auto | Length::Fill(_) => measured_main,
+            Length::Auto => measured_main,
+            Length::Fill(_) => 0,
         };
         base_main[index] = value.max(0);
         main_sum += base_main[index];
@@ -3216,22 +3371,72 @@ fn resolve_grid_axis(
         }
     }
 
+    let percent_weights: Vec<u8> = (0..count)
+        .map(
+            |index| match tracks.get(index).copied().unwrap_or(TrackSize::Auto) {
+                TrackSize::Percent(percent) => percent,
+                _ => 0,
+            },
+        )
+        .collect();
+    let total_percent: u16 = percent_weights.iter().map(|percent| *percent as u16).sum();
+    if total_percent > 0 {
+        let percent_target_total = available
+            .saturating_mul(total_percent as u32)
+            .saturating_div(100);
+        let percent_distribution = distribute_weighted_u32(
+            percent_target_total,
+            &percent_weights
+                .iter()
+                .map(|percent| u32::from(*percent))
+                .collect::<Vec<u32>>(),
+        );
+        for (index, assigned) in percent_distribution.into_iter().enumerate() {
+            if percent_weights[index] > 0 {
+                result[index] = assigned;
+            }
+        }
+    }
+
     let total_gap = gap.max(0) as u32 * count.saturating_sub(1) as u32;
     let used = result.iter().copied().sum::<u32>() + total_gap;
     let remainder = available.saturating_sub(used);
 
-    let fr_weights: Vec<u32> = (0..count)
-        .map(|index| {
-            tracks
-                .get(index)
-                .copied()
-                .unwrap_or(TrackSize::Auto)
-                .fr_weight()
+    let fill_count = (0..count)
+        .filter(|index| {
+            matches!(
+                tracks.get(*index).copied().unwrap_or(TrackSize::Auto),
+                TrackSize::Fill
+            )
         })
-        .collect();
-    let fr_lengths = distribute_weighted_u32(remainder, &fr_weights);
-    for (value, added) in result.iter_mut().zip(fr_lengths.into_iter()) {
-        *value += added;
+        .count();
+    if fill_count > 0 {
+        let fill_weights = vec![1u32; fill_count];
+        let fill_lengths = distribute_weighted_u32(remainder, &fill_weights);
+        let mut fill_cursor = 0usize;
+        for (index, value) in result.iter_mut().enumerate() {
+            if matches!(
+                tracks.get(index).copied().unwrap_or(TrackSize::Auto),
+                TrackSize::Fill
+            ) {
+                *value += fill_lengths[fill_cursor];
+                fill_cursor += 1;
+            }
+        }
+    } else {
+        let fr_weights: Vec<u32> = (0..count)
+            .map(|index| {
+                tracks
+                    .get(index)
+                    .copied()
+                    .unwrap_or(TrackSize::Auto)
+                    .fr_weight()
+            })
+            .collect();
+        let fr_lengths = distribute_weighted_u32(remainder, &fr_weights);
+        for (value, added) in result.iter_mut().zip(fr_lengths.into_iter()) {
+            *value += added;
+        }
     }
 
     result
@@ -4152,7 +4357,10 @@ mod tests {
     fn rejects_invalid_knob_range() {
         let spec = UiSpec::new(RootFrameSpec::new(
             "root",
-            Node::Knob(KnobSpec::new("k", "Drive", 0.5, (1.0, 1.0))),
+            panel(
+                "panel",
+                Node::Knob(KnobSpec::new("k", "Drive", 0.5, (1.0, 1.0))),
+            ),
         ));
         let error = measure_checked(&spec).expect_err("expected invalid range error");
         assert!(matches!(
@@ -4165,7 +4373,10 @@ mod tests {
     fn rejects_invalid_slider_range() {
         let spec = UiSpec::new(RootFrameSpec::new(
             "root",
-            Node::Slider(SliderSpec::new("s", "Shape", 0.5, (0.8, 0.2))),
+            panel(
+                "panel",
+                Node::Slider(SliderSpec::new("s", "Shape", 0.5, (0.8, 0.2))),
+            ),
         ));
         let error = measure_checked(&spec).expect_err("expected invalid range error");
         assert!(matches!(
@@ -4178,7 +4389,10 @@ mod tests {
     fn rejects_out_of_range_control_value() {
         let spec = UiSpec::new(RootFrameSpec::new(
             "root",
-            Node::Slider(SliderSpec::new("s", "Shape", 1.5, (0.0, 1.0))),
+            panel(
+                "panel",
+                Node::Slider(SliderSpec::new("s", "Shape", 1.5, (0.0, 1.0))),
+            ),
         ));
         let error = measure_checked(&spec).expect_err("expected invalid control value");
         assert!(matches!(
@@ -4192,12 +4406,15 @@ mod tests {
     fn rejects_dropdown_selection_out_of_bounds() {
         let spec = UiSpec::new(RootFrameSpec::new(
             "root",
-            Node::Dropdown(DropdownSpec::new(
-                "mode",
-                "Mode",
-                vec!["A".to_string(), "B".to_string()],
-                2,
-            )),
+            panel(
+                "panel",
+                Node::Dropdown(DropdownSpec::new(
+                    "mode",
+                    "Mode",
+                    vec!["A".to_string(), "B".to_string()],
+                    2,
+                )),
+            ),
         ));
         let error = measure_checked(&spec).expect_err("expected invalid dropdown selection");
         assert!(matches!(
@@ -4214,11 +4431,14 @@ mod tests {
     fn rejects_zero_control_size() {
         let spec = UiSpec::new(RootFrameSpec::new(
             "root",
-            Node::Slider(
-                SliderSpec::new("s", "Shape", 0.5, (0.0, 1.0)).control_size(Size {
-                    width: 0,
-                    height: 24,
-                }),
+            panel(
+                "panel",
+                Node::Slider(
+                    SliderSpec::new("s", "Shape", 0.5, (0.0, 1.0)).control_size(Size {
+                        width: 0,
+                        height: 24,
+                    }),
+                ),
             ),
         ));
         let error = measure_checked(&spec).expect_err("expected invalid control size");
@@ -4231,7 +4451,7 @@ mod tests {
     #[test]
     fn fixed_root_layout_expands_to_intrinsic_content() {
         let spec = UiSpec::new(
-            RootFrameSpec::new("root", label("VeryWideLabel"))
+            RootFrameSpec::new("root", panel("panel", label("VeryWideLabel")).pad_all(0))
                 .padding(0)
                 .layout(LayoutBox::fixed(1, 1)),
         );
@@ -4265,7 +4485,7 @@ mod tests {
     #[test]
     fn explicit_max_still_caps_fixed_pixel_layout() {
         let spec = UiSpec::new(
-            RootFrameSpec::new("root", label("VeryWideLabel"))
+            RootFrameSpec::new("root", panel("panel", label("VeryWideLabel")).pad_all(0))
                 .padding(0)
                 .layout(LayoutBox::fixed(1, 1).max(12, 12)),
         );
@@ -4334,8 +4554,12 @@ mod tests {
         let spec = UiSpec::new(
             RootFrameSpec::new(
                 "root",
-                label("VERY LONG LABEL THAT MUST NOT WIDEN THE WINDOW")
-                    .layout(LayoutBox::fixed(64, 16).max(64, 16)),
+                panel(
+                    "panel",
+                    label("VERY LONG LABEL THAT MUST NOT WIDEN THE WINDOW")
+                        .layout(LayoutBox::fixed(64, 16).max(64, 16)),
+                )
+                .pad_all(0),
             )
             .padding(0),
         );
@@ -4379,7 +4603,7 @@ mod tests {
     #[test]
     fn weighted_child_clamps_zero_weight_to_one() {
         let child = weighted(label("x"), 0);
-        assert_eq!(child.weight, 1);
+        assert_eq!(child.size, SectionSize::Fraction(1));
     }
 
     #[test]
@@ -4392,7 +4616,7 @@ mod tests {
         assert_eq!(grid.template.columns, vec![TrackSize::Fr(1)]);
         assert_eq!(
             grid.template.rows,
-            vec![TrackSize::Fr(7), TrackSize::Fr(30)]
+            vec![TrackSize::Percent(7), TrackSize::Percent(30)]
         );
         assert_eq!(grid.template.column_gap, 0);
         assert_eq!(grid.template.row_gap, 0);
@@ -4418,7 +4642,7 @@ mod tests {
         assert_eq!(grid.layout, LayoutBox::fill());
         assert_eq!(
             grid.template.columns,
-            vec![TrackSize::Fr(70), TrackSize::Fr(30)]
+            vec![TrackSize::Percent(70), TrackSize::Percent(30)]
         );
         assert_eq!(grid.template.rows, vec![TrackSize::Fr(1)]);
         assert_eq!(grid.template.column_gap, 0);
@@ -4562,8 +4786,8 @@ mod tests {
     #[test]
     fn nested_section_layouts_tile_each_parent_without_gaps() {
         let right_nested = column_sections(vec![
-            weighted(panel("right-top", label("R1")).pad_all(0), 4),
-            weighted(panel("right-bottom", label("R2")).pad_all(0), 6),
+            weighted(panel("right-top", label("R1")).pad_all(0), 40),
+            weighted(panel("right-bottom", label("R2")).pad_all(0), 60),
         ]);
         let controls = row_sections(vec![
             weighted(panel("knobs", label("Knobs")).pad_all(0), 70),
@@ -5293,7 +5517,10 @@ mod tests {
                 scale: 1,
             },
         ]);
-        let spec = UiSpec::new(RootFrameSpec::new("root", Node::Region(region)));
+        let spec = UiSpec::new(RootFrameSpec::new(
+            "root",
+            panel("panel", Node::Region(region)).pad_all(0),
+        ));
 
         let result =
             render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
@@ -5344,13 +5571,17 @@ mod tests {
 
         let spec = UiSpec::new(RootFrameSpec::new(
             "root",
-            Node::Region(RegionSpec::new(
-                "plot",
-                Size {
-                    width: 64,
-                    height: 48,
-                },
-            )),
+            panel(
+                "panel",
+                Node::Region(RegionSpec::new(
+                    "plot",
+                    Size {
+                        width: 64,
+                        height: 48,
+                    },
+                )),
+            )
+            .pad_all(0),
         ));
 
         let result =

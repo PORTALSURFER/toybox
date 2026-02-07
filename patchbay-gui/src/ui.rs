@@ -1256,10 +1256,7 @@ impl<'a> Ui<'a> {
             }
         };
         let measured_size = match requested_size {
-            Some(explicit) => Size {
-                width: explicit.width.max(measured_size.width),
-                height: explicit.height.max(measured_size.height),
-            },
+            Some(explicit) => explicit,
             None => measured_size,
         };
 
@@ -2941,7 +2938,7 @@ mod tests {
     }
 
     #[test]
-    fn root_frame_clamps_explicit_size_to_content() {
+    fn root_frame_preserves_explicit_size_even_when_content_is_larger() {
         let mut canvas = Canvas::new(200, 200);
         let mut layout = Layout::default();
         let theme = Theme::default();
@@ -2970,9 +2967,7 @@ mod tests {
         let measured = ui_state
             .take_root_frame_size()
             .expect("root frame size missing");
-        let expected = text_size("Root", theme.text_scale);
-        assert!(measured.width >= expected.width);
-        assert!(measured.height >= expected.height);
+        assert_eq!(measured, explicit);
     }
 
     #[test]
