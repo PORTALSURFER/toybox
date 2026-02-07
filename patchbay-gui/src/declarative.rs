@@ -2491,7 +2491,10 @@ fn render_flex(
 
         let child_rect =
             axis.compose_rect(cursor_main, cross_origin, resolved_main[index], cross_size);
-        let resolved_child = resolve_size(layout, intrinsic[index], child_rect.size);
+        let resolved_child = clamp_size_to_available(
+            resolve_size(layout, intrinsic[index], child_rect.size),
+            child_rect.size,
+        );
         let child_rect = Rect {
             origin: child_rect.origin,
             size: resolved_child,
@@ -2674,7 +2677,10 @@ fn render_grid(
                 };
                 let layout = node_layout(child);
                 let measured = intrinsic[index];
-                let resolved = resolve_size(layout, measured, cell_rect.size);
+                let resolved = clamp_size_to_available(
+                    resolve_size(layout, measured, cell_rect.size),
+                    cell_rect.size,
+                );
                 render_node(
                     child,
                     Rect {
@@ -2694,6 +2700,14 @@ fn render_grid(
     }
 
     draw_container_debug_border(ui, rect, ContainerKind::Grid, depth);
+}
+
+/// Clamp a resolved child size so it cannot exceed the available slot size.
+fn clamp_size_to_available(resolved: Size, available: Size) -> Size {
+    Size {
+        width: resolved.width.min(available.width),
+        height: resolved.height.min(available.height),
+    }
 }
 
 /// Resolve one grid axis using track definitions and available space.
@@ -3334,6 +3348,20 @@ mod tests {
             },
         };
         assert!(debug_border_draw_rect(rect, 1).is_none());
+    }
+
+    #[test]
+    fn clamp_size_to_available_caps_oversized_children() {
+        let available = Size {
+            width: 60,
+            height: 40,
+        };
+        let resolved = Size {
+            width: 80,
+            height: 70,
+        };
+        let clamped = clamp_size_to_available(resolved, available);
+        assert_eq!(clamped, available);
     }
 
     #[test]
