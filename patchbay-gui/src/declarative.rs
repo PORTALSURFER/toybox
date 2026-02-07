@@ -304,7 +304,11 @@ pub(crate) struct RootRenderPlan {
 pub enum RootScaleMode {
     /// Disable root-level scaling and render at authored size.
     None,
-    /// Uniformly fit the authored design size to the current window.
+    /// Fit the authored design size to the current window using root-canvas
+    /// transform scaling.
+    ///
+    /// When host and design aspect ratios differ, scaling is resolved per axis
+    /// so content fills the available window area.
     UniformFit,
 }
 
@@ -1935,12 +1939,9 @@ fn resolve_surface_content_rect(
         .round()
         .max(1.0);
 
-    let (origin_x, origin_y) = match scale_mode {
+    let (origin_x, origin_y): (f32, f32) = match scale_mode {
         RootScaleMode::None => (0.0, 0.0),
-        RootScaleMode::UniformFit => (
-            ((surface.width as f32) - scaled_width) * 0.5,
-            ((surface.height as f32) - scaled_height) * 0.5,
-        ),
+        RootScaleMode::UniformFit => (0.0, 0.0),
     };
 
     Rect {
@@ -1949,8 +1950,14 @@ fn resolve_surface_content_rect(
             y: origin_y.round() as i32,
         },
         size: Size {
-            width: scaled_width as u32,
-            height: scaled_height as u32,
+            width: match scale_mode {
+                RootScaleMode::None => scaled_width as u32,
+                RootScaleMode::UniformFit => surface.width.max(1),
+            },
+            height: match scale_mode {
+                RootScaleMode::None => scaled_height as u32,
+                RootScaleMode::UniformFit => surface.height.max(1),
+            },
         },
     }
 }
@@ -4138,7 +4145,7 @@ mod tests {
     }
 
     #[test]
-    fn plan_root_render_uniform_fit_centers_surface_content() {
+    fn plan_root_render_uniform_fit_fills_surface_content() {
         let spec = UiSpec::new(
             RootFrameSpec::new(
                 "root",
@@ -4178,10 +4185,10 @@ mod tests {
         assert_eq!(
             plan.transform.content_rect_surface,
             Rect {
-                origin: Point { x: 0, y: 75 },
+                origin: Point { x: 0, y: 0 },
                 size: Size {
                     width: 300,
-                    height: 150,
+                    height: 300,
                 },
             }
         );
