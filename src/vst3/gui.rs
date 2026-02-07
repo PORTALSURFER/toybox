@@ -157,6 +157,13 @@ pub struct HostedVst3View<G: Vst3HostedGui> {
 }
 
 #[cfg(feature = "gui")]
+#[derive(Clone, Copy)]
+enum ResizeAxis {
+    Width,
+    Height,
+}
+
+#[cfg(feature = "gui")]
 impl<G: Vst3HostedGui> HostedVst3View<G> {
     /// Create a new host-parented view with default logical dimensions.
     pub fn new(gui: G, default_width: u32, default_height: u32) -> Self {
@@ -179,19 +186,58 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
         }
     }
 
-    fn desired_size(&self) -> (i32, i32) {
-        let Ok(gui) = self.gui.lock() else {
-            return self.default_size;
-        };
-        if let Some((width, height)) = gui.last_size() {
-            (width as i32, height as i32)
+    fn minimum_size(&self) -> (i32, i32) {
+        self.default_size
+    }
+
+    fn uniform_ratio(&self) -> f32 {
+        self.default_size.0 as f32 / self.default_size.1.max(1) as f32
+    }
+
+    fn dominant_resize_axis(&self, requested_width: i32, requested_height: i32) -> ResizeAxis {
+        let current = self.rect.get();
+        let current_width = (current.right - current.left).max(1);
+        let current_height = (current.bottom - current.top).max(1);
+        let width_delta = (requested_width - current_width).abs();
+        let height_delta = (requested_height - current_height).abs();
+        if width_delta >= height_delta {
+            ResizeAxis::Width
         } else {
-            self.default_size
+            ResizeAxis::Height
         }
     }
 
-    fn minimum_size(&self) -> (i32, i32) {
-        self.default_size
+    fn constrain_uniform_size(
+        &self,
+        requested_width: i32,
+        requested_height: i32,
+        axis: ResizeAxis,
+    ) -> (i32, i32) {
+        let (min_width, min_height) = self.minimum_size();
+        let ratio = self.uniform_ratio();
+        let clamped_width = requested_width.max(min_width).max(1);
+        let clamped_height = requested_height.max(min_height).max(1);
+
+        match axis {
+            ResizeAxis::Width => {
+                let mut width = clamped_width;
+                let mut height = ((width as f32) / ratio).round() as i32;
+                if height < min_height {
+                    height = min_height;
+                    width = ((height as f32) * ratio).round() as i32;
+                }
+                (width.max(min_width).max(1), height.max(min_height).max(1))
+            }
+            ResizeAxis::Height => {
+                let mut height = clamped_height;
+                let mut width = ((height as f32) * ratio).round() as i32;
+                if width < min_width {
+                    width = min_width;
+                    height = ((width as f32) / ratio).round() as i32;
+                }
+                (width.max(min_width).max(1), height.max(min_height).max(1))
+            }
+        }
     }
 }
 
@@ -276,12 +322,16 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
         let requested = unsafe { *new_size };
         let requested_width = (requested.right - requested.left).max(1);
         let requested_height = (requested.bottom - requested.top).max(1);
+        let axis = self.dominant_resize_axis(requested_width, requested_height);
+        let (constrained_width, constrained_height) =
+            self.constrain_uniform_size(requested_width, requested_height, axis);
+        let constrained = view_rect(constrained_width, constrained_height);
+        unsafe { *new_size = constrained };
 
         if let Ok(gui) = self.gui.lock() {
-            gui.request_resize(requested_width as u32, requested_height as u32);
+            gui.request_resize(constrained_width as u32, constrained_height as u32);
         }
-        self.rect
-            .set(view_rect(requested_width.max(1), requested_height.max(1)));
+        self.rect.set(constrained);
         kResultOk
     }
 
@@ -304,9 +354,11 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
         let rect = unsafe { &mut *rect };
         let requested_width = (rect.right - rect.left).max(1);
         let requested_height = (rect.bottom - rect.top).max(1);
-        let (min_width, min_height) = self.minimum_size();
-        rect.right = rect.left + requested_width.max(min_width);
-        rect.bottom = rect.top + requested_height.max(min_height);
+        let axis = self.dominant_resize_axis(requested_width, requested_height);
+        let (constrained_width, constrained_height) =
+            self.constrain_uniform_size(requested_width, requested_height, axis);
+        rect.right = rect.left + constrained_width;
+        rect.bottom = rect.top + constrained_height;
         kResultOk
     }
 }
@@ -404,6 +456,16 @@ mod tests {
         assert_eq!(result, kResultOk);
         assert_eq!(rect.right - rect.left, 640);
         assert_eq!(rect.bottom - rect.top, 400);
+    }
+
+    #[test]
+    fn hosted_view_size_constraint_blocks_non_uniform_resize() {
+        let view = HostedVst3View::new(MockHostedGui { last_size: None }, 320, 200);
+        let mut rect = view_rect(500, 200);
+        let result = unsafe { view.checkSizeConstraint(&mut rect) };
+        assert_eq!(result, kResultOk);
+        assert_eq!(rect.right - rect.left, 500);
+        assert_eq!(rect.bottom - rect.top, 313);
     }
 
     #[test]
