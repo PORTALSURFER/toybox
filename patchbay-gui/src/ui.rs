@@ -1255,7 +1255,7 @@ impl<'a> Ui<'a> {
             && let Some(start) = self.state.drag_start
         {
             let dy = (self.input.pointer_pos.y - start.y) as f32;
-            let delta = dy * 0.005 * (range.1 - range.0);
+            let delta = -dy * 0.005 * (range.1 - range.0);
             let new_value = (self.state.drag_value + delta).clamp(range.0, range.1);
             if (*value - new_value).abs() > f32::EPSILON {
                 *value = new_value;
@@ -1273,7 +1273,7 @@ impl<'a> Ui<'a> {
             }
         }
 
-        let t = (*value - range.0) / (range.1 - range.0).max(1.0e-6);
+        let t = ((*value - range.0) / (range.1 - range.0).max(1.0e-6)).clamp(0.0, 1.0);
         let arc_start = 7.0 * std::f32::consts::PI / 4.0;
         let arc_end = 5.0 * std::f32::consts::PI / 4.0;
         let arc_span = if arc_end < arc_start {
@@ -1281,7 +1281,8 @@ impl<'a> Ui<'a> {
         } else {
             arc_end - arc_start
         };
-        let angle = arc_start + t * arc_span;
+        // Keep the existing rotation path but map high values to the right side.
+        let angle = arc_start + (1.0 - t) * arc_span;
         let indicator = knob_indicator_point(center, radius, angle);
 
         let fill = if response.active {
@@ -1309,8 +1310,8 @@ impl<'a> Ui<'a> {
             center,
             arc_radius,
             arc_thickness,
-            arc_start,
             angle,
+            arc_end,
             self.theme.knob_indicator,
         );
         self.canvas
@@ -2019,7 +2020,7 @@ mod tests {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
             let response = ui.knob(WidgetId::new(1), "GAIN", &mut value, (0.0, 1.0));
             assert!(response.changed);
-            assert!(value < 0.5, "dragging up should now reduce value");
+            assert!(value > 0.5, "dragging up should increase value");
         }
     }
 
