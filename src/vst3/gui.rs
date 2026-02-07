@@ -197,17 +197,20 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
     }
 
     fn dominant_resize_axis(&self, requested_width: i32, requested_height: i32) -> ResizeAxis {
-        let current = self.rect.get();
-        let current_width = (current.right - current.left).max(1);
-        let current_height = (current.bottom - current.top).max(1);
-        let width_delta = (requested_width - current_width).abs();
-        let height_delta = (requested_height - current_height).abs();
-        // Keep the previous axis when deltas are very close to avoid
-        // oscillation while dragging from a window corner.
+        // Pick the axis that requires the smallest correction from the raw
+        // requested size, then keep the previous axis on near-ties to avoid
+        // corner-drag oscillation.
+        let ratio = self.uniform_ratio();
+        let requested_width = requested_width.max(1);
+        let requested_height = requested_height.max(1);
+        let corrected_height = ((requested_width as f32) / ratio).round() as i32;
+        let corrected_width = ((requested_height as f32) * ratio).round() as i32;
+        let width_error = (corrected_height - requested_height).abs();
+        let height_error = (corrected_width - requested_width).abs();
         let previous = self.resize_axis.get();
-        let chosen = if width_delta > height_delta + 2 {
+        let chosen = if width_error + 2 < height_error {
             ResizeAxis::Width
-        } else if height_delta > width_delta + 2 {
+        } else if height_error + 2 < width_error {
             ResizeAxis::Height
         } else {
             previous
