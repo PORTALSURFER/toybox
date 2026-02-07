@@ -2980,21 +2980,25 @@ fn render_panel(
         header_height: Some(header_height),
     };
 
-    let response = ui.panel_with_key(&panel.key, style, Some(rect.size), |ui, content_rect| {
-        render_node(
-            &panel.content,
-            content_rect,
-            ui,
-            tokens,
-            actions,
-            depth + 1,
-            debug_border_candidates,
-        );
+    let mut outer_rect = rect;
+    ui.with_layout(rect.origin, |ui| {
+        let response = ui.panel_with_key(&panel.key, style, Some(rect.size), |ui, content_rect| {
+            render_node(
+                &panel.content,
+                content_rect,
+                ui,
+                tokens,
+                actions,
+                depth + 1,
+                debug_border_candidates,
+            );
+        });
+        outer_rect = response.outer_rect;
     });
     collect_container_debug_border_candidate(
         debug_border_candidates,
         ui,
-        response.outer_rect,
+        outer_rect,
         ContainerKind::Panel,
         depth,
     );
@@ -5666,6 +5670,76 @@ mod tests {
             matches!(
                 action,
                 UiAction::RegionHover { key, hovered, .. } if key == "plot" && !hovered
+            )
+        }));
+    }
+
+    #[test]
+    fn panel_children_respect_grid_cell_origins() {
+        let root_size = Size {
+            width: 200,
+            height: 100,
+        };
+        let content = row_sections(vec![
+            weighted(
+                panel(
+                    "left-panel",
+                    Node::Region(RegionSpec::new(
+                        "left-region",
+                        Size {
+                            width: 100,
+                            height: 100,
+                        },
+                    )),
+                )
+                .pad_all(0)
+                .background(Color::rgb(15, 20, 25))
+                .outline(Color::rgb(15, 20, 25)),
+                50,
+            ),
+            weighted(
+                panel(
+                    "right-panel",
+                    Node::Region(RegionSpec::new(
+                        "right-region",
+                        Size {
+                            width: 100,
+                            height: 100,
+                        },
+                    )),
+                )
+                .pad_all(0)
+                .background(Color::rgb(30, 35, 40))
+                .outline(Color::rgb(30, 35, 40)),
+                50,
+            ),
+        ]);
+        let spec = UiSpec::new(root_frame_sized("root", content, root_size, root_size).padding(0));
+
+        let mut canvas = Canvas::new(root_size.width, root_size.height);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState {
+            pointer_pos: Point { x: 150, y: 50 },
+            ..InputState::default()
+        };
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let result =
+            render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+
+        assert!(result.actions.iter().any(|action| {
+            matches!(
+                action,
+                UiAction::RegionHover { key, hovered, .. }
+                    if key == "right-region" && *hovered
+            )
+        }));
+        assert!(result.actions.iter().any(|action| {
+            matches!(
+                action,
+                UiAction::RegionHover { key, hovered, .. }
+                    if key == "left-region" && !*hovered
             )
         }));
     }
