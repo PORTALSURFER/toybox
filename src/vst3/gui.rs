@@ -251,6 +251,23 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
             }
         }
     }
+
+    fn fit_uniform_within_requested(
+        &self,
+        requested_width: i32,
+        requested_height: i32,
+    ) -> (i32, i32) {
+        let ratio = self.uniform_ratio();
+        let max_width = requested_width.max(1);
+        let max_height = requested_height.max(1);
+        let mut width = max_width;
+        let mut height = ((width as f32) / ratio).round() as i32;
+        if height > max_height {
+            height = max_height;
+            width = ((height as f32) * ratio).round() as i32;
+        }
+        (width.max(1), height.max(1))
+    }
 }
 
 #[cfg(feature = "gui")]
@@ -346,8 +363,12 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
         let requested_width = (requested.right - requested.left).max(1);
         let requested_height = (requested.bottom - requested.top).max(1);
         let axis = self.dominant_resize_axis(requested_width, requested_height);
-        let (constrained_width, constrained_height) =
+        let (mut constrained_width, mut constrained_height) =
             self.constrain_uniform_size(requested_width, requested_height, axis);
+        if constrained_width > requested_width || constrained_height > requested_height {
+            (constrained_width, constrained_height) =
+                self.fit_uniform_within_requested(requested_width, requested_height);
+        }
         let constrained = view_rect(constrained_width, constrained_height);
         unsafe { *new_size = constrained };
 
@@ -383,8 +404,12 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
         let requested_width = (rect.right - rect.left).max(1);
         let requested_height = (rect.bottom - rect.top).max(1);
         let axis = self.dominant_resize_axis(requested_width, requested_height);
-        let (constrained_width, constrained_height) =
+        let (mut constrained_width, mut constrained_height) =
             self.constrain_uniform_size(requested_width, requested_height, axis);
+        if constrained_width > requested_width || constrained_height > requested_height {
+            (constrained_width, constrained_height) =
+                self.fit_uniform_within_requested(requested_width, requested_height);
+        }
         rect.right = rect.left + constrained_width;
         rect.bottom = rect.top + constrained_height;
         kResultOk
@@ -519,8 +544,8 @@ mod tests {
         let mut rect = view_rect(500, 200);
         let result = unsafe { view.checkSizeConstraint(&mut rect) };
         assert_eq!(result, kResultOk);
-        assert_eq!(rect.right - rect.left, 500);
-        assert_eq!(rect.bottom - rect.top, 313);
+        assert_eq!(rect.right - rect.left, 320);
+        assert_eq!(rect.bottom - rect.top, 200);
     }
 
     #[test]
