@@ -152,6 +152,7 @@ pub trait Vst3HostedGui {
 pub struct HostedVst3View<G: Vst3HostedGui> {
     rect: Cell<ViewRect>,
     attached: Cell<bool>,
+    resize_axis: Cell<ResizeAxis>,
     default_size: (i32, i32),
     gui: Mutex<G>,
 }
@@ -172,6 +173,7 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
         Self {
             rect: Cell::new(view_rect(width, height)),
             attached: Cell::new(false),
+            resize_axis: Cell::new(ResizeAxis::Width),
             default_size: (width, height),
             gui: Mutex::new(gui),
         }
@@ -200,11 +202,18 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
         let current_height = (current.bottom - current.top).max(1);
         let width_delta = (requested_width - current_width).abs();
         let height_delta = (requested_height - current_height).abs();
-        if width_delta >= height_delta {
+        // Keep the previous axis when deltas are very close to avoid
+        // oscillation while dragging from a window corner.
+        let previous = self.resize_axis.get();
+        let chosen = if width_delta > height_delta + 2 {
             ResizeAxis::Width
-        } else {
+        } else if height_delta > width_delta + 2 {
             ResizeAxis::Height
-        }
+        } else {
+            previous
+        };
+        self.resize_axis.set(chosen);
+        chosen
     }
 
     fn constrain_uniform_size(
@@ -340,7 +349,12 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
         unsafe { *new_size = constrained };
 
         if let Ok(gui) = self.gui.lock() {
-            gui.request_resize(constrained_width as u32, constrained_height as u32);
+            let current = self.rect.get();
+            let current_width = (current.right - current.left).max(1);
+            let current_height = (current.bottom - current.top).max(1);
+            if constrained_width != current_width || constrained_height != current_height {
+                gui.request_resize(constrained_width as u32, constrained_height as u32);
+            }
         }
         self.rect.set(constrained);
         kResultOk
