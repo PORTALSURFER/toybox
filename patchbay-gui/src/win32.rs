@@ -1,7 +1,7 @@
 //! Win32 window creation and message handling.
 
 use crate::canvas::{Canvas, Color, Point, Size};
-use crate::declarative::{render_checked, UiAction, UiSpec};
+use crate::declarative::{UiAction, UiSpec, render_checked};
 use crate::host::{GuiError, InputState};
 use crate::logging::log_line_safe;
 use crate::renderer::{Renderer, RendererDevice};
@@ -18,28 +18,28 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use windows::core::PCWSTR;
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    BeginPaint, CreateSolidBrush, DeleteObject, EndPaint, FillRect, GetDC, ReleaseDC, HBRUSH, HDC,
-    PAINTSTRUCT,
+    BeginPaint, CreateSolidBrush, DeleteObject, EndPaint, FillRect, GetDC, HBRUSH, HDC,
+    PAINTSTRUCT, ReleaseDC,
 };
 use windows::Win32::System::LibraryLoader::{
-    GetModuleHandleExW, GetModuleHandleW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+    GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GetModuleHandleExW, GetModuleHandleW,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, ReleaseCapture, SetCapture, VK_LBUTTON, VK_MENU, VK_RBUTTON, VK_SHIFT,
 };
 use windows::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDROP};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, GetCursorPos, GetParent,
-    GetWindowRect, LoadCursorW, RegisterClassW, SetTimer, SetWindowLongPtrW, SetWindowPos,
-    ShowWindow, CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA, HMENU, HTCLIENT,
-    MA_ACTIVATE, SWP_NOZORDER, SW_HIDE, SW_SHOW, WM_CHAR, WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND,
+    CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, CreateWindowExW, DefWindowProcW,
+    DestroyWindow, GWLP_USERDATA, GetClientRect, GetCursorPos, GetParent, GetWindowRect, HMENU,
+    HTCLIENT, LoadCursorW, MA_ACTIVATE, RegisterClassW, SW_HIDE, SW_SHOW, SetTimer,
+    SetWindowLongPtrW, ShowWindow, WM_CHAR, WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND,
     WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_MOUSEWHEEL,
     WM_NCDESTROY, WM_NCHITTEST, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WM_TIMER,
     WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
 };
+use windows::core::PCWSTR;
 
 const TIMER_ID: usize = 1;
 const TIMER_INTERVAL_MS: u32 = 16;
@@ -424,10 +424,12 @@ where
         }
 
         if let Some((width, height)) = unpack_size(self.resize_request.swap(0, Ordering::AcqRel)) {
-            let width = width;
-            let height = height;
+            let requested = Size {
+                width: width.max(1),
+                height: height.max(1),
+            };
             let mut current_rect = windows::Win32::Foundation::RECT::default();
-            let current_size = unsafe {
+            let host_client_size = unsafe {
                 if GetClientRect(self.hwnd, &mut current_rect).is_ok() {
                     Some((
                         (current_rect.right - current_rect.left).max(1) as u32,
@@ -437,22 +439,10 @@ where
                     None
                 }
             };
-            if current_size != Some((width, height)) {
-                unsafe {
-                    if let Err(err) = SetWindowPos(
-                        self.hwnd,
-                        None,
-                        0,
-                        0,
-                        width as i32,
-                        height as i32,
-                        SWP_NOZORDER,
-                    ) {
-                        log_line_safe(&format!("win32: SetWindowPos failed: {err:?}"));
-                    }
-                }
-            }
-            self.apply_layout_size(Size { width, height }, true);
+            // Host manages parented child geometry; avoid SetWindowPos here to
+            // prevent resize feedback loops and flicker during drag-resize.
+            let target = resolved_layout_size_for_resize_request(requested, host_client_size);
+            self.apply_layout_size(target, true);
         }
 
         self.sync_client_size_if_needed();
@@ -536,6 +526,19 @@ where
 
 fn client_size_changed(current: Size, next: Size) -> bool {
     current != next
+}
+
+fn resolved_layout_size_for_resize_request(
+    requested: Size,
+    host_client: Option<(u32, u32)>,
+) -> Size {
+    match host_client {
+        Some((width, height)) => Size {
+            width: width.max(1),
+            height: height.max(1),
+        },
+        None => requested,
+    }
 }
 
 fn enforce_aspect_min(width: u32, height: u32, aspect: f32) -> (u32, u32) {
@@ -880,7 +883,7 @@ fn wide_to_path(buffer: &[u16]) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{client_size_changed, enforce_aspect_min};
+    use super::{client_size_changed, enforce_aspect_min, resolved_layout_size_for_resize_request};
     use crate::canvas::Size;
 
     #[test]
@@ -916,5 +919,31 @@ mod tests {
             height: 480,
         };
         assert!(!client_size_changed(current, current));
+    }
+
+    #[test]
+    fn resize_request_prefers_host_client_size_when_available() {
+        let requested = Size {
+            width: 500,
+            height: 300,
+        };
+        let resolved = resolved_layout_size_for_resize_request(requested, Some((640, 400)));
+        assert_eq!(
+            resolved,
+            Size {
+                width: 640,
+                height: 400,
+            }
+        );
+    }
+
+    #[test]
+    fn resize_request_uses_requested_size_when_host_client_unknown() {
+        let requested = Size {
+            width: 777,
+            height: 333,
+        };
+        let resolved = resolved_layout_size_for_resize_request(requested, None);
+        assert_eq!(resolved, requested);
     }
 }

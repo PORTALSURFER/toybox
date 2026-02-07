@@ -203,13 +203,18 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
         // the host is clearly performing a vertical-only resize gesture.
         if width_delta <= 1 && height_delta > 1 {
             let width = ((clamped_height as f32) * ratio).round() as i32;
-            (width.max(min_width).max(1), clamped_height.max(min_height).max(1))
+            (
+                width.max(min_width).max(1),
+                clamped_height.max(min_height).max(1),
+            )
         } else {
             let height = ((clamped_width as f32) / ratio).round() as i32;
-            (clamped_width.max(min_width).max(1), height.max(min_height).max(1))
+            (
+                clamped_width.max(min_width).max(1),
+                height.max(min_height).max(1),
+            )
         }
     }
-
 }
 
 #[cfg(feature = "gui")]
@@ -307,17 +312,9 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
             self.constrain_uniform_size(requested_width, requested_height);
         let constrained = view_rect(constrained_width, constrained_height);
         unsafe { *new_size = constrained };
-        // Always propagate the accepted size to the embedded child window so
-        // rendering tracks host-driven `onSize` changes even when no aspect
-        // correction was required.
-        if let Ok(gui) = self.gui.lock() {
-            let current = self.rect.get();
-            let current_width = (current.right - current.left).max(1);
-            let current_height = (current.bottom - current.top).max(1);
-            if constrained_width != current_width || constrained_height != current_height {
-                gui.request_resize(constrained_width as u32, constrained_height as u32);
-            }
-        }
+        // Do not issue a plugin-driven resize request from host-driven onSize.
+        // Sending request_resize here can create a host/plugin feedback loop
+        // during interactive drags and cause visible flicker.
         self.rect.set(constrained);
         kResultOk
     }
@@ -479,6 +476,30 @@ mod tests {
         assert_eq!(result, kResultOk);
         assert_eq!(rect.right - rect.left, 500);
         assert_eq!(rect.bottom - rect.top, 313);
+    }
+
+    #[test]
+    fn hosted_view_on_size_does_not_emit_resize_request_feedback() {
+        let view = HostedVst3View::new(
+            MockHostedGui {
+                last_size: None,
+                resize_request: std::sync::Mutex::new(None),
+            },
+            320,
+            200,
+        );
+        let mut rect = view_rect(500, 200);
+        let result = unsafe { view.onSize(&mut rect) };
+        assert_eq!(result, kResultOk);
+        assert_eq!(rect.right - rect.left, 500);
+        assert_eq!(rect.bottom - rect.top, 313);
+
+        let gui = view.gui.lock().expect("gui mutex should not be poisoned");
+        let resize = gui
+            .resize_request
+            .lock()
+            .expect("resize mutex should not be poisoned");
+        assert!(resize.is_none());
     }
 
     #[test]
