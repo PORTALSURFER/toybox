@@ -119,6 +119,8 @@ pub enum UiAction {
         key: String,
         /// Interaction kind.
         kind: RegionInteractionKind,
+        /// Pointer position relative to the interacted region.
+        local_pointer: Point,
     },
 }
 
@@ -2799,30 +2801,35 @@ fn push_region_actions(key: &str, response: RegionResponse, actions: &mut Vec<Ui
         actions.push(UiAction::RegionInteracted {
             key: key.to_string(),
             kind: RegionInteractionKind::Pressed,
+            local_pointer: response.local_pointer,
         });
     }
     if response.released {
         actions.push(UiAction::RegionInteracted {
             key: key.to_string(),
             kind: RegionInteractionKind::Released,
+            local_pointer: response.local_pointer,
         });
     }
     if response.dragged {
         actions.push(UiAction::RegionInteracted {
             key: key.to_string(),
             kind: RegionInteractionKind::Dragged,
+            local_pointer: response.local_pointer,
         });
     }
     if response.secondary_clicked {
         actions.push(UiAction::RegionInteracted {
             key: key.to_string(),
             kind: RegionInteractionKind::SecondaryClicked,
+            local_pointer: response.local_pointer,
         });
     }
     if response.double_clicked {
         actions.push(UiAction::RegionInteracted {
             key: key.to_string(),
             kind: RegionInteractionKind::DoubleClicked,
+            local_pointer: response.local_pointer,
         });
     }
 }
@@ -3478,9 +3485,20 @@ mod tests {
 
         let result =
             render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
-        assert!(result.actions.iter().any(
-            |action| matches!(action, UiAction::RegionInteracted { key, kind } if key == "plot"
-                && *kind == RegionInteractionKind::Pressed)
-        ));
+        assert!(result.actions.iter().any(|action| {
+            matches!(
+                action,
+                UiAction::RegionInteracted {
+                    key,
+                    kind,
+                    local_pointer
+                } if key == "plot"
+                    && *kind == RegionInteractionKind::Pressed
+                    && local_pointer.x >= 0
+                    && local_pointer.y >= 0
+                    && local_pointer.x < 64
+                    && local_pointer.y < 48
+            )
+        }));
     }
 }

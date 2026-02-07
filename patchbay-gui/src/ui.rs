@@ -441,6 +441,8 @@ pub struct ButtonResponse {
 pub struct RegionResponse {
     /// The pointer is hovering the region.
     pub hovered: bool,
+    /// Pointer position relative to region bounds.
+    pub local_pointer: Point,
     /// The region is actively being dragged.
     pub active: bool,
     /// The primary button was pressed on the region.
@@ -1095,12 +1097,14 @@ impl<'a> Ui<'a> {
     pub fn region_with_key(&mut self, key: &str, rect: Rect) -> RegionResponse {
         let id = WidgetId::from_label(key);
         let hovered = rect.contains(self.input.pointer_pos);
+        let local_pointer = local_pointer_in_rect(self.input.pointer_pos, rect);
         if hovered {
             self.state.hot = Some(id);
         }
 
         let mut response = RegionResponse {
             hovered,
+            local_pointer,
             active: self.state.active == Some(id),
             pressed: false,
             released: false,
@@ -1955,6 +1959,15 @@ fn knob_indicator_point(center: Point, radius: i32, angle: f32) -> Point {
     Point {
         x: center.x + (angle.cos() * (radius as f32 * 0.7)) as i32,
         y: center.y - (angle.sin() * (radius as f32 * 0.7)) as i32,
+    }
+}
+
+fn local_pointer_in_rect(pointer: Point, rect: Rect) -> Point {
+    let max_x = rect.size.width.saturating_sub(1) as i32;
+    let max_y = rect.size.height.saturating_sub(1) as i32;
+    Point {
+        x: (pointer.x - rect.origin.x).clamp(0, max_x.max(0)),
+        y: (pointer.y - rect.origin.y).clamp(0, max_y.max(0)),
     }
 }
 
