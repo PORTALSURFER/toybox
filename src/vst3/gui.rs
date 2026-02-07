@@ -192,22 +192,21 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
         let ratio = self.uniform_ratio();
         let clamped_width = requested_width.max(min_width).max(1);
         let clamped_height = requested_height.max(min_height).max(1);
+        let current = self.rect.get();
+        let current_width = (current.right - current.left).max(1);
+        let current_height = (current.bottom - current.top).max(1);
+        let width_delta = (clamped_width - current_width).abs();
+        let height_delta = (clamped_height - current_height).abs();
 
-        let height_from_width = ((clamped_width as f32) / ratio).round() as i32;
-        let width_from_height = ((clamped_height as f32) * ratio).round() as i32;
-
-        let width_driven_width = clamped_width.max(min_width).max(1);
-        let width_driven_height = height_from_width.max(min_height).max(1);
-        let height_driven_width = width_from_height.max(min_width).max(1);
-        let height_driven_height = clamped_height.max(min_height).max(1);
-
-        let width_driven_error = (width_driven_height - clamped_height).abs();
-        let height_driven_error = (height_driven_width - clamped_width).abs();
-
-        if width_driven_error <= height_driven_error {
-            (width_driven_width, width_driven_height)
+        // Keep a single resize path by default (width-driven) to prevent
+        // branch switching while dragging. Only use height-driven sizing when
+        // the host is clearly performing a vertical-only resize gesture.
+        if width_delta <= 1 && height_delta > 1 {
+            let width = ((clamped_height as f32) * ratio).round() as i32;
+            (width.max(min_width).max(1), clamped_height.max(min_height).max(1))
         } else {
-            (height_driven_width, height_driven_height)
+            let height = ((clamped_width as f32) / ratio).round() as i32;
+            (clamped_width.max(min_width).max(1), height.max(min_height).max(1))
         }
     }
 
