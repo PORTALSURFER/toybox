@@ -2015,11 +2015,32 @@ pub fn render_checked(
     };
 
     let mut actions = Vec::new();
+    let mut debug_border_candidates = Vec::new();
     let response =
         ui.root_frame_with_key_at(&spec.root.key, style, Some(resolved), origin, |ui, rect| {
-            render_node(&spec.root.content, rect, ui, &tokens, &mut actions, 1);
+            render_node(
+                &spec.root.content,
+                rect,
+                ui,
+                &tokens,
+                &mut actions,
+                1,
+                &mut debug_border_candidates,
+            );
         });
-    draw_container_debug_border(ui, response.outer_rect, ContainerKind::RootFrame, 0);
+    collect_container_debug_border_candidate(
+        &mut debug_border_candidates,
+        ui,
+        response.outer_rect,
+        ContainerKind::RootFrame,
+        0,
+    );
+    if let Some(candidate) = select_container_debug_border_candidate(&debug_border_candidates)
+        && let Some(color) = container_debug_border_color(candidate.kind, candidate.depth)
+        && let Some(draw_rect) = debug_border_draw_rect(candidate.rect, 1)
+    {
+        ui.debug_stroke_rect(draw_rect, 1, color);
+    }
 
     Ok(RenderResult {
         measured_size: resolved,
@@ -2037,6 +2058,14 @@ enum ContainerKind {
     Flex,
     Grid,
     Absolute,
+}
+
+/// Candidate border outline emitted while traversing container nodes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct DebugBorderCandidate {
+    rect: Rect,
+    kind: ContainerKind,
+    depth: usize,
 }
 
 /// Return the optional debug border color for a container kind/depth pair.
@@ -2059,18 +2088,57 @@ fn container_debug_border_color(kind: ContainerKind, depth: usize) -> Option<Col
     }
 }
 
-/// Draw a layout debug border for a container when the feature is enabled.
-fn draw_container_debug_border(ui: &mut Ui<'_>, rect: Rect, kind: ContainerKind, depth: usize) {
+/// Record a hovered layout-debug border candidate for later selection.
+fn collect_container_debug_border_candidate(
+    candidates: &mut Vec<DebugBorderCandidate>,
+    ui: &Ui<'_>,
+    rect: Rect,
+    kind: ContainerKind,
+    depth: usize,
+) {
     // Skip root-level wrappers so debug outlines focus on meaningful inner
     // layout partitions instead of the full-window container.
     if !should_draw_container_debug_border(kind, depth, rect.contains(ui.input().pointer_pos)) {
         return;
     }
-    if let Some(color) = container_debug_border_color(kind, depth) {
-        if let Some(draw_rect) = debug_border_draw_rect(rect, 1) {
-            ui.debug_stroke_rect(draw_rect, 1, color);
+    if container_debug_border_color(kind, depth).is_none() {
+        return;
+    }
+    candidates.push(DebugBorderCandidate { rect, kind, depth });
+}
+
+/// Pick exactly one container debug-border target for this frame.
+///
+/// Selection order:
+/// 1. deepest container depth
+/// 2. smallest area (more specific subsection)
+/// 3. latest rendered candidate (stable tie-breaker)
+fn select_container_debug_border_candidate(
+    candidates: &[DebugBorderCandidate],
+) -> Option<DebugBorderCandidate> {
+    let mut best_index: Option<usize> = None;
+    for (index, candidate) in candidates.iter().copied().enumerate() {
+        match best_index {
+            None => best_index = Some(index),
+            Some(current_index) => {
+                let current = candidates[current_index];
+                let better_depth = candidate.depth > current.depth;
+                let same_depth = candidate.depth == current.depth;
+                let smaller_area = candidate_area(candidate) < candidate_area(current);
+                let same_area = candidate_area(candidate) == candidate_area(current);
+                let later_render = index > current_index;
+                if better_depth || (same_depth && (smaller_area || (same_area && later_render))) {
+                    best_index = Some(index);
+                }
+            }
         }
     }
+    best_index.map(|index| candidates[index])
+}
+
+/// Compute a comparable area metric for candidate ranking.
+fn candidate_area(candidate: DebugBorderCandidate) -> u64 {
+    u64::from(candidate.rect.size.width) * u64::from(candidate.rect.size.height)
 }
 
 /// Return whether a hovered container should render the debug layout border.
@@ -2573,13 +2641,56 @@ fn render_node(
     tokens: &ThemeTokens,
     actions: &mut Vec<UiAction>,
     depth: usize,
+    debug_border_candidates: &mut Vec<DebugBorderCandidate>,
 ) {
     match node {
-        Node::Panel(panel) => render_panel(panel, rect, ui, tokens, actions, depth),
-        Node::Row(flex) => render_flex(flex, rect, ui, tokens, Axis::Horizontal, actions, depth),
-        Node::Column(flex) => render_flex(flex, rect, ui, tokens, Axis::Vertical, actions, depth),
-        Node::Grid(grid) => render_grid(grid, rect, ui, tokens, actions, depth),
-        Node::Absolute(absolute) => render_absolute(absolute, rect, ui, tokens, actions, depth),
+        Node::Panel(panel) => render_panel(
+            panel,
+            rect,
+            ui,
+            tokens,
+            actions,
+            depth,
+            debug_border_candidates,
+        ),
+        Node::Row(flex) => render_flex(
+            flex,
+            rect,
+            ui,
+            tokens,
+            Axis::Horizontal,
+            actions,
+            depth,
+            debug_border_candidates,
+        ),
+        Node::Column(flex) => render_flex(
+            flex,
+            rect,
+            ui,
+            tokens,
+            Axis::Vertical,
+            actions,
+            depth,
+            debug_border_candidates,
+        ),
+        Node::Grid(grid) => render_grid(
+            grid,
+            rect,
+            ui,
+            tokens,
+            actions,
+            depth,
+            debug_border_candidates,
+        ),
+        Node::Absolute(absolute) => render_absolute(
+            absolute,
+            rect,
+            ui,
+            tokens,
+            actions,
+            depth,
+            debug_border_candidates,
+        ),
         Node::Label(label) => render_label(label, rect, ui, tokens),
         Node::Spacer(_) => {}
         Node::Knob(knob) => render_knob(knob, rect, ui, tokens, actions),
@@ -2600,6 +2711,7 @@ fn render_panel(
     tokens: &ThemeTokens,
     actions: &mut Vec<UiAction>,
     depth: usize,
+    debug_border_candidates: &mut Vec<DebugBorderCandidate>,
 ) {
     let title = panel.title.as_deref();
     let header_height = panel
@@ -2614,9 +2726,23 @@ fn render_panel(
     };
 
     let response = ui.panel_with_key(&panel.key, style, Some(rect.size), |ui, content_rect| {
-        render_node(&panel.content, content_rect, ui, tokens, actions, depth + 1);
+        render_node(
+            &panel.content,
+            content_rect,
+            ui,
+            tokens,
+            actions,
+            depth + 1,
+            debug_border_candidates,
+        );
     });
-    draw_container_debug_border(ui, response.outer_rect, ContainerKind::Panel, depth);
+    collect_container_debug_border_candidate(
+        debug_border_candidates,
+        ui,
+        response.outer_rect,
+        ContainerKind::Panel,
+        depth,
+    );
 }
 
 /// Render a flex container.
@@ -2628,6 +2754,7 @@ fn render_flex(
     axis: Axis,
     actions: &mut Vec<UiAction>,
     depth: usize,
+    debug_border_candidates: &mut Vec<DebugBorderCandidate>,
 ) {
     let child_count = flex.children.len();
     if child_count == 0 {
@@ -2720,12 +2847,26 @@ fn render_flex(
             size: resolved_child,
         };
 
-        render_node(child, child_rect, ui, tokens, actions, depth + 1);
+        render_node(
+            child,
+            child_rect,
+            ui,
+            tokens,
+            actions,
+            depth + 1,
+            debug_border_candidates,
+        );
         let next_gap = gaps.get(index).copied().unwrap_or(0);
         cursor_main += resolved_main[index] + next_gap;
     }
 
-    draw_container_debug_border(ui, rect, ContainerKind::Flex, depth);
+    collect_container_debug_border_candidate(
+        debug_border_candidates,
+        ui,
+        rect,
+        ContainerKind::Flex,
+        depth,
+    );
 }
 
 /// Return per-space weighting for flex main-axis justification.
@@ -2825,6 +2966,7 @@ fn render_grid(
     tokens: &ThemeTokens,
     actions: &mut Vec<UiAction>,
     depth: usize,
+    debug_border_candidates: &mut Vec<DebugBorderCandidate>,
 ) {
     let columns = grid.template.columns.len().max(1);
     let rows = if grid.children.is_empty() {
@@ -2911,6 +3053,7 @@ fn render_grid(
                     tokens,
                     actions,
                     depth + 1,
+                    debug_border_candidates,
                 );
             }
             let next_gap = column_gaps.get(col).copied().unwrap_or(0);
@@ -2919,7 +3062,13 @@ fn render_grid(
         y += row_height as i32 + row_gap;
     }
 
-    draw_container_debug_border(ui, rect, ContainerKind::Grid, depth);
+    collect_container_debug_border_candidate(
+        debug_border_candidates,
+        ui,
+        rect,
+        ContainerKind::Grid,
+        depth,
+    );
 }
 
 /// Clamp a resolved child size so it cannot exceed the available slot size.
@@ -3001,6 +3150,7 @@ fn render_absolute(
     tokens: &ThemeTokens,
     actions: &mut Vec<UiAction>,
     depth: usize,
+    debug_border_candidates: &mut Vec<DebugBorderCandidate>,
 ) {
     for child in &absolute.children {
         let measured = measure_node(&child.node, tokens);
@@ -3013,10 +3163,24 @@ fn render_absolute(
             },
             size: resolved,
         };
-        render_node(&child.node, child_rect, ui, tokens, actions, depth + 1);
+        render_node(
+            &child.node,
+            child_rect,
+            ui,
+            tokens,
+            actions,
+            depth + 1,
+            debug_border_candidates,
+        );
     }
 
-    draw_container_debug_border(ui, rect, ContainerKind::Absolute, depth);
+    collect_container_debug_border_candidate(
+        debug_border_candidates,
+        ui,
+        rect,
+        ContainerKind::Absolute,
+        depth,
+    );
 }
 
 /// Render a label node.
@@ -3558,6 +3722,104 @@ mod tests {
             2,
             false
         ));
+    }
+
+    #[test]
+    fn debug_border_selection_prefers_deepest_hovered_container() {
+        let candidates = vec![
+            DebugBorderCandidate {
+                rect: Rect {
+                    origin: Point { x: 0, y: 0 },
+                    size: Size {
+                        width: 600,
+                        height: 360,
+                    },
+                },
+                kind: ContainerKind::Flex,
+                depth: 2,
+            },
+            DebugBorderCandidate {
+                rect: Rect {
+                    origin: Point { x: 300, y: 120 },
+                    size: Size {
+                        width: 280,
+                        height: 180,
+                    },
+                },
+                kind: ContainerKind::Grid,
+                depth: 3,
+            },
+        ];
+
+        let selected = select_container_debug_border_candidate(&candidates)
+            .expect("expected a selected debug border candidate");
+        assert_eq!(selected.depth, 3);
+        assert_eq!(selected.kind, ContainerKind::Grid);
+    }
+
+    #[test]
+    fn debug_border_selection_prefers_smaller_area_on_depth_tie() {
+        let candidates = vec![
+            DebugBorderCandidate {
+                rect: Rect {
+                    origin: Point { x: 0, y: 0 },
+                    size: Size {
+                        width: 320,
+                        height: 240,
+                    },
+                },
+                kind: ContainerKind::Panel,
+                depth: 3,
+            },
+            DebugBorderCandidate {
+                rect: Rect {
+                    origin: Point { x: 120, y: 90 },
+                    size: Size {
+                        width: 140,
+                        height: 80,
+                    },
+                },
+                kind: ContainerKind::Absolute,
+                depth: 3,
+            },
+        ];
+
+        let selected = select_container_debug_border_candidate(&candidates)
+            .expect("expected a selected debug border candidate");
+        assert_eq!(selected.kind, ContainerKind::Absolute);
+        assert_eq!(candidate_area(selected), 11_200);
+    }
+
+    #[test]
+    fn debug_border_selection_prefers_latest_render_on_full_tie() {
+        let candidates = vec![
+            DebugBorderCandidate {
+                rect: Rect {
+                    origin: Point { x: 32, y: 32 },
+                    size: Size {
+                        width: 90,
+                        height: 90,
+                    },
+                },
+                kind: ContainerKind::Panel,
+                depth: 4,
+            },
+            DebugBorderCandidate {
+                rect: Rect {
+                    origin: Point { x: 32, y: 32 },
+                    size: Size {
+                        width: 90,
+                        height: 90,
+                    },
+                },
+                kind: ContainerKind::Grid,
+                depth: 4,
+            },
+        ];
+
+        let selected = select_container_debug_border_candidate(&candidates)
+            .expect("expected a selected debug border candidate");
+        assert_eq!(selected.kind, ContainerKind::Grid);
     }
 
     #[test]
