@@ -622,7 +622,7 @@ pub struct Ui<'a> {
     /// Sequential layout cursor and sizing configuration.
     layout: &'a mut Layout,
     /// Theme colors and typography values.
-    theme: &'a Theme,
+    theme: Theme,
     /// Saved layout scopes used by `with_layout`.
     layout_stack: Vec<Layout>,
     /// Nested bounds tracking stack for auto-size containers.
@@ -647,7 +647,7 @@ impl<'a> Ui<'a> {
             input,
             state,
             layout,
-            theme,
+            theme: theme.clone(),
             layout_stack: Vec::new(),
             bounds_stack: Vec::new(),
             vector_commands: Vec::new(),
@@ -745,7 +745,7 @@ impl<'a> Ui<'a> {
 
     /// Access the current theme settings.
     pub fn theme(&self) -> &Theme {
-        self.theme
+        &self.theme
     }
 
     /// Access the layout for custom sizing.
@@ -1028,6 +1028,21 @@ impl<'a> Ui<'a> {
             color,
             true,
         )
+    }
+
+    /// Draw bounded single-line text in a rect with an explicit text scale.
+    pub(crate) fn text_single_line_hard_clamped_in_rect_scaled(
+        &mut self,
+        rect: Rect,
+        text: &str,
+        color: Color,
+        text_scale: u32,
+    ) -> Size {
+        let previous = self.theme.text_scale;
+        self.theme.text_scale = text_scale.max(1);
+        let rendered = self.text_single_line_hard_clamped_in_rect(rect, text, color);
+        self.theme.text_scale = previous;
+        rendered
     }
 
     /// Push a new empty bounds union for nested layout tracking.
@@ -2118,6 +2133,33 @@ impl<'a> Ui<'a> {
         response
     }
 
+    /// Render a knob in a fixed rectangle with an explicit text scale.
+    pub(crate) fn knob_with_labels_in_rect_scaled(
+        &mut self,
+        id: WidgetId,
+        name_label: &str,
+        value_label: &str,
+        value: &mut f32,
+        range: (f32, f32),
+        desired_diameter: u32,
+        rect: Rect,
+        text_scale: u32,
+    ) -> KnobResponse {
+        let previous = self.theme.text_scale;
+        self.theme.text_scale = text_scale.max(1);
+        let response = self.knob_with_labels_in_rect(
+            id,
+            name_label,
+            value_label,
+            value,
+            range,
+            desired_diameter,
+            rect,
+        );
+        self.theme.text_scale = previous;
+        response
+    }
+
     /// Render a slider in a fixed rectangle without affecting surrounding layout.
     pub(crate) fn slider_in_rect(
         &mut self,
@@ -2143,6 +2185,24 @@ impl<'a> Ui<'a> {
         response
     }
 
+    /// Render a slider in a fixed rectangle with an explicit text scale.
+    pub(crate) fn slider_in_rect_scaled(
+        &mut self,
+        id: WidgetId,
+        label: &str,
+        value: &mut f32,
+        range: (f32, f32),
+        control_size: Size,
+        rect: Rect,
+        text_scale: u32,
+    ) -> SliderResponse {
+        let previous = self.theme.text_scale;
+        self.theme.text_scale = text_scale.max(1);
+        let response = self.slider_in_rect(id, label, value, range, control_size, rect);
+        self.theme.text_scale = previous;
+        response
+    }
+
     /// Render a toggle in a fixed rectangle without affecting surrounding layout.
     pub(crate) fn toggle_in_rect(
         &mut self,
@@ -2157,6 +2217,23 @@ impl<'a> Ui<'a> {
         let height = control_size.height.max(1) as i32;
         let response = self.toggle(id, label, value, rect.size.width.max(1) as i32, height);
         *self.layout = previous;
+        response
+    }
+
+    /// Render a toggle in a fixed rectangle with an explicit text scale.
+    pub(crate) fn toggle_in_rect_scaled(
+        &mut self,
+        id: WidgetId,
+        label: &str,
+        value: &mut bool,
+        control_size: Size,
+        rect: Rect,
+        text_scale: u32,
+    ) -> ToggleResponse {
+        let previous = self.theme.text_scale;
+        self.theme.text_scale = text_scale.max(1);
+        let response = self.toggle_in_rect(id, label, value, control_size, rect);
+        self.theme.text_scale = previous;
         response
     }
 
@@ -2177,6 +2254,22 @@ impl<'a> Ui<'a> {
             rect.size.height.max(1) as i32,
         );
         *self.layout = previous;
+        response
+    }
+
+    /// Render a button in a fixed rectangle with an explicit text scale.
+    pub(crate) fn button_in_rect_scaled(
+        &mut self,
+        id: WidgetId,
+        label: &str,
+        control_size: Size,
+        rect: Rect,
+        text_scale: u32,
+    ) -> ButtonResponse {
+        let previous = self.theme.text_scale;
+        self.theme.text_scale = text_scale.max(1);
+        let response = self.button_in_rect(id, label, control_size, rect);
+        self.theme.text_scale = previous;
         response
     }
 
@@ -2202,6 +2295,24 @@ impl<'a> Ui<'a> {
             height,
         );
         *self.layout = previous;
+        response
+    }
+
+    /// Render a dropdown in a fixed rectangle with an explicit text scale.
+    pub(crate) fn dropdown_in_rect_scaled(
+        &mut self,
+        id: WidgetId,
+        label: &str,
+        options: &[&str],
+        selected: &mut usize,
+        control_size: Size,
+        rect: Rect,
+        text_scale: u32,
+    ) -> DropdownResponse {
+        let previous = self.theme.text_scale;
+        self.theme.text_scale = text_scale.max(1);
+        let response = self.dropdown_in_rect(id, label, options, selected, control_size, rect);
+        self.theme.text_scale = previous;
         response
     }
 

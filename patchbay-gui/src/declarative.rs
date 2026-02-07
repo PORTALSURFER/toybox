@@ -3248,7 +3248,12 @@ fn render_absolute(
 /// Render a label node.
 fn render_label(label: &LabelSpec, rect: Rect, ui: &mut Ui<'_>, tokens: &ThemeTokens) {
     let color = label.color.unwrap_or(tokens.colors.text);
-    let _ = ui.text_single_line_hard_clamped_in_rect(rect, &label.text, color);
+    let _ = ui.text_single_line_hard_clamped_in_rect_scaled(
+        rect,
+        &label.text,
+        color,
+        tokens.typography.text_scale,
+    );
 }
 
 /// Render a knob node and emit actions.
@@ -3265,7 +3270,7 @@ fn render_knob(
         .value_label
         .clone()
         .unwrap_or_else(|| format_value(knob.value));
-    let response = ui.knob_with_labels_in_rect(
+    let response = ui.knob_with_labels_in_rect_scaled(
         id,
         &knob.label,
         &value_label,
@@ -3273,6 +3278,7 @@ fn render_knob(
         knob.range,
         tokens.controls.knob_diameter,
         rect,
+        tokens.typography.text_scale,
     );
     if response.changed {
         actions.push(UiAction::KnobChanged {
@@ -3296,13 +3302,14 @@ fn render_slider(
         width: tokens.controls.slider_width,
         height: tokens.controls.slider_height,
     });
-    let response = ui.slider_in_rect(
+    let response = ui.slider_in_rect_scaled(
         id,
         &slider.label,
         &mut value,
         slider.range,
         control_size,
         rect,
+        tokens.typography.text_scale,
     );
     if response.changed {
         actions.push(UiAction::SliderChanged {
@@ -3326,7 +3333,14 @@ fn render_toggle(
         width: tokens.controls.toggle_width,
         height: tokens.controls.toggle_height,
     });
-    let response = ui.toggle_in_rect(id, &toggle.label, &mut value, control_size, rect);
+    let response = ui.toggle_in_rect_scaled(
+        id,
+        &toggle.label,
+        &mut value,
+        control_size,
+        rect,
+        tokens.typography.text_scale,
+    );
     if response.changed {
         actions.push(UiAction::ToggleChanged {
             key: toggle.key.clone(),
@@ -3348,7 +3362,13 @@ fn render_button(
         width: tokens.controls.button_width,
         height: tokens.controls.button_height,
     });
-    let response = ui.button_in_rect(id, &button.label, control_size, rect);
+    let response = ui.button_in_rect_scaled(
+        id,
+        &button.label,
+        control_size,
+        rect,
+        tokens.typography.text_scale,
+    );
     if response.clicked {
         actions.push(UiAction::ButtonPressed {
             key: button.key.clone(),
@@ -3371,13 +3391,14 @@ fn render_dropdown(
     });
     let mut selected = dropdown.selected;
     let option_refs: Vec<&str> = dropdown.options.iter().map(String::as_str).collect();
-    let response = ui.dropdown_in_rect(
+    let response = ui.dropdown_in_rect_scaled(
         id,
         &dropdown.label,
         &option_refs,
         &mut selected,
         control_size,
         rect,
+        tokens.typography.text_scale,
     );
     if response.changed {
         actions.push(UiAction::DropdownSelected {
