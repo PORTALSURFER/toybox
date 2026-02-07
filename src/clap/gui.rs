@@ -251,23 +251,23 @@ fn map_gui_error(err: GuiError) -> PluginError {
 #[cfg(feature = "gui")]
 #[macro_export]
 macro_rules! patchbay_clap_resize_callbacks {
-    ($gui:expr) => {
+    ($field:ident) => {
         fn can_resize(&mut self) -> bool {
-            $gui.host_resize_enabled()
+            self.$field.host_resize_enabled()
         }
 
         fn adjust_size(
             &mut self,
             size: $crate::clack_extensions::gui::GuiSize,
         ) -> Option<$crate::clack_extensions::gui::GuiSize> {
-            $gui.adjust_host_size(size)
+            self.$field.adjust_host_size(size)
         }
 
         fn set_size(
             &mut self,
             size: $crate::clack_extensions::gui::GuiSize,
         ) -> Result<(), $crate::clack_plugin::plugin::PluginError> {
-            $gui.apply_host_size(size);
+            self.$field.apply_host_size(size);
             Ok(())
         }
     };
