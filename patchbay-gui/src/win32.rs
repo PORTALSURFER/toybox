@@ -365,17 +365,30 @@ where
                 let aspect = f32::from_bits(aspect_bits);
                 (width, height) = enforce_aspect_min(width, height, aspect);
             }
-            unsafe {
-                if let Err(err) = SetWindowPos(
-                    self.hwnd,
-                    None,
-                    0,
-                    0,
-                    width as i32,
-                    height as i32,
-                    SWP_NOZORDER,
-                ) {
-                    log_line_safe(&format!("win32: SetWindowPos failed: {err:?}"));
+            let mut current_rect = windows::Win32::Foundation::RECT::default();
+            let current_size = unsafe {
+                if GetClientRect(self.hwnd, &mut current_rect).is_ok() {
+                    Some((
+                        (current_rect.right - current_rect.left).max(1) as u32,
+                        (current_rect.bottom - current_rect.top).max(1) as u32,
+                    ))
+                } else {
+                    None
+                }
+            };
+            if current_size != Some((width, height)) {
+                unsafe {
+                    if let Err(err) = SetWindowPos(
+                        self.hwnd,
+                        None,
+                        0,
+                        0,
+                        width as i32,
+                        height as i32,
+                        SWP_NOZORDER,
+                    ) {
+                        log_line_safe(&format!("win32: SetWindowPos failed: {err:?}"));
+                    }
                 }
             }
             self.on_resize();
