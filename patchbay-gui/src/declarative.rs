@@ -715,15 +715,19 @@ impl LayoutBox {
         }
     }
 
-    /// Create a fixed-size box.
+    /// Create a fixed-size baseline box.
+    ///
+    /// The returned constraints use fixed pixel lengths as minimum floors.
+    /// Content can still grow beyond these values when intrinsic measurement
+    /// requires more space.
     pub const fn fixed(width: u32, height: u32) -> Self {
         Self {
             width: Length::Px(width),
             height: Length::Px(height),
             min_width: Some(width),
             min_height: Some(height),
-            max_width: Some(width),
-            max_height: Some(height),
+            max_width: None,
+            max_height: None,
         }
     }
 
@@ -751,19 +755,25 @@ impl LayoutBox {
         self
     }
 
-    /// Set a fixed width while preserving current height behavior.
+    /// Set a fixed-width baseline while preserving current height behavior.
+    ///
+    /// The width acts as a minimum floor and may expand for larger intrinsic
+    /// content unless an explicit max width is also applied.
     pub const fn fixed_width(mut self, width: u32) -> Self {
         self.width = Length::Px(width);
         self.min_width = Some(width);
-        self.max_width = Some(width);
+        self.max_width = None;
         self
     }
 
-    /// Set a fixed height while preserving current width behavior.
+    /// Set a fixed-height baseline while preserving current width behavior.
+    ///
+    /// The height acts as a minimum floor and may expand for larger intrinsic
+    /// content unless an explicit max height is also applied.
     pub const fn fixed_height(mut self, height: u32) -> Self {
         self.height = Length::Px(height);
         self.min_height = Some(height);
-        self.max_height = Some(height);
+        self.max_height = None;
         self
     }
 
@@ -1643,7 +1653,7 @@ pub struct ControlTokens {
 impl Default for ControlTokens {
     fn default() -> Self {
         Self {
-            knob_diameter: 64,
+            knob_diameter: 32,
             slider_width: 180,
             slider_height: 28,
             toggle_width: 64,
@@ -2166,7 +2176,7 @@ fn resolve_axis(
 ) -> u32 {
     let base = match length {
         Length::Auto => measured,
-        Length::Px(px) => px,
+        Length::Px(px) => px.max(measured),
         Length::Fill(_) => available.max(measured),
     };
     let min_applied = base.max(min.unwrap_or(0));
@@ -3128,7 +3138,7 @@ mod tests {
                 }),
             ],
         );
-        let spec = UiSpec::new(RootFrameSpec::new("root", Node::Grid(grid)));
+        let spec = UiSpec::new(RootFrameSpec::new("root", Node::Grid(grid)).padding(0));
         let measured = measure_checked(&spec).expect("measurement should succeed");
         assert_eq!(measured.width, 23);
         assert_eq!(measured.height, 27);
@@ -3219,6 +3229,85 @@ mod tests {
             error,
             DeclarativeError::InvalidControlSize { node_kind, .. } if node_kind == "Slider"
         ));
+    }
+
+    #[test]
+    fn fixed_root_layout_expands_to_intrinsic_content() {
+        let spec = UiSpec::new(
+            RootFrameSpec::new("root", label("VeryWideLabel"))
+                .padding(0)
+                .layout(LayoutBox::fixed(1, 1)),
+        );
+        let measured = measure_checked(&spec).expect("measurement should succeed");
+        let intrinsic = text_size(
+            "VeryWideLabel",
+            ThemeTokens::default().typography.text_scale,
+        );
+        assert_eq!(measured, intrinsic);
+    }
+
+    #[test]
+    fn fixed_panel_layout_expands_to_intrinsic_content() {
+        let spec = UiSpec::new(
+            RootFrameSpec::new(
+                "root",
+                panel("panel", label("WidePanelText"))
+                    .pad_all(0)
+                    .layout(LayoutBox::fixed(2, 2)),
+            )
+            .padding(0),
+        );
+        let measured = measure_checked(&spec).expect("measurement should succeed");
+        let intrinsic = text_size(
+            "WidePanelText",
+            ThemeTokens::default().typography.text_scale,
+        );
+        assert_eq!(measured, intrinsic);
+    }
+
+    #[test]
+    fn explicit_max_still_caps_fixed_pixel_layout() {
+        let spec = UiSpec::new(
+            RootFrameSpec::new("root", label("VeryWideLabel"))
+                .padding(0)
+                .layout(LayoutBox::fixed(1, 1).max(12, 12)),
+        );
+        let measured = measure_checked(&spec).expect("measurement should succeed");
+        assert_eq!(measured.width, 12);
+        assert_eq!(measured.height, 12);
+    }
+
+    #[test]
+    fn fixed_absolute_layout_expands_to_positioned_child_bounds() {
+        let spec = UiSpec::new(
+            RootFrameSpec::new(
+                "root",
+                Node::Absolute(
+                    AbsoluteSpec::new(vec![AbsoluteChild::new(
+                        Point { x: 40, y: 30 },
+                        spacer(Size {
+                            width: 15,
+                            height: 11,
+                        }),
+                    )])
+                    .layout(LayoutBox::fixed(10, 10)),
+                ),
+            )
+            .padding(0),
+        );
+        let measured = measure_checked(&spec).expect("measurement should succeed");
+        assert_eq!(
+            measured,
+            Size {
+                width: 55,
+                height: 41,
+            }
+        );
+    }
+
+    #[test]
+    fn default_control_tokens_use_half_knob_diameter() {
+        assert_eq!(ThemeTokens::default().controls.knob_diameter, 32);
     }
 
     #[test]

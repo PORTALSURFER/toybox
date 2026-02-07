@@ -7,7 +7,7 @@ use crate::host::InputState;
 use crate::vector_scene::{KnobVisual, VectorCommand};
 
 /// Default rendered knob diameter in pixels for declarative and immediate UIs.
-pub(crate) const DEFAULT_KNOB_DIAMETER: i32 = 64;
+pub(crate) const DEFAULT_KNOB_DIAMETER: i32 = 32;
 /// Horizontal padding reserved around knob circles and arc rings in block layouts.
 pub(crate) const KNOB_BLOCK_SIDE_PADDING: i32 = 8;
 
@@ -1368,7 +1368,7 @@ impl<'a> Ui<'a> {
         }));
 
         let name_pos = Point {
-            x: knob_rect.origin.x,
+            x: self.layout.cursor.x,
             y: self.layout.cursor.y,
         };
         if !name_label.is_empty() {
@@ -1382,7 +1382,7 @@ impl<'a> Ui<'a> {
         }
 
         let value_pos = Point {
-            x: knob_rect.origin.x,
+            x: self.layout.cursor.x,
             y: knob_rect.origin.y + knob_size + label_gap,
         };
         if !value_label.is_empty() {

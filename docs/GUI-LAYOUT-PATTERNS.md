@@ -78,6 +78,7 @@ let graph_section = column(vec![
 
 ## Notes
 - Prefer `LayoutBox::fill_width()` for panels in stacked columns.
-- Prefer `LayoutBox::fixed(w, h)` only when the host should not resize that region.
+- `LayoutBox::fixed(w, h)` defines a minimum baseline, not a hard cap; content can grow beyond it.
+- Use `LayoutBox::auto().max(w, h)` when you need strict clipping/capping behavior.
 - Keep keys stable and descriptive (`section/control`).
 - Start with `justify_start` and add `justify_space_*` only when you need distribution across slack space.
