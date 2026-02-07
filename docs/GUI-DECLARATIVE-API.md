@@ -53,6 +53,22 @@ Use the host window with:
 
 This keeps rendering deterministic and centralizes state mutation in one reducer step.
 
+### CLAP Callback Defaults
+For CLAP plugins, use Toybox callback macros so host/window communication stays in
+the framework layer:
+- `toybox::patchbay_clap_gui_callbacks!(...)` for full default GUI callbacks
+- `toybox::patchbay_clap_resize_callbacks!(...)` for resize-only wiring
+
+This keeps plugin code focused on:
+- DSP behavior
+- declarative UI content (`UiSpec`)
+- reducer logic (`UiAction -> state`)
+
+Resize behavior is enabled by default through `GuiHostWindow`. Plugins can opt
+out when needed:
+- `GuiHostWindow::disable_host_resize()`
+- `GuiHostWindow::set_host_resize_policy(HostResizePolicy::Disabled)`
+
 ## Validation Guarantees
 `measure_checked` and `render_checked` validate trees and return `DeclarativeError` on invalid specs.
 
