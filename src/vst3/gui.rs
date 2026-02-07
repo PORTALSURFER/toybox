@@ -143,7 +143,10 @@ pub trait Vst3HostedGui {
     /// Return the latest known GUI logical size.
     fn last_size(&self) -> Option<(u32, u32)>;
 
-    /// Request a GUI resize from the host.
+    /// Apply a host-provided GUI size to the hosted native view.
+    ///
+    /// Implementations should treat this as a local view update path and must
+    /// avoid host-callback feedback loops.
     fn request_resize(&self, width: u32, height: u32);
 }
 
@@ -312,9 +315,9 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
             self.constrain_uniform_size(requested_width, requested_height);
         let constrained = view_rect(constrained_width, constrained_height);
         unsafe { *new_size = constrained };
-        // Do not issue a plugin-driven resize request from host-driven onSize.
-        // Sending request_resize here can create a host/plugin feedback loop
-        // during interactive drags and cause visible flicker.
+        if let Ok(gui) = self.gui.lock() {
+            gui.request_resize(constrained_width as u32, constrained_height as u32);
+        }
         self.rect.set(constrained);
         kResultOk
     }
@@ -479,7 +482,7 @@ mod tests {
     }
 
     #[test]
-    fn hosted_view_on_size_does_not_emit_resize_request_feedback() {
+    fn hosted_view_on_size_applies_resize_to_hosted_gui() {
         let view = HostedVst3View::new(
             MockHostedGui {
                 last_size: None,
@@ -499,7 +502,7 @@ mod tests {
             .resize_request
             .lock()
             .expect("resize mutex should not be poisoned");
-        assert!(resize.is_none());
+        assert_eq!(*resize, Some((500, 313)));
     }
 
     #[test]
