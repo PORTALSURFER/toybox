@@ -9,7 +9,31 @@ use crate::vector_scene::{KnobVisual, VectorCommand};
 /// Default rendered knob diameter in pixels for declarative and immediate UIs.
 pub(crate) const DEFAULT_KNOB_DIAMETER: i32 = 64;
 /// Horizontal padding reserved around knob circles and arc rings in block layouts.
-const KNOB_BLOCK_SIDE_PADDING: i32 = 8;
+pub(crate) const KNOB_BLOCK_SIDE_PADDING: i32 = 8;
+
+/// Return the knob label height (in pixels) for a text scale.
+pub(crate) fn knob_label_height(text_scale: u32) -> u32 {
+    8 * text_scale.max(1)
+}
+
+/// Return the vertical gap (in pixels) around knob labels for a text scale.
+pub(crate) fn knob_label_gap(text_scale: u32) -> u32 {
+    4 * text_scale.max(1)
+}
+
+/// Return the full knob block footprint for a control diameter and text scale.
+///
+/// Declarative measurement and rendering both use this helper to keep
+/// measured and rendered bounds identical.
+pub(crate) fn knob_block_size_for_diameter(diameter: u32, text_scale: u32) -> Size {
+    let knob_diameter = diameter.max(1);
+    let label_height = knob_label_height(text_scale);
+    let label_gap = knob_label_gap(text_scale);
+    Size {
+        width: knob_diameter + (KNOB_BLOCK_SIDE_PADDING.max(0) * 2) as u32,
+        height: knob_diameter + label_height * 2 + label_gap * 2,
+    }
+}
 
 /// Unique identifier for widgets across frames.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -621,14 +645,7 @@ impl<'a> Ui<'a> {
     /// width, and the width includes ring/indicator padding so adjacent knobs in
     /// grid layouts do not overlap visually or interactively.
     pub fn knob_block_size(&self, _name_label: &str, _value_label: &str) -> Size {
-        let knob_diameter = self.layout.knob_size.max(1) as u32;
-        let label_height = 8 * self.theme.text_scale.max(1);
-        let label_gap = 4 * self.theme.text_scale.max(1);
-        let padded_width = knob_diameter + (KNOB_BLOCK_SIDE_PADDING.max(0) * 2) as u32;
-        Size {
-            width: padded_width,
-            height: knob_diameter + label_height * 2 + label_gap * 2,
-        }
+        knob_block_size_for_diameter(self.layout.knob_size.max(1) as u32, self.theme.text_scale)
     }
 
     /// Return the rendered footprint for a slider block.
@@ -1865,15 +1882,16 @@ impl<'a> Ui<'a> {
         value_label: &str,
         value: &mut f32,
         range: (f32, f32),
+        desired_diameter: u32,
         rect: Rect,
     ) -> KnobResponse {
         let previous = *self.layout;
-        let label_height = 8 * self.theme.text_scale as i32;
-        let label_gap = 4 * self.theme.text_scale as i32;
-        // Keep knob rendering bounded to the default diameter so measured and
-        // rendered footprints remain consistent in dense declarative layouts.
+        let label_height = knob_label_height(self.theme.text_scale) as i32;
+        let label_gap = knob_label_gap(self.theme.text_scale) as i32;
+        // Keep knob rendering bounded to the resolved declarative diameter so
+        // measured and rendered footprints remain consistent.
         let available_height = (rect.size.height as i32 - label_height * 2 - label_gap * 2).max(1);
-        let knob_size = DEFAULT_KNOB_DIAMETER
+        let knob_size = (desired_diameter.max(1) as i32)
             .min(rect.size.width as i32)
             .min(available_height)
             .max(1);
@@ -2131,6 +2149,7 @@ mod tests {
             "50%",
             &mut value,
             (0.0, 1.0),
+            DEFAULT_KNOB_DIAMETER as u32,
             rect,
         );
 

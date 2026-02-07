@@ -5,7 +5,7 @@
 //! via an explicit reducer step.
 
 use crate::canvas::{Color, Point, Rect, Size};
-use crate::ui::{RegionResponse, RootFrameStyle, Ui, WidgetId};
+use crate::ui::{RegionResponse, RootFrameStyle, Ui, WidgetId, knob_block_size_for_diameter};
 
 /// Validation errors produced by declarative UI helpers.
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]
@@ -2061,18 +2061,7 @@ fn measure_label(label: &LabelSpec, tokens: &ThemeTokens) -> Size {
 /// Measure a knob node.
 fn measure_knob(knob: &KnobSpec, tokens: &ThemeTokens) -> Size {
     let control = tokens.controls.knob_diameter.max(1);
-    let label_h = 8 * tokens.typography.text_scale.max(1);
-    let spacing = tokens.spacing.xs.max(0) as u32;
-    let label = text_size(&knob.label, tokens.typography.text_scale);
-    let value_label = knob
-        .value_label
-        .clone()
-        .unwrap_or_else(|| format_value(knob.value));
-    let value = text_size(&value_label, tokens.typography.text_scale);
-    let measured = Size {
-        width: control.max(label.width).max(value.width),
-        height: control + label_h * 2 + spacing * 2,
-    };
+    let measured = knob_block_size_for_diameter(control, tokens.typography.text_scale);
     resolve_size(knob.layout, measured, measured)
 }
 
@@ -2616,7 +2605,7 @@ fn render_knob(
     knob: &KnobSpec,
     rect: Rect,
     ui: &mut Ui<'_>,
-    _tokens: &ThemeTokens,
+    tokens: &ThemeTokens,
     actions: &mut Vec<UiAction>,
 ) {
     let id = WidgetId::from_label(&knob.key);
@@ -2625,8 +2614,15 @@ fn render_knob(
         .value_label
         .clone()
         .unwrap_or_else(|| format_value(knob.value));
-    let response =
-        ui.knob_with_labels_in_rect(id, &knob.label, &value_label, &mut value, knob.range, rect);
+    let response = ui.knob_with_labels_in_rect(
+        id,
+        &knob.label,
+        &value_label,
+        &mut value,
+        knob.range,
+        tokens.controls.knob_diameter,
+        rect,
+    );
     if response.changed {
         actions.push(UiAction::KnobChanged {
             key: knob.key.clone(),
@@ -3433,6 +3429,60 @@ mod tests {
         let measured = measure_checked(&spec).expect("helper-composed tree should validate");
         assert!(measured.width > 0);
         assert!(measured.height > 0);
+    }
+
+    #[test]
+    fn measure_knob_matches_shared_block_metrics() {
+        let mut tokens = ThemeTokens::default();
+        tokens.controls.knob_diameter = 90;
+        tokens.typography.text_scale = 3;
+
+        let knob = KnobSpec::new("k", "Drive", 0.5, (0.0, 1.0));
+        let measured = measure_knob(&knob, &tokens);
+        let expected = knob_block_size_for_diameter(90, 3);
+
+        assert_eq!(measured, expected);
+    }
+
+    #[test]
+    fn render_knob_uses_token_diameter_for_hit_region() {
+        let mut canvas = Canvas::new(360, 220);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState {
+            pointer_pos: Point { x: 100, y: 60 },
+            wheel_delta: 1.0,
+            ..InputState::default()
+        };
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+
+        let mut tokens = ThemeTokens::default();
+        tokens.controls.knob_diameter = 96;
+        let spec = UiSpec::new(
+            RootFrameSpec::new(
+                "root",
+                Node::Absolute(
+                    AbsoluteSpec::new(vec![AbsoluteChild::new(
+                        Point { x: 0, y: 0 },
+                        Node::Knob(KnobSpec::new("k", "Drive", 0.5, (0.0, 1.0))),
+                    )])
+                    .layout(LayoutBox::fixed(320, 200)),
+                ),
+            )
+            .tokens(tokens)
+            .padding(0)
+            .layout(LayoutBox::fixed(320, 200)),
+        );
+
+        let result =
+            render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+        assert!(
+            result
+                .actions
+                .iter()
+                .any(|action| matches!(action, UiAction::KnobChanged { key, .. } if key == "k"))
+        );
     }
 
     #[test]
