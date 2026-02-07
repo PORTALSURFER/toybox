@@ -384,13 +384,8 @@ where
         self.sync_client_size_if_needed();
 
         if let Some((width, height)) = unpack_size(self.resize_request.swap(0, Ordering::AcqRel)) {
-            let mut width = width;
-            let mut height = height;
-            let aspect_bits = self.aspect_ratio.load(Ordering::Relaxed);
-            if aspect_bits != 0 {
-                let aspect = f32::from_bits(aspect_bits);
-                (width, height) = enforce_aspect_min(width, height, aspect);
-            }
+            let width = width;
+            let height = height;
             let mut current_rect = windows::Win32::Foundation::RECT::default();
             let current_size = unsafe {
                 if GetClientRect(self.hwnd, &mut current_rect).is_ok() {
