@@ -1712,14 +1712,53 @@ pub fn render_checked(
     };
 
     let mut actions = Vec::new();
-    let _ = ui.root_frame_with_key_at(&spec.root.key, style, Some(resolved), origin, |ui, rect| {
-        render_node(&spec.root.content, rect, ui, &tokens, &mut actions);
-    });
+    let response =
+        ui.root_frame_with_key_at(&spec.root.key, style, Some(resolved), origin, |ui, rect| {
+            render_node(&spec.root.content, rect, ui, &tokens, &mut actions, 1);
+        });
+    draw_container_debug_border(ui, response.outer_rect, ContainerKind::RootFrame, 0);
 
     Ok(RenderResult {
         measured_size: resolved,
         actions,
     })
+}
+
+/// Declarative container node kinds that can emit debug layout borders.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ContainerKind {
+    RootFrame,
+    Panel,
+    Flex,
+    Grid,
+    Absolute,
+}
+
+/// Return the optional debug border color for a container kind/depth pair.
+fn container_debug_border_color(kind: ContainerKind, depth: usize) -> Option<Color> {
+    #[cfg(feature = "layout-debug-borders")]
+    {
+        let palette = match kind {
+            ContainerKind::RootFrame => [Color::rgb(245, 98, 98), Color::rgb(255, 136, 136)],
+            ContainerKind::Panel => [Color::rgb(88, 196, 255), Color::rgb(132, 216, 255)],
+            ContainerKind::Flex => [Color::rgb(117, 230, 155), Color::rgb(156, 242, 182)],
+            ContainerKind::Grid => [Color::rgb(255, 196, 93), Color::rgb(255, 218, 145)],
+            ContainerKind::Absolute => [Color::rgb(186, 149, 255), Color::rgb(208, 181, 255)],
+        };
+        Some(palette[depth % palette.len()])
+    }
+    #[cfg(not(feature = "layout-debug-borders"))]
+    {
+        let _ = (kind, depth);
+        None
+    }
+}
+
+/// Draw a layout debug border for a container when the feature is enabled.
+fn draw_container_debug_border(ui: &mut Ui<'_>, rect: Rect, kind: ContainerKind, depth: usize) {
+    if let Some(color) = container_debug_border_color(kind, depth) {
+        ui.debug_stroke_rect(rect, 1, color);
+    }
 }
 
 /// Validate the top-level UI specification.
@@ -2194,13 +2233,14 @@ fn render_node(
     ui: &mut Ui<'_>,
     tokens: &ThemeTokens,
     actions: &mut Vec<UiAction>,
+    depth: usize,
 ) {
     match node {
-        Node::Panel(panel) => render_panel(panel, rect, ui, tokens, actions),
-        Node::Row(flex) => render_flex(flex, rect, ui, tokens, Axis::Horizontal, actions),
-        Node::Column(flex) => render_flex(flex, rect, ui, tokens, Axis::Vertical, actions),
-        Node::Grid(grid) => render_grid(grid, rect, ui, tokens, actions),
-        Node::Absolute(absolute) => render_absolute(absolute, rect, ui, tokens, actions),
+        Node::Panel(panel) => render_panel(panel, rect, ui, tokens, actions, depth),
+        Node::Row(flex) => render_flex(flex, rect, ui, tokens, Axis::Horizontal, actions, depth),
+        Node::Column(flex) => render_flex(flex, rect, ui, tokens, Axis::Vertical, actions, depth),
+        Node::Grid(grid) => render_grid(grid, rect, ui, tokens, actions, depth),
+        Node::Absolute(absolute) => render_absolute(absolute, rect, ui, tokens, actions, depth),
         Node::Label(label) => render_label(label, rect, ui, tokens),
         Node::Spacer(_) => {}
         Node::Knob(knob) => render_knob(knob, rect, ui, tokens, actions),
@@ -2220,6 +2260,7 @@ fn render_panel(
     ui: &mut Ui<'_>,
     tokens: &ThemeTokens,
     actions: &mut Vec<UiAction>,
+    depth: usize,
 ) {
     let title = panel.title.as_deref();
     let header_height = panel
@@ -2233,9 +2274,10 @@ fn render_panel(
         header_height: Some(header_height),
     };
 
-    let _ = ui.panel_with_key(&panel.key, style, Some(rect.size), |ui, content_rect| {
-        render_node(&panel.content, content_rect, ui, tokens, actions);
+    let response = ui.panel_with_key(&panel.key, style, Some(rect.size), |ui, content_rect| {
+        render_node(&panel.content, content_rect, ui, tokens, actions, depth + 1);
     });
+    draw_container_debug_border(ui, response.outer_rect, ContainerKind::Panel, depth);
 }
 
 /// Render a flex container.
@@ -2246,6 +2288,7 @@ fn render_flex(
     tokens: &ThemeTokens,
     axis: Axis,
     actions: &mut Vec<UiAction>,
+    depth: usize,
 ) {
     let child_count = flex.children.len();
     if child_count == 0 {
@@ -2335,10 +2378,12 @@ fn render_flex(
             size: resolved_child,
         };
 
-        render_node(child, child_rect, ui, tokens, actions);
+        render_node(child, child_rect, ui, tokens, actions, depth + 1);
         let next_gap = gaps.get(index).copied().unwrap_or(0);
         cursor_main += resolved_main[index] + next_gap;
     }
+
+    draw_container_debug_border(ui, rect, ContainerKind::Flex, depth);
 }
 
 /// Return per-space weighting for flex main-axis justification.
@@ -2437,6 +2482,7 @@ fn render_grid(
     ui: &mut Ui<'_>,
     tokens: &ThemeTokens,
     actions: &mut Vec<UiAction>,
+    depth: usize,
 ) {
     let columns = grid.template.columns.len().max(1);
     let rows = if grid.children.is_empty() {
@@ -2510,12 +2556,15 @@ fn render_grid(
                     ui,
                     tokens,
                     actions,
+                    depth + 1,
                 );
             }
             x += col_width as i32 + column_gap;
         }
         y += row_height as i32 + row_gap;
     }
+
+    draw_container_debug_border(ui, rect, ContainerKind::Grid, depth);
 }
 
 /// Resolve one grid axis using track definitions and available space.
@@ -2588,6 +2637,7 @@ fn render_absolute(
     ui: &mut Ui<'_>,
     tokens: &ThemeTokens,
     actions: &mut Vec<UiAction>,
+    depth: usize,
 ) {
     for child in &absolute.children {
         let measured = measure_node(&child.node, tokens);
@@ -2600,8 +2650,10 @@ fn render_absolute(
             },
             size: resolved,
         };
-        render_node(&child.node, child_rect, ui, tokens, actions);
+        render_node(&child.node, child_rect, ui, tokens, actions, depth + 1);
     }
+
+    draw_container_debug_border(ui, rect, ContainerKind::Absolute, depth);
 }
 
 /// Render a label node.
@@ -3070,6 +3122,31 @@ mod tests {
     use crate::canvas::Canvas;
     use crate::host::InputState;
     use crate::ui::{Layout, Theme, UiState};
+
+    #[cfg(feature = "layout-debug-borders")]
+    #[test]
+    fn debug_border_palette_is_available_when_feature_enabled() {
+        let kinds = [
+            ContainerKind::RootFrame,
+            ContainerKind::Panel,
+            ContainerKind::Flex,
+            ContainerKind::Grid,
+            ContainerKind::Absolute,
+        ];
+        for kind in kinds {
+            assert!(container_debug_border_color(kind, 0).is_some());
+            assert!(container_debug_border_color(kind, 1).is_some());
+        }
+    }
+
+    #[cfg(not(feature = "layout-debug-borders"))]
+    #[test]
+    fn debug_border_palette_is_disabled_without_feature() {
+        assert_eq!(
+            container_debug_border_color(ContainerKind::RootFrame, 0),
+            None
+        );
+    }
 
     #[test]
     fn rejects_duplicate_widget_keys() {

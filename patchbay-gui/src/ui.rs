@@ -990,6 +990,12 @@ impl<'a> Ui<'a> {
         self.track_rect_internal(rect);
     }
 
+    /// Stroke a debug border rectangle and include it in tracked bounds.
+    pub(crate) fn debug_stroke_rect(&mut self, rect: Rect, thickness: u32, color: Color) {
+        self.canvas.stroke_rect(rect, thickness, color);
+        self.track_rect_internal(rect);
+    }
+
     /// Draw a root frame container sized to its contents.
     ///
     /// Root frames are the top-level container for a window. The measured size
