@@ -449,6 +449,28 @@ fn fit_text_single_line_hard_clamp(text: &str, max_width: u32, scale: u32) -> St
     single_line.chars().take(max_chars).collect()
 }
 
+/// Normalize knob name labels to uppercase for consistent visual style.
+fn normalize_knob_name_label(label: &str) -> String {
+    label.to_uppercase()
+}
+
+/// Normalize knob value labels to lowercase when they contain alphabetic text.
+fn normalize_knob_value_label(label: &str) -> String {
+    if label.chars().any(char::is_alphabetic) {
+        label.to_lowercase()
+    } else {
+        label.to_string()
+    }
+}
+
+/// Return a horizontally centered text origin for a bounded label area.
+fn centered_text_origin_x(origin_x: i32, max_width: u32, text_width: u32) -> i32 {
+    let available = max_width as i32;
+    let text = text_width as i32;
+    let offset = ((available - text) / 2).max(0);
+    origin_x + offset
+}
+
 /// Response metadata from knob widgets.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct KnobResponse {
@@ -895,6 +917,37 @@ impl<'a> Ui<'a> {
         size
     }
 
+    /// Draw centered single-line text hard-clamped to width bounds.
+    fn draw_text_single_line_hard_clamped_centered(
+        &mut self,
+        origin: Point,
+        text: &str,
+        max_width: u32,
+        color: Color,
+        track_bounds: bool,
+    ) -> Size {
+        let fitted = fit_text_single_line_hard_clamp(text, max_width, self.theme.text_scale);
+        if fitted.is_empty() {
+            return Size {
+                width: 0,
+                height: 0,
+            };
+        }
+        let size = text_size(&fitted, self.theme.text_scale);
+        let centered_origin = Point {
+            x: centered_text_origin_x(origin.x, max_width, size.width),
+            y: origin.y,
+        };
+        self.draw_text_internal(centered_origin, &fitted, color, self.theme.text_scale);
+        if track_bounds {
+            self.track_rect_internal(Rect {
+                origin: centered_origin,
+                size,
+            });
+        }
+        size
+    }
+
     /// Draw bounded single-line text in a rect with hard clipping semantics.
     pub(crate) fn text_single_line_hard_clamped_in_rect(
         &mut self,
@@ -1323,8 +1376,9 @@ impl<'a> Ui<'a> {
 
     /// Draw a knob with a name label above and a value label below.
     ///
-    /// Labels are clamped to the knob width with single-line ellipsis to keep
-    /// dense manual layouts from overlapping neighboring controls.
+    /// Knob labels are hard-clamped to the knob width (without ellipsis) and
+    /// horizontally centered. Name labels are normalized to uppercase, while
+    /// value labels are lowercased when they contain alphabetic text.
     pub fn knob_with_labels(
         &mut self,
         id: WidgetId,
@@ -1337,6 +1391,13 @@ impl<'a> Ui<'a> {
         let block_size = self.knob_block_size(name_label, value_label);
         let label_height = 8 * self.theme.text_scale as i32;
         let label_gap = 4 * self.theme.text_scale as i32;
+        let block_rect = Rect {
+            origin: self.layout.cursor,
+            size: block_size,
+        };
+        self.canvas
+            .stroke_rect(block_rect, 1, self.theme.knob_outline);
+        self.track_rect_internal(block_rect);
         let knob_x_offset = ((block_size.width as i32 - knob_size) / 2).max(0);
         let knob_origin = Point {
             x: self.layout.cursor.x + knob_x_offset,
@@ -1449,10 +1510,11 @@ impl<'a> Ui<'a> {
             x: self.layout.cursor.x,
             y: self.layout.cursor.y,
         };
-        if !name_label.is_empty() {
-            let _ = self.draw_text_single_line_clamped(
+        let normalized_name = normalize_knob_name_label(name_label);
+        if !normalized_name.is_empty() {
+            let _ = self.draw_text_single_line_hard_clamped_centered(
                 name_pos,
-                name_label,
+                &normalized_name,
                 block_size.width,
                 self.theme.text,
                 true,
@@ -1463,10 +1525,11 @@ impl<'a> Ui<'a> {
             x: self.layout.cursor.x,
             y: knob_rect.origin.y + knob_size + label_gap,
         };
-        if !value_label.is_empty() {
-            let _ = self.draw_text_single_line_clamped(
+        let normalized_value = normalize_knob_value_label(value_label);
+        if !normalized_value.is_empty() {
+            let _ = self.draw_text_single_line_hard_clamped_centered(
                 value_pos,
-                value_label,
+                &normalized_value,
                 block_size.width,
                 self.theme.text,
                 true,
@@ -2274,6 +2337,26 @@ mod tests {
         let fitted = fit_text_single_line_hard_clamp("ABCDEFGHIJ", 24, 1);
         assert_eq!(fitted, "ABCD");
         assert!(!fitted.contains("..."));
+    }
+
+    #[test]
+    fn knob_name_labels_are_normalized_to_uppercase() {
+        assert_eq!(normalize_knob_name_label("Mix dB"), "MIX DB");
+        assert_eq!(normalize_knob_name_label("phase"), "PHASE");
+    }
+
+    #[test]
+    fn knob_value_labels_lowercase_only_when_textual() {
+        assert_eq!(normalize_knob_value_label("+2.3 dB"), "+2.3 db");
+        assert_eq!(normalize_knob_value_label("23dB"), "23db");
+        assert_eq!(normalize_knob_value_label("42.0%"), "42.0%");
+    }
+
+    #[test]
+    fn centered_text_origin_offsets_within_available_width() {
+        assert_eq!(centered_text_origin_x(10, 40, 20), 20);
+        assert_eq!(centered_text_origin_x(10, 20, 20), 10);
+        assert_eq!(centered_text_origin_x(10, 16, 20), 10);
     }
 
     #[test]
