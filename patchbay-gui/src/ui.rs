@@ -1244,7 +1244,7 @@ impl<'a> Ui<'a> {
             && let Some(start) = self.state.drag_start
         {
             let dy = (self.input.pointer_pos.y - start.y) as f32;
-            let delta = -dy * 0.005 * (range.1 - range.0);
+            let delta = dy * 0.005 * (range.1 - range.0);
             let new_value = (self.state.drag_value + delta).clamp(range.0, range.1);
             if (*value - new_value).abs() > f32::EPSILON {
                 *value = new_value;
@@ -1255,7 +1255,7 @@ impl<'a> Ui<'a> {
         if hovered && self.input.wheel_delta != 0.0 {
             let step = 0.02 * (range.1 - range.0);
             let new_value =
-                (*value + step * self.input.wheel_delta.signum()).clamp(range.0, range.1);
+                (*value - step * self.input.wheel_delta.signum()).clamp(range.0, range.1);
             if (*value - new_value).abs() > f32::EPSILON {
                 *value = new_value;
                 response.changed = true;
@@ -1992,6 +1992,7 @@ mod tests {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
             let response = ui.knob(WidgetId::new(1), "GAIN", &mut value, (0.0, 1.0));
             assert!(response.changed);
+            assert!(value < 0.5, "dragging up should now reduce value");
         }
     }
 
