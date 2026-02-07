@@ -9,11 +9,23 @@ use raw_window_handle::RawWindowHandle;
 /// Re-export Patchbay GUI types for downstream declarative GUI integrations.
 pub use patchbay_gui::{Color, InputState, OpenParentedMode, ThemeTokens};
 
+/// Host-resize policy for CLAP Patchbay GUI windows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HostResizePolicy {
+    /// Accept host resize requests and forward them to Patchbay.
+    #[default]
+    Enabled,
+    /// Ignore host resize requests and report a fixed-size window.
+    Disabled,
+}
+
 /// Wrapper around a Patchbay GUI window for a CLAP editor.
 #[derive(Default)]
 pub struct GuiHostWindow {
     /// Underlying host window adapter from `patchbay-gui`.
     inner: HostWindow,
+    /// Policy controlling host-driven resize behavior.
+    host_resize_policy: HostResizePolicy,
 }
 
 impl GuiHostWindow {
@@ -54,11 +66,24 @@ impl GuiHostWindow {
         self.inner.request_resize(width, height);
     }
 
+    /// Set host-resize behavior for this window.
+    pub fn set_host_resize_policy(&mut self, policy: HostResizePolicy) {
+        log_line_safe(&format!(
+            "toybox/gui: set_host_resize_policy policy={policy:?}"
+        ));
+        self.host_resize_policy = policy;
+    }
+
+    /// Disable host-driven resize handling for this window.
+    pub fn disable_host_resize(&mut self) {
+        self.set_host_resize_policy(HostResizePolicy::Disabled);
+    }
+
     /// Return the canonical host-resize policy for Patchbay CLAP windows.
     ///
     /// Patchbay GUIs are designed to accept host-driven resize requests.
     pub const fn host_resize_enabled(&self) -> bool {
-        true
+        matches!(self.host_resize_policy, HostResizePolicy::Enabled)
     }
 
     /// Normalize a host-provided GUI size to Patchbay's non-zero constraints.
@@ -72,11 +97,23 @@ impl GuiHostWindow {
         }
     }
 
+    /// Resolve the host-adjusted size according to the current resize policy.
+    ///
+    /// Returns `None` when host-driven resizing is disabled.
+    pub fn adjust_host_size(&self, size: GuiSize) -> Option<GuiSize> {
+        self.host_resize_enabled()
+            .then(|| self.normalize_host_size(size))
+    }
+
     /// Apply a host-driven GUI resize request using Patchbay's policy.
     ///
     /// This keeps resize ownership in Toybox so plugin implementations do not
     /// need per-plugin resize forwarding logic.
     pub fn apply_host_size(&self, size: GuiSize) {
+        if !self.host_resize_enabled() {
+            log_line_safe("toybox/gui: apply_host_size ignored (resize disabled)");
+            return;
+        }
         let normalized = self.normalize_host_size(size);
         self.request_resize(normalized.width, normalized.height);
     }
@@ -205,4 +242,33 @@ fn map_gui_error(err: GuiError) -> PluginError {
         GuiError::ThreadSpawn => "Failed to spawn GUI thread",
         GuiError::DeviceCachePoison => "GUI device cache was poisoned",
     })
+}
+
+/// Inject default CLAP resize callbacks backed by Toybox Patchbay policy.
+///
+/// This macro standardizes host-resize behavior across plugins: resizable by
+/// default, with an opt-out via [`GuiHostWindow::set_host_resize_policy`].
+#[cfg(feature = "gui")]
+#[macro_export]
+macro_rules! patchbay_clap_resize_callbacks {
+    ($gui:expr) => {
+        fn can_resize(&mut self) -> bool {
+            $gui.host_resize_enabled()
+        }
+
+        fn adjust_size(
+            &mut self,
+            size: $crate::clack_extensions::gui::GuiSize,
+        ) -> Option<$crate::clack_extensions::gui::GuiSize> {
+            $gui.adjust_host_size(size)
+        }
+
+        fn set_size(
+            &mut self,
+            size: $crate::clack_extensions::gui::GuiSize,
+        ) -> Result<(), $crate::clack_plugin::plugin::PluginError> {
+            $gui.apply_host_size(size);
+            Ok(())
+        }
+    };
 }
