@@ -414,6 +414,22 @@ impl RootFrameSpec {
     }
 }
 
+/// Create a root frame sized from host window bounds with a minimum floor.
+///
+/// This helper standardizes the "host-sized layout" model: root layout uses the
+/// current host window size while preserving a minimum authored baseline.
+/// Root-level scale mode remains [`RootScaleMode::None`].
+pub fn root_frame_sized(
+    key: impl Into<String>,
+    content: Node,
+    min_size: Size,
+    window_size: Size,
+) -> RootFrameSpec {
+    let resolved_width = window_size.width.max(min_size.width);
+    let resolved_height = window_size.height.max(min_size.height);
+    RootFrameSpec::new(key, content).layout(LayoutBox::fixed(resolved_width, resolved_height))
+}
+
 /// Layout nodes for the declarative UI tree.
 #[derive(Clone, Debug)]
 pub enum Node {
@@ -703,6 +719,70 @@ pub fn row(children: Vec<Node>) -> Node {
 /// Create a column container node.
 pub fn column(children: Vec<Node>) -> Node {
     Node::column(children)
+}
+
+/// Child node paired with a relative section weight.
+///
+/// Weights are interpreted as fractions of available main-axis space inside
+/// section helpers like [`column_sections`] and [`row_sections`].
+#[derive(Clone, Debug)]
+pub struct WeightedChild {
+    /// Child node rendered inside the section.
+    pub node: Node,
+    /// Relative share of available section space.
+    ///
+    /// Values are clamped to at least `1` when constructed via [`weighted`].
+    pub weight: u16,
+}
+
+/// Create a weighted section child.
+pub fn weighted(node: Node, weight: u16) -> WeightedChild {
+    WeightedChild {
+        node,
+        weight: weight.max(1),
+    }
+}
+
+fn apply_weighted_sections(children: Vec<WeightedChild>, vertical: bool) -> Vec<Node> {
+    children
+        .into_iter()
+        .map(|child| {
+            let weight = Length::Fill(child.weight.max(1));
+            if vertical {
+                child
+                    .node
+                    .layout(LayoutBox::auto().fill_width().with_height(weight))
+            } else {
+                child
+                    .node
+                    .layout(LayoutBox::auto().fill_height().with_width(weight))
+            }
+        })
+        .collect()
+}
+
+/// Create a weighted full-size column section layout.
+///
+/// Children fill width and split available height by relative `weight`.
+pub fn column_sections(children: Vec<WeightedChild>) -> Node {
+    column(apply_weighted_sections(children, true))
+        .gap(0)
+        .pad_all(0)
+        .justify_start()
+        .align_stretch()
+        .layout(LayoutBox::fill())
+}
+
+/// Create a weighted full-size row section layout.
+///
+/// Children fill height and split available width by relative `weight`.
+pub fn row_sections(children: Vec<WeightedChild>) -> Node {
+    row(apply_weighted_sections(children, false))
+        .gap(0)
+        .pad_all(0)
+        .justify_start()
+        .align_stretch()
+        .layout(LayoutBox::fill())
 }
 
 /// Create a grid container node.
@@ -4208,6 +4288,111 @@ mod tests {
 
         let flex = FlexSpec::row(vec![label("A"), label("B")]).justify_space_evenly();
         assert_eq!(flex.justify, Justify::SpaceEvenly);
+    }
+
+    #[test]
+    fn weighted_child_clamps_zero_weight_to_one() {
+        let child = weighted(label("x"), 0);
+        assert_eq!(child.weight, 1);
+    }
+
+    #[test]
+    fn column_sections_apply_weighted_height_fill() {
+        let node = column_sections(vec![weighted(label("A"), 7), weighted(label("B"), 30)]);
+        let Node::Column(flex) = node else {
+            panic!("expected column section container");
+        };
+        assert_eq!(flex.gap, 0);
+        assert_eq!(flex.padding, EdgeInsets::all(0));
+        assert_eq!(flex.align, Align::Stretch);
+        assert_eq!(flex.justify, Justify::Start);
+        assert_eq!(flex.layout, LayoutBox::fill());
+        assert_eq!(flex.children.len(), 2);
+
+        let first = node_layout(&flex.children[0]);
+        assert_eq!(first.width, Length::Fill(1));
+        assert_eq!(first.height, Length::Fill(7));
+
+        let second = node_layout(&flex.children[1]);
+        assert_eq!(second.width, Length::Fill(1));
+        assert_eq!(second.height, Length::Fill(30));
+    }
+
+    #[test]
+    fn row_sections_apply_weighted_width_fill() {
+        let node = row_sections(vec![weighted(label("L"), 70), weighted(label("R"), 30)]);
+        let Node::Row(flex) = node else {
+            panic!("expected row section container");
+        };
+        assert_eq!(flex.gap, 0);
+        assert_eq!(flex.padding, EdgeInsets::all(0));
+        assert_eq!(flex.align, Align::Stretch);
+        assert_eq!(flex.justify, Justify::Start);
+        assert_eq!(flex.layout, LayoutBox::fill());
+        assert_eq!(flex.children.len(), 2);
+
+        let left = node_layout(&flex.children[0]);
+        assert_eq!(left.width, Length::Fill(70));
+        assert_eq!(left.height, Length::Fill(1));
+
+        let right = node_layout(&flex.children[1]);
+        assert_eq!(right.width, Length::Fill(30));
+        assert_eq!(right.height, Length::Fill(1));
+    }
+
+    #[test]
+    fn root_frame_sized_uses_window_size_with_minimum_floor() {
+        let root = root_frame_sized(
+            "root",
+            label("x"),
+            Size {
+                width: 420,
+                height: 258,
+            },
+            Size {
+                width: 360,
+                height: 400,
+            },
+        );
+        assert_eq!(
+            root.layout,
+            LayoutBox::fixed(420, 400),
+            "root should clamp to min width and use host-provided height"
+        );
+        assert_eq!(root.scale_mode, RootScaleMode::None);
+        assert_eq!(root.design_size, None);
+    }
+
+    #[test]
+    fn nested_section_helpers_measure_successfully() {
+        let controls = row_sections(vec![
+            weighted(panel("left", label("Knobs")).pad_all(0), 70),
+            weighted(panel("right", label("Dropdowns")).pad_all(0), 30),
+        ]);
+        let content = column_sections(vec![
+            weighted(panel("header", label("Header")).pad_all(0), 7),
+            weighted(panel("curve", label("Curve")).pad_all(0), 63),
+            weighted(panel("controls", controls).pad_all(0), 30),
+        ]);
+        let spec = UiSpec::new(
+            root_frame_sized(
+                "root",
+                content,
+                Size {
+                    width: 420,
+                    height: 258,
+                },
+                Size {
+                    width: 840,
+                    height: 516,
+                },
+            )
+            .padding(0),
+        );
+
+        let measured = measure_checked(&spec).expect("nested section helpers should validate");
+        assert!(measured.width >= 420);
+        assert!(measured.height >= 258);
     }
 
     #[test]

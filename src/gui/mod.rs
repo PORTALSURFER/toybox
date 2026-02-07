@@ -14,7 +14,8 @@ pub mod declarative {
         IndicatorSpec, Justify, KnobSpec, LabelSpec, LayoutBox, Length, MainPalette, Node,
         PanelSpec, RegionInteractionKind, RegionSpec, RenderResult, RootFrameSpec, RootScaleMode,
         SliderSpec, SpacingTokens, ThemeTokens, ToggleSpec, TrackSize, TypographyTokens, UiAction,
-        UiSpec, button, column, dropdown, grid, indicator, knob, label, measure_checked, panel,
-        region, render_checked, row, slider, spacer, toggle,
+        UiSpec, WeightedChild, button, column, column_sections, dropdown, grid, indicator, knob,
+        label, measure_checked, panel, region, render_checked, root_frame_sized, row, row_sections,
+        slider, spacer, toggle, weighted,
     };
 }

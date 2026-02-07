@@ -27,9 +27,9 @@ pub use crate::declarative::{
     DrawCommand, DropdownSpec, EdgeInsets, FlexSpec, GridSpec, GridTemplate, IndicatorSpec,
     Justify, KnobSpec, LabelSpec, LayoutBox, Length, Node, PanelSpec, RegionInteractionKind,
     RegionSpec, RenderResult, RootFrameSpec, RootScaleMode, SliderSpec, SpacingTokens, ThemeTokens,
-    ToggleSpec, TrackSize, TypographyTokens, UiAction, UiSpec, button, column, dropdown, grid,
-    indicator, knob, label, measure_checked, panel, region, render_checked, row, slider, spacer,
-    toggle,
+    ToggleSpec, TrackSize, TypographyTokens, UiAction, UiSpec, WeightedChild, button, column,
+    column_sections, dropdown, grid, indicator, knob, label, measure_checked, panel, region,
+    render_checked, root_frame_sized, row, row_sections, slider, spacer, toggle, weighted,
 };
 #[cfg(not(target_os = "windows"))]
 pub use crate::host::WindowHandle;
