@@ -351,6 +351,18 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
             self.constrain_uniform_size(requested_width, requested_height, axis);
         let constrained = view_rect(constrained_width, constrained_height);
         unsafe { *new_size = constrained };
+        // Some hosts still apply their raw requested size unless we explicitly
+        // issue a resize request back. Guard this to avoid request loops.
+        if (requested_width != constrained_width || requested_height != constrained_height)
+            && let Ok(gui) = self.gui.lock()
+        {
+            let current = self.rect.get();
+            let current_width = (current.right - current.left).max(1);
+            let current_height = (current.bottom - current.top).max(1);
+            if constrained_width != current_width || constrained_height != current_height {
+                gui.request_resize(constrained_width as u32, constrained_height as u32);
+            }
+        }
         self.rect.set(constrained);
         kResultOk
     }
