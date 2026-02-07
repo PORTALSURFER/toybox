@@ -22,7 +22,6 @@ mod vector_scene;
 mod win32;
 
 pub use crate::canvas::{Canvas, Color, Point, Rect, Size};
-pub use crate::ui::MainPalette;
 pub use crate::declarative::{
     AbsoluteChild, AbsoluteSpec, Align, ButtonSpec, ColorTokens, ControlTokens, DeclarativeError,
     DrawCommand, DropdownSpec, EdgeInsets, FlexSpec, GridSpec, GridTemplate, IndicatorSpec,
@@ -34,5 +33,6 @@ pub use crate::declarative::{
 #[cfg(not(target_os = "windows"))]
 pub use crate::host::WindowHandle;
 pub use crate::host::{GuiError, HostWindow, InputState, OpenParentedMode};
+pub use crate::ui::MainPalette;
 #[cfg(target_os = "windows")]
 pub use crate::win32::WindowHandle;

@@ -684,8 +684,13 @@ where
         SetTimer(Some(child_hwnd), TIMER_ID, TIMER_INTERVAL_MS, None);
         DragAcceptFiles(child_hwnd, true);
         log_line_safe("win32: initial window hidden; waiting for show gate");
-        // Render once; on success it will reveal the window.
         let state = &mut *(state_ptr as *mut WindowState<State, Init, Build, Reduce>);
+        // Synchronize to the actual client rect before the first frame.
+        // Some hosts may constrain the child view at create-time without
+        // emitting WM_SIZE immediately, which otherwise causes a one-frame (or
+        // persistent) size mismatch and clipped content.
+        state.on_resize();
+        // Render once; on success it will reveal the window.
         state.render_frame();
     }
 
