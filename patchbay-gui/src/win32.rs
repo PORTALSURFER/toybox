@@ -1,7 +1,7 @@
 //! Win32 window creation and message handling.
 
 use crate::canvas::{Canvas, Color, Point, Size};
-use crate::declarative::{UiAction, UiSpec, render_checked};
+use crate::declarative::{render_checked, UiAction, UiSpec};
 use crate::host::{GuiError, InputState};
 use crate::logging::log_line_safe;
 use crate::renderer::{Renderer, RendererDevice};
@@ -18,28 +18,28 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+use windows::core::PCWSTR;
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    BeginPaint, CreateSolidBrush, DeleteObject, EndPaint, FillRect, GetDC, HBRUSH, HDC,
-    PAINTSTRUCT, ReleaseDC,
+    BeginPaint, CreateSolidBrush, DeleteObject, EndPaint, FillRect, GetDC, ReleaseDC, HBRUSH, HDC,
+    PAINTSTRUCT,
 };
 use windows::Win32::System::LibraryLoader::{
-    GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GetModuleHandleExW, GetModuleHandleW,
+    GetModuleHandleExW, GetModuleHandleW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, ReleaseCapture, SetCapture, VK_LBUTTON, VK_MENU, VK_RBUTTON, VK_SHIFT,
 };
 use windows::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDROP};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, CreateWindowExW, DefWindowProcW,
-    DestroyWindow, GWLP_USERDATA, GetClientRect, GetCursorPos, GetParent, GetWindowRect, HMENU,
-    HTCLIENT, LoadCursorW, MA_ACTIVATE, RegisterClassW, SW_HIDE, SW_SHOW, SWP_NOZORDER, SetTimer,
-    SetWindowLongPtrW, SetWindowPos, ShowWindow, WM_CHAR, WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, GetCursorPos, GetParent,
+    GetWindowRect, LoadCursorW, RegisterClassW, SetTimer, SetWindowLongPtrW, SetWindowPos,
+    ShowWindow, CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA, HMENU, HTCLIENT,
+    MA_ACTIVATE, SWP_NOZORDER, SW_HIDE, SW_SHOW, WM_CHAR, WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND,
     WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_MOUSEWHEEL,
     WM_NCDESTROY, WM_NCHITTEST, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WM_TIMER,
     WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
 };
-use windows::core::PCWSTR;
 
 const TIMER_ID: usize = 1;
 const TIMER_INTERVAL_MS: u32 = 16;
@@ -168,22 +168,22 @@ where
         }
     }
 
-    fn is_aspect_close(width: u32, height: u32, aspect: f32) -> bool {
-        if !aspect.is_finite() || aspect <= 0.0 {
-            return true;
-        }
-        let width = width.max(1) as i32;
-        let height = height.max(1) as i32;
-        let expected_height = ((width as f32) / aspect).round() as i32;
-        let expected_width = ((height as f32) * aspect).round() as i32;
-        (expected_height - height).abs() <= 1 || (expected_width - width).abs() <= 1
-    }
-
-    fn should_adopt_client_size(&self, width: u32, height: u32) -> bool {
-        match self.configured_aspect_ratio() {
-            Some(aspect) => Self::is_aspect_close(width, height, aspect),
-            None => true,
-        }
+    /// Return true when an observed client size should be applied to layout.
+    ///
+    /// Resize handling intentionally consumes all intermediate host sizes,
+    /// including transient non-aspect values. Filtering those samples causes
+    /// visible slide/snap artifacts while users drag-resize plugin windows.
+    fn should_apply_client_size(&self, width: u32, height: u32) -> bool {
+        // Keep the configured ratio plumbed for host negotiation paths, but do
+        // not gate live client-size adoption on ratio matching.
+        let _ = self.configured_aspect_ratio();
+        client_size_changed(
+            self.canonical_layout_size,
+            Size {
+                width: width.max(1),
+                height: height.max(1),
+            },
+        )
     }
 
     fn apply_layout_size(&mut self, size: Size, sync_pointer: bool) {
@@ -341,7 +341,7 @@ where
         }
         let width = (rect.right - rect.left).max(1) as u32;
         let height = (rect.bottom - rect.top).max(1) as u32;
-        if self.should_adopt_client_size(width, height) {
+        if self.should_apply_client_size(width, height) {
             self.apply_layout_size(Size { width, height }, false);
         }
     }
@@ -359,11 +359,7 @@ where
         }
         let width = (rect.right - rect.left).max(1) as u32;
         let height = (rect.bottom - rect.top).max(1) as u32;
-        if !self.should_adopt_client_size(width, height) {
-            return;
-        }
-        let current = self.canonical_layout_size;
-        if current.width != width || current.height != height {
+        if self.should_apply_client_size(width, height) {
             self.apply_layout_size(Size { width, height }, true);
         }
     }
@@ -536,6 +532,10 @@ where
         self.input.key_pressed = None;
         self.input.dropped_files.clear();
     }
+}
+
+fn client_size_changed(current: Size, next: Size) -> bool {
+    current != next
 }
 
 fn enforce_aspect_min(width: u32, height: u32, aspect: f32) -> (u32, u32) {
@@ -880,7 +880,8 @@ fn wide_to_path(buffer: &[u16]) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::enforce_aspect_min;
+    use super::{client_size_changed, enforce_aspect_min};
+    use crate::canvas::Size;
 
     #[test]
     fn aspect_enforces_min_dimensions() {
@@ -893,5 +894,27 @@ mod tests {
     #[test]
     fn aspect_noop_for_invalid_ratio() {
         assert_eq!(enforce_aspect_min(100, 80, 0.0), (100, 80));
+    }
+
+    #[test]
+    fn client_size_change_detects_intermediate_non_aspect_step() {
+        let current = Size {
+            width: 420,
+            height: 258,
+        };
+        let next = Size {
+            width: 507,
+            height: 269,
+        };
+        assert!(client_size_changed(current, next));
+    }
+
+    #[test]
+    fn client_size_change_ignores_identical_size() {
+        let current = Size {
+            width: 640,
+            height: 480,
+        };
+        assert!(!client_size_changed(current, current));
     }
 }
