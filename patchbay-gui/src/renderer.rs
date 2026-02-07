@@ -23,7 +23,7 @@ impl RendererDevice {
     pub fn new() -> Result<Self, GuiError> {
         log_line_safe("renderer_device: create begin");
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN,
+            backends: wgpu::Backends::from_env().unwrap_or(wgpu::Backends::PRIMARY),
             ..Default::default()
         });
         log_line_safe("renderer_device: instance created");
@@ -38,10 +38,12 @@ impl RendererDevice {
         })?;
         log_line_safe("renderer_device: adapter acquired");
 
+        let required_features =
+            adapter.features() & (wgpu::Features::CLEAR_TEXTURE | wgpu::Features::PIPELINE_CACHE);
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("patchbay-gui-device"),
-            required_features: wgpu::Features::empty(),
-            required_limits: wgpu::Limits::downlevel_defaults(),
+            required_features,
+            required_limits: wgpu::Limits::default(),
             experimental_features: wgpu::ExperimentalFeatures::disabled(),
             memory_hints: wgpu::MemoryHints::Performance,
             trace: wgpu::Trace::Off,
@@ -51,6 +53,9 @@ impl RendererDevice {
             GuiError::Device(err)
         })?;
         log_line_safe("renderer_device: device created");
+        device.on_uncaptured_error(Arc::new(|error| {
+            log_line_safe(&format!("renderer_device: uncaptured wgpu error: {error}"));
+        }));
 
         Ok(Self {
             instance,
@@ -68,6 +73,7 @@ pub struct Renderer {
     config: wgpu::SurfaceConfiguration,
     vello_renderer: VelloRenderer,
     scene: Scene,
+    render_target_texture: wgpu::Texture,
     render_target_view: wgpu::TextureView,
     blitter: wgpu::util::TextureBlitter,
     canvas_texture: wgpu::Texture,
@@ -95,7 +101,12 @@ impl Renderer {
             .formats
             .iter()
             .copied()
-            .find(|candidate| candidate.is_srgb())
+            .find(|candidate| {
+                matches!(
+                    candidate,
+                    wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Bgra8Unorm
+                )
+            })
             .unwrap_or_else(|| capabilities.formats[0]);
         let present_mode = capabilities
             .present_modes
@@ -124,7 +135,7 @@ impl Renderer {
             width: size.width.max(1),
             height: size.height.max(1),
         };
-        let render_target_view = Self::create_render_target_view(
+        let (render_target_texture, render_target_view) = Self::create_render_target(
             &device.device,
             Size {
                 width: config.width,
@@ -141,6 +152,7 @@ impl Renderer {
             config,
             vello_renderer,
             scene: Scene::new(),
+            render_target_texture,
             render_target_view,
             blitter,
             canvas_texture,
@@ -155,13 +167,15 @@ impl Renderer {
         self.config.width = size.width.max(1);
         self.config.height = size.height.max(1);
         self.surface.configure(&self.device.device, &self.config);
-        self.render_target_view = Self::create_render_target_view(
+        let (texture, view) = Self::create_render_target(
             &self.device.device,
             Size {
                 width: self.config.width,
                 height: self.config.height,
             },
         );
+        self.render_target_texture = texture;
+        self.render_target_view = view;
     }
 
     /// Upload the latest canvas pixels to the GPU texture used by Vello.
@@ -272,7 +286,10 @@ impl Renderer {
         self.canvas_size = size;
     }
 
-    fn create_render_target_view(device: &wgpu::Device, size: Size) -> wgpu::TextureView {
+    fn create_render_target(
+        device: &wgpu::Device,
+        size: Size,
+    ) -> (wgpu::Texture, wgpu::TextureView) {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("patchbay-gui-vello-target"),
             size: wgpu::Extent3d {
@@ -287,7 +304,8 @@ impl Renderer {
             usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
-        texture.create_view(&wgpu::TextureViewDescriptor::default())
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        (texture, view)
     }
 
     fn create_canvas_texture(device: &wgpu::Device, size: Size) -> wgpu::Texture {
