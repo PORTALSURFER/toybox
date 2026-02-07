@@ -395,6 +395,7 @@ where
                 &mut self.layout,
                 &self.theme,
             );
+            ui.set_vector_text_enabled(self.renderer.vector_text_available());
             ui.reset_input_consumption();
             ui.clear_overlays();
             let spec = (self.build_spec)(&self.input, &self.state);
@@ -411,6 +412,7 @@ where
                 }
             }
             ui.draw_overlays();
+            self.renderer.set_vector_commands(ui.take_vector_commands());
         }
         if let Some(size) = self.ui_state.take_root_frame_size() {
             let current = self.canvas.size();

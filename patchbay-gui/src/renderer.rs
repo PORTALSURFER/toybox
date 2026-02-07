@@ -3,6 +3,7 @@
 use crate::canvas::Size;
 use crate::host::GuiError;
 use crate::logging::log_line_safe;
+use crate::vector_scene::{VectorCommand, VectorScenePainter};
 use crate::win32::SurfaceWindow;
 use std::sync::Arc;
 use vello::kurbo::Affine;
@@ -80,6 +81,8 @@ pub struct Renderer {
     canvas_image: ImageData,
     canvas_size: Size,
     upload_scratch: Vec<u8>,
+    vector_painter: VectorScenePainter,
+    vector_commands: Vec<VectorCommand>,
 }
 
 impl Renderer {
@@ -159,7 +162,19 @@ impl Renderer {
             canvas_image,
             canvas_size: initial_canvas_size,
             upload_scratch: Vec::new(),
+            vector_painter: VectorScenePainter::new(),
+            vector_commands: Vec::new(),
         })
+    }
+
+    /// Return true if vector text rendering is available.
+    pub fn vector_text_available(&self) -> bool {
+        self.vector_painter.has_text_font()
+    }
+
+    /// Replace the queued vector commands for the next render pass.
+    pub fn set_vector_commands(&mut self, commands: Vec<VectorCommand>) {
+        self.vector_commands = commands;
     }
 
     /// Resize the surface and backing Vello render target.
@@ -235,9 +250,12 @@ impl Renderer {
         self.scene.reset();
         let scale_x = self.config.width as f64 / self.canvas_size.width.max(1) as f64;
         let scale_y = self.config.height as f64 / self.canvas_size.height.max(1) as f64;
-        self.scene.draw_image(
-            &self.canvas_image,
-            Affine::scale_non_uniform(scale_x, scale_y),
+        let scene_transform = Affine::scale_non_uniform(scale_x, scale_y);
+        self.scene.draw_image(&self.canvas_image, scene_transform);
+        self.vector_painter.append_to_scene(
+            &mut self.scene,
+            &self.vector_commands,
+            scene_transform,
         );
 
         if let Err(err) = self.vello_renderer.render_to_texture(

@@ -2797,7 +2797,7 @@ fn render_region_draw_commands(commands: &[DrawCommand], rect: Rect, ui: &mut Ui
                 color,
                 scale,
             } => {
-                ui.canvas().draw_text(
+                ui.text_scaled_with_color(
                     offset_point(*origin, rect.origin),
                     text,
                     *color,

@@ -17,6 +17,7 @@ mod logging;
 #[cfg(target_os = "windows")]
 mod renderer;
 mod ui;
+mod vector_scene;
 #[cfg(target_os = "windows")]
 mod win32;
 

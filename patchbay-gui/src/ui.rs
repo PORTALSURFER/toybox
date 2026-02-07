@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use crate::canvas::{Canvas, Color, Point, Rect, Size};
 use crate::host::InputState;
+use crate::vector_scene::{KnobVisual, VectorCommand};
 
 /// Default rendered knob diameter in pixels for declarative and immediate UIs.
 pub(crate) const DEFAULT_KNOB_DIAMETER: i32 = 64;
@@ -488,6 +489,10 @@ pub struct Ui<'a> {
     layout_stack: Vec<Layout>,
     /// Nested bounds tracking stack for auto-size containers.
     bounds_stack: Vec<Option<Rect>>,
+    /// Vector draw commands collected for the renderer overlay pass.
+    vector_commands: Vec<VectorCommand>,
+    /// Use vector text instead of CPU bitmap glyphs when available.
+    vector_text_enabled: bool,
 }
 
 impl<'a> Ui<'a> {
@@ -507,7 +512,21 @@ impl<'a> Ui<'a> {
             theme,
             layout_stack: Vec::new(),
             bounds_stack: Vec::new(),
+            vector_commands: Vec::new(),
+            vector_text_enabled: false,
         }
+    }
+
+    /// Enable or disable vector text emission for this frame.
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    pub(crate) fn set_vector_text_enabled(&mut self, enabled: bool) {
+        self.vector_text_enabled = enabled;
+    }
+
+    /// Drain queued vector commands for renderer submission.
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    pub(crate) fn take_vector_commands(&mut self) -> Vec<VectorCommand> {
+        std::mem::take(&mut self.vector_commands)
     }
 
     /// Access the current layout cursor.
@@ -525,10 +544,24 @@ impl<'a> Ui<'a> {
         self.layout.cursor.y += amount;
     }
 
+    /// Draw text through either the vector renderer or bitmap fallback path.
+    fn draw_text_internal(&mut self, position: Point, text: &str, color: Color, scale: u32) {
+        let scale = scale.max(1);
+        if self.vector_text_enabled {
+            self.vector_commands.push(VectorCommand::Text {
+                origin: position,
+                text: text.to_string(),
+                color,
+                scale,
+            });
+            return;
+        }
+        self.canvas.draw_text(position, text, color, scale);
+    }
+
     /// Draw a label at the given position.
     pub fn text(&mut self, position: Point, text: &str) {
-        self.canvas
-            .draw_text(position, text, self.theme.text, self.theme.text_scale);
+        self.draw_text_internal(position, text, self.theme.text, self.theme.text_scale);
         let size = text_size(text, self.theme.text_scale);
         self.track_rect_internal(Rect {
             origin: position,
@@ -538,13 +571,23 @@ impl<'a> Ui<'a> {
 
     /// Draw a label at the given position with a custom color.
     pub fn text_with_color(&mut self, position: Point, text: &str, color: Color) {
-        self.canvas
-            .draw_text(position, text, color, self.theme.text_scale);
+        self.draw_text_internal(position, text, color, self.theme.text_scale);
         let size = text_size(text, self.theme.text_scale);
         self.track_rect_internal(Rect {
             origin: position,
             size,
         });
+    }
+
+    /// Draw text with an explicit scale value.
+    pub(crate) fn text_scaled_with_color(
+        &mut self,
+        position: Point,
+        text: &str,
+        color: Color,
+        scale: u32,
+    ) {
+        self.draw_text_internal(position, text, color, scale);
     }
 
     /// Access the input snapshot for this frame.
@@ -687,7 +730,8 @@ impl<'a> Ui<'a> {
 
     /// Draw any deferred overlays (dropdown menus).
     pub fn draw_overlays(&mut self) {
-        for overlay in self.state.overlays.iter() {
+        let overlays = self.state.overlays.clone();
+        for overlay in overlays.iter() {
             let rect = overlay.base_rect;
             let height = rect.size.height as i32;
             for (index, option) in overlay.options.iter().enumerate() {
@@ -719,8 +763,12 @@ impl<'a> Ui<'a> {
                     option_rect.size.width.saturating_sub(8),
                     self.theme.text_scale,
                 );
-                self.canvas
-                    .draw_text(option_text, &fitted, self.theme.text, self.theme.text_scale);
+                self.draw_text_internal(
+                    option_text,
+                    &fitted,
+                    self.theme.text,
+                    self.theme.text_scale,
+                );
             }
         }
     }
@@ -761,8 +809,7 @@ impl<'a> Ui<'a> {
                 height: 0,
             };
         }
-        self.canvas
-            .draw_text(origin, &fitted, color, self.theme.text_scale);
+        self.draw_text_internal(origin, &fitted, color, self.theme.text_scale);
         let size = text_size(&fitted, self.theme.text_scale);
         if track_bounds {
             self.track_rect_internal(Rect { origin, size });
@@ -857,8 +904,7 @@ impl<'a> Ui<'a> {
                 x: origin.x + padding,
                 y: origin.y + padding,
             };
-            self.canvas
-                .draw_text(title_pos, title, self.theme.text, self.theme.text_scale);
+            self.draw_text_internal(title_pos, title, self.theme.text, self.theme.text_scale);
             let title_size = text_size(title, self.theme.text_scale);
             self.track_rect_internal(Rect {
                 origin: title_pos,
@@ -972,8 +1018,7 @@ impl<'a> Ui<'a> {
                 x: origin.x + padding,
                 y: origin.y + padding,
             };
-            self.canvas
-                .draw_text(title_pos, title, self.theme.text, self.theme.text_scale);
+            self.draw_text_internal(title_pos, title, self.theme.text, self.theme.text_scale);
             let title_size = text_size(title, self.theme.text_scale);
             self.track_rect_internal(Rect {
                 origin: title_pos,
@@ -1087,8 +1132,7 @@ impl<'a> Ui<'a> {
     pub fn label(&mut self, text: &str) {
         let pos = self.layout.cursor;
         let line_height = 8 * self.theme.text_scale as i32;
-        self.canvas
-            .draw_text(pos, text, self.theme.text, self.theme.text_scale);
+        self.draw_text_internal(pos, text, self.theme.text, self.theme.text_scale);
         let size = text_size(text, self.theme.text_scale);
         self.track_rect_internal(Rect { origin: pos, size });
         self.layout.cursor.y += line_height + self.layout.spacing;
@@ -1283,8 +1327,6 @@ impl<'a> Ui<'a> {
         };
         // Keep the existing rotation path but map high values to the right side.
         let angle = arc_start + (1.0 - t) * arc_span;
-        let indicator = knob_indicator_point(center, radius, angle);
-
         let fill = if response.active {
             self.theme.knob_active
         } else if hovered {
@@ -1293,29 +1335,20 @@ impl<'a> Ui<'a> {
             self.theme.knob_fill
         };
 
-        self.canvas.fill_circle(center, radius, fill);
-        self.canvas
-            .stroke_circle(center, radius, 2, self.theme.knob_outline);
         let arc_radius = radius + 6;
         let arc_thickness = 3;
-        self.canvas.stroke_arc(
+        self.vector_commands.push(VectorCommand::Knob(KnobVisual {
             center,
+            radius,
             arc_radius,
             arc_thickness,
             arc_start,
             arc_end,
-            self.theme.knob_outline,
-        );
-        self.canvas.stroke_arc(
-            center,
-            arc_radius,
-            arc_thickness,
-            angle,
-            arc_end,
-            self.theme.knob_indicator,
-        );
-        self.canvas
-            .draw_line(center, indicator, self.theme.knob_indicator);
+            value_angle: angle,
+            fill,
+            outline: self.theme.knob_outline,
+            indicator: self.theme.knob_indicator,
+        }));
 
         let name_pos = Point {
             x: knob_rect.origin.x,
@@ -1963,6 +1996,7 @@ impl<'a> Ui<'a> {
 /// Angles are interpreted in the same convention as [`Canvas::stroke_arc`]:
 /// `0` points right and positive rotation is counter-clockwise. Screen-space
 /// Y grows downward, so the sine term is inverted.
+#[cfg(test)]
 fn knob_indicator_point(center: Point, radius: i32, angle: f32) -> Point {
     Point {
         x: center.x + (angle.cos() * (radius as f32 * 0.7)) as i32,

@@ -11,6 +11,7 @@ wgpu = { version = "27.0.1", default-features = false, features = ["std", "parki
 vello = "0.7.0"
 pollster = "0.3"
 thiserror = "1.0"
+skrifa = "0.40"
 toybox-process-log = { path = "../crates/process-log" }
 
 [features]
