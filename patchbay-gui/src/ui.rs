@@ -1263,8 +1263,8 @@ impl<'a> Ui<'a> {
         }
 
         let t = (*value - range.0) / (range.1 - range.0).max(1.0e-6);
-        let arc_start = 7.0 * std::f32::consts::PI / 4.0 + std::f32::consts::PI;
-        let arc_end = 5.0 * std::f32::consts::PI / 4.0 + std::f32::consts::PI;
+        let arc_start = 7.0 * std::f32::consts::PI / 4.0;
+        let arc_end = 5.0 * std::f32::consts::PI / 4.0;
         let arc_span = if arc_end < arc_start {
             arc_end + std::f32::consts::TAU - arc_start
         } else {
