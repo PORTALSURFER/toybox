@@ -1823,14 +1823,8 @@ enum ContainerKind {
 fn container_debug_border_color(kind: ContainerKind, depth: usize) -> Option<Color> {
     #[cfg(feature = "layout-debug-borders")]
     {
-        let palette = match kind {
-            ContainerKind::RootFrame => [Color::rgb(245, 98, 98), Color::rgb(255, 136, 136)],
-            ContainerKind::Panel => [Color::rgb(88, 196, 255), Color::rgb(132, 216, 255)],
-            ContainerKind::Flex => [Color::rgb(117, 230, 155), Color::rgb(156, 242, 182)],
-            ContainerKind::Grid => [Color::rgb(255, 196, 93), Color::rgb(255, 218, 145)],
-            ContainerKind::Absolute => [Color::rgb(186, 149, 255), Color::rgb(208, 181, 255)],
-        };
-        Some(palette[depth % palette.len()])
+        let _ = (kind, depth);
+        Some(Color::rgb(245, 98, 98))
     }
     #[cfg(not(feature = "layout-debug-borders"))]
     {
@@ -3228,9 +3222,10 @@ mod tests {
             ContainerKind::Grid,
             ContainerKind::Absolute,
         ];
+        let expected = Some(Color::rgb(245, 98, 98));
         for kind in kinds {
-            assert!(container_debug_border_color(kind, 0).is_some());
-            assert!(container_debug_border_color(kind, 1).is_some());
+            assert_eq!(container_debug_border_color(kind, 0), expected);
+            assert_eq!(container_debug_border_color(kind, 1), expected);
         }
     }
 
