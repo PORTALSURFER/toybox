@@ -67,7 +67,5 @@ On Windows, output paths are:
 
 ## SDK requirement for VST3
 
-VST3 builds validate that `third_party/vst3sdk` exists (or `TOYBOX_VST3SDK_DIR` is set).
-Initialize submodules before building:
-
-- `git submodule update --init --recursive`
+VST3 builds require `VST3_SDK_DIR` to be set to a valid VST3 SDK root
+directory (it must contain `pluginterfaces`).

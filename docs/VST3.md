@@ -8,14 +8,16 @@ Toybox exposes VST3 support behind the `vst3` feature flag:
 - Convenience imports: `toybox::vst3::prelude::*`
 - Entry macro: `toybox::vst3_plugin_entry!(FactoryType)`
 
-The VST3 SDK source tree is tracked as a git submodule at:
+Toybox resolves the VST3 SDK from this environment variable:
 
-- `third_party/vst3sdk`
+- `VST3_SDK_DIR`
 
 ## Prerequisites
 
-1. Initialize submodules:
-- `git submodule update --init --recursive`
+1. Set `VST3_SDK_DIR` to your local VST3 SDK root (the folder that contains
+   `pluginterfaces`):
+- PowerShell: `$env:VST3_SDK_DIR = "C:\\path\\to\\vst3sdk"`
+- Bash/zsh: `export VST3_SDK_DIR=/path/to/vst3sdk`
 
 2. Build with VST3 enabled:
 - Add `features = ["vst3"]` to your `toybox` dependency.

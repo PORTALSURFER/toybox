@@ -23,7 +23,7 @@
 ## Scope (current)
 - CLAP framework coverage: entry points, descriptor/factory, ABI glue, params/state/value↔text/automation, event processing, registration macros, and Windows `.clap` bundle layout.
 - VST3 framework coverage (feature `vst3`): entrypoint macro, factory/component/controller helper modules, process/params/state/gui utilities, and Windows `.vst3` bundle layout helpers.
-- VST3 SDK source-of-truth stored as a submodule at `third_party/vst3sdk`.
+- VST3 SDK path provided by the `VST3_SDK_DIR` environment variable.
 - Minimal examples:
   - `examples/minimal-clap`
   - `examples/minimal-vst3`
@@ -52,6 +52,6 @@
 
 ## Dependencies
 - CLAP: `clack-plugin`, `clack-extensions`, `clack-common`.
-- VST3: `third_party/vst3sdk` submodule (validated at build time) plus generated Rust bindings from `vst3`.
+- VST3: `VST3_SDK_DIR` SDK location (validated at build time) plus generated Rust bindings from `vst3`.
 - GUI: `patchbay-gui` + `wgpu`.
 - DSP/spectral use-cases: `rustfft` in plugin crates that need it.
