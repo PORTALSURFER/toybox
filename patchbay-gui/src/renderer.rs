@@ -10,6 +10,31 @@ use vello::kurbo::Affine;
 use vello::peniko::{Color as VelloColor, ImageData};
 use vello::{AaConfig, RenderParams, Renderer as VelloRenderer, RendererOptions, Scene};
 
+/// Surface-space transform used to present the CPU canvas.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct PresentationTransform {
+    /// X-axis scale factor.
+    pub scale_x: f32,
+    /// Y-axis scale factor.
+    pub scale_y: f32,
+    /// X-axis translation in surface pixels.
+    pub offset_x: f32,
+    /// Y-axis translation in surface pixels.
+    pub offset_y: f32,
+}
+
+impl PresentationTransform {
+    /// Build a transform that stretches the canvas to the full surface.
+    fn stretch(surface_width: u32, surface_height: u32, canvas_size: Size) -> Self {
+        Self {
+            scale_x: surface_width.max(1) as f32 / canvas_size.width.max(1) as f32,
+            scale_y: surface_height.max(1) as f32 / canvas_size.height.max(1) as f32,
+            offset_x: 0.0,
+            offset_y: 0.0,
+        }
+    }
+}
+
 /// Cached GPU device resources shared across window surfaces.
 #[derive(Debug)]
 pub struct RendererDevice {
@@ -83,6 +108,7 @@ pub struct Renderer {
     upload_scratch: Vec<u8>,
     vector_painter: VectorScenePainter,
     vector_commands: Vec<VectorCommand>,
+    presentation_transform: Option<PresentationTransform>,
 }
 
 impl Renderer {
@@ -164,6 +190,7 @@ impl Renderer {
             upload_scratch: Vec::new(),
             vector_painter: VectorScenePainter::new(),
             vector_commands: Vec::new(),
+            presentation_transform: None,
         })
     }
 
@@ -175,6 +202,11 @@ impl Renderer {
     /// Replace the queued vector commands for the next render pass.
     pub fn set_vector_commands(&mut self, commands: Vec<VectorCommand>) {
         self.vector_commands = commands;
+    }
+
+    /// Set the surface transform used for the next render pass.
+    pub fn set_presentation_transform(&mut self, transform: PresentationTransform) {
+        self.presentation_transform = Some(transform);
     }
 
     /// Resize the surface and backing Vello render target.
@@ -248,11 +280,17 @@ impl Renderer {
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         self.scene.reset();
-        let scale_x = self.config.width as f64 / self.canvas_size.width.max(1) as f64;
-        let scale_y = self.config.height as f64 / self.canvas_size.height.max(1) as f64;
-        // The declarative layout engine owns uniform-fit policy. The renderer
-        // should map the CPU canvas to the full surface to avoid letterboxing.
-        let scene_transform = Affine::scale_non_uniform(scale_x, scale_y);
+        let transform = self.presentation_transform.unwrap_or_else(|| {
+            PresentationTransform::stretch(self.config.width, self.config.height, self.canvas_size)
+        });
+        let scene_transform = Affine::new([
+            transform.scale_x as f64,
+            0.0,
+            0.0,
+            transform.scale_y as f64,
+            transform.offset_x as f64,
+            transform.offset_y as f64,
+        ]);
         self.scene.draw_image(&self.canvas_image, scene_transform);
         self.vector_painter.append_to_scene(
             &mut self.scene,

@@ -1,10 +1,10 @@
 //! Win32 window creation and message handling.
 
 use crate::canvas::{Canvas, Color, Point, Size};
-use crate::declarative::{UiAction, UiSpec, render_checked};
+use crate::declarative::{UiAction, UiSpec, plan_root_render, render_checked};
 use crate::host::{GuiError, InputState};
 use crate::logging::log_line_safe;
-use crate::renderer::{Renderer, RendererDevice};
+use crate::renderer::{PresentationTransform, Renderer, RendererDevice};
 use crate::ui::{Layout, Theme, Ui, UiState};
 use raw_window_handle_06::{
     DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
@@ -195,10 +195,7 @@ where
         self.last_size
             .store(pack_size(size.width, size.height), Ordering::Release);
         self.input.window_size = size;
-        if self.canvas.size() != size {
-            self.canvas.resize(size.width, size.height);
-            self.renderer.resize(size);
-        }
+        self.renderer.resize(size);
         if sync_pointer {
             self.sync_pointer_pos();
         }
@@ -384,15 +381,9 @@ where
             };
             return;
         }
-        let client_width = (client_rect.right - client_rect.left).max(1) as i32;
-        let client_height = (client_rect.bottom - client_rect.top).max(1) as i32;
-        let canvas_size = self.canvas.size();
-        let scaled_x = (local_x as i64 * canvas_size.width as i64 / client_width as i64) as i32;
-        let scaled_y = (local_y as i64 * canvas_size.height as i64 / client_height as i64) as i32;
-
         self.input.pointer_pos = Point {
-            x: scaled_x,
-            y: scaled_y,
+            x: local_x,
+            y: local_y,
         };
     }
 
@@ -448,16 +439,35 @@ where
         self.sync_client_size_if_needed();
 
         self.layout.cursor = self.layout_origin;
-        self.canvas.clear(self.theme.background);
         self.sync_pointer_pos();
         self.sync_mouse_buttons();
 
         {
             self.ui_state.begin_frame();
-            let spec = (self.build_spec)(&self.input, &self.state);
+            let initial_spec = (self.build_spec)(&self.input, &self.state);
+            let initial_plan = plan_root_render(&initial_spec, self.input.window_size);
+            let mut mapped_input = self.input.clone();
+            mapped_input.pointer_pos = initial_plan
+                .transform
+                .surface_to_design(self.input.pointer_pos);
+            let spec = (self.build_spec)(&mapped_input, &self.state);
+            let plan = plan_root_render(&spec, self.input.window_size);
+            mapped_input.pointer_pos = plan.transform.surface_to_design(self.input.pointer_pos);
+            if self.canvas.size() != plan.layout_size {
+                self.canvas
+                    .resize(plan.layout_size.width, plan.layout_size.height);
+            }
+            self.canvas.clear(self.theme.background);
+            self.renderer
+                .set_presentation_transform(PresentationTransform {
+                    scale_x: plan.transform.scale_x,
+                    scale_y: plan.transform.scale_y,
+                    offset_x: plan.transform.offset_x,
+                    offset_y: plan.transform.offset_y,
+                });
             let mut ui = Ui::new(
                 &mut self.canvas,
-                &self.input,
+                &mapped_input,
                 &mut self.ui_state,
                 &mut self.layout,
                 &self.theme,
