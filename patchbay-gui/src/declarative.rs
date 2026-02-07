@@ -2607,7 +2607,7 @@ fn render_absolute(
 /// Render a label node.
 fn render_label(label: &LabelSpec, rect: Rect, ui: &mut Ui<'_>, tokens: &ThemeTokens) {
     let color = label.color.unwrap_or(tokens.colors.text);
-    ui.text_with_color(rect.origin, &label.text, color);
+    let _ = ui.text_single_line_hard_clamped_in_rect(rect, &label.text, color);
 }
 
 /// Render a knob node and emit actions.
@@ -3308,6 +3308,26 @@ mod tests {
     #[test]
     fn default_control_tokens_use_half_knob_diameter() {
         assert_eq!(ThemeTokens::default().controls.knob_diameter, 32);
+    }
+
+    #[test]
+    fn label_with_explicit_box_does_not_expand_root_width() {
+        let spec = UiSpec::new(
+            RootFrameSpec::new(
+                "root",
+                label("VERY LONG LABEL THAT MUST NOT WIDEN THE WINDOW")
+                    .layout(LayoutBox::fixed(64, 16).max(64, 16)),
+            )
+            .padding(0),
+        );
+        let measured = measure_checked(&spec).expect("measurement should succeed");
+        assert_eq!(
+            measured,
+            Size {
+                width: 64,
+                height: 16,
+            }
+        );
     }
 
     #[test]

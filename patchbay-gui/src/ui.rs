@@ -421,6 +421,34 @@ fn fit_text_single_line_ellipsis(text: &str, max_width: u32, scale: u32) -> Stri
     fitted
 }
 
+/// Fit a string to a single line by hard-clamping to visible width.
+///
+/// Unlike [`fit_text_single_line_ellipsis`], this does not append ellipsis.
+fn fit_text_single_line_hard_clamp(text: &str, max_width: u32, scale: u32) -> String {
+    if max_width == 0 {
+        return String::new();
+    }
+
+    let single_line: String = text
+        .chars()
+        .map(|ch| if ch == '\n' || ch == '\r' { ' ' } else { ch })
+        .collect();
+    if text_size(&single_line, scale).width <= max_width {
+        return single_line;
+    }
+
+    let char_width = 6 * scale.max(1);
+    if char_width == 0 {
+        return String::new();
+    }
+    let max_chars = (max_width / char_width) as usize;
+    if max_chars == 0 {
+        return String::new();
+    }
+
+    single_line.chars().take(max_chars).collect()
+}
+
 /// Response metadata from knob widgets.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct KnobResponse {
@@ -832,6 +860,56 @@ impl<'a> Ui<'a> {
             self.track_rect_internal(Rect { origin, size });
         }
         size
+    }
+
+    /// Draw a single-line label hard-clamped to width and height bounds.
+    fn draw_text_single_line_hard_clamped(
+        &mut self,
+        origin: Point,
+        text: &str,
+        max_width: u32,
+        max_height: u32,
+        color: Color,
+        track_bounds: bool,
+    ) -> Size {
+        let line_height = 8 * self.theme.text_scale.max(1);
+        if max_height < line_height {
+            return Size {
+                width: 0,
+                height: 0,
+            };
+        }
+
+        let fitted = fit_text_single_line_hard_clamp(text, max_width, self.theme.text_scale);
+        if fitted.is_empty() {
+            return Size {
+                width: 0,
+                height: 0,
+            };
+        }
+        self.draw_text_internal(origin, &fitted, color, self.theme.text_scale);
+        let size = text_size(&fitted, self.theme.text_scale);
+        if track_bounds {
+            self.track_rect_internal(Rect { origin, size });
+        }
+        size
+    }
+
+    /// Draw bounded single-line text in a rect with hard clipping semantics.
+    pub(crate) fn text_single_line_hard_clamped_in_rect(
+        &mut self,
+        rect: Rect,
+        text: &str,
+        color: Color,
+    ) -> Size {
+        self.draw_text_single_line_hard_clamped(
+            rect.origin,
+            text,
+            rect.size.width,
+            rect.size.height,
+            color,
+            true,
+        )
     }
 
     /// Push a new empty bounds union for nested layout tracking.
@@ -2189,6 +2267,51 @@ mod tests {
         );
 
         assert_eq!(response.measured_size.width, expected_width);
+    }
+
+    #[test]
+    fn hard_clamp_fitter_truncates_without_ellipsis() {
+        let fitted = fit_text_single_line_hard_clamp("ABCDEFGHIJ", 24, 1);
+        assert_eq!(fitted, "ABCD");
+        assert!(!fitted.contains("..."));
+    }
+
+    #[test]
+    fn hard_clamped_text_respects_rect_height() {
+        let mut canvas = Canvas::new(200, 120);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState::default();
+
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let clipped = ui.text_single_line_hard_clamped_in_rect(
+            Rect {
+                origin: Point { x: 0, y: 0 },
+                size: Size {
+                    width: 120,
+                    height: 8,
+                },
+            },
+            "BOUND",
+            Color::rgb(255, 255, 255),
+        );
+        assert_eq!(clipped.width, 0);
+        assert_eq!(clipped.height, 0);
+
+        let visible = ui.text_single_line_hard_clamped_in_rect(
+            Rect {
+                origin: Point { x: 0, y: 20 },
+                size: Size {
+                    width: 18,
+                    height: 16,
+                },
+            },
+            "ABCDEFGHIJ",
+            Color::rgb(255, 255, 255),
+        );
+        assert_eq!(visible.width, 12);
+        assert_eq!(visible.height, 16);
     }
 
     #[test]
