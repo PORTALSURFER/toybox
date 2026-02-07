@@ -33,11 +33,12 @@ use windows::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDR
 use windows::Win32::UI::WindowsAndMessaging::{
     CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, CreateWindowExW, DefWindowProcW,
     DestroyWindow, GWLP_USERDATA, GetClientRect, GetCursorPos, GetParent, GetWindowRect, HMENU,
-    HTCLIENT, LoadCursorW, MA_ACTIVATE, RegisterClassW, SW_HIDE, SW_SHOW, SetTimer,
-    SetWindowLongPtrW, ShowWindow, WM_CHAR, WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND,
-    WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_MOUSEWHEEL,
-    WM_NCDESTROY, WM_NCHITTEST, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WM_TIMER,
-    WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
+    HTCLIENT, LoadCursorW, MA_ACTIVATE, RegisterClassW, SW_HIDE, SW_SHOW, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOZORDER, SetTimer, SetWindowLongPtrW, SetWindowPos, ShowWindow, WM_CHAR,
+    WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_NCHITTEST, WM_PAINT,
+    WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN,
+    WS_CLIPSIBLINGS,
 };
 use windows::core::PCWSTR;
 
@@ -329,15 +330,10 @@ where
     }
 
     fn on_resize(&mut self) {
-        let mut rect = windows::Win32::Foundation::RECT::default();
-        unsafe {
-            if GetClientRect(self.hwnd, &mut rect).is_err() {
-                log_line_safe("win32: GetClientRect failed in on_resize");
-                return;
-            }
-        }
-        let width = (rect.right - rect.left).max(1) as u32;
-        let height = (rect.bottom - rect.top).max(1) as u32;
+        let Some((width, height)) = self.current_client_size() else {
+            log_line_safe("win32: GetClientRect failed in on_resize");
+            return;
+        };
         if self.should_apply_client_size(width, height) {
             self.apply_layout_size(Size { width, height }, false);
         }
@@ -348,16 +344,41 @@ where
     /// Some hosts do not reliably send `WM_SIZE` for every embedded resize
     /// path, so we also detect and apply size changes in the render loop.
     fn sync_client_size_if_needed(&mut self) {
+        let Some((width, height)) = self.current_client_size() else {
+            return;
+        };
+        if self.should_apply_client_size(width, height) {
+            self.apply_layout_size(Size { width, height }, true);
+        }
+    }
+
+    fn current_client_size(&self) -> Option<(u32, u32)> {
         let mut rect = windows::Win32::Foundation::RECT::default();
         unsafe {
             if GetClientRect(self.hwnd, &mut rect).is_err() {
-                return;
+                return None;
             }
         }
-        let width = (rect.right - rect.left).max(1) as u32;
-        let height = (rect.bottom - rect.top).max(1) as u32;
-        if self.should_apply_client_size(width, height) {
-            self.apply_layout_size(Size { width, height }, true);
+        Some((
+            (rect.right - rect.left).max(1) as u32,
+            (rect.bottom - rect.top).max(1) as u32,
+        ))
+    }
+
+    fn apply_child_size_request(&self, size: Size) {
+        let result = unsafe {
+            SetWindowPos(
+                self.hwnd,
+                None,
+                0,
+                0,
+                size.width.max(1) as i32,
+                size.height.max(1) as i32,
+                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
+            )
+        };
+        if result.is_err() {
+            log_line_safe("win32: SetWindowPos failed for resize request");
         }
     }
 
@@ -419,19 +440,11 @@ where
                 width: width.max(1),
                 height: height.max(1),
             };
-            let mut current_rect = windows::Win32::Foundation::RECT::default();
-            let host_client_size = unsafe {
-                if GetClientRect(self.hwnd, &mut current_rect).is_ok() {
-                    Some((
-                        (current_rect.right - current_rect.left).max(1) as u32,
-                        (current_rect.bottom - current_rect.top).max(1) as u32,
-                    ))
-                } else {
-                    None
-                }
-            };
-            // Host manages parented child geometry; avoid SetWindowPos here to
-            // prevent resize feedback loops and flicker during drag-resize.
+            let mut host_client_size = self.current_client_size();
+            if host_client_size != Some((requested.width, requested.height)) {
+                self.apply_child_size_request(requested);
+                host_client_size = self.current_client_size();
+            }
             let target = resolved_layout_size_for_resize_request(requested, host_client_size);
             self.apply_layout_size(target, true);
         }
