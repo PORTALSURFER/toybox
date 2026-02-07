@@ -277,9 +277,20 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
         if !gui.open() {
             return kResultFalse;
         }
-        if let Some((width, height)) = gui.last_size() {
-            self.rect.set(view_rect(width as i32, height as i32));
+        let (min_width, min_height) = self.minimum_size();
+        let (requested_width, requested_height) = if let Some((width, height)) = gui.last_size() {
+            (width as i32, height as i32)
+        } else {
+            (min_width, min_height)
+        };
+        let axis = self.dominant_resize_axis(requested_width, requested_height);
+        let (constrained_width, constrained_height) =
+            self.constrain_uniform_size(requested_width, requested_height, axis);
+        if constrained_width != requested_width || constrained_height != requested_height {
+            gui.request_resize(constrained_width as u32, constrained_height as u32);
         }
+        self.rect
+            .set(view_rect(constrained_width, constrained_height));
 
         self.attached.set(true);
         kResultOk
@@ -384,6 +395,7 @@ mod tests {
 
     struct MockHostedGui {
         last_size: Option<(u32, u32)>,
+        resize_request: std::sync::Mutex<Option<(u32, u32)>>,
     }
 
     impl Vst3HostedGui for MockHostedGui {
@@ -399,7 +411,11 @@ mod tests {
             self.last_size
         }
 
-        fn request_resize(&self, _width: u32, _height: u32) {}
+        fn request_resize(&self, width: u32, height: u32) {
+            if let Ok(mut slot) = self.resize_request.lock() {
+                *slot = Some((width, height));
+            }
+        }
     }
 
     #[test]
@@ -424,7 +440,14 @@ mod tests {
 
     #[test]
     fn hosted_view_reports_default_size_before_attach() {
-        let view = HostedVst3View::new(MockHostedGui { last_size: None }, 420, 240);
+        let view = HostedVst3View::new(
+            MockHostedGui {
+                last_size: None,
+                resize_request: std::sync::Mutex::new(None),
+            },
+            420,
+            240,
+        );
         let mut size = view_rect(0, 0);
         let result = unsafe { view.getSize(&mut size) };
         assert_eq!(result, kResultOk);
@@ -437,6 +460,7 @@ mod tests {
         let view = HostedVst3View::new(
             MockHostedGui {
                 last_size: Some((777, 333)),
+                resize_request: std::sync::Mutex::new(None),
             },
             420,
             240,
@@ -450,7 +474,14 @@ mod tests {
 
     #[test]
     fn hosted_view_size_constraint_keeps_requested_size_when_larger_than_minimum() {
-        let view = HostedVst3View::new(MockHostedGui { last_size: None }, 320, 200);
+        let view = HostedVst3View::new(
+            MockHostedGui {
+                last_size: None,
+                resize_request: std::sync::Mutex::new(None),
+            },
+            320,
+            200,
+        );
         let mut rect = view_rect(640, 400);
         let result = unsafe { view.checkSizeConstraint(&mut rect) };
         assert_eq!(result, kResultOk);
@@ -460,7 +491,14 @@ mod tests {
 
     #[test]
     fn hosted_view_size_constraint_blocks_non_uniform_resize() {
-        let view = HostedVst3View::new(MockHostedGui { last_size: None }, 320, 200);
+        let view = HostedVst3View::new(
+            MockHostedGui {
+                last_size: None,
+                resize_request: std::sync::Mutex::new(None),
+            },
+            320,
+            200,
+        );
         let mut rect = view_rect(500, 200);
         let result = unsafe { view.checkSizeConstraint(&mut rect) };
         assert_eq!(result, kResultOk);
@@ -470,7 +508,14 @@ mod tests {
 
     #[test]
     fn hosted_view_attach_rejects_null_parent() {
-        let view = HostedVst3View::new(MockHostedGui { last_size: None }, 320, 240);
+        let view = HostedVst3View::new(
+            MockHostedGui {
+                last_size: None,
+                resize_request: std::sync::Mutex::new(None),
+            },
+            320,
+            240,
+        );
         let result = unsafe { view.attached(std::ptr::null_mut(), kPlatformTypeHWND) };
         assert_eq!(result, kInvalidArgument);
     }
