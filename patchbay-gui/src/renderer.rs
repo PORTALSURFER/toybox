@@ -250,7 +250,13 @@ impl Renderer {
         self.scene.reset();
         let scale_x = self.config.width as f64 / self.canvas_size.width.max(1) as f64;
         let scale_y = self.config.height as f64 / self.canvas_size.height.max(1) as f64;
-        let scene_transform = Affine::scale_non_uniform(scale_x, scale_y);
+        let uniform_scale = scale_x.min(scale_y).max(f64::EPSILON);
+        let fitted_width = self.canvas_size.width as f64 * uniform_scale;
+        let fitted_height = self.canvas_size.height as f64 * uniform_scale;
+        let offset_x = ((self.config.width as f64 - fitted_width) * 0.5).max(0.0);
+        let offset_y = ((self.config.height as f64 - fitted_height) * 0.5).max(0.0);
+        let scene_transform =
+            Affine::translate((offset_x, offset_y)) * Affine::scale(uniform_scale);
         self.scene.draw_image(&self.canvas_image, scene_transform);
         self.vector_painter.append_to_scene(
             &mut self.scene,
