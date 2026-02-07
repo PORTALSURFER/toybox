@@ -1,6 +1,7 @@
 //! Strict declarative Patchbay GUI helpers for CLAP plugins.
 
 use crate::logging::log_line_safe;
+use clack_extensions::gui::GuiSize;
 use clack_plugin::plugin::PluginError;
 use patchbay_gui::{GuiError, HostWindow, Size, UiAction, UiSpec};
 use raw_window_handle::RawWindowHandle;
@@ -51,6 +52,33 @@ impl GuiHostWindow {
             width, height
         ));
         self.inner.request_resize(width, height);
+    }
+
+    /// Return the canonical host-resize policy for Patchbay CLAP windows.
+    ///
+    /// Patchbay GUIs are designed to accept host-driven resize requests.
+    pub const fn host_resize_enabled(&self) -> bool {
+        true
+    }
+
+    /// Normalize a host-provided GUI size to Patchbay's non-zero constraints.
+    ///
+    /// CLAP hosts may report zero during transient resize negotiation; Patchbay
+    /// always clamps to at least `1x1`.
+    pub fn normalize_host_size(&self, size: GuiSize) -> GuiSize {
+        GuiSize {
+            width: size.width.max(1),
+            height: size.height.max(1),
+        }
+    }
+
+    /// Apply a host-driven GUI resize request using Patchbay's policy.
+    ///
+    /// This keeps resize ownership in Toybox so plugin implementations do not
+    /// need per-plugin resize forwarding logic.
+    pub fn apply_host_size(&self, size: GuiSize) {
+        let normalized = self.normalize_host_size(size);
+        self.request_resize(normalized.width, normalized.height);
     }
 
     /// Set an optional aspect ratio for window resizing.
