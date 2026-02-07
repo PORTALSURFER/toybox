@@ -359,25 +359,21 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
             return kInvalidArgument;
         }
 
+        // Hosts are expected to call checkSizeConstraint during resize.
+        // Avoid re-constraining here to prevent correction loops and visible
+        // jumps while dragging window corners.
         let requested = unsafe { *new_size };
         let requested_width = (requested.right - requested.left).max(1);
         let requested_height = (requested.bottom - requested.top).max(1);
-        let axis = self.dominant_resize_axis(requested_width, requested_height);
-        let (mut constrained_width, mut constrained_height) =
-            self.constrain_uniform_size(requested_width, requested_height, axis);
-        if constrained_width > requested_width || constrained_height > requested_height {
-            (constrained_width, constrained_height) =
-                self.fit_uniform_within_requested(requested_width, requested_height);
-        }
-        let constrained = view_rect(constrained_width, constrained_height);
+        let constrained = view_rect(requested_width, requested_height);
         unsafe { *new_size = constrained };
 
         if let Ok(gui) = self.gui.lock() {
             let current = self.rect.get();
             let current_width = (current.right - current.left).max(1);
             let current_height = (current.bottom - current.top).max(1);
-            if constrained_width != current_width || constrained_height != current_height {
-                gui.request_resize(constrained_width as u32, constrained_height as u32);
+            if requested_width != current_width || requested_height != current_height {
+                gui.request_resize(requested_width as u32, requested_height as u32);
             }
         }
         self.rect.set(constrained);
