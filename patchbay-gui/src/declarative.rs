@@ -5,7 +5,9 @@
 //! via an explicit reducer step.
 
 use crate::canvas::{Color, Point, Rect, Size};
-use crate::ui::{RegionResponse, RootFrameStyle, Ui, WidgetId, knob_block_size_for_diameter};
+use crate::ui::{
+    MainPalette, RegionResponse, RootFrameStyle, Ui, WidgetId, knob_block_size_for_diameter,
+};
 
 /// Validation errors produced by declarative UI helpers.
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]
@@ -1619,13 +1621,25 @@ pub struct ColorTokens {
 
 impl Default for ColorTokens {
     fn default() -> Self {
+        Self::main()
+    }
+}
+
+impl ColorTokens {
+    /// Build declarative color tokens from a semantic palette.
+    pub const fn from_palette(palette: MainPalette) -> Self {
         Self {
-            background: Color::rgb(18, 19, 22),
-            surface: Color::rgb(52, 57, 66),
-            border: Color::rgb(88, 94, 104),
-            text: Color::rgb(238, 239, 242),
-            accent: Color::rgb(90, 140, 220),
+            background: palette.background_primary,
+            surface: palette.background_secondary,
+            border: palette.ui_secondary,
+            text: palette.text_primary,
+            accent: palette.accent_focus,
         }
+    }
+
+    /// Return the canonical declarative color token set.
+    pub const fn main() -> Self {
+        Self::from_palette(MainPalette::main())
     }
 }
 
@@ -1716,6 +1730,38 @@ pub struct ThemeTokens {
     pub spacing: SpacingTokens,
     /// Control token set.
     pub controls: ControlTokens,
+}
+
+impl ThemeTokens {
+    /// Build declarative tokens from a semantic palette and default sizing.
+    pub const fn from_palette(palette: MainPalette) -> Self {
+        Self {
+            colors: ColorTokens::from_palette(palette),
+            typography: TypographyTokens { text_scale: 2 },
+            spacing: SpacingTokens {
+                xs: 4,
+                sm: 8,
+                md: 12,
+                lg: 16,
+            },
+            controls: ControlTokens {
+                knob_diameter: 32,
+                slider_width: 180,
+                slider_height: 28,
+                toggle_width: 64,
+                toggle_height: 28,
+                button_width: 120,
+                button_height: 28,
+                dropdown_width: 180,
+                dropdown_height: 28,
+            },
+        }
+    }
+
+    /// Return the canonical declarative token set.
+    pub const fn main() -> Self {
+        Self::from_palette(MainPalette::main())
+    }
 }
 
 /// Measure the required size for a UI specification.
@@ -3170,7 +3216,7 @@ mod tests {
     use super::*;
     use crate::canvas::Canvas;
     use crate::host::InputState;
-    use crate::ui::{Layout, Theme, UiState};
+    use crate::ui::{Layout, MainPalette, Theme, UiState};
 
     #[cfg(feature = "layout-debug-borders")]
     #[test]
@@ -3468,6 +3514,28 @@ mod tests {
     #[test]
     fn default_control_tokens_use_half_knob_diameter() {
         assert_eq!(ThemeTokens::default().controls.knob_diameter, 32);
+    }
+
+    #[test]
+    fn default_color_tokens_use_main_palette() {
+        let palette = MainPalette::main();
+        let tokens = ColorTokens::default();
+        assert_eq!(tokens.background, palette.background_primary);
+        assert_eq!(tokens.surface, palette.background_secondary);
+        assert_eq!(tokens.border, palette.ui_secondary);
+        assert_eq!(tokens.text, palette.text_primary);
+        assert_eq!(tokens.accent, palette.accent_focus);
+    }
+
+    #[test]
+    fn theme_tokens_from_palette_uses_palette_for_color_roles() {
+        let palette = MainPalette::main();
+        let tokens = ThemeTokens::from_palette(palette);
+        assert_eq!(tokens.colors.background, palette.background_primary);
+        assert_eq!(tokens.colors.surface, palette.background_secondary);
+        assert_eq!(tokens.colors.border, palette.ui_secondary);
+        assert_eq!(tokens.colors.text, palette.text_primary);
+        assert_eq!(tokens.colors.accent, palette.accent_focus);
     }
 
     #[test]

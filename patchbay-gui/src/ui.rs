@@ -63,6 +63,50 @@ impl WidgetId {
     }
 }
 
+/// Semantic color palette shared across Patchbay-based GUIs.
+///
+/// The palette defines intent-level roles (focus, emphasis, text, and
+/// backgrounds) so widget and declarative token defaults can stay visually
+/// consistent without hardcoding unrelated RGB values throughout the codebase.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MainPalette {
+    /// Primary focus accent for active elements and cursor-like indicators.
+    pub accent_focus: Color,
+    /// Secondary emphasis for highlighted syntax-like constructs.
+    pub syntax_emphasis: Color,
+    /// Identifier emphasis color for important names and symbols.
+    pub identifiers: Color,
+    /// Literal/constant emphasis color.
+    pub literals: Color,
+    /// Primary readable text color.
+    pub text_primary: Color,
+    /// De-emphasized text color for comments and inactive hints.
+    pub text_muted: Color,
+    /// Structural UI secondary color for borders, gutters, and separators.
+    pub ui_secondary: Color,
+    /// Primary background color.
+    pub background_primary: Color,
+    /// Secondary background color for panels and surfaces.
+    pub background_secondary: Color,
+}
+
+impl MainPalette {
+    /// Return the canonical main palette used by Patchbay GUI defaults.
+    pub const fn main() -> Self {
+        Self {
+            accent_focus: Color::rgb(199, 240, 0),
+            syntax_emphasis: Color::rgb(99, 214, 176),
+            identifiers: Color::rgb(143, 191, 159),
+            literals: Color::rgb(79, 175, 160),
+            text_primary: Color::rgb(201, 201, 194),
+            text_muted: Color::rgb(126, 138, 106),
+            ui_secondary: Color::rgb(95, 102, 84),
+            background_primary: Color::rgb(27, 30, 26),
+            background_secondary: Color::rgb(35, 40, 35),
+        }
+    }
+}
+
 /// Theme colors for the GUI widgets.
 #[derive(Clone, Debug)]
 pub struct Theme {
@@ -84,18 +128,30 @@ pub struct Theme {
     pub knob_indicator: Color,
 }
 
+impl Theme {
+    /// Build widget theme defaults from a semantic palette.
+    pub const fn from_palette(palette: MainPalette) -> Self {
+        Self {
+            background: palette.background_primary,
+            text: palette.text_primary,
+            text_scale: 2,
+            knob_fill: palette.background_secondary,
+            knob_outline: palette.ui_secondary,
+            knob_active: palette.accent_focus,
+            knob_hover: palette.syntax_emphasis,
+            knob_indicator: palette.text_primary,
+        }
+    }
+
+    /// Return the canonical main widget theme.
+    pub const fn main() -> Self {
+        Self::from_palette(MainPalette::main())
+    }
+}
+
 impl Default for Theme {
     fn default() -> Self {
-        Self {
-            background: Color::rgb(18, 19, 22),
-            text: Color::rgb(238, 239, 242),
-            text_scale: 2,
-            knob_fill: Color::rgb(52, 57, 66),
-            knob_outline: Color::rgb(88, 94, 104),
-            knob_active: Color::rgb(90, 140, 220),
-            knob_hover: Color::rgb(110, 130, 170),
-            knob_indicator: Color::rgb(240, 240, 240),
-        }
+        Self::main()
     }
 }
 
@@ -2903,5 +2959,32 @@ mod tests {
 
         assert_eq!(response.rows, 2);
         assert_eq!(response.columns, 4);
+    }
+
+    #[test]
+    fn main_palette_matches_documented_values() {
+        let palette = MainPalette::main();
+        assert_eq!(palette.accent_focus, Color::rgb(199, 240, 0));
+        assert_eq!(palette.syntax_emphasis, Color::rgb(99, 214, 176));
+        assert_eq!(palette.identifiers, Color::rgb(143, 191, 159));
+        assert_eq!(palette.literals, Color::rgb(79, 175, 160));
+        assert_eq!(palette.text_primary, Color::rgb(201, 201, 194));
+        assert_eq!(palette.text_muted, Color::rgb(126, 138, 106));
+        assert_eq!(palette.ui_secondary, Color::rgb(95, 102, 84));
+        assert_eq!(palette.background_primary, Color::rgb(27, 30, 26));
+        assert_eq!(palette.background_secondary, Color::rgb(35, 40, 35));
+    }
+
+    #[test]
+    fn default_theme_is_derived_from_main_palette() {
+        let palette = MainPalette::main();
+        let theme = Theme::default();
+        assert_eq!(theme.background, palette.background_primary);
+        assert_eq!(theme.text, palette.text_primary);
+        assert_eq!(theme.knob_fill, palette.background_secondary);
+        assert_eq!(theme.knob_outline, palette.ui_secondary);
+        assert_eq!(theme.knob_active, palette.accent_focus);
+        assert_eq!(theme.knob_hover, palette.syntax_emphasis);
+        assert_eq!(theme.knob_indicator, palette.text_primary);
     }
 }
