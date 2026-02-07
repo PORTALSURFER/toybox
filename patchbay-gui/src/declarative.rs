@@ -1046,6 +1046,8 @@ pub struct GridTemplate {
     pub column_gap: i32,
     /// Gap between rows in pixels.
     pub row_gap: i32,
+    /// Horizontal distribution for leftover width.
+    pub justify_x: Justify,
     /// Grid padding.
     pub padding: EdgeInsets,
 }
@@ -1056,8 +1058,9 @@ impl GridTemplate {
         Self {
             columns,
             rows: Vec::new(),
-            column_gap: 12,
-            row_gap: 12,
+            column_gap: 0,
+            row_gap: 0,
+            justify_x: Justify::Start,
             padding: EdgeInsets::default(),
         }
     }
@@ -1104,6 +1107,42 @@ impl GridTemplate {
     pub fn gap_xy(mut self, column_gap: i32, row_gap: i32) -> Self {
         self.column_gap = column_gap;
         self.row_gap = row_gap;
+        self
+    }
+
+    /// Pack columns from the left edge.
+    pub fn justify_start(mut self) -> Self {
+        self.justify_x = Justify::Start;
+        self
+    }
+
+    /// Center packed columns in available width.
+    pub fn justify_center(mut self) -> Self {
+        self.justify_x = Justify::Center;
+        self
+    }
+
+    /// Pack columns against the right edge.
+    pub fn justify_end(mut self) -> Self {
+        self.justify_x = Justify::End;
+        self
+    }
+
+    /// Distribute leftover width between columns.
+    pub fn justify_space_between(mut self) -> Self {
+        self.justify_x = Justify::SpaceBetween;
+        self
+    }
+
+    /// Distribute leftover width around columns.
+    pub fn justify_space_around(mut self) -> Self {
+        self.justify_x = Justify::SpaceAround;
+        self
+    }
+
+    /// Distribute leftover width evenly including edges.
+    pub fn justify_space_evenly(mut self) -> Self {
+        self.justify_x = Justify::SpaceEvenly;
         self
     }
 
@@ -2531,9 +2570,18 @@ fn render_grid(
 
     let column_gap = grid.template.column_gap.max(0);
     let row_gap = grid.template.row_gap.max(0);
+    let packed_columns_width = column_widths.iter().copied().sum::<u32>()
+        + (column_gap as u32).saturating_mul(columns.saturating_sub(1) as u32);
+    let free_width = (inner.size.width as i32 - packed_columns_width as i32).max(0);
+    let space_weights = justify_space_weights(grid.template.justify_x, columns);
+    let extra_spaces = distribute_space(free_width, &space_weights);
+    let mut column_gaps = vec![column_gap; columns.saturating_sub(1)];
+    for (index, gap_value) in column_gaps.iter_mut().enumerate() {
+        *gap_value += extra_spaces.get(index + 1).copied().unwrap_or(0);
+    }
     let mut y = inner.origin.y;
     for (row, row_height) in row_heights.iter().copied().enumerate().take(rows) {
-        let mut x = inner.origin.x;
+        let mut x = inner.origin.x + extra_spaces.first().copied().unwrap_or(0);
         for (col, col_width) in column_widths.iter().copied().enumerate().take(columns) {
             let index = row * columns + col;
             if let Some(child) = grid.children.get(index) {
@@ -2559,7 +2607,8 @@ fn render_grid(
                     depth + 1,
                 );
             }
-            x += col_width as i32 + column_gap;
+            let next_gap = column_gaps.get(col).copied().unwrap_or(0);
+            x += col_width as i32 + next_gap;
         }
         y += row_height as i32 + row_gap;
     }
@@ -3226,6 +3275,40 @@ mod tests {
         let template = GridTemplate::columns_fr(2).gap(9);
         assert_eq!(template.column_gap, 9);
         assert_eq!(template.row_gap, 9);
+    }
+
+    #[test]
+    fn grid_template_defaults_to_tight_left_packing() {
+        let template = GridTemplate::columns_fr(3);
+        assert_eq!(template.column_gap, 0);
+        assert_eq!(template.row_gap, 0);
+        assert_eq!(template.justify_x, Justify::Start);
+    }
+
+    #[test]
+    fn grid_template_justify_helpers_set_horizontal_distribution() {
+        assert_eq!(
+            GridTemplate::columns_fr(2).justify_center().justify_x,
+            Justify::Center
+        );
+        assert_eq!(
+            GridTemplate::columns_fr(2).justify_end().justify_x,
+            Justify::End
+        );
+        assert_eq!(
+            GridTemplate::columns_fr(2)
+                .justify_space_between()
+                .justify_x,
+            Justify::SpaceBetween
+        );
+        assert_eq!(
+            GridTemplate::columns_fr(2).justify_space_around().justify_x,
+            Justify::SpaceAround
+        );
+        assert_eq!(
+            GridTemplate::columns_fr(2).justify_space_evenly().justify_x,
+            Justify::SpaceEvenly
+        );
     }
 
     #[test]

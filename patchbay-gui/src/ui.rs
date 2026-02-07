@@ -29,9 +29,12 @@ pub(crate) fn knob_block_size_for_diameter(diameter: u32, text_scale: u32) -> Si
     let knob_diameter = diameter.max(1);
     let label_height = knob_label_height(text_scale);
     let label_gap = knob_label_gap(text_scale);
+    let dial_square_side = knob_diameter + (KNOB_BLOCK_SIDE_PADDING.max(0) * 2) as u32;
+    let label_stack_height = knob_diameter + label_height * 2 + label_gap * 2;
+    let square_side = dial_square_side.max(label_stack_height);
     Size {
-        width: knob_diameter + (KNOB_BLOCK_SIDE_PADDING.max(0) * 2) as u32,
-        height: knob_diameter + label_height * 2 + label_gap * 2,
+        width: square_side,
+        height: square_side,
     }
 }
 
@@ -463,12 +466,17 @@ fn normalize_knob_value_label(label: &str) -> String {
     }
 }
 
-/// Return a horizontally centered text origin for a bounded label area.
-fn centered_text_origin_x(origin_x: i32, max_width: u32, text_width: u32) -> i32 {
-    let available = max_width as i32;
-    let text = text_width as i32;
-    let offset = ((available - text) / 2).max(0);
-    origin_x + offset
+/// Return a text origin centered on a target x and clamped to bounds.
+fn centered_text_origin_on_x(
+    left_bound: i32,
+    max_width: u32,
+    text_width: u32,
+    target_center_x: i32,
+) -> i32 {
+    let raw = target_center_x - text_width as i32 / 2;
+    let min_x = left_bound;
+    let max_x = left_bound + (max_width as i32 - text_width as i32).max(0);
+    raw.clamp(min_x, max_x)
 }
 
 /// Response metadata from knob widgets.
@@ -918,9 +926,10 @@ impl<'a> Ui<'a> {
     }
 
     /// Draw centered single-line text hard-clamped to width bounds.
-    fn draw_text_single_line_hard_clamped_centered(
+    fn draw_text_single_line_hard_clamped_centered_on_x(
         &mut self,
         origin: Point,
+        center_x: i32,
         text: &str,
         max_width: u32,
         color: Color,
@@ -935,7 +944,7 @@ impl<'a> Ui<'a> {
         }
         let size = text_size(&fitted, self.theme.text_scale);
         let centered_origin = Point {
-            x: centered_text_origin_x(origin.x, max_width, size.width),
+            x: centered_text_origin_on_x(origin.x, max_width, size.width, center_x),
             y: origin.y,
         };
         self.draw_text_internal(centered_origin, &fitted, color, self.theme.text_scale);
@@ -1426,6 +1435,8 @@ impl<'a> Ui<'a> {
                 height: (knob_size + KNOB_BLOCK_SIDE_PADDING * 2).max(1) as u32,
             },
         };
+        self.canvas
+            .stroke_rect(hit_rect, 1, self.theme.knob_outline);
         self.track_rect_internal(hit_rect);
         let center = Point {
             x: knob_rect.origin.x + knob_size / 2,
@@ -1518,8 +1529,9 @@ impl<'a> Ui<'a> {
         };
         let normalized_name = normalize_knob_name_label(name_label);
         if !normalized_name.is_empty() {
-            let _ = self.draw_text_single_line_hard_clamped_centered(
+            let _ = self.draw_text_single_line_hard_clamped_centered_on_x(
                 name_pos,
+                center.x,
                 &normalized_name,
                 block_size.width,
                 self.theme.text,
@@ -1533,8 +1545,9 @@ impl<'a> Ui<'a> {
         };
         let normalized_value = normalize_knob_value_label(value_label);
         if !normalized_value.is_empty() {
-            let _ = self.draw_text_single_line_hard_clamped_centered(
+            let _ = self.draw_text_single_line_hard_clamped_centered_on_x(
                 value_pos,
+                center.x,
                 &normalized_value,
                 block_size.width,
                 self.theme.text,
@@ -2310,7 +2323,12 @@ mod tests {
     fn knob_labels_are_clamped_to_knob_width() {
         let mut canvas = Canvas::new(320, 240);
         let mut layout = Layout::default();
-        let expected_width = (layout.knob_size.max(1) + KNOB_BLOCK_SIDE_PADDING * 2).max(1) as u32;
+        let knob_diameter = layout.knob_size.max(1) as u32;
+        let dial_square_width = knob_diameter + (KNOB_BLOCK_SIDE_PADDING.max(0) * 2) as u32;
+        let label_stack_height = knob_diameter
+            + knob_label_height(Theme::default().text_scale) * 2
+            + knob_label_gap(Theme::default().text_scale) * 2;
+        let expected_width = dial_square_width.max(label_stack_height);
         let theme = Theme::default();
         let mut ui_state = UiState::default();
         let input = InputState::default();
@@ -2359,10 +2377,10 @@ mod tests {
     }
 
     #[test]
-    fn centered_text_origin_offsets_within_available_width() {
-        assert_eq!(centered_text_origin_x(10, 40, 20), 20);
-        assert_eq!(centered_text_origin_x(10, 20, 20), 10);
-        assert_eq!(centered_text_origin_x(10, 16, 20), 10);
+    fn centered_text_origin_on_axis_clamps_to_bounds() {
+        assert_eq!(centered_text_origin_on_x(10, 40, 20, 30), 20);
+        assert_eq!(centered_text_origin_on_x(10, 40, 20, 8), 10);
+        assert_eq!(centered_text_origin_on_x(10, 40, 20, 80), 30);
     }
 
     #[test]
@@ -2509,8 +2527,12 @@ mod tests {
     fn block_size_helpers_match_rendered_width_contracts() {
         let mut canvas = Canvas::new(200, 200);
         let mut layout = Layout::default();
-        let expected_knob_width =
-            (layout.knob_size.max(1) + KNOB_BLOCK_SIDE_PADDING * 2).max(1) as u32;
+        let knob_diameter = layout.knob_size.max(1) as u32;
+        let dial_square_width = knob_diameter + (KNOB_BLOCK_SIDE_PADDING.max(0) * 2) as u32;
+        let label_stack_height = knob_diameter
+            + knob_label_height(Theme::default().text_scale) * 2
+            + knob_label_gap(Theme::default().text_scale) * 2;
+        let expected_knob_width = dial_square_width.max(label_stack_height);
         let theme = Theme::default();
         let mut ui_state = UiState::default();
         let input = InputState::default();
