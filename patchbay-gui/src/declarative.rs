@@ -2197,25 +2197,26 @@ pub fn render_checked(
 
     let mut actions = Vec::new();
     let mut debug_border_candidates = Vec::new();
-    let response =
-        ui.root_frame_with_key_at(&spec.root.key, style, Some(resolved), origin, |ui, rect| {
-            render_node(
-                &spec.root.content,
-                rect,
-                ui,
-                &tokens,
-                &mut actions,
-                1,
-                &mut debug_border_candidates,
-            );
-        });
-    collect_container_debug_border_candidate(
-        &mut debug_border_candidates,
-        ui,
-        response.outer_rect,
-        ContainerKind::RootFrame,
-        0,
-    );
+    let response = {
+        let mut ctx = RenderCtx {
+            tokens: &tokens,
+            actions: &mut actions,
+            debug_border_candidates: &mut debug_border_candidates,
+            depth: 1,
+        };
+        let response =
+            ui.root_frame_with_key_at(&spec.root.key, style, Some(resolved), origin, |ui, rect| {
+                render_node(&spec.root.content, rect, ui, &mut ctx);
+            });
+        collect_container_debug_border_candidate(
+            ctx.debug_border_candidates,
+            ui,
+            response.outer_rect,
+            ContainerKind::RootFrame,
+            0,
+        );
+        response
+    };
     if let Some(candidate) = select_container_debug_border_candidate(&debug_border_candidates)
         && let Some(color) = container_debug_border_color(candidate.kind, candidate.depth)
         && let Some(draw_rect) = debug_border_draw_rect(candidate.rect, 1)
@@ -2888,133 +2889,72 @@ fn resolve_axis(
     }
 }
 
-/// Render a node subtree and collect actions.
-fn render_node(
-    node: &Node,
-    rect: Rect,
-    ui: &mut Ui<'_>,
-    tokens: &ThemeTokens,
-    actions: &mut Vec<UiAction>,
+/// Mutable render-state threaded through declarative node traversal.
+struct RenderCtx<'a> {
+    /// Theme tokens used for sizing and rendering.
+    tokens: &'a ThemeTokens,
+    /// Collected UI actions for the current frame.
+    actions: &'a mut Vec<UiAction>,
+    /// Candidate container rectangles for debug-border selection.
+    debug_border_candidates: &'a mut Vec<DebugBorderCandidate>,
+    /// Current container depth in the render tree.
     depth: usize,
-    debug_border_candidates: &mut Vec<DebugBorderCandidate>,
-) {
+}
+
+/// Render a node subtree and collect actions.
+fn render_node(node: &Node, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx<'_>) {
     ui.with_clip(rect, |ui| match node {
-        Node::Panel(panel) => render_panel(
-            panel,
-            rect,
-            ui,
-            tokens,
-            actions,
-            depth,
-            debug_border_candidates,
-        ),
-        Node::Row(flex) => render_flex(
-            flex,
-            rect,
-            ui,
-            tokens,
-            Axis::Horizontal,
-            actions,
-            depth,
-            debug_border_candidates,
-        ),
-        Node::Column(flex) => render_flex(
-            flex,
-            rect,
-            ui,
-            tokens,
-            Axis::Vertical,
-            actions,
-            depth,
-            debug_border_candidates,
-        ),
-        Node::Grid(grid) => render_grid(
-            grid,
-            rect,
-            ui,
-            tokens,
-            actions,
-            depth,
-            debug_border_candidates,
-        ),
-        Node::Absolute(absolute) => render_absolute(
-            absolute,
-            rect,
-            ui,
-            tokens,
-            actions,
-            depth,
-            debug_border_candidates,
-        ),
-        Node::Label(label) => render_label(label, rect, ui, tokens),
+        Node::Panel(panel) => render_panel(panel, rect, ui, ctx),
+        Node::Row(flex) => render_flex(flex, rect, ui, Axis::Horizontal, ctx),
+        Node::Column(flex) => render_flex(flex, rect, ui, Axis::Vertical, ctx),
+        Node::Grid(grid) => render_grid(grid, rect, ui, ctx),
+        Node::Absolute(absolute) => render_absolute(absolute, rect, ui, ctx),
+        Node::Label(label) => render_label(label, rect, ui, ctx.tokens),
         Node::Spacer(_) => {}
-        Node::Knob(knob) => render_knob(knob, rect, ui, tokens, actions),
-        Node::Slider(slider) => render_slider(slider, rect, ui, tokens, actions),
-        Node::Toggle(toggle) => render_toggle(toggle, rect, ui, tokens, actions),
-        Node::Button(button) => render_button(button, rect, ui, tokens, actions),
-        Node::Dropdown(dropdown) => render_dropdown(dropdown, rect, ui, tokens, actions),
-        Node::Region(region) => render_region(region, rect, ui, actions),
+        Node::Knob(knob) => render_knob(knob, rect, ui, ctx.tokens, ctx.actions),
+        Node::Slider(slider) => render_slider(slider, rect, ui, ctx.tokens, ctx.actions),
+        Node::Toggle(toggle) => render_toggle(toggle, rect, ui, ctx.tokens, ctx.actions),
+        Node::Button(button) => render_button(button, rect, ui, ctx.tokens, ctx.actions),
+        Node::Dropdown(dropdown) => render_dropdown(dropdown, rect, ui, ctx.tokens, ctx.actions),
+        Node::Region(region) => render_region(region, rect, ui, ctx.actions),
         Node::Indicator(indicator) => render_indicator(indicator, rect, ui),
     });
 }
 
 /// Render a panel container.
-fn render_panel(
-    panel: &PanelSpec,
-    rect: Rect,
-    ui: &mut Ui<'_>,
-    tokens: &ThemeTokens,
-    actions: &mut Vec<UiAction>,
-    depth: usize,
-    debug_border_candidates: &mut Vec<DebugBorderCandidate>,
-) {
+fn render_panel(panel: &PanelSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx<'_>) {
     let title = panel.title.as_deref();
     let header_height = panel
         .header_height
-        .unwrap_or_else(|| panel_header_height(title, tokens));
+        .unwrap_or_else(|| panel_header_height(title, ctx.tokens));
     let style = crate::ui::PanelStyle {
         title,
         padding: panel.padding,
-        background: Some(panel.background.unwrap_or(tokens.colors.surface)),
-        outline: Some(panel.outline.unwrap_or(tokens.colors.border)),
+        background: Some(panel.background.unwrap_or(ctx.tokens.colors.surface)),
+        outline: Some(panel.outline.unwrap_or(ctx.tokens.colors.border)),
         header_height: Some(header_height),
     };
 
     let mut outer_rect = rect;
     ui.with_layout(rect.origin, |ui| {
         let response = ui.panel_with_key(&panel.key, style, Some(rect.size), |ui, content_rect| {
-            render_node(
-                &panel.content,
-                content_rect,
-                ui,
-                tokens,
-                actions,
-                depth + 1,
-                debug_border_candidates,
-            );
+            ctx.depth += 1;
+            render_node(&panel.content, content_rect, ui, ctx);
+            ctx.depth = ctx.depth.saturating_sub(1);
         });
         outer_rect = response.outer_rect;
     });
     collect_container_debug_border_candidate(
-        debug_border_candidates,
+        ctx.debug_border_candidates,
         ui,
         outer_rect,
         ContainerKind::Panel,
-        depth,
+        ctx.depth,
     );
 }
 
 /// Render a flex container.
-fn render_flex(
-    flex: &FlexSpec,
-    rect: Rect,
-    ui: &mut Ui<'_>,
-    tokens: &ThemeTokens,
-    axis: Axis,
-    actions: &mut Vec<UiAction>,
-    depth: usize,
-    debug_border_candidates: &mut Vec<DebugBorderCandidate>,
-) {
+fn render_flex(flex: &FlexSpec, rect: Rect, ui: &mut Ui<'_>, axis: Axis, ctx: &mut RenderCtx<'_>) {
     let child_count = flex.children.len();
     if child_count == 0 {
         return;
@@ -3022,7 +2962,7 @@ fn render_flex(
 
     let mut intrinsic = Vec::with_capacity(child_count);
     for child in &flex.children {
-        intrinsic.push(measure_node(child, tokens));
+        intrinsic.push(measure_node(child, ctx.tokens));
     }
 
     let gap = flex.gap.max(0);
@@ -3107,25 +3047,19 @@ fn render_flex(
             size: resolved_child,
         };
 
-        render_node(
-            child,
-            child_rect,
-            ui,
-            tokens,
-            actions,
-            depth + 1,
-            debug_border_candidates,
-        );
+        ctx.depth += 1;
+        render_node(child, child_rect, ui, ctx);
+        ctx.depth = ctx.depth.saturating_sub(1);
         let next_gap = gaps.get(index).copied().unwrap_or(0);
         cursor_main += resolved_main[index] + next_gap;
     }
 
     collect_container_debug_border_candidate(
-        debug_border_candidates,
+        ctx.debug_border_candidates,
         ui,
         rect,
         ContainerKind::Flex,
-        depth,
+        ctx.depth,
     );
 }
 
@@ -3219,15 +3153,7 @@ fn distribute_space(total: i32, weights: &[u32]) -> Vec<i32> {
 }
 
 /// Render a grid container.
-fn render_grid(
-    grid: &GridSpec,
-    rect: Rect,
-    ui: &mut Ui<'_>,
-    tokens: &ThemeTokens,
-    actions: &mut Vec<UiAction>,
-    depth: usize,
-    debug_border_candidates: &mut Vec<DebugBorderCandidate>,
-) {
+fn render_grid(grid: &GridSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx<'_>) {
     let columns = grid.template.columns.len().max(1);
     let rows = if grid.children.is_empty() {
         0
@@ -3242,7 +3168,7 @@ fn render_grid(
     let intrinsic: Vec<Size> = grid
         .children
         .iter()
-        .map(|child| measure_node(child, tokens))
+        .map(|child| measure_node(child, ctx.tokens))
         .collect();
 
     let column_widths = resolve_grid_axis(
@@ -3303,6 +3229,7 @@ fn render_grid(
                     resolve_size(layout, measured, cell_rect.size),
                     cell_rect.size,
                 );
+                ctx.depth += 1;
                 render_node(
                     child,
                     Rect {
@@ -3310,11 +3237,9 @@ fn render_grid(
                         size: resolved,
                     },
                     ui,
-                    tokens,
-                    actions,
-                    depth + 1,
-                    debug_border_candidates,
+                    ctx,
                 );
+                ctx.depth = ctx.depth.saturating_sub(1);
             }
             let next_gap = column_gaps.get(col).copied().unwrap_or(0);
             x += col_width as i32 + next_gap;
@@ -3323,11 +3248,11 @@ fn render_grid(
     }
 
     collect_container_debug_border_candidate(
-        debug_border_candidates,
+        ctx.debug_border_candidates,
         ui,
         rect,
         ContainerKind::Grid,
-        depth,
+        ctx.depth,
     );
 }
 
@@ -3493,17 +3418,9 @@ fn distribute_weighted_u32(total: u32, weights: &[u32]) -> Vec<u32> {
 }
 
 /// Render an absolute-positioned container.
-fn render_absolute(
-    absolute: &AbsoluteSpec,
-    rect: Rect,
-    ui: &mut Ui<'_>,
-    tokens: &ThemeTokens,
-    actions: &mut Vec<UiAction>,
-    depth: usize,
-    debug_border_candidates: &mut Vec<DebugBorderCandidate>,
-) {
+fn render_absolute(absolute: &AbsoluteSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx<'_>) {
     for child in &absolute.children {
-        let measured = measure_node(&child.node, tokens);
+        let measured = measure_node(&child.node, ctx.tokens);
         let layout = node_layout(&child.node);
         let resolved = resolve_size(layout, measured, measured);
         let child_rect = Rect {
@@ -3513,23 +3430,17 @@ fn render_absolute(
             },
             size: resolved,
         };
-        render_node(
-            &child.node,
-            child_rect,
-            ui,
-            tokens,
-            actions,
-            depth + 1,
-            debug_border_candidates,
-        );
+        ctx.depth += 1;
+        render_node(&child.node, child_rect, ui, ctx);
+        ctx.depth = ctx.depth.saturating_sub(1);
     }
 
     collect_container_debug_border_candidate(
-        debug_border_candidates,
+        ctx.debug_border_candidates,
         ui,
         rect,
         ContainerKind::Absolute,
-        depth,
+        ctx.depth,
     );
 }
 
