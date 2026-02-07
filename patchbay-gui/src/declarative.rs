@@ -1823,8 +1823,14 @@ enum ContainerKind {
 fn container_debug_border_color(kind: ContainerKind, depth: usize) -> Option<Color> {
     #[cfg(feature = "layout-debug-borders")]
     {
-        let _ = (kind, depth);
-        Some(Color::rgb(245, 98, 98))
+        let _ = depth;
+        match kind {
+            ContainerKind::RootFrame => None,
+            ContainerKind::Panel
+            | ContainerKind::Flex
+            | ContainerKind::Grid
+            | ContainerKind::Absolute => Some(Color::rgb(245, 98, 98)),
+        }
     }
     #[cfg(not(feature = "layout-debug-borders"))]
     {
@@ -1835,6 +1841,9 @@ fn container_debug_border_color(kind: ContainerKind, depth: usize) -> Option<Col
 
 /// Draw a layout debug border for a container when the feature is enabled.
 fn draw_container_debug_border(ui: &mut Ui<'_>, rect: Rect, kind: ContainerKind, depth: usize) {
+    if kind == ContainerKind::RootFrame || !rect.contains(ui.input().pointer_pos) {
+        return;
+    }
     if let Some(color) = container_debug_border_color(kind, depth) {
         ui.debug_stroke_rect(rect, 1, color);
     }
@@ -3215,15 +3224,14 @@ mod tests {
     #[cfg(feature = "layout-debug-borders")]
     #[test]
     fn debug_border_palette_is_available_when_feature_enabled() {
-        let kinds = [
-            ContainerKind::RootFrame,
+        assert_eq!(container_debug_border_color(ContainerKind::RootFrame, 0), None);
+        let expected = Some(Color::rgb(245, 98, 98));
+        for kind in [
             ContainerKind::Panel,
             ContainerKind::Flex,
             ContainerKind::Grid,
             ContainerKind::Absolute,
-        ];
-        let expected = Some(Color::rgb(245, 98, 98));
-        for kind in kinds {
+        ] {
             assert_eq!(container_debug_border_color(kind, 0), expected);
             assert_eq!(container_debug_border_color(kind, 1), expected);
         }
