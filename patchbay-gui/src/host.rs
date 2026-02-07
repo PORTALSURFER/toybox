@@ -227,6 +227,13 @@ impl HostWindow {
         Reduce: FnMut(&mut State, UiAction) + Send + 'static,
         State: Send + 'static,
     {
+        let size = Size {
+            width: size.width.max(1),
+            height: size.height.max(1),
+        };
+        self.last_size
+            .store(pack_size(size.width, size.height), Ordering::Release);
+
         let parent = self.parent.ok_or(GuiError::NoParent)?;
         let (parent_hwnd, parent_hinstance) = match parent {
             RawWindowHandle::Win32(handle) => (handle.hwnd as isize, handle.hinstance as isize),
@@ -235,6 +242,8 @@ impl HostWindow {
         if let Some(handle) = &self.handle {
             if handle.is_valid() && handle.parent_matches(parent_hwnd) {
                 if mode == OpenParentedMode::ReuseIfOpen {
+                    self.resize_request
+                        .store(pack_size(size.width, size.height), Ordering::Release);
                     self.show();
                     return Ok(());
                 }
