@@ -427,7 +427,9 @@ pub fn root_frame_sized(
 ) -> RootFrameSpec {
     let resolved_width = window_size.width.max(min_size.width);
     let resolved_height = window_size.height.max(min_size.height);
-    RootFrameSpec::new(key, content).layout(LayoutBox::fixed(resolved_width, resolved_height))
+    RootFrameSpec::new(key, content).layout(
+        LayoutBox::fixed(resolved_width, resolved_height).max(resolved_width, resolved_height),
+    )
 }
 
 /// Layout nodes for the declarative UI tree.
@@ -743,46 +745,50 @@ pub fn weighted(node: Node, weight: u16) -> WeightedChild {
     }
 }
 
-fn apply_weighted_sections(children: Vec<WeightedChild>, vertical: bool) -> Vec<Node> {
-    children
-        .into_iter()
-        .map(|child| {
-            let weight = Length::Fill(child.weight.max(1));
-            if vertical {
-                child
-                    .node
-                    .layout(LayoutBox::auto().fill_width().with_height(weight))
-            } else {
-                child
-                    .node
-                    .layout(LayoutBox::auto().fill_height().with_width(weight))
-            }
-        })
-        .collect()
-}
-
 /// Create a weighted full-size column section layout.
 ///
 /// Children fill width and split available height by relative `weight`.
 pub fn column_sections(children: Vec<WeightedChild>) -> Node {
-    column(apply_weighted_sections(children, true))
-        .gap(0)
-        .pad_all(0)
-        .justify_start()
-        .align_stretch()
-        .layout(LayoutBox::fill())
+    let rows: Vec<TrackSize> = children
+        .iter()
+        .map(|child| TrackSize::Fr(child.weight.max(1)))
+        .collect();
+    let nodes: Vec<Node> = children
+        .into_iter()
+        .map(|child| child.node.layout(LayoutBox::fill()))
+        .collect();
+    grid(
+        GridTemplate::new(vec![TrackSize::Fr(1)])
+            .rows(rows)
+            .gap(0)
+            .pad_all(0)
+            .justify_start(),
+        nodes,
+    )
+    .layout(LayoutBox::fill())
 }
 
 /// Create a weighted full-size row section layout.
 ///
 /// Children fill height and split available width by relative `weight`.
 pub fn row_sections(children: Vec<WeightedChild>) -> Node {
-    row(apply_weighted_sections(children, false))
-        .gap(0)
-        .pad_all(0)
-        .justify_start()
-        .align_stretch()
-        .layout(LayoutBox::fill())
+    let columns: Vec<TrackSize> = children
+        .iter()
+        .map(|child| TrackSize::Fr(child.weight.max(1)))
+        .collect();
+    let nodes: Vec<Node> = children
+        .into_iter()
+        .map(|child| child.node.layout(LayoutBox::fill()))
+        .collect();
+    grid(
+        GridTemplate::new(columns)
+            .rows(vec![TrackSize::Fr(1)])
+            .gap(0)
+            .pad_all(0)
+            .justify_start(),
+        nodes,
+    )
+    .layout(LayoutBox::fill())
 }
 
 /// Create a grid container node.
@@ -4299,44 +4305,54 @@ mod tests {
     #[test]
     fn column_sections_apply_weighted_height_fill() {
         let node = column_sections(vec![weighted(label("A"), 7), weighted(label("B"), 30)]);
-        let Node::Column(flex) = node else {
-            panic!("expected column section container");
+        let Node::Grid(grid) = node else {
+            panic!("expected grid-backed column section container");
         };
-        assert_eq!(flex.gap, 0);
-        assert_eq!(flex.padding, EdgeInsets::all(0));
-        assert_eq!(flex.align, Align::Stretch);
-        assert_eq!(flex.justify, Justify::Start);
-        assert_eq!(flex.layout, LayoutBox::fill());
-        assert_eq!(flex.children.len(), 2);
+        assert_eq!(grid.layout, LayoutBox::fill());
+        assert_eq!(grid.template.columns, vec![TrackSize::Fr(1)]);
+        assert_eq!(
+            grid.template.rows,
+            vec![TrackSize::Fr(7), TrackSize::Fr(30)]
+        );
+        assert_eq!(grid.template.column_gap, 0);
+        assert_eq!(grid.template.row_gap, 0);
+        assert_eq!(grid.template.padding, EdgeInsets::all(0));
+        assert_eq!(grid.template.justify_x, Justify::Start);
+        assert_eq!(grid.children.len(), 2);
 
-        let first = node_layout(&flex.children[0]);
+        let first = node_layout(&grid.children[0]);
         assert_eq!(first.width, Length::Fill(1));
-        assert_eq!(first.height, Length::Fill(7));
+        assert_eq!(first.height, Length::Fill(1));
 
-        let second = node_layout(&flex.children[1]);
+        let second = node_layout(&grid.children[1]);
         assert_eq!(second.width, Length::Fill(1));
-        assert_eq!(second.height, Length::Fill(30));
+        assert_eq!(second.height, Length::Fill(1));
     }
 
     #[test]
     fn row_sections_apply_weighted_width_fill() {
         let node = row_sections(vec![weighted(label("L"), 70), weighted(label("R"), 30)]);
-        let Node::Row(flex) = node else {
-            panic!("expected row section container");
+        let Node::Grid(grid) = node else {
+            panic!("expected grid-backed row section container");
         };
-        assert_eq!(flex.gap, 0);
-        assert_eq!(flex.padding, EdgeInsets::all(0));
-        assert_eq!(flex.align, Align::Stretch);
-        assert_eq!(flex.justify, Justify::Start);
-        assert_eq!(flex.layout, LayoutBox::fill());
-        assert_eq!(flex.children.len(), 2);
+        assert_eq!(grid.layout, LayoutBox::fill());
+        assert_eq!(
+            grid.template.columns,
+            vec![TrackSize::Fr(70), TrackSize::Fr(30)]
+        );
+        assert_eq!(grid.template.rows, vec![TrackSize::Fr(1)]);
+        assert_eq!(grid.template.column_gap, 0);
+        assert_eq!(grid.template.row_gap, 0);
+        assert_eq!(grid.template.padding, EdgeInsets::all(0));
+        assert_eq!(grid.template.justify_x, Justify::Start);
+        assert_eq!(grid.children.len(), 2);
 
-        let left = node_layout(&flex.children[0]);
-        assert_eq!(left.width, Length::Fill(70));
+        let left = node_layout(&grid.children[0]);
+        assert_eq!(left.width, Length::Fill(1));
         assert_eq!(left.height, Length::Fill(1));
 
-        let right = node_layout(&flex.children[1]);
-        assert_eq!(right.width, Length::Fill(30));
+        let right = node_layout(&grid.children[1]);
+        assert_eq!(right.width, Length::Fill(1));
         assert_eq!(right.height, Length::Fill(1));
     }
 
@@ -4356,7 +4372,7 @@ mod tests {
         );
         assert_eq!(
             root.layout,
-            LayoutBox::fixed(420, 400),
+            LayoutBox::fixed(420, 400).max(420, 400),
             "root should clamp to min width and use host-provided height"
         );
         assert_eq!(root.scale_mode, RootScaleMode::None);
