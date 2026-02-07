@@ -30,6 +30,7 @@ pub use crate::declarative::{
     ToggleSpec, TrackSize, TypographyTokens, UiAction, UiSpec, WeightedChild, button, column,
     column_sections, dropdown, grid, indicator, knob, label, measure_checked, panel, region,
     render_checked, root_frame_sized, row, row_sections, slider, spacer, toggle, weighted,
+    weighted_section_lengths,
 };
 #[cfg(not(target_os = "windows"))]
 pub use crate::host::WindowHandle;

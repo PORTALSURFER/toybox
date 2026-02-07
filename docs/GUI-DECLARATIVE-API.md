@@ -25,9 +25,13 @@ Use helper constructors for common nodes:
 - `row(children)` / `column(children)`
 - `grid(template, children)`
 - `panel(key, content)`
+- `root_frame_sized(key, content, min_size, window_size)`
 - `label(text)`
 - `knob(...)`, `slider(...)`, `toggle(...)`, `button(...)`, `dropdown(...)`
 - `spacer(size)`, `region(key, size)`, `indicator(size, active)`
+- `weighted(node, weight)`, `column_sections(...)`, `row_sections(...)`
+- `weighted_section_lengths(total, weights)` when plugin-side overlay math must
+  mirror Patchbay section sizing
 - `RegionSpec::draw_commands(...)` for declarative custom canvas drawing.
 
 These map directly to `Node::*` variants and keep the tree callback-free.

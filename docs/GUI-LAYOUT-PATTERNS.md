@@ -3,20 +3,29 @@
 ## Purpose
 This document provides repeatable layout recipes for strict declarative plugin UIs.
 
-## Root + Section Stack
-Use a root frame that fills host space, then stack panels in a column.
+## Canonical Root + Fractional Sections
+Use `root_frame_sized` plus weighted section helpers as the canonical layout
+pattern. This keeps resize behavior and section math owned by Patchbay.
 
 ```rust
-let root = RootFrameSpec::new(
+let controls = row_sections(vec![
+    weighted(panel("knobs", knobs).pad_all(8), 70),
+    weighted(panel("dropdowns", dropdowns).pad_all(8), 30),
+]);
+
+let content = column_sections(vec![
+    weighted(panel("header", header).pad_all(0), 7),
+    weighted(panel("curve", curve).pad_all(0), 63),
+    weighted(panel("controls", controls).pad_all(0), 30),
+]);
+
+let root = root_frame_sized(
     "root",
-    column(vec![
-        panel("header", label("Header")).fill_width(),
-        panel("body", body_node).fill(),
-    ])
-    .gap(12)
-    .pad_xy(16, 12),
+    content,
+    Size { width: 420, height: 258 },
+    input.window_size,
 )
-.layout(LayoutBox::fill());
+.padding(0);
 ```
 
 ## Equal-Width Control Row
@@ -77,7 +86,8 @@ let graph_section = column(vec![
 ```
 
 ## Notes
-- Prefer `LayoutBox::fill_width()` for panels in stacked columns.
+- Prefer `root_frame_sized` + `column_sections`/`row_sections` for top-level
+  composition and nested section splits.
 - `LayoutBox::fixed(w, h)` defines a minimum baseline, not a hard cap; content can grow beyond it.
 - Use `LayoutBox::auto().max(w, h)` when you need strict clipping/capping behavior.
 - Declarative `Label` rendering is single-line and hard-clamped to its assigned rect (no ellipsis), so provide explicit label boxes when overflow must be prevented.
