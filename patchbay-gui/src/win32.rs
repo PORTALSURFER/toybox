@@ -298,6 +298,30 @@ where
         self.renderer.resize(Size { width, height });
     }
 
+    /// Keep renderer state aligned with the current host-provided client size.
+    ///
+    /// Some hosts do not reliably send `WM_SIZE` for every embedded resize
+    /// path, so we also detect and apply size changes in the render loop.
+    fn sync_client_size_if_needed(&mut self) {
+        let mut rect = windows::Win32::Foundation::RECT::default();
+        unsafe {
+            if GetClientRect(self.hwnd, &mut rect).is_err() {
+                return;
+            }
+        }
+        let width = (rect.right - rect.left).max(1) as u32;
+        let height = (rect.bottom - rect.top).max(1) as u32;
+        let current = self.input.window_size;
+        if current.width != width || current.height != height {
+            self.last_size
+                .store(pack_size(width, height), Ordering::Release);
+            self.input.window_size = Size { width, height };
+            self.canvas.resize(width, height);
+            self.renderer.resize(Size { width, height });
+            self.sync_pointer_pos();
+        }
+    }
+
     fn sync_pointer_pos(&mut self) {
         let mut point = windows::Win32::Foundation::POINT::default();
         if unsafe { GetCursorPos(&mut point) }.is_err() {
@@ -356,6 +380,8 @@ where
             (self.on_init)(&mut self.state);
             self.initialized = true;
         }
+
+        self.sync_client_size_if_needed();
 
         if let Some((width, height)) = unpack_size(self.resize_request.swap(0, Ordering::AcqRel)) {
             let mut width = width;
