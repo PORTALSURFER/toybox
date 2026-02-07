@@ -12,9 +12,9 @@ pub mod declarative {
         AbsoluteChild, AbsoluteSpec, Align, ButtonSpec, ColorTokens, ControlTokens,
         DeclarativeError, DrawCommand, DropdownSpec, EdgeInsets, FlexSpec, GridSpec, GridTemplate,
         IndicatorSpec, Justify, KnobSpec, LabelSpec, LayoutBox, Length, MainPalette, Node,
-        PanelSpec, RegionInteractionKind, RegionSpec, RenderResult, RootFrameSpec, SliderSpec,
-        SpacingTokens, ThemeTokens, ToggleSpec, TrackSize, TypographyTokens, UiAction, UiSpec,
-        button, column, dropdown, grid, indicator, knob, label, measure_checked, panel, region,
-        render_checked, row, slider, spacer, toggle,
+        PanelSpec, RegionInteractionKind, RegionSpec, RenderResult, RootFrameSpec, RootScaleMode,
+        SliderSpec, SpacingTokens, ThemeTokens, ToggleSpec, TrackSize, TypographyTokens, UiAction,
+        UiSpec, button, column, dropdown, grid, indicator, knob, label, measure_checked, panel,
+        region, render_checked, row, slider, spacer, toggle,
     };
 }

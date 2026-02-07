@@ -216,12 +216,51 @@ pub enum RegionInteractionKind {
 }
 
 /// Result of rendering a declarative UI tree.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RenderResult {
     /// Measured root size used for host auto-resize.
     pub measured_size: Size,
     /// Actions emitted during widget interaction handling.
     pub actions: Vec<UiAction>,
+    /// Resolved uniform render scale applied for this frame.
+    pub resolved_scale: f32,
+    /// Resolved content rectangle used for rendering root content.
+    pub content_rect: Rect,
+}
+
+impl Default for RenderResult {
+    fn default() -> Self {
+        Self {
+            measured_size: Size {
+                width: 0,
+                height: 0,
+            },
+            actions: Vec::new(),
+            resolved_scale: 1.0,
+            content_rect: Rect {
+                origin: Point { x: 0, y: 0 },
+                size: Size {
+                    width: 0,
+                    height: 0,
+                },
+            },
+        }
+    }
+}
+
+/// Root frame scaling behavior.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RootScaleMode {
+    /// Disable root-level scaling and render at authored size.
+    None,
+    /// Uniformly fit the authored design size to the current window.
+    UniformFit,
+}
+
+impl Default for RootScaleMode {
+    fn default() -> Self {
+        Self::None
+    }
 }
 
 /// Declarative UI tree describing a window.
@@ -251,6 +290,12 @@ pub struct RootFrameSpec {
     pub layout: LayoutBox,
     /// Optional design-token overrides for this frame.
     pub tokens: Option<ThemeTokens>,
+    /// Optional baseline design size used for uniform fit scaling.
+    pub design_size: Option<Size>,
+    /// Root-level scaling behavior.
+    pub scale_mode: RootScaleMode,
+    /// Optional zoom multiplier applied after scale mode resolution.
+    pub zoom_override: Option<f32>,
     /// Root content node.
     pub content: Box<Node>,
 }
@@ -264,6 +309,9 @@ impl RootFrameSpec {
             padding: 12,
             layout: LayoutBox::auto(),
             tokens: None,
+            design_size: None,
+            scale_mode: RootScaleMode::None,
+            zoom_override: None,
             content: Box::new(content),
         }
     }
@@ -289,6 +337,24 @@ impl RootFrameSpec {
     /// Override token set for this root.
     pub fn tokens(mut self, tokens: ThemeTokens) -> Self {
         self.tokens = Some(tokens);
+        self
+    }
+
+    /// Set the baseline authored design size used by root scaling modes.
+    pub fn design_size(mut self, size: Size) -> Self {
+        self.design_size = Some(size);
+        self
+    }
+
+    /// Set root scaling behavior.
+    pub fn scale_mode(mut self, mode: RootScaleMode) -> Self {
+        self.scale_mode = mode;
+        self
+    }
+
+    /// Set an optional zoom multiplier applied after base scaling.
+    pub fn zoom_override(mut self, zoom: f32) -> Self {
+        self.zoom_override = Some(zoom);
         self
     }
 }
@@ -1774,6 +1840,328 @@ pub fn measure_checked(spec: &UiSpec) -> Result<Size, DeclarativeError> {
     Ok(measure_root_frame(&spec.root, &tokens))
 }
 
+/// Scale a positive integer dimension with rounding and lower bound of one.
+fn scale_u32(value: u32, scale: f32) -> u32 {
+    if value == 0 {
+        return 0;
+    }
+    ((value as f32 * scale).round() as u32).max(1)
+}
+
+/// Scale a signed pixel value with rounding and zero preservation.
+fn scale_i32(value: i32, scale: f32) -> i32 {
+    if value == 0 {
+        0
+    } else {
+        let scaled = (value as f32 * scale).round() as i32;
+        if scaled == 0 {
+            value.signum()
+        } else {
+            scaled
+        }
+    }
+}
+
+/// Scale an optional integer dimension.
+fn scale_optional_u32(value: Option<u32>, scale: f32) -> Option<u32> {
+    value.map(|current| scale_u32(current, scale))
+}
+
+/// Scale a length axis when it uses pixel units.
+fn scale_length(length: Length, scale: f32) -> Length {
+    match length {
+        Length::Auto => Length::Auto,
+        Length::Px(px) => Length::Px(scale_u32(px, scale)),
+        Length::Fill(weight) => Length::Fill(weight),
+    }
+}
+
+/// Scale layout constraints.
+fn scale_layout(layout: LayoutBox, scale: f32) -> LayoutBox {
+    LayoutBox {
+        width: scale_length(layout.width, scale),
+        height: scale_length(layout.height, scale),
+        min_width: scale_optional_u32(layout.min_width, scale),
+        min_height: scale_optional_u32(layout.min_height, scale),
+        max_width: scale_optional_u32(layout.max_width, scale),
+        max_height: scale_optional_u32(layout.max_height, scale),
+    }
+}
+
+/// Scale edge insets.
+fn scale_insets(insets: EdgeInsets, scale: f32) -> EdgeInsets {
+    EdgeInsets {
+        left: scale_i32(insets.left, scale),
+        right: scale_i32(insets.right, scale),
+        top: scale_i32(insets.top, scale),
+        bottom: scale_i32(insets.bottom, scale),
+    }
+}
+
+/// Scale size values.
+fn scale_size(size: Size, scale: f32) -> Size {
+    Size {
+        width: scale_u32(size.width, scale),
+        height: scale_u32(size.height, scale),
+    }
+}
+
+/// Scale a point in pixel coordinates.
+fn scale_point(point: Point, scale: f32) -> Point {
+    Point {
+        x: scale_i32(point.x, scale),
+        y: scale_i32(point.y, scale),
+    }
+}
+
+/// Scale a rectangle in pixel coordinates.
+fn scale_rect(rect: Rect, scale: f32) -> Rect {
+    Rect {
+        origin: scale_point(rect.origin, scale),
+        size: scale_size(rect.size, scale),
+    }
+}
+
+/// Scale root design tokens uniformly for rendering.
+fn scale_tokens(tokens: ThemeTokens, scale: f32) -> ThemeTokens {
+    let mut scaled = tokens;
+    scaled.typography.text_scale = scale_u32(tokens.typography.text_scale.max(1), scale);
+    scaled.spacing.xs = scale_i32(tokens.spacing.xs, scale);
+    scaled.spacing.sm = scale_i32(tokens.spacing.sm, scale);
+    scaled.spacing.md = scale_i32(tokens.spacing.md, scale);
+    scaled.spacing.lg = scale_i32(tokens.spacing.lg, scale);
+    scaled.controls.knob_diameter = scale_u32(tokens.controls.knob_diameter.max(1), scale);
+    scaled.controls.slider_width = scale_u32(tokens.controls.slider_width.max(1), scale);
+    scaled.controls.slider_height = scale_u32(tokens.controls.slider_height.max(1), scale);
+    scaled.controls.toggle_width = scale_u32(tokens.controls.toggle_width.max(1), scale);
+    scaled.controls.toggle_height = scale_u32(tokens.controls.toggle_height.max(1), scale);
+    scaled.controls.button_width = scale_u32(tokens.controls.button_width.max(1), scale);
+    scaled.controls.button_height = scale_u32(tokens.controls.button_height.max(1), scale);
+    scaled.controls.dropdown_width = scale_u32(tokens.controls.dropdown_width.max(1), scale);
+    scaled.controls.dropdown_height = scale_u32(tokens.controls.dropdown_height.max(1), scale);
+    scaled
+}
+
+/// Scale a draw command in-place for region rendering.
+fn scale_draw_command(command: &DrawCommand, scale: f32) -> DrawCommand {
+    match command {
+        DrawCommand::FillRect { rect, color } => DrawCommand::FillRect {
+            rect: scale_rect(*rect, scale),
+            color: *color,
+        },
+        DrawCommand::StrokeRect {
+            rect,
+            thickness,
+            color,
+        } => DrawCommand::StrokeRect {
+            rect: scale_rect(*rect, scale),
+            thickness: scale_u32(*thickness, scale),
+            color: *color,
+        },
+        DrawCommand::FillCircle {
+            center,
+            radius,
+            color,
+        } => DrawCommand::FillCircle {
+            center: scale_point(*center, scale),
+            radius: scale_i32(*radius, scale),
+            color: *color,
+        },
+        DrawCommand::StrokeCircle {
+            center,
+            radius,
+            thickness,
+            color,
+        } => DrawCommand::StrokeCircle {
+            center: scale_point(*center, scale),
+            radius: scale_i32(*radius, scale),
+            thickness: scale_i32(*thickness, scale),
+            color: *color,
+        },
+        DrawCommand::Line { start, end, color } => DrawCommand::Line {
+            start: scale_point(*start, scale),
+            end: scale_point(*end, scale),
+            color: *color,
+        },
+        DrawCommand::Text {
+            origin,
+            text,
+            color,
+            scale: text_scale,
+        } => DrawCommand::Text {
+            origin: scale_point(*origin, scale),
+            text: text.clone(),
+            color: *color,
+            scale: scale_u32((*text_scale).max(1), scale),
+        },
+    }
+}
+
+/// Scale declarative nodes recursively.
+fn scale_node(node: &Node, scale: f32) -> Node {
+    match node {
+        Node::Panel(panel) => Node::Panel(PanelSpec {
+            key: panel.key.clone(),
+            title: panel.title.clone(),
+            padding: scale_i32(panel.padding, scale),
+            background: panel.background,
+            outline: panel.outline,
+            header_height: panel.header_height.map(|value| scale_i32(value, scale)),
+            layout: scale_layout(panel.layout, scale),
+            content: Box::new(scale_node(&panel.content, scale)),
+        }),
+        Node::Row(flex) => Node::Row(FlexSpec {
+            layout: scale_layout(flex.layout, scale),
+            gap: scale_i32(flex.gap, scale),
+            padding: scale_insets(flex.padding, scale),
+            align: flex.align,
+            justify: flex.justify,
+            children: flex.children.iter().map(|child| scale_node(child, scale)).collect(),
+        }),
+        Node::Column(flex) => Node::Column(FlexSpec {
+            layout: scale_layout(flex.layout, scale),
+            gap: scale_i32(flex.gap, scale),
+            padding: scale_insets(flex.padding, scale),
+            align: flex.align,
+            justify: flex.justify,
+            children: flex.children.iter().map(|child| scale_node(child, scale)).collect(),
+        }),
+        Node::Grid(grid) => Node::Grid(GridSpec {
+            layout: scale_layout(grid.layout, scale),
+            template: GridTemplate {
+                columns: grid
+                    .template
+                    .columns
+                    .iter()
+                    .copied()
+                    .map(|track| match track {
+                        TrackSize::Px(px) => TrackSize::Px(scale_u32(px, scale)),
+                        TrackSize::Auto => TrackSize::Auto,
+                        TrackSize::Fr(weight) => TrackSize::Fr(weight),
+                    })
+                    .collect(),
+                rows: grid
+                    .template
+                    .rows
+                    .iter()
+                    .copied()
+                    .map(|track| match track {
+                        TrackSize::Px(px) => TrackSize::Px(scale_u32(px, scale)),
+                        TrackSize::Auto => TrackSize::Auto,
+                        TrackSize::Fr(weight) => TrackSize::Fr(weight),
+                    })
+                    .collect(),
+                column_gap: scale_i32(grid.template.column_gap, scale),
+                row_gap: scale_i32(grid.template.row_gap, scale),
+                justify_x: grid.template.justify_x,
+                padding: scale_insets(grid.template.padding, scale),
+            },
+            children: grid.children.iter().map(|child| scale_node(child, scale)).collect(),
+        }),
+        Node::Absolute(absolute) => Node::Absolute(AbsoluteSpec {
+            layout: scale_layout(absolute.layout, scale),
+            children: absolute
+                .children
+                .iter()
+                .map(|child| AbsoluteChild {
+                    origin: scale_point(child.origin, scale),
+                    node: scale_node(&child.node, scale),
+                })
+                .collect(),
+        }),
+        Node::Label(label) => Node::Label(LabelSpec {
+            text: label.text.clone(),
+            color: label.color,
+            layout: scale_layout(label.layout, scale),
+        }),
+        Node::Spacer(spacer) => Node::Spacer(SpacerSpec {
+            size: scale_size(spacer.size, scale),
+        }),
+        Node::Knob(knob) => Node::Knob(KnobSpec {
+            key: knob.key.clone(),
+            label: knob.label.clone(),
+            value: knob.value,
+            range: knob.range,
+            value_label: knob.value_label.clone(),
+            layout: scale_layout(knob.layout, scale),
+        }),
+        Node::Slider(slider) => Node::Slider(SliderSpec {
+            key: slider.key.clone(),
+            label: slider.label.clone(),
+            value: slider.value,
+            range: slider.range,
+            control_size: slider.control_size.map(|size| scale_size(size, scale)),
+            layout: scale_layout(slider.layout, scale),
+        }),
+        Node::Toggle(toggle) => Node::Toggle(ToggleSpec {
+            key: toggle.key.clone(),
+            label: toggle.label.clone(),
+            value: toggle.value,
+            control_size: toggle.control_size.map(|size| scale_size(size, scale)),
+            layout: scale_layout(toggle.layout, scale),
+        }),
+        Node::Button(button) => Node::Button(ButtonSpec {
+            key: button.key.clone(),
+            label: button.label.clone(),
+            control_size: button.control_size.map(|size| scale_size(size, scale)),
+            layout: scale_layout(button.layout, scale),
+        }),
+        Node::Dropdown(dropdown) => Node::Dropdown(DropdownSpec {
+            key: dropdown.key.clone(),
+            label: dropdown.label.clone(),
+            options: dropdown.options.clone(),
+            selected: dropdown.selected,
+            control_size: dropdown.control_size.map(|size| scale_size(size, scale)),
+            layout: scale_layout(dropdown.layout, scale),
+        }),
+        Node::Region(region) => Node::Region(RegionSpec {
+            key: region.key.clone(),
+            size: scale_size(region.size, scale),
+            draw: region
+                .draw
+                .iter()
+                .map(|command| scale_draw_command(command, scale))
+                .collect(),
+        }),
+        Node::Indicator(indicator) => Node::Indicator(IndicatorSpec {
+            size: scale_size(indicator.size, scale),
+            active: indicator.active,
+        }),
+    }
+}
+
+/// Build a scaled root frame for render-time execution.
+fn scaled_root_frame(root: &RootFrameSpec, scale: f32) -> RootFrameSpec {
+    RootFrameSpec {
+        key: root.key.clone(),
+        title: root.title.clone(),
+        padding: scale_i32(root.padding, scale),
+        layout: scale_layout(root.layout, scale),
+        tokens: root.tokens,
+        design_size: root.design_size.map(|size| scale_size(size, scale)),
+        scale_mode: root.scale_mode,
+        zoom_override: root.zoom_override,
+        content: Box::new(scale_node(&root.content, scale)),
+    }
+}
+
+/// Resolve root render scale from viewport and root scaling policy.
+fn resolve_root_scale(root: &RootFrameSpec, measured: Size, viewport: Size) -> f32 {
+    let design = root.design_size.unwrap_or(measured);
+    let zoom_override = root.zoom_override.unwrap_or(1.0);
+    let base = match root.scale_mode {
+        RootScaleMode::None => 1.0,
+        RootScaleMode::UniformFit => {
+            let design_width = design.width.max(1) as f32;
+            let design_height = design.height.max(1) as f32;
+            let fit_width = viewport.width.max(1) as f32 / design_width;
+            let fit_height = viewport.height.max(1) as f32 / design_height;
+            fit_width.min(fit_height)
+        }
+    };
+    (base * zoom_override).clamp(0.1, 8.0)
+}
+
 /// Render a UI specification and collect typed actions.
 ///
 /// # Errors
@@ -1784,28 +2172,43 @@ pub fn render_checked(
     origin: Point,
 ) -> Result<RenderResult, DeclarativeError> {
     validate_spec(spec)?;
-    let tokens = spec.root.tokens.unwrap_or_default();
-    let measured = measure_root_frame(&spec.root, &tokens);
-    let resolved = resolve_size(spec.root.layout, measured, measured);
+    let base_tokens = spec.root.tokens.unwrap_or_default();
+    let measured = measure_root_frame(&spec.root, &base_tokens);
+    let viewport = ui.input().window_size;
+    let resolved_scale = resolve_root_scale(&spec.root, measured, viewport);
+    let tokens = scale_tokens(base_tokens, resolved_scale);
+    let scaled_root = scaled_root_frame(&spec.root, resolved_scale);
+    let scaled_measured = measure_root_frame(&scaled_root, &tokens);
+    let resolved = resolve_size(scaled_root.layout, scaled_measured, scaled_measured);
 
     let style = RootFrameStyle {
-        title: spec.root.title.as_deref(),
-        padding: spec.root.padding,
+        title: scaled_root.title.as_deref(),
+        padding: scaled_root.padding,
         background: Some(tokens.colors.surface),
         outline: Some(tokens.colors.border),
-        header_height: Some(panel_header_height(spec.root.title.as_deref(), &tokens)),
+        header_height: Some(panel_header_height(scaled_root.title.as_deref(), &tokens)),
     };
 
     let mut actions = Vec::new();
     let response =
-        ui.root_frame_with_key_at(&spec.root.key, style, Some(resolved), origin, |ui, rect| {
-            render_node(&spec.root.content, rect, ui, &tokens, &mut actions, 1);
+        ui.root_frame_with_key_at(&scaled_root.key, style, Some(resolved), origin, |ui, rect| {
+            render_node(
+                &scaled_root.content,
+                rect,
+                ui,
+                &tokens,
+                &mut actions,
+                1,
+                resolved_scale,
+            );
         });
     draw_container_debug_border(ui, response.outer_rect, ContainerKind::RootFrame, 0);
 
     Ok(RenderResult {
         measured_size: resolved,
         actions,
+        resolved_scale,
+        content_rect: response.content_rect,
     })
 }
 
@@ -2353,13 +2756,27 @@ fn render_node(
     tokens: &ThemeTokens,
     actions: &mut Vec<UiAction>,
     depth: usize,
+    render_scale: f32,
 ) {
     match node {
-        Node::Panel(panel) => render_panel(panel, rect, ui, tokens, actions, depth),
-        Node::Row(flex) => render_flex(flex, rect, ui, tokens, Axis::Horizontal, actions, depth),
-        Node::Column(flex) => render_flex(flex, rect, ui, tokens, Axis::Vertical, actions, depth),
-        Node::Grid(grid) => render_grid(grid, rect, ui, tokens, actions, depth),
-        Node::Absolute(absolute) => render_absolute(absolute, rect, ui, tokens, actions, depth),
+        Node::Panel(panel) => render_panel(panel, rect, ui, tokens, actions, depth, render_scale),
+        Node::Row(flex) => render_flex(
+            flex,
+            rect,
+            ui,
+            tokens,
+            Axis::Horizontal,
+            actions,
+            depth,
+            render_scale,
+        ),
+        Node::Column(flex) => {
+            render_flex(flex, rect, ui, tokens, Axis::Vertical, actions, depth, render_scale)
+        }
+        Node::Grid(grid) => render_grid(grid, rect, ui, tokens, actions, depth, render_scale),
+        Node::Absolute(absolute) => {
+            render_absolute(absolute, rect, ui, tokens, actions, depth, render_scale)
+        }
         Node::Label(label) => render_label(label, rect, ui, tokens),
         Node::Spacer(_) => {}
         Node::Knob(knob) => render_knob(knob, rect, ui, tokens, actions),
@@ -2367,7 +2784,7 @@ fn render_node(
         Node::Toggle(toggle) => render_toggle(toggle, rect, ui, tokens, actions),
         Node::Button(button) => render_button(button, rect, ui, tokens, actions),
         Node::Dropdown(dropdown) => render_dropdown(dropdown, rect, ui, tokens, actions),
-        Node::Region(region) => render_region(region, rect, ui, actions),
+        Node::Region(region) => render_region(region, rect, ui, actions, render_scale),
         Node::Indicator(indicator) => render_indicator(indicator, rect, ui),
     }
 }
@@ -2380,6 +2797,7 @@ fn render_panel(
     tokens: &ThemeTokens,
     actions: &mut Vec<UiAction>,
     depth: usize,
+    render_scale: f32,
 ) {
     let title = panel.title.as_deref();
     let header_height = panel
@@ -2394,7 +2812,15 @@ fn render_panel(
     };
 
     let response = ui.panel_with_key(&panel.key, style, Some(rect.size), |ui, content_rect| {
-        render_node(&panel.content, content_rect, ui, tokens, actions, depth + 1);
+        render_node(
+            &panel.content,
+            content_rect,
+            ui,
+            tokens,
+            actions,
+            depth + 1,
+            render_scale,
+        );
     });
     draw_container_debug_border(ui, response.outer_rect, ContainerKind::Panel, depth);
 }
@@ -2408,6 +2834,7 @@ fn render_flex(
     axis: Axis,
     actions: &mut Vec<UiAction>,
     depth: usize,
+    render_scale: f32,
 ) {
     let child_count = flex.children.len();
     if child_count == 0 {
@@ -2500,7 +2927,15 @@ fn render_flex(
             size: resolved_child,
         };
 
-        render_node(child, child_rect, ui, tokens, actions, depth + 1);
+        render_node(
+            child,
+            child_rect,
+            ui,
+            tokens,
+            actions,
+            depth + 1,
+            render_scale,
+        );
         let next_gap = gaps.get(index).copied().unwrap_or(0);
         cursor_main += resolved_main[index] + next_gap;
     }
@@ -2605,6 +3040,7 @@ fn render_grid(
     tokens: &ThemeTokens,
     actions: &mut Vec<UiAction>,
     depth: usize,
+    render_scale: f32,
 ) {
     let columns = grid.template.columns.len().max(1);
     let rows = if grid.children.is_empty() {
@@ -2691,6 +3127,7 @@ fn render_grid(
                     tokens,
                     actions,
                     depth + 1,
+                    render_scale,
                 );
             }
             let next_gap = column_gaps.get(col).copied().unwrap_or(0);
@@ -2781,6 +3218,7 @@ fn render_absolute(
     tokens: &ThemeTokens,
     actions: &mut Vec<UiAction>,
     depth: usize,
+    render_scale: f32,
 ) {
     for child in &absolute.children {
         let measured = measure_node(&child.node, tokens);
@@ -2793,7 +3231,15 @@ fn render_absolute(
             },
             size: resolved,
         };
-        render_node(&child.node, child_rect, ui, tokens, actions, depth + 1);
+        render_node(
+            &child.node,
+            child_rect,
+            ui,
+            tokens,
+            actions,
+            depth + 1,
+            render_scale,
+        );
     }
 
     draw_container_debug_border(ui, rect, ContainerKind::Absolute, depth);
@@ -2942,10 +3388,16 @@ fn render_dropdown(
 }
 
 /// Render a region node and emit interaction actions.
-fn render_region(region: &RegionSpec, rect: Rect, ui: &mut Ui<'_>, actions: &mut Vec<UiAction>) {
+fn render_region(
+    region: &RegionSpec,
+    rect: Rect,
+    ui: &mut Ui<'_>,
+    actions: &mut Vec<UiAction>,
+    render_scale: f32,
+) {
     render_region_draw_commands(&region.draw, rect, ui);
     let response = ui.region_with_key(&region.key, rect);
-    push_region_actions(&region.key, response, actions);
+    push_region_actions(&region.key, response, actions, render_scale);
 }
 
 /// Render region-local drawing commands into absolute canvas coordinates.
@@ -3010,19 +3462,34 @@ fn render_region_draw_commands(commands: &[DrawCommand], rect: Rect, ui: &mut Ui
 }
 
 /// Convert region responses to action list entries.
-fn push_region_actions(key: &str, response: RegionResponse, actions: &mut Vec<UiAction>) {
+fn unscale_point(point: Point, render_scale: f32) -> Point {
+    let inv = 1.0 / render_scale.max(0.1);
+    Point {
+        x: (point.x as f32 * inv).round() as i32,
+        y: (point.y as f32 * inv).round() as i32,
+    }
+}
+
+fn push_region_actions(
+    key: &str,
+    response: RegionResponse,
+    actions: &mut Vec<UiAction>,
+    render_scale: f32,
+) {
+    let local_pointer = unscale_point(response.local_pointer, render_scale);
+    let raw_local_pointer = unscale_point(response.raw_local_pointer, render_scale);
     actions.push(UiAction::RegionHover {
         key: key.to_string(),
         hovered: response.hovered,
-        local_pointer: response.local_pointer,
+        local_pointer,
     });
 
     if response.pressed {
         actions.push(UiAction::RegionInteracted {
             key: key.to_string(),
             kind: RegionInteractionKind::Pressed,
-            local_pointer: response.local_pointer,
-            raw_local_pointer: response.raw_local_pointer,
+            local_pointer,
+            raw_local_pointer,
             alt_down: response.alt_down,
         });
     }
@@ -3030,8 +3497,8 @@ fn push_region_actions(key: &str, response: RegionResponse, actions: &mut Vec<Ui
         actions.push(UiAction::RegionInteracted {
             key: key.to_string(),
             kind: RegionInteractionKind::Released,
-            local_pointer: response.local_pointer,
-            raw_local_pointer: response.raw_local_pointer,
+            local_pointer,
+            raw_local_pointer,
             alt_down: response.alt_down,
         });
     }
@@ -3039,8 +3506,8 @@ fn push_region_actions(key: &str, response: RegionResponse, actions: &mut Vec<Ui
         actions.push(UiAction::RegionInteracted {
             key: key.to_string(),
             kind: RegionInteractionKind::Dragged,
-            local_pointer: response.local_pointer,
-            raw_local_pointer: response.raw_local_pointer,
+            local_pointer,
+            raw_local_pointer,
             alt_down: response.alt_down,
         });
     }
@@ -3048,8 +3515,8 @@ fn push_region_actions(key: &str, response: RegionResponse, actions: &mut Vec<Ui
         actions.push(UiAction::RegionInteracted {
             key: key.to_string(),
             kind: RegionInteractionKind::SecondaryClicked,
-            local_pointer: response.local_pointer,
-            raw_local_pointer: response.raw_local_pointer,
+            local_pointer,
+            raw_local_pointer,
             alt_down: response.alt_down,
         });
     }
@@ -3057,8 +3524,8 @@ fn push_region_actions(key: &str, response: RegionResponse, actions: &mut Vec<Ui
         actions.push(UiAction::RegionInteracted {
             key: key.to_string(),
             kind: RegionInteractionKind::DoubleClicked,
-            local_pointer: response.local_pointer,
-            raw_local_pointer: response.raw_local_pointer,
+            local_pointer,
+            raw_local_pointer,
             alt_down: response.alt_down,
         });
     }
