@@ -1271,10 +1271,7 @@ impl<'a> Ui<'a> {
             arc_end - arc_start
         };
         let angle = arc_start + t * arc_span;
-        let indicator = Point {
-            x: center.x + (angle.cos() * (radius as f32 * 0.7)) as i32,
-            y: center.y + (angle.sin() * (radius as f32 * 0.7)) as i32,
-        };
+        let indicator = knob_indicator_point(center, radius, angle);
 
         let fill = if response.active {
             self.theme.knob_active
@@ -1949,6 +1946,18 @@ impl<'a> Ui<'a> {
     }
 }
 
+/// Convert a knob angle in mathematical coordinates into a screen-space point.
+///
+/// Angles are interpreted in the same convention as [`Canvas::stroke_arc`]:
+/// `0` points right and positive rotation is counter-clockwise. Screen-space
+/// Y grows downward, so the sine term is inverted.
+fn knob_indicator_point(center: Point, radius: i32, angle: f32) -> Point {
+    Point {
+        x: center.x + (angle.cos() * (radius as f32 * 0.7)) as i32,
+        y: center.y - (angle.sin() * (radius as f32 * 0.7)) as i32,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2015,6 +2024,22 @@ mod tests {
             let response = ui.knob_with_key("attack", "Attack 0.60s", &mut value, (0.0, 1.0));
             assert!(response.changed);
         }
+    }
+
+    #[test]
+    fn knob_indicator_point_uses_arc_coordinate_convention() {
+        let center = Point { x: 100, y: 100 };
+        let radius = 20;
+
+        let start = 7.0 * std::f32::consts::PI / 4.0;
+        let top = std::f32::consts::PI / 2.0;
+
+        let start_point = knob_indicator_point(center, radius, start);
+        let top_point = knob_indicator_point(center, radius, top);
+
+        assert!(start_point.x > center.x);
+        assert!(start_point.y > center.y);
+        assert!(top_point.y < center.y);
     }
 
     #[test]
