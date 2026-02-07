@@ -207,7 +207,7 @@ impl UiState {
         self.root_frame_size = None;
     }
 
-    /// Store the latest measured root frame size for host resize requests.
+    /// Store the latest measured root frame size for host integrations.
     pub(crate) fn set_root_frame_size(&mut self, size: Size) {
         self.root_frame_used = true;
         self.root_frame_size = Some(size);

@@ -145,7 +145,6 @@ where
     last_mouse_secondary_down: bool,
     debug_input: bool,
     frame_counter: u64,
-    logged_missing_root_frame: bool,
 }
 
 impl<State, Init, Build, Reduce> WindowState<State, Init, Build, Reduce>
@@ -294,6 +293,7 @@ where
         let height = (rect.bottom - rect.top).max(1) as u32;
         self.last_size
             .store(pack_size(width, height), Ordering::Release);
+        self.input.window_size = Size { width, height };
         self.canvas.resize(width, height);
         self.renderer.resize(Size { width, height });
     }
@@ -414,18 +414,7 @@ where
             ui.draw_overlays();
             self.renderer.set_vector_commands(ui.take_vector_commands());
         }
-        if let Some(size) = self.ui_state.take_root_frame_size() {
-            let current = self.canvas.size();
-            if size.width != current.width || size.height != current.height {
-                self.resize_request
-                    .store(pack_size(size.width, size.height), Ordering::Release);
-            }
-        } else if !self.ui_state.root_frame_used() && !self.logged_missing_root_frame {
-            log_line_safe(
-                "win32: warning: no root frame drawn in frame; window auto-resize skipped",
-            );
-            self.logged_missing_root_frame = true;
-        }
+        let _ = self.ui_state.take_root_frame_size();
         if self.debug_input {
             let text = format!(
                 "frame={} ptr=({}, {}) md={} mr={} rd={}",
@@ -663,7 +652,10 @@ where
         hwnd: child_hwnd,
         renderer,
         canvas,
-        input: InputState::default(),
+        input: InputState {
+            window_size: size,
+            ..InputState::default()
+        },
         ui_state,
         layout,
         layout_origin: layout.cursor,
@@ -684,7 +676,6 @@ where
         last_mouse_secondary_down: false,
         debug_input: std::env::var_os("PATCHBAY_DEBUG_INPUT").is_some(),
         frame_counter: 0,
-        logged_missing_root_frame: false,
     });
 
     unsafe {

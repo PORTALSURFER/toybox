@@ -123,8 +123,7 @@ impl GuiHostWindow {
 
     /// Open a parented window with an explicit reuse policy.
     ///
-    /// The `size` argument is used as the initial window size before
-    /// declarative auto-resize takes over.
+    /// The `size` argument is used as the initial window size.
     #[allow(clippy::too_many_arguments)]
     pub fn open_parented_with<State, Init, Build, Reduce>(
         &mut self,

@@ -189,6 +189,10 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
             self.default_size
         }
     }
+
+    fn minimum_size(&self) -> (i32, i32) {
+        self.default_size
+    }
 }
 
 #[cfg(feature = "gui")]
@@ -272,18 +276,12 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
         let requested = unsafe { *new_size };
         let requested_width = (requested.right - requested.left).max(1);
         let requested_height = (requested.bottom - requested.top).max(1);
-        let (desired_width, desired_height) = self.desired_size();
 
         if let Ok(gui) = self.gui.lock() {
             gui.request_resize(requested_width as u32, requested_height as u32);
         }
-
-        if requested_width != desired_width || requested_height != desired_height {
-            self.rect.set(view_rect(desired_width, desired_height));
-            return kResultFalse;
-        }
-
-        self.rect.set(requested);
+        self.rect
+            .set(view_rect(requested_width.max(1), requested_height.max(1)));
         kResultOk
     }
 
@@ -296,7 +294,7 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
     }
 
     unsafe fn canResize(&self) -> tresult {
-        kResultFalse
+        kResultTrue
     }
 
     unsafe fn checkSizeConstraint(&self, rect: *mut ViewRect) -> tresult {
@@ -304,9 +302,11 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
             return kInvalidArgument;
         }
         let rect = unsafe { &mut *rect };
-        let (desired_width, desired_height) = self.desired_size();
-        rect.right = rect.left + desired_width;
-        rect.bottom = rect.top + desired_height;
+        let requested_width = (rect.right - rect.left).max(1);
+        let requested_height = (rect.bottom - rect.top).max(1);
+        let (min_width, min_height) = self.minimum_size();
+        rect.right = rect.left + requested_width.max(min_width);
+        rect.bottom = rect.top + requested_height.max(min_height);
         kResultOk
     }
 }
@@ -381,7 +381,7 @@ mod tests {
     }
 
     #[test]
-    fn hosted_view_size_constraint_uses_gui_last_size() {
+    fn hosted_view_size_constraint_applies_minimum_default_size() {
         let view = HostedVst3View::new(
             MockHostedGui {
                 last_size: Some((777, 333)),
@@ -392,8 +392,18 @@ mod tests {
         let mut rect = view_rect(100, 100);
         let result = unsafe { view.checkSizeConstraint(&mut rect) };
         assert_eq!(result, kResultOk);
-        assert_eq!(rect.right - rect.left, 777);
-        assert_eq!(rect.bottom - rect.top, 333);
+        assert_eq!(rect.right - rect.left, 420);
+        assert_eq!(rect.bottom - rect.top, 240);
+    }
+
+    #[test]
+    fn hosted_view_size_constraint_keeps_requested_size_when_larger_than_minimum() {
+        let view = HostedVst3View::new(MockHostedGui { last_size: None }, 320, 200);
+        let mut rect = view_rect(640, 400);
+        let result = unsafe { view.checkSizeConstraint(&mut rect) };
+        assert_eq!(result, kResultOk);
+        assert_eq!(rect.right - rect.left, 640);
+        assert_eq!(rect.bottom - rect.top, 400);
     }
 
     #[test]

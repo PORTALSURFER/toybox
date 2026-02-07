@@ -13,6 +13,8 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 /// Input snapshot delivered to UI widgets for a single frame.
 #[derive(Clone, Debug, Default)]
 pub struct InputState {
+    /// Current logical window size in pixels.
+    pub window_size: Size,
     /// Current pointer position in pixels.
     pub pointer_pos: crate::canvas::Point,
     /// Whether the primary mouse button is held.

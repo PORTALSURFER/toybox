@@ -13,6 +13,8 @@ use std::sync::{Arc, Mutex};
 /// Input snapshot delivered to UI widgets for a single frame.
 #[derive(Clone, Debug, Default)]
 pub struct InputState {
+    /// Current logical window size in pixels.
+    pub window_size: Size,
     /// Current pointer position in pixels.
     pub pointer_pos: crate::canvas::Point,
     /// Whether the primary mouse button is held.
@@ -171,8 +173,7 @@ impl HostWindow {
     /// The caller supplies initial state plus callbacks for initialization,
     /// per-frame declarative spec building, and action reduction.
     ///
-    /// The `size` argument is used as the initial window size; the declarative
-    /// root frame still drives auto-resizing each frame.
+    /// The `size` argument is used as the initial window size.
     pub fn open_parented<State, Init, Build, Reduce>(
         &mut self,
         title: String,
@@ -208,8 +209,7 @@ impl HostWindow {
     /// shown, and the new state/callbacks are ignored. When `mode` is
     /// [`OpenParentedMode::Recreate`], any existing window is destroyed and a
     /// new one is created with the provided state. The `size` argument is used
-    /// as the initial window size; the declarative root frame will still drive
-    /// auto-resizing.
+    /// as the initial window size.
     #[allow(clippy::too_many_arguments)]
     pub fn open_parented_with<State, Init, Build, Reduce>(
         &mut self,
