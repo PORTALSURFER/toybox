@@ -2179,7 +2179,10 @@ pub fn render_checked(
     let tokens = scale_tokens(base_tokens, resolved_scale);
     let scaled_root = scaled_root_frame(&spec.root, resolved_scale);
     let scaled_measured = measure_root_frame(&scaled_root, &tokens);
-    let resolved = resolve_size(scaled_root.layout, scaled_measured, scaled_measured);
+    // Root layout must resolve against the live viewport; resolving against
+    // measured size here locks the frame to design dimensions and leaves
+    // uncovered surface area after host resizes.
+    let resolved = resolve_size(scaled_root.layout, scaled_measured, viewport);
 
     let style = RootFrameStyle {
         title: scaled_root.title.as_deref(),
