@@ -1,7 +1,7 @@
 //! Win32 window creation and message handling.
 
 use crate::canvas::{Canvas, Color, Point, Size};
-use crate::declarative::{RootScaleMode, UiAction, UiSpec, measure_checked, render_checked};
+use crate::declarative::{UiAction, UiSpec, render_checked};
 use crate::host::{GuiError, InputState};
 use crate::logging::log_line_safe;
 use crate::renderer::{Renderer, RendererDevice};
@@ -401,27 +401,7 @@ where
 
         {
             self.ui_state.begin_frame();
-            let mut spec = (self.build_spec)(&self.input, &self.state);
-            let mut restored_window_size = None;
-            if spec.root.scale_mode == RootScaleMode::UniformFit {
-                let design_size = spec.root.design_size.unwrap_or_else(|| {
-                    measure_checked(&spec).unwrap_or(Size {
-                        width: self.canvas.size().width.max(1),
-                        height: self.canvas.size().height.max(1),
-                    })
-                });
-                let design_size = Size {
-                    width: design_size.width.max(1),
-                    height: design_size.height.max(1),
-                };
-                if self.canvas.size() != design_size {
-                    self.canvas.resize(design_size.width, design_size.height);
-                    self.sync_pointer_pos();
-                }
-                restored_window_size = Some(self.input.window_size);
-                self.input.window_size = design_size;
-                spec = (self.build_spec)(&self.input, &self.state);
-            }
+            let spec = (self.build_spec)(&self.input, &self.state);
             let mut ui = Ui::new(
                 &mut self.canvas,
                 &self.input,
@@ -446,9 +426,6 @@ where
             }
             ui.draw_overlays();
             self.renderer.set_vector_commands(ui.take_vector_commands());
-            if let Some(window_size) = restored_window_size {
-                self.input.window_size = window_size;
-            }
         }
         let _ = self.ui_state.take_root_frame_size();
         if self.debug_input {
