@@ -153,6 +153,7 @@ pub struct HostedVst3View<G: Vst3HostedGui> {
     rect: Cell<ViewRect>,
     attached: Cell<bool>,
     resize_axis: Cell<ResizeAxis>,
+    last_requested_size: Cell<(i32, i32)>,
     default_size: (i32, i32),
     gui: Mutex<G>,
 }
@@ -174,6 +175,7 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
             rect: Cell::new(view_rect(width, height)),
             attached: Cell::new(false),
             resize_axis: Cell::new(ResizeAxis::Width),
+            last_requested_size: Cell::new((width, height)),
             default_size: (width, height),
             gui: Mutex::new(gui),
         }
@@ -184,7 +186,10 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
             return;
         };
         if let Some((width, height)) = gui.last_size() {
-            self.rect.set(view_rect(width as i32, height as i32));
+            let width = width as i32;
+            let height = height as i32;
+            self.rect.set(view_rect(width, height));
+            self.last_requested_size.set((width, height));
         }
     }
 
@@ -199,13 +204,12 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
     fn dominant_resize_axis(&self, requested_width: i32, requested_height: i32) -> ResizeAxis {
         let requested_width = requested_width.max(1);
         let requested_height = requested_height.max(1);
-        let current = self.rect.get();
-        let current_width = (current.right - current.left).max(1);
-        let current_height = (current.bottom - current.top).max(1);
-        let width_delta = (requested_width - current_width).abs();
-        let height_delta = (requested_height - current_height).abs();
+        let (last_width, last_height) = self.last_requested_size.get();
+        let width_delta = (requested_width - last_width).abs();
+        let height_delta = (requested_height - last_height).abs();
         let previous = self.resize_axis.get();
-        // Follow the axis that changed most relative to the current size.
+        // Follow the axis that changed most relative to the previous host
+        // request to avoid oscillating against already-constrained rects.
         // Keep previous axis on near ties to avoid corner-drag oscillation.
         let chosen = if width_delta > height_delta + 1 {
             ResizeAxis::Width
@@ -214,6 +218,8 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
         } else {
             previous
         };
+        self.last_requested_size
+            .set((requested_width, requested_height));
         self.resize_axis.set(chosen);
         chosen
     }
