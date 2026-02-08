@@ -11,3 +11,7 @@ mod toggle_labels_are_clamped_to_control_width_tests {
 mod button_reports_click_tests {
     include!("02_button_reports_click_tests.rs");
 }
+
+mod dropdown_interaction_tests {
+    include!("03_dropdown_interaction_tests.rs");
+}
