@@ -3,7 +3,10 @@
 use crate::logging::log_line_safe;
 use clack_extensions::gui::GuiSize;
 use clack_plugin::plugin::PluginError;
-use patchbay_gui::{GuiError, HostWindow, Size, UiAction, UiSpec};
+use patchbay_gui::{
+    GuiError, HostWindow, OpenParentedRequest as PatchbayOpenParentedRequest, Size, UiAction,
+    UiSpec,
+};
 use raw_window_handle::RawWindowHandle;
 
 /// Re-export Patchbay GUI types for downstream declarative GUI integrations.
@@ -17,6 +20,55 @@ pub enum HostResizePolicy {
     Enabled,
     /// Ignore host resize requests and report a fixed-size window.
     Disabled,
+}
+
+/// Request payload for opening a CLAP parented Patchbay window.
+///
+/// This avoids wide function signatures while preserving explicit ownership of
+/// title, size, state, and callbacks at call sites.
+pub struct GuiOpenRequest<State, Init, Build, Reduce> {
+    /// Window title shown by the host.
+    pub title: String,
+    /// Initial logical size in pixels.
+    pub size: (u32, u32),
+    /// Initial user-provided UI state.
+    pub state: State,
+    /// One-time state initialization callback.
+    pub on_init: Init,
+    /// Per-frame declarative UI builder callback.
+    pub build: Build,
+    /// UI action reducer callback.
+    pub reduce: Reduce,
+    /// Reuse behavior for repeated open calls.
+    pub mode: OpenParentedMode,
+}
+
+impl<State, Init, Build, Reduce> GuiOpenRequest<State, Init, Build, Reduce> {
+    /// Build a request using [`OpenParentedMode::Recreate`].
+    pub fn new(
+        title: String,
+        size: (u32, u32),
+        state: State,
+        on_init: Init,
+        build: Build,
+        reduce: Reduce,
+    ) -> Self {
+        Self {
+            title,
+            size,
+            state,
+            on_init,
+            build,
+            reduce,
+            mode: OpenParentedMode::Recreate,
+        }
+    }
+
+    /// Override the default reuse mode.
+    pub fn with_mode(mut self, mode: OpenParentedMode) -> Self {
+        self.mode = mode;
+        self
+    }
 }
 
 /// Wrapper around a Patchbay GUI window for a CLAP editor.
@@ -144,15 +196,9 @@ impl GuiHostWindow {
         Reduce: FnMut(&mut State, UiAction) + Send + 'static,
         State: Send + 'static,
     {
-        self.open_parented_with(
-            title,
-            size,
-            state,
-            on_init,
-            build,
-            reduce,
-            OpenParentedMode::Recreate,
-        )
+        self.open_parented_with(GuiOpenRequest::new(
+            title, size, state, on_init, build, reduce,
+        ))
     }
 
     /// Open a parented window, reusing it if it is already open.
@@ -176,29 +222,17 @@ impl GuiHostWindow {
         State: Send + 'static,
     {
         self.open_parented_with(
-            title,
-            size,
-            state,
-            on_init,
-            build,
-            reduce,
-            OpenParentedMode::ReuseIfOpen,
+            GuiOpenRequest::new(title, size, state, on_init, build, reduce)
+                .with_mode(OpenParentedMode::ReuseIfOpen),
         )
     }
 
     /// Open a parented window with an explicit reuse policy.
     ///
     /// The `size` argument is used as the initial window size.
-    #[allow(clippy::too_many_arguments)]
     pub fn open_parented_with<State, Init, Build, Reduce>(
         &mut self,
-        title: String,
-        size: (u32, u32),
-        state: State,
-        on_init: Init,
-        build: Build,
-        reduce: Reduce,
-        mode: OpenParentedMode,
+        request: GuiOpenRequest<State, Init, Build, Reduce>,
     ) -> Result<(), PluginError>
     where
         Init: FnMut(&mut State) + Send + 'static,
@@ -206,22 +240,33 @@ impl GuiHostWindow {
         Reduce: FnMut(&mut State, UiAction) + Send + 'static,
         State: Send + 'static,
     {
+        let GuiOpenRequest {
+            title,
+            size,
+            state,
+            on_init,
+            build,
+            reduce,
+            mode,
+        } = request;
         log_line_safe(&format!(
             "toybox/gui: open_parented title=\"{}\" requested_size={}x{} mode={mode:?}",
             title, size.0, size.1
         ));
         self.inner
             .open_parented_with(
-                title,
-                Size {
-                    width: size.0.max(1),
-                    height: size.1.max(1),
-                },
-                state,
-                on_init,
-                build,
-                reduce,
-                mode,
+                PatchbayOpenParentedRequest::new(
+                    title,
+                    Size {
+                        width: size.0.max(1),
+                        height: size.1.max(1),
+                    },
+                    state,
+                    on_init,
+                    build,
+                    reduce,
+                )
+                .with_mode(mode),
             )
             .map_err(map_gui_error)
     }

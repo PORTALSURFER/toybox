@@ -55,6 +55,55 @@ pub enum OpenParentedMode {
     Recreate,
 }
 
+/// Request payload for opening a parented GUI window.
+///
+/// This bundles state and callbacks so call sites do not need wide function
+/// signatures when opening Patchbay windows.
+pub struct OpenParentedRequest<State, Init, Build, Reduce> {
+    /// Window title shown by the host.
+    pub title: String,
+    /// Initial logical window size.
+    pub size: Size,
+    /// Initial user-provided UI state.
+    pub state: State,
+    /// One-time state initialization callback.
+    pub on_init: Init,
+    /// Per-frame declarative tree builder.
+    pub build: Build,
+    /// UI action reducer callback.
+    pub reduce: Reduce,
+    /// Reuse behavior for repeated open calls.
+    pub mode: OpenParentedMode,
+}
+
+impl<State, Init, Build, Reduce> OpenParentedRequest<State, Init, Build, Reduce> {
+    /// Build an open request using [`OpenParentedMode::ReuseIfOpen`].
+    pub fn new(
+        title: String,
+        size: Size,
+        state: State,
+        on_init: Init,
+        build: Build,
+        reduce: Reduce,
+    ) -> Self {
+        Self {
+            title,
+            size,
+            state,
+            on_init,
+            build,
+            reduce,
+            mode: OpenParentedMode::ReuseIfOpen,
+        }
+    }
+
+    /// Override the default reuse mode.
+    pub fn with_mode(mut self, mode: OpenParentedMode) -> Self {
+        self.mode = mode;
+        self
+    }
+}
+
 /// Errors returned by the Patchbay GUI system.
 #[derive(thiserror::Error, Debug)]
 pub enum GuiError {
@@ -192,7 +241,7 @@ impl HostWindow {
         Reduce: FnMut(&mut State, UiAction) + Send + 'static,
         State: Send + 'static,
     {
-        self.open_parented_with(
+        self.open_parented_with(OpenParentedRequest::new(
             title,
             Size {
                 width: size.0.max(1),
@@ -202,8 +251,7 @@ impl HostWindow {
             on_init,
             build,
             reduce,
-            OpenParentedMode::ReuseIfOpen,
-        )
+        ))
     }
 
     /// Open a parented Patchbay GUI window with explicit reuse policy.
@@ -213,16 +261,9 @@ impl HostWindow {
     /// [`OpenParentedMode::Recreate`], any existing window is destroyed and a
     /// new one is created with the provided state. The `size` argument is used
     /// as the initial window size.
-    #[allow(clippy::too_many_arguments)]
     pub fn open_parented_with<State, Init, Build, Reduce>(
         &mut self,
-        title: String,
-        size: Size,
-        state: State,
-        on_init: Init,
-        build: Build,
-        reduce: Reduce,
-        mode: OpenParentedMode,
+        request: OpenParentedRequest<State, Init, Build, Reduce>,
     ) -> Result<(), GuiError>
     where
         Init: FnMut(&mut State) + Send + 'static,
@@ -230,6 +271,15 @@ impl HostWindow {
         Reduce: FnMut(&mut State, UiAction) + Send + 'static,
         State: Send + 'static,
     {
+        let OpenParentedRequest {
+            title,
+            size,
+            state,
+            on_init,
+            build,
+            reduce,
+            mode,
+        } = request;
         let size = Size {
             width: size.width.max(1),
             height: size.height.max(1),
