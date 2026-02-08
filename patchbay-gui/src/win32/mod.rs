@@ -54,6 +54,7 @@ include!("window_state_sizing_input.rs");
 include!("render_loop.rs");
 include!("resize_helpers.rs");
 include!("thread_spawn.rs");
+include!("thread_spawn_helpers.rs");
 include!("window_state_drop.rs");
 include!("window_proc.rs");
 include!("win32_utils.rs");
