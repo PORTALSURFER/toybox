@@ -44,7 +44,9 @@ fn render_flex(flex: &FlexSpec, rect: Rect, ui: &mut Ui<'_>, axis: Axis, ctx: &m
     let intrinsic = measure_flex_intrinsic_children(flex, ctx.tokens);
     let resolved_main = resolve_flex_main_lengths(flex, axis, &intrinsic, gap, available_main);
     let main_spacing = resolve_flex_main_spacing(flex, &resolved_main, child_count, gap, available_main);
-    render_flex_children(flex, axis, ui, ctx, inner, &intrinsic, &resolved_main, &main_spacing);
+    let render_ctx = FlexRenderContext::new(axis, inner, flex.align);
+    let solved = FlexSolvedLengths::new(&intrinsic, &resolved_main, &main_spacing);
+    render_flex_children(flex, &render_ctx, &solved, ui, ctx);
     emit_flex_debug_border(ui, ctx, rect);
 }
 
@@ -113,6 +115,51 @@ struct FlexMainSpacing {
     gaps: Vec<i32>,
 }
 
+/// Geometry and alignment state shared across flex child rendering.
+struct FlexRenderContext {
+    /// Flex axis orientation.
+    axis: Axis,
+    /// Inner padded container bounds.
+    inner: Rect,
+    /// Available space on the cross axis.
+    available_cross: i32,
+    /// Cross-axis alignment mode.
+    align: Align,
+}
+
+impl FlexRenderContext {
+    /// Build a new render context from flex layout primitives.
+    fn new(axis: Axis, inner: Rect, align: Align) -> Self {
+        Self {
+            axis,
+            inner,
+            available_cross: axis.cross(inner.size) as i32,
+            align,
+        }
+    }
+}
+
+/// Pre-resolved lengths used while placing flex children.
+struct FlexSolvedLengths<'a> {
+    /// Intrinsic measured size for each child.
+    intrinsic: &'a [Size],
+    /// Resolved main-axis length for each child.
+    resolved_main: &'a [i32],
+    /// Resolved spacing before and between children.
+    main_spacing: &'a FlexMainSpacing,
+}
+
+impl<'a> FlexSolvedLengths<'a> {
+    /// Build solved-length bundle from measured arrays.
+    fn new(intrinsic: &'a [Size], resolved_main: &'a [i32], main_spacing: &'a FlexMainSpacing) -> Self {
+        Self {
+            intrinsic,
+            resolved_main,
+            main_spacing,
+        }
+    }
+}
+
 /// Resolve flex main-axis spacing according to `justify`.
 fn resolve_flex_main_spacing(
     flex: &FlexSpec,
@@ -139,50 +186,56 @@ fn resolve_flex_main_spacing(
 /// Render all flex children using pre-resolved main sizes and spacing.
 fn render_flex_children(
     flex: &FlexSpec,
-    axis: Axis,
+    render_ctx: &FlexRenderContext,
+    solved: &FlexSolvedLengths<'_>,
     ui: &mut Ui<'_>,
     ctx: &mut RenderCtx<'_>,
-    inner: Rect,
-    intrinsic: &[Size],
-    resolved_main: &[i32],
-    main_spacing: &FlexMainSpacing,
 ) {
-    let available_cross = axis.cross(inner.size) as i32;
-    let mut cursor_main = axis.origin_main(inner.origin) + main_spacing.leading_offset;
+    let mut cursor_main =
+        render_ctx.axis.origin_main(render_ctx.inner.origin) + solved.main_spacing.leading_offset;
     for (index, child) in flex.children.iter().enumerate() {
-        let child_rect = resolve_flex_child_rect(
-            child,
-            axis,
-            inner,
-            intrinsic[index],
-            resolved_main[index],
-            available_cross,
-            flex.align,
-            cursor_main,
-        );
+        let child_rect = resolve_flex_child_rect(child, index, cursor_main, render_ctx, solved);
         ctx.depth += 1;
         render_node(child, child_rect, ui, ctx);
         ctx.depth = ctx.depth.saturating_sub(1);
-        let next_gap = main_spacing.gaps.get(index).copied().unwrap_or(0);
-        cursor_main += resolved_main[index] + next_gap;
+        cursor_main = advance_flex_cursor(cursor_main, index, solved);
     }
+}
+
+/// Advance the main-axis cursor past one child and its trailing gap.
+fn advance_flex_cursor(cursor_main: i32, index: usize, solved: &FlexSolvedLengths<'_>) -> i32 {
+    let next_gap = solved.main_spacing.gaps.get(index).copied().unwrap_or(0);
+    cursor_main + solved.resolved_main[index] + next_gap
 }
 
 /// Resolve a child's final clamped rectangle in flex layout.
 fn resolve_flex_child_rect(
     child: &Node,
-    axis: Axis,
-    inner: Rect,
-    intrinsic: Size,
-    resolved_main: i32,
-    available_cross: i32,
-    align: Align,
+    index: usize,
     cursor_main: i32,
+    render_ctx: &FlexRenderContext,
+    solved: &FlexSolvedLengths<'_>,
 ) -> Rect {
+    let intrinsic = solved.intrinsic[index];
+    let resolved_main = solved.resolved_main[index];
     let layout = node_layout(child);
-    let cross_size = resolve_flex_child_cross_size(axis, intrinsic, layout, available_cross, align);
-    let cross_origin = resolve_flex_child_cross_origin(axis, inner, available_cross, cross_size, align);
-    let slot_rect = axis.compose_rect(cursor_main, cross_origin, resolved_main, cross_size);
+    let cross_size = resolve_flex_child_cross_size(
+        render_ctx.axis,
+        intrinsic,
+        layout,
+        render_ctx.available_cross,
+        render_ctx.align,
+    );
+    let cross_origin = resolve_flex_child_cross_origin(
+        render_ctx.axis,
+        render_ctx.inner,
+        render_ctx.available_cross,
+        cross_size,
+        render_ctx.align,
+    );
+    let slot_rect = render_ctx
+        .axis
+        .compose_rect(cursor_main, cross_origin, resolved_main, cross_size);
     let resolved_child = clamp_size_to_available(resolve_size(layout, intrinsic, slot_rect.size), slot_rect.size);
     Rect {
         origin: slot_rect.origin,
