@@ -5,8 +5,8 @@ use vello::Scene;
 use vello::kurbo::{Affine, BezPath, Circle, Line, Point as KurboPoint, Stroke};
 use vello::peniko::Fill;
 
-use super::vector_scene_color_and_angle_helpers::{color_to_vello, normalize_angle};
-use super::vector_scene_types::KnobVisual;
+use super::color_and_angle_helpers::{color_to_vello, normalize_angle};
+use super::types::KnobVisual;
 
 /// Emit vector geometry for a knob visual payload.
 pub(super) fn draw_knob(scene: &mut Scene, knob: KnobVisual, transform: Affine) {

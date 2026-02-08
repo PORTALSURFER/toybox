@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::canvas::Size;
 use crate::host::GuiError;
 use crate::logging::log_line_safe;
-use crate::vector_scene::VectorCommand;
+use crate::vector::scene::VectorCommand;
 use crate::win32::SurfaceWindow;
 use vello::RendererOptions;
 
@@ -88,7 +88,7 @@ impl Renderer {
             canvas_image,
             canvas_size: initial_canvas_size,
             upload_scratch: Vec::new(),
-            vector_painter: crate::vector_scene::VectorScenePainter::new(),
+            vector_painter: crate::vector::scene::VectorScenePainter::new(),
             vector_commands: Vec::new(),
             presentation_transform: None,
         })

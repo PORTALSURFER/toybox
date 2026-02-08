@@ -8,8 +8,8 @@ use vello::{Glyph, Scene};
 use crate::canvas::{Color, Point};
 use crate::logging::log_line_safe;
 
-use super::vector_scene_color_and_angle_helpers::color_to_vello;
-use super::vector_scene_types::{TextLineMetrics, VectorScenePainter};
+use super::color_and_angle_helpers::color_to_vello;
+use super::types::{TextLineMetrics, VectorScenePainter};
 
 impl VectorScenePainter {
     /// Draw one vector text run into the scene using the loaded font, if any.

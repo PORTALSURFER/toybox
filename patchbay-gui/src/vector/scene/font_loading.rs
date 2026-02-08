@@ -7,7 +7,7 @@ use vello::peniko::{Blob, FontData};
 
 use crate::logging::log_line_safe;
 
-use super::vector_scene_types::LoadedFont;
+use super::types::LoadedFont;
 
 /// Try to load a default sans-serif font from known platform locations.
 pub(super) fn load_default_font() -> Option<LoadedFont> {

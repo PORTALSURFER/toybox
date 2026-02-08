@@ -5,12 +5,12 @@
 //! and appends high-quality vector primitives to the Vello scene.
 #![cfg_attr(not(target_os = "windows"), allow(dead_code))]
 
-mod vector_scene_color_and_angle_helpers;
-mod vector_scene_font_loading;
-mod vector_scene_knob_rendering;
-mod vector_scene_text_rendering;
-mod vector_scene_types;
+mod color_and_angle_helpers;
+mod font_loading;
+mod knob_rendering;
+mod text_rendering;
+mod types;
 
 #[cfg(target_os = "windows")]
-pub(crate) use vector_scene_types::VectorScenePainter;
-pub(crate) use vector_scene_types::{KnobVisual, VectorCommand};
+pub(crate) use types::VectorScenePainter;
+pub(crate) use types::{KnobVisual, VectorCommand};

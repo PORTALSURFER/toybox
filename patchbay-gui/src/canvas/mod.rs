@@ -2,12 +2,12 @@
 
 use std::cmp::{max, min};
 
-include!("color_geometry_types.rs");
-include!("canvas_storage_and_core_methods.rs");
-include!("canvas_shape_raster_methods.rs");
-include!("canvas_arc_raster_methods.rs");
-include!("canvas_blit_and_text_methods.rs");
-include!("bitmap_font.rs");
+include!("types/color_geometry.rs");
+include!("storage/core.rs");
+include!("raster/shape.rs");
+include!("raster/arc.rs");
+include!("raster/blit_and_text.rs");
+include!("font/bitmap.rs");
 
 #[cfg(test)]
 mod tests;

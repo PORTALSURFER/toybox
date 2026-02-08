@@ -6,16 +6,21 @@ use vello::peniko::ImageData;
 use vello::{Renderer as VelloRenderer, Scene};
 
 use crate::canvas::Size;
-use crate::vector_scene::{VectorCommand, VectorScenePainter};
+use crate::vector::scene::{VectorCommand, VectorScenePainter};
 
-mod renderer_device_initialization;
-mod renderer_error_handling;
-mod renderer_lifecycle;
-mod renderer_upload_and_present;
+#[path = "error/handling.rs"]
+mod error_handling;
+#[path = "device/initialization.rs"]
+mod initialization;
+#[path = "lifecycle/core.rs"]
+mod lifecycle;
 #[cfg(test)]
+#[path = "tests/unit.rs"]
 mod tests;
+#[path = "presentation/upload_and_present.rs"]
+mod upload_and_present;
 
-pub(crate) use renderer_error_handling::{map_vello_init_error, should_reconfigure_surface};
+pub(crate) use error_handling::{map_vello_init_error, should_reconfigure_surface};
 
 /// Surface-space transform used to present the CPU canvas.
 #[derive(Clone, Copy, Debug, PartialEq)]

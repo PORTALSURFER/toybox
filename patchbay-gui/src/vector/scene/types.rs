@@ -5,8 +5,8 @@ use vello::Scene;
 use vello::kurbo::Affine;
 use vello::peniko::FontData;
 
-use super::vector_scene_font_loading::load_default_font;
-use super::vector_scene_knob_rendering::draw_knob;
+use super::font_loading::load_default_font;
+use super::knob_rendering::draw_knob;
 
 /// Vector command stream emitted by the UI layer.
 #[derive(Clone, Debug)]
