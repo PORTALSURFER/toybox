@@ -16,6 +16,7 @@ include!("core/frame.rs");
 include!("core/methods.rs");
 include!("text/methods.rs");
 include!("layout/utilities.rs");
+include!("layout/container_frame.rs");
 include!("layout/root_frame.rs");
 include!("layout/panel_grid.rs");
 include!("input/overlay.rs");

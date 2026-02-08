@@ -29,93 +29,34 @@ impl<'a> Ui<'a> {
         style: RootFrameStyle<'_>,
         size: Option<Size>,
         origin: Point,
-        mut f: F,
+        f: F,
     ) -> RootFrameResponse
     where
         F: FnMut(&mut Ui<'_>, Rect),
     {
-        let id = WidgetId::from_label(key);
-        let header_height = style.header_height.unwrap_or_else(|| {
-            if style.title.is_some() {
-                (8 * self.theme.text_scale as i32 + 4).max(0)
-            } else {
-                0
-            }
-        });
-        let padding = style.padding.max(0);
-        let fallback = Size {
-            width: (padding * 2 + 160).max(0) as u32,
-            height: (padding * 2 + header_height + 80).max(0) as u32,
-        };
-        let requested_size = size;
-        let cached = self.state.layout.get(id);
-        let size = requested_size.or(cached).unwrap_or(fallback);
-        let outer_rect = Rect { origin, size };
-        let background = style.background.unwrap_or(self.theme.knob_fill);
-        let outline = style.outline.unwrap_or(self.theme.knob_outline);
-
-        self.fill_rect_clipped(outer_rect, background);
-        self.stroke_rect_clipped(outer_rect, 1, outline);
-
-        if let Some(title) = style.title {
-            let title_pos = Point {
-                x: origin.x + padding,
-                y: origin.y + padding,
-            };
-            self.draw_text_internal(title_pos, title, self.theme.text, self.theme.text_scale);
-            let title_size = text_size(title, self.theme.text_scale);
-            self.track_rect_internal(Rect {
-                origin: title_pos,
-                size: title_size,
-            });
-        }
-
-        let content_origin = Point {
-            x: origin.x + padding,
-            y: origin.y + padding + header_height,
-        };
-        let content_rect = Rect {
-            origin: content_origin,
-            size: Size {
-                width: size.width.saturating_sub((padding * 2) as u32),
-                height: size
-                    .height
-                    .saturating_sub((padding * 2 + header_height) as u32),
+        let result = render_container_frame(
+            self,
+            ContainerFrameSpec {
+                key,
+                title: style.title,
+                padding: style.padding,
+                header_height: style.header_height,
+                requested_size: size,
+                origin,
+                background: style.background.unwrap_or(self.theme.knob_fill),
+                outline: style.outline.unwrap_or(self.theme.knob_outline),
             },
-        };
-
-        self.push_bounds();
-        self.with_layout(content_origin, |ui| f(ui, content_rect));
-        let measured_bounds = self.pop_bounds();
-
-        let measured_size = if let Some(bounds) = measured_bounds {
-            let max_x = bounds.origin.x + bounds.size.width as i32;
-            let max_y = bounds.origin.y + bounds.size.height as i32;
-            let content_width = (max_x - content_origin.x).max(0) as u32;
-            let content_height = (max_y - content_origin.y).max(0) as u32;
-            Size {
-                width: content_width + (padding * 2) as u32,
-                height: content_height + (padding * 2 + header_height) as u32,
-            }
-        } else {
-            Size {
-                width: (padding * 2) as u32,
-                height: (padding * 2 + header_height) as u32,
-            }
-        };
-        let measured_size = match requested_size {
-            Some(explicit) => explicit,
-            None => measured_size,
-        };
-
-        self.state.layout.set(id, measured_size);
-        self.track_rect_internal(outer_rect);
-        self.state.set_root_frame_size(measured_size);
-
+            ExplicitSizePolicy::PreferExplicit,
+            ContainerFrameEffects {
+                advance_layout_cursor: false,
+                update_root_frame_size: true,
+            },
+            f,
+        );
         RootFrameResponse {
-            outer_rect,
-            content_rect,
-            measured_size,
+            outer_rect: result.outer_rect,
+            content_rect: result.content_rect,
+            measured_size: result.measured_size,
         }
     }
 
