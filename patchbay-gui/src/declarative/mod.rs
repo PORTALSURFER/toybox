@@ -4,18 +4,20 @@
 //! typed actions. UI state mutation is intentionally kept outside of the tree
 //! via an explicit reducer step.
 
-include!("part_000.rs");
-include!("part_001.rs");
-include!("part_002.rs");
-include!("part_003.rs");
-include!("part_004.rs");
-include!("part_005.rs");
-include!("part_006.rs");
-include!("part_007.rs");
-include!("part_008.rs");
-include!("part_009.rs");
-include!("part_010.rs");
-include!("part_011.rs");
-include!("part_012.rs");
-include!("part_013.rs");
-include!("part_014.rs");
+include!("errors_actions_root_render.rs");
+include!("root_spec_and_node.rs");
+include!("node_builders_and_sections.rs");
+include!("builder_helpers_and_layout_box.rs");
+include!("flex_and_grid_layout_types.rs");
+include!("container_and_widget_specs_a.rs");
+include!("widget_specs_b_and_tokens.rs");
+include!("render_entry_and_debug_candidates.rs");
+include!("debug_selection_and_validation.rs");
+include!("measure_and_render_dispatch.rs");
+include!("render_panel_and_flex.rs");
+include!("render_grid_absolute_and_tracks.rs");
+include!("render_widgets_and_regions.rs");
+include!("layout_geometry_and_formatting.rs");
+
+#[cfg(test)]
+mod tests;
