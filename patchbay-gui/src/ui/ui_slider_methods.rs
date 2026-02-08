@@ -41,8 +41,33 @@ impl<'a> SliderRectRenderRequest<'a> {
     }
 }
 
-impl<'a> Ui<'a> {
+/// Resolved layout geometry for one slider draw call.
+#[derive(Clone, Copy)]
+struct SliderLayoutResolved {
+    /// Total vertical block consumed by slider + optional label.
+    block_size: Size,
+    /// Slider control rectangle.
+    rect: Rect,
+    /// Slider control height in pixels.
+    height: i32,
+}
 
+/// Precomputed drawing geometry for slider visuals.
+#[derive(Clone, Copy)]
+struct SliderVisualState {
+    /// Slider track rectangle.
+    track_rect: Rect,
+    /// Filled portion of the track.
+    fill_rect: Rect,
+    /// Handle center point.
+    handle_center: Point,
+    /// Handle radius in pixels.
+    handle_radius: i32,
+    /// Track fill color based on interaction state.
+    fill: Color,
+}
+
+impl<'a> Ui<'a> {
     /// Draw a horizontal slider with the given label and value.
     ///
     /// The provided `id` must be stable across frames. If the label changes
@@ -57,32 +82,60 @@ impl<'a> Ui<'a> {
         width: i32,
         height: i32,
     ) -> SliderResponse {
-        let width = width.max(1);
+        let layout = self.resolve_slider_layout(label, width, height);
+        let mut response = self.begin_slider_interaction(id, layout.rect);
+
+        response.changed |= self.apply_slider_drag(id, layout.rect, range, value);
+        response.changed |= self.apply_slider_wheel(response.hovered, range, value);
+
+        let visuals = self.resolve_slider_visuals(layout.rect, layout.height, range, *value, response);
+        self.draw_slider_visuals(visuals);
+        self.advance_slider_cursor(layout.rect, layout.block_size);
+        response
+    }
+
+    /// Resolve slider layout geometry and draw the optional label.
+    fn resolve_slider_layout(&mut self, label: &str, width: i32, height: i32) -> SliderLayoutResolved {
         let height = height.max(1);
         let control_size = Size {
-            width: width as u32,
+            width: width.max(1) as u32,
             height: height as u32,
         };
         let block_size = self.slider_block_size(label, control_size);
-        let label_height = 8 * self.theme.text_scale as i32;
-        let base = self.layout.cursor;
-        let mut rect_origin = base;
-        if !label.is_empty() {
-            let _ = self.draw_text_single_line_clamped(
-                base,
-                label,
-                control_size.width,
-                self.theme.text,
-                true,
-            );
-            rect_origin.y += label_height;
-        }
-
+        let rect_origin = self.draw_slider_label(label, control_size);
         let rect = Rect {
             origin: rect_origin,
             size: control_size,
         };
         self.track_rect_internal(rect);
+        SliderLayoutResolved {
+            block_size,
+            rect,
+            height,
+        }
+    }
+
+    /// Draw slider label and return the control rectangle origin.
+    fn draw_slider_label(&mut self, label: &str, control_size: Size) -> Point {
+        let base = self.layout.cursor;
+        if label.is_empty() {
+            return base;
+        }
+        let _ = self.draw_text_single_line_clamped(
+            base,
+            label,
+            control_size.width,
+            self.theme.text,
+            true,
+        );
+        Point {
+            x: base.x,
+            y: base.y + 8 * self.theme.text_scale as i32,
+        }
+    }
+
+    /// Resolve slider hover/active state for this frame.
+    fn begin_slider_interaction(&mut self, id: WidgetId, rect: Rect) -> SliderResponse {
         let hovered = self.pointer_inside_clipped_rect(rect);
         if hovered {
             self.state.hot = Some(id);
@@ -93,83 +146,122 @@ impl<'a> Ui<'a> {
             active: self.state.active == Some(id),
             changed: false,
         };
-
         if hovered && self.mouse_pressed() {
             self.state.active = Some(id);
             response.active = true;
         }
-
         if self.state.active == Some(id) && self.input.mouse_released {
             self.state.active = None;
             response.active = false;
         }
+        response
+    }
 
-        if self.state.active == Some(id) && self.input.mouse_down {
-            let span = (range.1 - range.0).max(1.0e-6);
-            let x = (self.input.pointer_pos.x - rect.origin.x) as f32;
-            let t = (x / rect.size.width.max(1) as f32).clamp(0.0, 1.0);
-            let new_value = range.0 + t * span;
-            if (*value - new_value).abs() > f32::EPSILON {
-                *value = new_value;
-                response.changed = true;
-            }
+    /// Apply mouse-drag value updates while this slider is active.
+    fn apply_slider_drag(
+        &mut self,
+        id: WidgetId,
+        rect: Rect,
+        range: (f32, f32),
+        value: &mut f32,
+    ) -> bool {
+        if self.state.active != Some(id) || !self.input.mouse_down {
+            return false;
         }
-
-        if hovered && self.input.wheel_delta != 0.0 {
-            let span = (range.1 - range.0).max(1.0e-6);
-            let step = 0.02 * span;
-            let new_value =
-                (*value + step * self.input.wheel_delta.signum()).clamp(range.0, range.1);
-            if (*value - new_value).abs() > f32::EPSILON {
-                *value = new_value;
-                response.changed = true;
-            }
-        }
-
         let span = (range.1 - range.0).max(1.0e-6);
-        let t = ((*value - range.0) / span).clamp(0.0, 1.0);
-        let track_height = (height / 4).max(4);
-        let track_y = rect.origin.y + (height - track_height) / 2;
+        let x = (self.input.pointer_pos.x - rect.origin.x) as f32;
+        let t = (x / rect.size.width.max(1) as f32).clamp(0.0, 1.0);
+        self.apply_slider_value(value, range, range.0 + t * span)
+    }
+
+    /// Apply wheel-based value updates when the slider is hovered.
+    fn apply_slider_wheel(&mut self, hovered: bool, range: (f32, f32), value: &mut f32) -> bool {
+        if !hovered || self.input.wheel_delta == 0.0 {
+            return false;
+        }
+        let span = (range.1 - range.0).max(1.0e-6);
+        let step = 0.02 * span;
+        let next = (*value + step * self.input.wheel_delta.signum()).clamp(range.0, range.1);
+        self.apply_slider_value(value, range, next)
+    }
+
+    /// Write a slider value if it changed by more than epsilon.
+    fn apply_slider_value(&self, value: &mut f32, range: (f32, f32), next: f32) -> bool {
+        let clamped = next.clamp(range.0, range.1);
+        if (*value - clamped).abs() <= f32::EPSILON {
+            return false;
+        }
+        *value = clamped;
+        true
+    }
+
+    /// Resolve all geometry/colors needed to draw slider visuals.
+    fn resolve_slider_visuals(
+        &self,
+        rect: Rect,
+        height: i32,
+        range: (f32, f32),
+        value: f32,
+        response: SliderResponse,
+    ) -> SliderVisualState {
+        let span = (range.1 - range.0).max(1.0e-6);
+        let t = ((value - range.0) / span).clamp(0.0, 1.0);
+        let track_height = (height / 4).max(4) as u32;
         let track_rect = Rect {
             origin: Point {
                 x: rect.origin.x,
-                y: track_y,
+                y: rect.origin.y + (height - track_height as i32) / 2,
             },
             size: Size {
                 width: rect.size.width,
-                height: track_height as u32,
+                height: track_height,
             },
         };
-        let fill_width = ((rect.size.width as f32) * t).round() as u32;
         let fill_rect = Rect {
             origin: track_rect.origin,
             size: Size {
-                width: fill_width,
+                width: ((rect.size.width as f32) * t).round() as u32,
                 height: track_rect.size.height,
             },
         };
-        let fill = if response.active {
+        SliderVisualState {
+            track_rect,
+            fill_rect,
+            handle_center: Point {
+                x: rect.origin.x + (rect.size.width as f32 * t) as i32,
+                y: rect.origin.y + height / 2,
+            },
+            handle_radius: (height / 2).max(3),
+            fill: self.resolve_slider_fill_color(response),
+        }
+    }
+
+    /// Resolve slider track fill color from interaction state.
+    fn resolve_slider_fill_color(&self, response: SliderResponse) -> Color {
+        if response.active {
             self.theme.knob_active
-        } else if hovered {
+        } else if response.hovered {
             self.theme.knob_hover
         } else {
             self.theme.knob_fill
-        };
-        self.fill_rect_clipped(track_rect, fill);
-        self.stroke_rect_clipped(track_rect, 1, self.theme.knob_outline);
-        self.fill_rect_clipped(fill_rect, self.theme.knob_indicator);
+        }
+    }
 
-        let handle_x = rect.origin.x + (rect.size.width as f32 * t) as i32;
-        let handle_center = Point {
-            x: handle_x,
-            y: rect.origin.y + height / 2,
-        };
-        let handle_radius = (height / 2).max(3);
-        self.canvas
-            .fill_circle(handle_center, handle_radius, self.theme.knob_indicator);
+    /// Draw slider visuals from precomputed geometry.
+    fn draw_slider_visuals(&mut self, visuals: SliderVisualState) {
+        self.fill_rect_clipped(visuals.track_rect, visuals.fill);
+        self.stroke_rect_clipped(visuals.track_rect, 1, self.theme.knob_outline);
+        self.fill_rect_clipped(visuals.fill_rect, self.theme.knob_indicator);
+        self.canvas.fill_circle(
+            visuals.handle_center,
+            visuals.handle_radius,
+            self.theme.knob_indicator,
+        );
+    }
 
+    /// Advance layout cursor after drawing a slider block.
+    fn advance_slider_cursor(&mut self, rect: Rect, block_size: Size) {
         self.layout.cursor.y = rect.origin.y + block_size.height as i32 + self.layout.spacing;
-        response
     }
 
     /// Draw a horizontal slider with a stable key and a dynamic label.
@@ -194,7 +286,6 @@ impl<'a> Ui<'a> {
     ) -> SliderResponse {
         let previous = *self.layout;
         self.layout.cursor = request.rect.origin;
-        let height = request.control_size.height.max(1) as i32;
         let previous_text_scale = self.theme.text_scale;
         self.theme.text_scale = request.text_scale;
         let response = {
@@ -206,7 +297,7 @@ impl<'a> Ui<'a> {
                     value,
                     request.range,
                     request.rect.size.width.max(1) as i32,
-                    height,
+                    request.control_size.height.max(1) as i32,
                 );
             });
             response

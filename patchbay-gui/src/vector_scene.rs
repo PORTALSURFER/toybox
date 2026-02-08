@@ -57,8 +57,8 @@ pub(crate) struct KnobVisual {
     pub indicator: Color,
 }
 
-#[derive(Clone, Debug)]
 /// Loaded font payload used for vector text rendering.
+#[derive(Clone, Debug)]
 struct LoadedFont {
     /// Vello font handle used by draw_glyphs.
     data: FontData,
@@ -75,6 +75,15 @@ pub(crate) struct VectorScenePainter {
     font: Option<LoadedFont>,
     /// Guard to avoid repeatedly logging missing-font fallbacks.
     logged_missing_font: bool,
+}
+
+/// Resolved vertical metrics for text line layout.
+#[derive(Clone, Copy, Debug)]
+struct TextLineMetrics {
+    /// Baseline ascent in pixels.
+    ascent: f32,
+    /// Line-to-line advance in pixels.
+    line_height: f32,
 }
 
 impl VectorScenePainter {
@@ -121,45 +130,75 @@ impl VectorScenePainter {
         scale: u32,
         transform: Affine,
     ) {
-        let Some(font) = &self.font else {
-            if !self.logged_missing_font {
-                log_line_safe(
-                    "vector_scene: no system font found; falling back to bitmap text rendering",
-                );
-                self.logged_missing_font = true;
-            }
+        if self.font.is_none() {
+            self.log_font_fallback_once(
+                "vector_scene: no system font found; falling back to bitmap text rendering",
+            );
             return;
-        };
-
-        let Ok(font_ref) = FontRef::from_index(font.bytes.as_slice(), font.index) else {
-            if !self.logged_missing_font {
-                log_line_safe(
-                    "vector_scene: failed to parse loaded font; falling back to bitmap text rendering",
-                );
-                self.logged_missing_font = true;
-            }
+        }
+        let Some(font_ref) = self.resolve_font_ref() else {
+            self.log_font_fallback_once(
+                "vector_scene: failed to parse loaded font; falling back to bitmap text rendering",
+            );
             return;
         };
 
         let font_size = (8u32.saturating_mul(scale.max(1))) as f32;
+        let metrics = Self::resolve_text_line_metrics(&font_ref, font_size);
+        let glyphs = Self::build_text_glyphs(&font_ref, text, origin, font_size, metrics);
+        if glyphs.is_empty() {
+            return;
+        }
+
+        let font = self.font.as_ref().expect("font was checked above");
+        Self::draw_glyph_run(scene, &font.data, transform, color, font_size, glyphs);
+    }
+
+    /// Log a vector text fallback message once per painter instance.
+    fn log_font_fallback_once(&mut self, message: &str) {
+        if self.logged_missing_font {
+            return;
+        }
+        log_line_safe(message);
+        self.logged_missing_font = true;
+    }
+
+    /// Resolve and parse the currently loaded font for text rendering.
+    fn resolve_font_ref(&self) -> Option<FontRef<'_>> {
+        let font = self.font.as_ref()?;
+        FontRef::from_index(font.bytes.as_slice(), font.index).ok()
+    }
+
+    /// Resolve ascent and line height for text layout at the given size.
+    fn resolve_text_line_metrics(font_ref: &FontRef<'_>, font_size: f32) -> TextLineMetrics {
         let metrics = font_ref.metrics(Size::new(font_size), LocationRef::default());
+        TextLineMetrics {
+            ascent: metrics.ascent.max(font_size * 0.7),
+            line_height: (metrics.ascent - metrics.descent + metrics.leading).max(font_size),
+        }
+    }
+
+    /// Build positioned glyphs for one text run.
+    fn build_text_glyphs(
+        font_ref: &FontRef<'_>,
+        text: &str,
+        origin: Point,
+        font_size: f32,
+        metrics: TextLineMetrics,
+    ) -> Vec<Glyph> {
         let glyph_metrics = font_ref.glyph_metrics(Size::new(font_size), LocationRef::default());
         let charmap = font_ref.charmap();
-        let ascent = metrics.ascent.max(font_size * 0.7);
-        let line_height = (metrics.ascent - metrics.descent + metrics.leading).max(font_size);
+        let fallback = charmap.map('?');
 
         let mut glyphs = Vec::new();
         let mut cursor_x = origin.x as f32;
-        let mut baseline_y = origin.y as f32 + ascent;
-        let fallback = charmap.map('?');
-
+        let mut baseline_y = origin.y as f32 + metrics.ascent;
         for ch in text.chars() {
             if ch == '\n' {
                 cursor_x = origin.x as f32;
-                baseline_y += line_height;
+                baseline_y += metrics.line_height;
                 continue;
             }
-
             let Some(gid) = charmap.map(ch).or(fallback) else {
                 continue;
             };
@@ -168,17 +207,22 @@ impl VectorScenePainter {
                 x: cursor_x,
                 y: baseline_y,
             });
-
-            let advance = glyph_metrics.advance_width(gid).unwrap_or(font_size * 0.5);
-            cursor_x += advance;
+            cursor_x += glyph_metrics.advance_width(gid).unwrap_or(font_size * 0.5);
         }
+        glyphs
+    }
 
-        if glyphs.is_empty() {
-            return;
-        }
-
+    /// Draw a positioned glyph run into the scene.
+    fn draw_glyph_run(
+        scene: &mut Scene,
+        font_data: &FontData,
+        transform: Affine,
+        color: Color,
+        font_size: f32,
+        glyphs: Vec<Glyph>,
+    ) {
         scene
-            .draw_glyphs(&font.data)
+            .draw_glyphs(font_data)
             .transform(transform)
             .font_size(font_size)
             .brush(color_to_vello(color))
@@ -188,12 +232,16 @@ impl VectorScenePainter {
 
 /// Emit vector geometry for a knob visual payload.
 fn draw_knob(scene: &mut Scene, knob: KnobVisual, transform: Affine) {
-    let radius = knob.radius.max(1) as f64;
-    let center = KurboPoint::new(knob.center.x as f64, knob.center.y as f64);
-    let body = Circle::new(center, radius);
-    let outline_stroke = Stroke::new(2.0);
-    let ring_stroke = Stroke::new(knob.arc_thickness.max(1) as f64);
+    draw_knob_body(scene, knob, transform);
+    draw_knob_outline_ring(scene, knob, transform);
+    draw_knob_active_arc(scene, knob, transform);
+    draw_knob_indicator_line(scene, knob, transform);
+}
 
+/// Draw the knob circular body fill and outline.
+fn draw_knob_body(scene: &mut Scene, knob: KnobVisual, transform: Affine) {
+    let center = KurboPoint::new(knob.center.x as f64, knob.center.y as f64);
+    let body = Circle::new(center, knob.radius.max(1) as f64);
     scene.fill(
         Fill::NonZero,
         transform,
@@ -202,13 +250,16 @@ fn draw_knob(scene: &mut Scene, knob: KnobVisual, transform: Affine) {
         &body,
     );
     scene.stroke(
-        &outline_stroke,
+        &Stroke::new(2.0),
         transform,
         color_to_vello(knob.outline),
         None,
         &body,
     );
+}
 
+/// Draw the full knob ring arc.
+fn draw_knob_outline_ring(scene: &mut Scene, knob: KnobVisual, transform: Affine) {
     let ring = arc_path(
         knob.center,
         knob.arc_radius.max(1) as f32,
@@ -216,13 +267,16 @@ fn draw_knob(scene: &mut Scene, knob: KnobVisual, transform: Affine) {
         knob.arc_end,
     );
     scene.stroke(
-        &ring_stroke,
+        &Stroke::new(knob.arc_thickness.max(1) as f64),
         transform,
         color_to_vello(knob.outline),
         None,
         &ring,
     );
+}
 
+/// Draw the active-value arc segment.
+fn draw_knob_active_arc(scene: &mut Scene, knob: KnobVisual, transform: Affine) {
     let active = arc_path(
         knob.center,
         knob.arc_radius.max(1) as f32,
@@ -230,24 +284,27 @@ fn draw_knob(scene: &mut Scene, knob: KnobVisual, transform: Affine) {
         knob.arc_end,
     );
     scene.stroke(
-        &ring_stroke,
+        &Stroke::new(knob.arc_thickness.max(1) as f64),
         transform,
         color_to_vello(knob.indicator),
         None,
         &active,
     );
+}
 
-    let indicator_point = indicator_point(knob.center, knob.radius, knob.value_angle);
-    let indicator_line = Line::new(
+/// Draw the center-to-indicator line for the current knob value.
+fn draw_knob_indicator_line(scene: &mut Scene, knob: KnobVisual, transform: Affine) {
+    let tip = indicator_point(knob.center, knob.radius, knob.value_angle);
+    let line = Line::new(
         KurboPoint::new(knob.center.x as f64, knob.center.y as f64),
-        KurboPoint::new(indicator_point.x as f64, indicator_point.y as f64),
+        KurboPoint::new(tip.x as f64, tip.y as f64),
     );
     scene.stroke(
         &Stroke::new(2.0),
         transform,
         color_to_vello(knob.indicator),
         None,
-        &indicator_line,
+        &line,
     );
 }
 
