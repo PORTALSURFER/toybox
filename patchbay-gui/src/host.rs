@@ -4,7 +4,10 @@ use crate::canvas::Size;
 use crate::declarative::{UiAction, UiSpec};
 use crate::renderer::RendererDevice;
 use crate::ui::{Layout, Theme, UiState};
-use crate::win32::{WindowHandle, spawn_window_thread};
+use crate::win32::{
+    SpawnCallbacks, SpawnSharedState, SpawnUiConfig, SpawnWindowConfig, SpawnWindowRequest,
+    WindowHandle, spawn_window_thread,
+};
 use raw_window_handle::RawWindowHandle;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -216,9 +219,9 @@ impl HostWindow {
         title: String,
         size: Size,
         state: State,
-        mut on_init: Init,
-        mut build: Build,
-        mut reduce: Reduce,
+        on_init: Init,
+        build: Build,
+        reduce: Reduce,
         mode: OpenParentedMode,
     ) -> Result<(), GuiError>
     where
@@ -261,25 +264,32 @@ impl HostWindow {
         let layout = Layout::default();
         let ui_state = UiState::default();
 
-        let handle = spawn_window_thread(
-            parent_hwnd,
-            parent_hinstance,
-            title,
-            size,
-            state,
-            move |state| {
-                on_init(state);
+        let request = SpawnWindowRequest {
+            window: SpawnWindowConfig {
+                parent_hwnd,
+                parent_hinstance,
+                title,
+                size,
             },
-            move |input, state| build(input, state),
-            move |state, action| reduce(state, action),
-            device_cache,
-            resize_request,
-            last_size,
-            aspect_ratio,
-            ui_state,
-            layout,
-            theme,
-        )?;
+            callbacks: SpawnCallbacks {
+                state,
+                on_init,
+                build,
+                reduce,
+            },
+            shared: SpawnSharedState {
+                device_cache,
+                resize_request,
+                last_size,
+                aspect_ratio,
+            },
+            ui: SpawnUiConfig {
+                ui_state,
+                layout,
+                theme,
+            },
+        };
+        let handle = spawn_window_thread(request)?;
 
         self.handle = Some(handle);
         Ok(())
