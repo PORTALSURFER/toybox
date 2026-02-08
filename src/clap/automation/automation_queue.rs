@@ -157,6 +157,7 @@ impl AutomationQueue {
     }
 }
 
+/// Drain queued scratch events into host output while collecting drain stats.
 fn drain_scratch_to_output(
     scratch: &mut Vec<AutomationEvent>,
     output: &mut OutputEvents<'_>,
@@ -177,6 +178,7 @@ fn drain_scratch_to_output(
     stats
 }
 
+/// Push one automation event to host output and return whether it succeeded.
 fn push_automation_event(output: &mut OutputEvents<'_>, event: AutomationEvent) -> bool {
     match event {
         AutomationEvent::GestureBegin(param_id) => {

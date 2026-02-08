@@ -104,6 +104,7 @@ pub fn measure_checked(spec: &UiSpec) -> Result<Size, DeclarativeError> {
     Ok(measure_root_frame(&spec.root, &tokens))
 }
 
+/// Clamp a size so both dimensions are at least one pixel.
 fn clamp_non_zero_size(size: Size) -> Size {
     Size {
         width: size.width.max(1),
@@ -263,18 +264,26 @@ pub fn render_checked(
 /// Declarative container node kinds that can emit debug layout borders.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ContainerKind {
+    /// Root frame wrapper that owns the full declarative content tree.
     RootFrame,
+    /// Panel container.
     Panel,
+    /// Flex layout container.
     Flex,
+    /// Grid layout container.
     Grid,
+    /// Absolute-positioned container.
     Absolute,
 }
 
 /// Candidate border outline emitted while traversing container nodes.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct DebugBorderCandidate {
+    /// Surface-space rectangle considered for debug border drawing.
     rect: Rect,
+    /// Container category used for border color resolution.
     kind: ContainerKind,
+    /// Nesting depth in the declarative container tree.
     depth: usize,
 }
 

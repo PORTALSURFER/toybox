@@ -1,3 +1,46 @@
+/// Request payload for rendering a slider inside a fixed rectangle.
+#[derive(Clone, Copy)]
+pub(crate) struct SliderRectRenderRequest<'a> {
+    /// Stable widget id.
+    id: WidgetId,
+    /// Label displayed above the slider track.
+    label: &'a str,
+    /// Inclusive value range.
+    range: (f32, f32),
+    /// Control footprint for slider visuals.
+    control_size: Size,
+    /// Bounds used for clipping and placement.
+    rect: Rect,
+    /// Explicit text scale override for the label.
+    text_scale: u32,
+}
+
+impl<'a> SliderRectRenderRequest<'a> {
+    /// Build a slider-in-rect request with default text scale.
+    pub(crate) fn new(
+        id: WidgetId,
+        label: &'a str,
+        range: (f32, f32),
+        control_size: Size,
+        rect: Rect,
+    ) -> Self {
+        Self {
+            id,
+            label,
+            range,
+            control_size,
+            rect,
+            text_scale: 1,
+        }
+    }
+
+    /// Override text scale for slider label rendering.
+    pub(crate) fn with_text_scale(mut self, text_scale: u32) -> Self {
+        self.text_scale = text_scale.max(1);
+        self
+    }
+}
+
 impl<'a> Ui<'a> {
 
     /// Draw a horizontal slider with the given label and value.
@@ -146,30 +189,29 @@ impl<'a> Ui<'a> {
     /// Render a slider in a fixed rectangle without affecting surrounding layout.
     pub(crate) fn slider_in_rect(
         &mut self,
-        id: WidgetId,
-        label: &str,
         value: &mut f32,
-        range: (f32, f32),
-        control_size: Size,
-        rect: Rect,
+        request: SliderRectRenderRequest<'_>,
     ) -> SliderResponse {
         let previous = *self.layout;
-        self.layout.cursor = rect.origin;
-        let height = control_size.height.max(1) as i32;
+        self.layout.cursor = request.rect.origin;
+        let height = request.control_size.height.max(1) as i32;
+        let previous_text_scale = self.theme.text_scale;
+        self.theme.text_scale = request.text_scale;
         let response = {
             let mut response = SliderResponse::default();
-            self.with_clip(rect, |ui| {
+            self.with_clip(request.rect, |ui| {
                 response = ui.slider(
-                    id,
-                    label,
+                    request.id,
+                    request.label,
                     value,
-                    range,
-                    rect.size.width.max(1) as i32,
+                    request.range,
+                    request.rect.size.width.max(1) as i32,
                     height,
                 );
             });
             response
         };
+        self.theme.text_scale = previous_text_scale;
         *self.layout = previous;
         response
     }
@@ -177,18 +219,9 @@ impl<'a> Ui<'a> {
     /// Render a slider in a fixed rectangle with an explicit text scale.
     pub(crate) fn slider_in_rect_scaled(
         &mut self,
-        id: WidgetId,
-        label: &str,
         value: &mut f32,
-        range: (f32, f32),
-        control_size: Size,
-        rect: Rect,
-        text_scale: u32,
+        request: SliderRectRenderRequest<'_>,
     ) -> SliderResponse {
-        let previous = self.theme.text_scale;
-        self.theme.text_scale = text_scale.max(1);
-        let response = self.slider_in_rect(id, label, value, range, control_size, rect);
-        self.theme.text_scale = previous;
-        response
+        self.slider_in_rect(value, request)
     }
 }

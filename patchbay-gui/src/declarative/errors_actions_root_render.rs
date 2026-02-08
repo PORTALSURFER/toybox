@@ -1,7 +1,8 @@
 
 use crate::canvas::{Color, Point, Rect, Size};
 use crate::ui::{
-    MainPalette, RegionResponse, RootFrameStyle, Ui, WidgetId, knob_block_size_for_diameter,
+    DropdownRectRenderRequest, KnobRectRenderRequest, MainPalette, RegionResponse, RootFrameStyle,
+    SliderRectRenderRequest, Ui, WidgetId, knob_block_size_for_diameter,
 };
 
 /// Validation errors produced by declarative UI helpers.

@@ -77,44 +77,29 @@ impl<'a> Ui<'a> {
     /// Render a knob in a fixed rectangle without affecting surrounding layout.
     pub(crate) fn knob_with_labels_in_rect(
         &mut self,
-        id: WidgetId,
-        name_label: &str,
-        value_label: &str,
         value: &mut f32,
-        range: (f32, f32),
-        desired_diameter: u32,
-        rect: Rect,
+        request: KnobRectRenderRequest<'_>,
     ) -> KnobResponse {
-        let spec = KnobRenderSpec::from_args(id, name_label, value_label, range);
-        let rect_spec = KnobRectSpec::new(rect, desired_diameter);
-        self.render_knob_in_rect_from_spec(spec, value, rect_spec)
+        let spec = KnobRenderSpec {
+            id: request.id,
+            labels: request.labels,
+            range: KnobRange::from_tuple(request.range),
+        };
+        let rect_spec = KnobRectSpec::new(request.rect, request.desired_diameter);
+        let previous_text_scale = self.theme.text_scale;
+        self.theme.text_scale = request.text_scale;
+        let response = self.render_knob_in_rect_from_spec(spec, value, rect_spec);
+        self.theme.text_scale = previous_text_scale;
+        response
     }
 
     /// Render a knob in a fixed rectangle with an explicit text scale.
     pub(crate) fn knob_with_labels_in_rect_scaled(
         &mut self,
-        id: WidgetId,
-        name_label: &str,
-        value_label: &str,
         value: &mut f32,
-        range: (f32, f32),
-        desired_diameter: u32,
-        rect: Rect,
-        text_scale: u32,
+        request: KnobRectRenderRequest<'_>,
     ) -> KnobResponse {
-        let previous_text_scale = self.theme.text_scale;
-        self.theme.text_scale = text_scale.max(1);
-        let response = self.knob_with_labels_in_rect(
-            id,
-            name_label,
-            value_label,
-            value,
-            range,
-            desired_diameter,
-            rect,
-        );
-        self.theme.text_scale = previous_text_scale;
-        response
+        self.knob_with_labels_in_rect(value, request)
     }
 
     /// Render a knob from normalized spec inputs at the current cursor.

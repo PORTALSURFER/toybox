@@ -13,16 +13,16 @@ fn render_knob(
         .value_label
         .clone()
         .unwrap_or_else(|| format_value(knob.value));
-    let response = ui.knob_with_labels_in_rect_scaled(
+    let knob_request = KnobRectRenderRequest::new(
         id,
         &knob.label,
         &value_label,
-        &mut value,
         knob.range,
         tokens.controls.knob_diameter,
         rect,
-        tokens.typography.text_scale,
-    );
+    )
+    .with_text_scale(tokens.typography.text_scale);
+    let response = ui.knob_with_labels_in_rect_scaled(&mut value, knob_request);
     if response.changed {
         actions.push(UiAction::KnobChanged {
             key: knob.key.clone(),
@@ -45,15 +45,10 @@ fn render_slider(
         width: tokens.controls.slider_width,
         height: tokens.controls.slider_height,
     });
-    let response = ui.slider_in_rect_scaled(
-        id,
-        &slider.label,
-        &mut value,
-        slider.range,
-        control_size,
-        rect,
-        tokens.typography.text_scale,
-    );
+    let slider_request =
+        SliderRectRenderRequest::new(id, &slider.label, slider.range, control_size, rect)
+            .with_text_scale(tokens.typography.text_scale);
+    let response = ui.slider_in_rect_scaled(&mut value, slider_request);
     if response.changed {
         actions.push(UiAction::SliderChanged {
             key: slider.key.clone(),
@@ -134,15 +129,15 @@ fn render_dropdown(
     });
     let mut selected = dropdown.selected;
     let option_refs: Vec<&str> = dropdown.options.iter().map(String::as_str).collect();
-    let response = ui.dropdown_in_rect_scaled(
+    let dropdown_request = DropdownRectRenderRequest::new(
         id,
         &dropdown.label,
         &option_refs,
-        &mut selected,
         control_size,
         rect,
-        tokens.typography.text_scale,
-    );
+    )
+    .with_text_scale(tokens.typography.text_scale);
+    let response = ui.dropdown_in_rect_scaled(&mut selected, dropdown_request);
     if response.changed {
         actions.push(UiAction::DropdownSelected {
             key: dropdown.key.clone(),
@@ -190,8 +185,8 @@ fn render_region_draw_commands(commands: &[DrawCommand], rect: Rect, ui: &mut Ui
                         y: center.y - *radius,
                     },
                     size: Size {
-                        width: (*radius as i32 * 2).max(0) as u32,
-                        height: (*radius as i32 * 2).max(0) as u32,
+                        width: (*radius * 2).max(0) as u32,
+                        height: (*radius * 2).max(0) as u32,
                     },
                 };
                 if ui.clipped_rect(bounds).is_some() {
@@ -211,8 +206,8 @@ fn render_region_draw_commands(commands: &[DrawCommand], rect: Rect, ui: &mut Ui
                         y: center.y - *radius,
                     },
                     size: Size {
-                        width: (*radius as i32 * 2).max(0) as u32,
-                        height: (*radius as i32 * 2).max(0) as u32,
+                        width: (*radius * 2).max(0) as u32,
+                        height: (*radius * 2).max(0) as u32,
                     },
                 };
                 if ui.clipped_rect(bounds).is_some() {
@@ -244,6 +239,7 @@ fn render_region_draw_commands(commands: &[DrawCommand], rect: Rect, ui: &mut Ui
     }
 }
 
+/// Convert low-level region interaction responses into declarative UI actions.
 fn push_region_actions(key: &str, response: RegionResponse, actions: &mut Vec<UiAction>) {
     let local_pointer = response.local_pointer;
     let raw_local_pointer = response.raw_local_pointer;

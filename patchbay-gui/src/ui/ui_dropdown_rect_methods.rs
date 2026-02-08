@@ -1,32 +1,74 @@
+/// Request payload for rendering a dropdown inside a fixed rectangle.
+#[derive(Clone, Copy)]
+pub(crate) struct DropdownRectRenderRequest<'a> {
+    /// Stable widget id.
+    id: WidgetId,
+    /// Label displayed above the dropdown control.
+    label: &'a str,
+    /// Option labels shown by the dropdown.
+    options: &'a [&'a str],
+    /// Control footprint for dropdown visuals.
+    control_size: Size,
+    /// Bounds used for clipping and placement.
+    rect: Rect,
+    /// Explicit text scale override for the dropdown label.
+    text_scale: u32,
+}
+
+impl<'a> DropdownRectRenderRequest<'a> {
+    /// Build a dropdown-in-rect request with default text scale.
+    pub(crate) fn new(
+        id: WidgetId,
+        label: &'a str,
+        options: &'a [&'a str],
+        control_size: Size,
+        rect: Rect,
+    ) -> Self {
+        Self {
+            id,
+            label,
+            options,
+            control_size,
+            rect,
+            text_scale: 1,
+        }
+    }
+
+    /// Override text scale for dropdown label rendering.
+    pub(crate) fn with_text_scale(mut self, text_scale: u32) -> Self {
+        self.text_scale = text_scale.max(1);
+        self
+    }
+}
+
 impl<'a> Ui<'a> {
 
     /// Render a dropdown in a fixed rectangle without affecting surrounding layout.
     pub(crate) fn dropdown_in_rect(
         &mut self,
-        id: WidgetId,
-        label: &str,
-        options: &[&str],
         selected: &mut usize,
-        control_size: Size,
-        rect: Rect,
+        request: DropdownRectRenderRequest<'_>,
     ) -> DropdownResponse {
         let previous = *self.layout;
-        self.layout.cursor = rect.origin;
-        let height = control_size.height.max(1) as i32;
+        self.layout.cursor = request.rect.origin;
+        let height = request.control_size.height.max(1) as i32;
+        let previous_text_scale = self.theme.text_scale;
+        self.theme.text_scale = request.text_scale;
         let response = {
             let mut response = DropdownResponse::default();
-            self.with_clip(rect, |ui| {
+            self.with_clip(request.rect, |ui| {
                 response = ui.dropdown(
-                    id,
-                    label,
-                    options,
+                    request.id,
+                    request.label,
+                    request.options,
                     selected,
-                    rect.size.width.max(1) as i32,
+                    request.rect.size.width.max(1) as i32,
                     height,
                 );
             });
             response
         };
+        self.theme.text_scale = previous_text_scale;
         *self.layout = previous;
         response
     }
@@ -34,18 +76,9 @@ impl<'a> Ui<'a> {
     /// Render a dropdown in a fixed rectangle with an explicit text scale.
     pub(crate) fn dropdown_in_rect_scaled(
         &mut self,
-        id: WidgetId,
-        label: &str,
-        options: &[&str],
         selected: &mut usize,
-        control_size: Size,
-        rect: Rect,
-        text_scale: u32,
+        request: DropdownRectRenderRequest<'_>,
     ) -> DropdownResponse {
-        let previous = self.theme.text_scale;
-        self.theme.text_scale = text_scale.max(1);
-        let response = self.dropdown_in_rect(id, label, options, selected, control_size, rect);
-        self.theme.text_scale = previous;
-        response
+        self.dropdown_in_rect(selected, request)
     }
 }

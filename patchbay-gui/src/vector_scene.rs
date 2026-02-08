@@ -58,16 +58,22 @@ pub(crate) struct KnobVisual {
 }
 
 #[derive(Clone, Debug)]
+/// Loaded font payload used for vector text rendering.
 struct LoadedFont {
+    /// Vello font handle used by draw_glyphs.
     data: FontData,
+    /// Owned font bytes kept alive for skrifa parsing.
     bytes: Vec<u8>,
+    /// Font face index for collections.
     index: u32,
 }
 
 /// Builds Vello scene primitives from UI vector commands.
 #[derive(Clone, Debug)]
 pub(crate) struct VectorScenePainter {
+    /// Optional loaded font for vector text rendering.
     font: Option<LoadedFont>,
+    /// Guard to avoid repeatedly logging missing-font fallbacks.
     logged_missing_font: bool,
 }
 
@@ -105,6 +111,7 @@ impl VectorScenePainter {
         }
     }
 
+    /// Draw one vector text run into the scene using the loaded font, if any.
     fn draw_text(
         &mut self,
         scene: &mut Scene,
@@ -162,9 +169,7 @@ impl VectorScenePainter {
                 y: baseline_y,
             });
 
-            let advance = glyph_metrics
-                .advance_width(gid)
-                .unwrap_or_else(|| font_size * 0.5);
+            let advance = glyph_metrics.advance_width(gid).unwrap_or(font_size * 0.5);
             cursor_x += advance;
         }
 
@@ -181,6 +186,7 @@ impl VectorScenePainter {
     }
 }
 
+/// Emit vector geometry for a knob visual payload.
 fn draw_knob(scene: &mut Scene, knob: KnobVisual, transform: Affine) {
     let radius = knob.radius.max(1) as f64;
     let center = KurboPoint::new(knob.center.x as f64, knob.center.y as f64);
@@ -245,6 +251,7 @@ fn draw_knob(scene: &mut Scene, knob: KnobVisual, transform: Affine) {
     );
 }
 
+/// Build a polyline arc path in UI coordinate space.
 fn arc_path(center: Point, radius: f32, start_angle: f32, end_angle: f32) -> BezPath {
     let mut start = normalize_angle(start_angle);
     let mut end = normalize_angle(end_angle);
@@ -276,6 +283,7 @@ fn arc_path(center: Point, radius: f32, start_angle: f32, end_angle: f32) -> Bez
     path
 }
 
+/// Resolve the indicator endpoint for a knob angle and radius.
 fn indicator_point(center: Point, radius: i32, angle: f32) -> Point {
     Point {
         x: center.x + (radius as f32 * angle.cos()) as i32,
@@ -283,6 +291,7 @@ fn indicator_point(center: Point, radius: i32, angle: f32) -> Point {
     }
 }
 
+/// Normalize an angle in radians to the `[0, TAU)` domain.
 fn normalize_angle(angle: f32) -> f32 {
     let mut normalized = angle % TAU;
     if normalized < 0.0 {
@@ -291,10 +300,12 @@ fn normalize_angle(angle: f32) -> f32 {
     normalized
 }
 
+/// Convert a canvas color into a Vello color.
 fn color_to_vello(color: Color) -> VelloColor {
     VelloColor::from_rgba8(color.r, color.g, color.b, color.a)
 }
 
+/// Try to load a default sans-serif font from known platform locations.
 fn load_default_font() -> Option<LoadedFont> {
     let mut candidates = Vec::new();
     if let Some(path) = std::env::var_os("PATCHBAY_GUI_FONT_PATH")

@@ -12,9 +12,10 @@ pub(crate) struct RootRenderPlan {
 }
 
 /// Root frame scaling behavior.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum RootScaleMode {
     /// Disable root-level scaling and render at authored size.
+    #[default]
     None,
     /// Fit the authored design size to the current window using root-canvas
     /// transform scaling.
@@ -22,12 +23,6 @@ pub enum RootScaleMode {
     /// When host and design aspect ratios differ, scaling is resolved per axis
     /// so content fills the available window area.
     UniformFit,
-}
-
-impl Default for RootScaleMode {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 /// Declarative UI tree describing a window.

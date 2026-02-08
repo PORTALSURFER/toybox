@@ -100,15 +100,15 @@
             },
         };
         let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
-        let response = ui.knob_with_labels_in_rect(
+        let request = KnobRectRenderRequest::new(
             WidgetId::new(77),
             "GAIN",
             "50%",
-            &mut value,
             (0.0, 1.0),
             DEFAULT_KNOB_DIAMETER as u32,
             rect,
         );
+        let response = ui.knob_with_labels_in_rect(&mut value, request);
 
         assert!(
             !response.hovered,

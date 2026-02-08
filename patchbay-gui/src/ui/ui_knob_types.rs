@@ -119,3 +119,47 @@ impl KnobRectSpec {
         }
     }
 }
+
+/// Request payload for rendering a knob inside a fixed rectangle.
+#[derive(Clone, Copy)]
+pub(crate) struct KnobRectRenderRequest<'a> {
+    /// Stable widget id.
+    id: WidgetId,
+    /// Name/value label pair rendered above/below the knob.
+    labels: KnobLabels<'a>,
+    /// Inclusive interaction range.
+    range: (f32, f32),
+    /// Preferred dial diameter before clamping.
+    desired_diameter: u32,
+    /// Rectangular section bounds for clipped rendering.
+    rect: Rect,
+    /// Explicit text scale override for this knob.
+    text_scale: u32,
+}
+
+impl<'a> KnobRectRenderRequest<'a> {
+    /// Build a knob-in-rect request with default text scale.
+    pub(crate) fn new(
+        id: WidgetId,
+        name_label: &'a str,
+        value_label: &'a str,
+        range: (f32, f32),
+        desired_diameter: u32,
+        rect: Rect,
+    ) -> Self {
+        Self {
+            id,
+            labels: KnobLabels::new(name_label, value_label),
+            range,
+            desired_diameter,
+            rect,
+            text_scale: 1,
+        }
+    }
+
+    /// Override text scale for the rendered knob labels.
+    pub(crate) fn with_text_scale(mut self, text_scale: u32) -> Self {
+        self.text_scale = text_scale.max(1);
+        self
+    }
+}
