@@ -45,3 +45,22 @@ fn stroke_arc_renders_top_semicircle() {
     assert_eq!(top, [color.r, color.g, color.b, color.a]);
     assert_ne!(bottom, [color.r, color.g, color.b, color.a]);
 }
+
+#[test]
+fn glyph_maps_lowercase_to_uppercase_for_letters() {
+    assert_eq!(BitmapFont::glyph('a'), BitmapFont::glyph('A'));
+    assert_eq!(BitmapFont::glyph('z'), BitmapFont::glyph('Z'));
+}
+
+#[test]
+fn glyph_uses_consistent_fallback_for_unknown_chars() {
+    assert_eq!(BitmapFont::glyph('~'), BitmapFont::glyph('`'));
+    assert_eq!(BitmapFont::glyph('~'), BitmapFont::glyph('\u{20AC}'));
+}
+
+#[test]
+fn glyph_preserves_known_symbols_and_space() {
+    assert_ne!(BitmapFont::glyph('/'), BitmapFont::glyph('~'));
+    assert_ne!(BitmapFont::glyph(':'), BitmapFont::glyph('~'));
+    assert_eq!(BitmapFont::glyph(' '), [0; 7]);
+}
