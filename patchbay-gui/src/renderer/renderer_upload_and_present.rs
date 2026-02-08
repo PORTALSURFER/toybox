@@ -141,7 +141,7 @@ impl Renderer {
     }
 
     /// Pad tightly packed RGBA rows to WGPU's row alignment requirement.
-    fn pad_rows_rgba(
+    pub(super) fn pad_rows_rgba(
         pixels: &[u8],
         width: u32,
         height: u32,
