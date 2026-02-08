@@ -15,7 +15,10 @@ include!("render_entry_and_debug_candidates.rs");
 include!("debug_selection_and_validation.rs");
 include!("measure_and_render_dispatch.rs");
 include!("render_panel_and_flex.rs");
-include!("render_grid_absolute_and_tracks.rs");
+include!("render/grid/axis.rs");
+include!("render/grid/layout.rs");
+include!("render/absolute.rs");
+include!("render/label.rs");
 include!("render_widgets_and_regions.rs");
 include!("layout_geometry_and_formatting.rs");
 
