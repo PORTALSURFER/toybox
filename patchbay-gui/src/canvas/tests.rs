@@ -1,0 +1,47 @@
+use super::*;
+
+fn pixel_at(canvas: &Canvas, x: u32, y: u32) -> [u8; 4] {
+    let width = canvas.size.width as usize;
+    let index = (y as usize * width + x as usize) * 4;
+    [
+        canvas.pixels[index],
+        canvas.pixels[index + 1],
+        canvas.pixels[index + 2],
+        canvas.pixels[index + 3],
+    ]
+}
+
+#[test]
+fn rect_contains_point() {
+    let rect = Rect {
+        origin: Point { x: 10, y: 20 },
+        size: Size {
+            width: 100,
+            height: 50,
+        },
+    };
+    assert!(rect.contains(Point { x: 10, y: 20 }));
+    assert!(rect.contains(Point { x: 109, y: 69 }));
+    assert!(!rect.contains(Point { x: 110, y: 70 }));
+}
+
+#[test]
+fn draw_text_advances_cursor() {
+    let mut canvas = Canvas::new(64, 64);
+    canvas.draw_text(Point { x: 0, y: 0 }, "AB", Color::rgb(255, 255, 255), 1);
+    assert!(canvas.pixels().iter().any(|value| *value != 0));
+}
+
+#[test]
+fn stroke_arc_renders_top_semicircle() {
+    let mut canvas = Canvas::new(21, 21);
+    let center = Point { x: 10, y: 10 };
+    let color = Color::rgb(200, 100, 50);
+    canvas.stroke_arc(center, 8, 2, 0.0, std::f32::consts::PI, color);
+
+    let top = pixel_at(&canvas, 10, 2);
+    let bottom = pixel_at(&canvas, 10, 18);
+
+    assert_eq!(top, [color.r, color.g, color.b, color.a]);
+    assert_ne!(bottom, [color.r, color.g, color.b, color.a]);
+}
