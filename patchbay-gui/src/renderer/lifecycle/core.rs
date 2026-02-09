@@ -128,7 +128,7 @@ impl Renderer {
     fn register_canvas_texture(
         renderer: &mut vello::Renderer,
         canvas_texture: &wgpu::Texture,
-    ) -> vello::peniko::Image {
+    ) -> vello::peniko::ImageData {
         renderer.register_texture(canvas_texture.clone())
     }
 
@@ -284,7 +284,7 @@ struct RendererInitResources {
     /// Texture backing the uploaded CPU canvas.
     canvas_texture: wgpu::Texture,
     /// Vello image handle for the canvas texture.
-    canvas_image: vello::peniko::Image,
+    canvas_image: vello::peniko::ImageData,
     /// Initial logical canvas size.
     initial_canvas_size: Size,
 }
