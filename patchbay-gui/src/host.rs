@@ -280,74 +280,134 @@ impl HostWindow {
             reduce,
             mode,
         } = request;
-        let size = Size {
-            width: size.width.max(1),
-            height: size.height.max(1),
-        };
-        self.last_size
-            .store(pack_size(size.width, size.height), Ordering::Release);
-
-        let parent = self.parent.ok_or(GuiError::NoParent)?;
-        let (parent_hwnd, parent_hinstance) = match parent {
-            RawWindowHandle::Win32(handle) => (handle.hwnd as isize, handle.hinstance as isize),
-            _ => return Err(GuiError::UnsupportedHandle),
-        };
-        if let Some(handle) = &self.handle {
-            if handle.is_valid() && handle.parent_matches(parent_hwnd) {
-                if mode == OpenParentedMode::ReuseIfOpen {
-                    self.resize_request
-                        .store(pack_size(size.width, size.height), Ordering::Release);
-                    self.show();
-                    return Ok(());
-                }
-            }
-            handle.destroy();
-            self.handle = None;
+        let size = Self::normalize_open_size(size);
+        self.record_last_size(size);
+        let parent = self.resolve_parent_window()?;
+        if self.reuse_or_destroy_existing_window(parent.hwnd, mode, size) {
+            return Ok(());
         }
-
-        let resize_request = self.resize_request.clone();
-        let last_size = self.last_size.clone();
-        let aspect_ratio = self.aspect_ratio.clone();
-        let device_cache = self.device_cache.clone();
-
-        let theme = Theme::default();
-        let layout = Layout::default();
-        let ui_state = UiState::default();
-
-        let request = SpawnWindowRequest {
-            window: SpawnWindowConfig {
-                parent_hwnd,
-                parent_hinstance,
-                title,
-                size,
-            },
-            callbacks: SpawnCallbacks {
-                state,
-                on_init,
-                build,
-                reduce,
-            },
-            shared: SpawnSharedState {
-                device_cache,
-                resize_request,
-                last_size,
-                aspect_ratio,
-            },
-            ui: SpawnUiConfig {
-                ui_state,
-                layout,
-                theme,
-            },
+        let callbacks = SpawnCallbacks {
+            state,
+            on_init,
+            build,
+            reduce,
         };
-        let handle = spawn_window_thread(request)?;
-
-        self.handle = Some(handle);
-        Ok(())
+        self.spawn_parented_window(parent, title, size, callbacks)
     }
 
     /// Access the OS-level window handle if one exists.
     pub fn handle(&self) -> Option<WindowHandle> {
         self.handle.clone()
+    }
+}
+
+/// Raw Win32 parent handles extracted from a CLAP host parent handle.
+struct ParentWindowHandles {
+    /// Parent window handle value.
+    hwnd: isize,
+    /// Parent module instance handle value.
+    hinstance: isize,
+}
+
+impl HostWindow {
+    /// Clamp requested open size to at least one pixel per dimension.
+    fn normalize_open_size(size: Size) -> Size {
+        Size {
+            width: size.width.max(1),
+            height: size.height.max(1),
+        }
+    }
+
+    /// Persist the latest requested logical size for host polling.
+    fn record_last_size(&self, size: Size) {
+        self.last_size
+            .store(pack_size(size.width, size.height), Ordering::Release);
+    }
+
+    /// Resolve and validate Win32 parent handles from the configured raw parent.
+    fn resolve_parent_window(&self) -> Result<ParentWindowHandles, GuiError> {
+        let parent = self.parent.ok_or(GuiError::NoParent)?;
+        match parent {
+            RawWindowHandle::Win32(handle) => Ok(ParentWindowHandles {
+                hwnd: handle.hwnd as isize,
+                hinstance: handle.hinstance as isize,
+            }),
+            _ => Err(GuiError::UnsupportedHandle),
+        }
+    }
+
+    /// Reuse an existing matching window or destroy stale window state.
+    ///
+    /// Returns `true` when a matching window was reused and no new spawn is needed.
+    fn reuse_or_destroy_existing_window(
+        &mut self,
+        parent_hwnd: isize,
+        mode: OpenParentedMode,
+        size: Size,
+    ) -> bool {
+        if let Some(handle) = &self.handle {
+            if handle.is_valid()
+                && handle.parent_matches(parent_hwnd)
+                && mode == OpenParentedMode::ReuseIfOpen
+            {
+                self.resize_request
+                    .store(pack_size(size.width, size.height), Ordering::Release);
+                self.show();
+                return true;
+            }
+            handle.destroy();
+            self.handle = None;
+        }
+        false
+    }
+
+    /// Build shared synchronization state for a newly spawned window.
+    fn build_spawn_shared_state(&self) -> SpawnSharedState {
+        SpawnSharedState {
+            device_cache: self.device_cache.clone(),
+            resize_request: self.resize_request.clone(),
+            last_size: self.last_size.clone(),
+            aspect_ratio: self.aspect_ratio.clone(),
+        }
+    }
+
+    /// Return default UI configuration used during Win32 window creation.
+    fn default_spawn_ui_config() -> SpawnUiConfig {
+        SpawnUiConfig {
+            ui_state: UiState::default(),
+            layout: Layout::default(),
+            theme: Theme::default(),
+        }
+    }
+
+    /// Spawn a new parented window and store its handle.
+    fn spawn_parented_window<State, Init, Build, Reduce>(
+        &mut self,
+        parent: ParentWindowHandles,
+        title: String,
+        size: Size,
+        callbacks: SpawnCallbacks<State, Init, Build, Reduce>,
+    ) -> Result<(), GuiError>
+    where
+        Init: FnMut(&mut State) + Send + 'static,
+        Build: FnMut(&InputState, &State) -> UiSpec + Send + 'static,
+        Reduce: FnMut(&mut State, UiAction) + Send + 'static,
+        State: Send + 'static,
+    {
+        let request = SpawnWindowRequest {
+            window: SpawnWindowConfig {
+                parent_hwnd: parent.hwnd,
+                parent_hinstance: parent.hinstance,
+                title,
+                size,
+            },
+            callbacks,
+            shared: self.build_spawn_shared_state(),
+            ui: Self::default_spawn_ui_config(),
+        };
+        let handle = spawn_window_thread(request)?;
+        self.handle = Some(handle);
+        Ok(())
     }
 }
 
