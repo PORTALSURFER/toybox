@@ -28,7 +28,8 @@ include!("render/grid/axis.rs");
 include!("render/grid/layout.rs");
 include!("render/absolute.rs");
 include!("render/label.rs");
-include!("render_widgets_and_regions.rs");
+include!("render/widgets.rs");
+include!("render/region.rs");
 include!("layout_geometry_and_formatting.rs");
 
 #[cfg(test)]
