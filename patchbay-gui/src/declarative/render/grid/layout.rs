@@ -17,19 +17,48 @@ fn render_grid(grid: &GridSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx
 
 /// Prepared grid geometry and track sizing for a single render pass.
 struct PreparedGridLayout {
+    /// Total number of columns resolved from the template.
     columns: usize,
+    /// Total number of rows needed for the current child count.
     rows: usize,
+    /// Insets-applied content bounds used for cell placement.
     inner: Rect,
+    /// One intrinsic measurement per child node.
     intrinsic: Vec<Size>,
+    /// Resolved width for each column track.
     column_widths: Vec<u32>,
+    /// Resolved height for each row track.
     row_heights: Vec<u32>,
+    /// Final row gap value applied during placement.
     row_gap: i32,
 }
 
 /// Horizontal spacing details computed from grid justification.
 struct GridColumnSpacing {
+    /// Leading horizontal offset before the first column starts.
     leading_space: i32,
+    /// Gap width between adjacent columns.
     column_gaps: Vec<i32>,
+}
+
+/// Shared immutable inputs used while rendering grid rows.
+struct GridRowRenderContext<'a> {
+    /// Source grid specification.
+    grid: &'a GridSpec,
+    /// Prepared geometry reused by every row.
+    layout: &'a PreparedGridLayout,
+    /// Column spacing and leading offset derived from justification.
+    spacing: &'a GridColumnSpacing,
+}
+
+/// Row-local placement parameters for one render pass.
+struct GridRowGeometry {
+    /// Zero-based row index.
+    row: usize,
+    /// Row top edge in surface coordinates.
+    y: i32,
+    /// Row track height.
+    height: u32,
 }
 
 /// Compute grid tracks and intrinsic measurements before rendering children.
@@ -127,38 +156,46 @@ fn render_grid_children(
     ui: &mut Ui<'_>,
     ctx: &mut RenderCtx<'_>,
 ) {
+    let row_ctx = GridRowRenderContext {
+        grid,
+        layout,
+        spacing,
+    };
     let mut y = layout.inner.origin.y;
-    for (row, row_height) in layout.row_heights.iter().copied().enumerate().take(layout.rows) {
-        render_grid_row(row, row_height, y, grid, layout, spacing, ui, ctx);
-        y += row_height as i32 + layout.row_gap;
+    for (row, height) in layout.row_heights.iter().copied().enumerate().take(layout.rows) {
+        render_grid_row(GridRowGeometry { row, y, height }, &row_ctx, ui, ctx);
+        y += height as i32 + layout.row_gap;
     }
 }
 
 /// Render a single grid row.
 fn render_grid_row(
-    row: usize,
-    row_height: u32,
-    y: i32,
-    grid: &GridSpec,
-    layout: &PreparedGridLayout,
-    spacing: &GridColumnSpacing,
+    row_geometry: GridRowGeometry,
+    row_ctx: &GridRowRenderContext<'_>,
     ui: &mut Ui<'_>,
     ctx: &mut RenderCtx<'_>,
 ) {
-    let mut x = layout.inner.origin.x + spacing.leading_space;
-    for (col, col_width) in layout.column_widths.iter().copied().enumerate().take(layout.columns) {
-        let index = row * layout.columns + col;
-        if let Some(child) = grid.children.get(index) {
+    let mut x = row_ctx.layout.inner.origin.x + row_ctx.spacing.leading_space;
+    for (col, width) in row_ctx
+        .layout
+        .column_widths
+        .iter()
+        .copied()
+        .enumerate()
+        .take(row_ctx.layout.columns)
+    {
+        let index = row_geometry.row * row_ctx.layout.columns + col;
+        if let Some(child) = row_ctx.grid.children.get(index) {
             let cell_rect = Rect {
-                origin: Point { x, y },
+                origin: Point { x, y: row_geometry.y },
                 size: Size {
-                    width: col_width,
-                    height: row_height,
+                    width,
+                    height: row_geometry.height,
                 },
             };
-            render_grid_child(child, cell_rect, layout.intrinsic[index], ui, ctx);
+            render_grid_child(child, cell_rect, row_ctx.layout.intrinsic[index], ui, ctx);
         }
-        x += col_width as i32 + spacing.column_gaps.get(col).copied().unwrap_or(0);
+        x += width as i32 + row_ctx.spacing.column_gaps.get(col).copied().unwrap_or(0);
     }
 }
 
