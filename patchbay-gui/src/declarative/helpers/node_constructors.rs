@@ -1,0 +1,69 @@
+/// Create a grid container node.
+pub fn grid(template: GridTemplate, children: Vec<Node>) -> Node {
+    Node::Grid(GridSpec::new(template, children))
+}
+
+/// Create a panel container node.
+pub fn panel(key: impl Into<String>, content: Node) -> Node {
+    Node::Panel(PanelSpec::new(key, content))
+}
+
+/// Create a text label node.
+pub fn label(text: impl Into<String>) -> Node {
+    Node::Label(LabelSpec::new(text))
+}
+
+/// Create a fixed-size spacer node.
+pub fn spacer(size: Size) -> Node {
+    Node::Spacer(SpacerSpec::new(size))
+}
+
+/// Create a knob control node.
+pub fn knob(
+    key: impl Into<String>,
+    label: impl Into<String>,
+    value: f32,
+    range: (f32, f32),
+) -> Node {
+    Node::Knob(KnobSpec::new(key, label, value, range))
+}
+
+/// Create a slider control node.
+pub fn slider(
+    key: impl Into<String>,
+    label: impl Into<String>,
+    value: f32,
+    range: (f32, f32),
+) -> Node {
+    Node::Slider(SliderSpec::new(key, label, value, range))
+}
+
+/// Create a toggle control node.
+pub fn toggle(key: impl Into<String>, label: impl Into<String>, value: bool) -> Node {
+    Node::Toggle(ToggleSpec::new(key, label, value))
+}
+
+/// Create a button control node.
+pub fn button(key: impl Into<String>, label: impl Into<String>) -> Node {
+    Node::Button(ButtonSpec::new(key, label))
+}
+
+/// Create a dropdown control node.
+pub fn dropdown(
+    key: impl Into<String>,
+    label: impl Into<String>,
+    options: Vec<String>,
+    selected: usize,
+) -> Node {
+    Node::Dropdown(DropdownSpec::new(key, label, options, selected))
+}
+
+/// Create an interactive region node.
+pub fn region(key: impl Into<String>, size: Size) -> Node {
+    Node::Region(RegionSpec::new(key, size))
+}
+
+/// Create an indicator node.
+pub fn indicator(size: Size, active: bool) -> Node {
+    Node::Indicator(IndicatorSpec::new(size, active))
+}
