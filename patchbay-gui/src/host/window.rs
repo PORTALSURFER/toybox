@@ -1,168 +1,28 @@
-//! Host window management and input plumbing for Patchbay GUI.
+//! HostWindow behavior and Win32 parented-window spawn flow.
+
+use std::sync::atomic::Ordering;
+
+use raw_window_handle::RawWindowHandle;
 
 use crate::canvas::Size;
 use crate::declarative::{UiAction, UiSpec};
-use crate::renderer::RendererDevice;
 use crate::ui::{Layout, Theme, UiState};
 use crate::win32::{
     SpawnCallbacks, SpawnSharedState, SpawnUiConfig, SpawnWindowConfig, SpawnWindowRequest,
-    WindowHandle, spawn_window_thread,
+    spawn_window_thread,
 };
-use raw_window_handle::RawWindowHandle;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 
-/// Input snapshot delivered to UI widgets for a single frame.
-#[derive(Clone, Debug, Default)]
-pub struct InputState {
-    /// Current logical window size in pixels.
-    pub window_size: Size,
-    /// Current pointer position in pixels.
-    pub pointer_pos: crate::canvas::Point,
-    /// Whether the primary mouse button is held.
-    pub mouse_down: bool,
-    /// Whether the primary mouse button was pressed this frame.
-    pub mouse_pressed: bool,
-    /// Whether the primary mouse button was released this frame.
-    pub mouse_released: bool,
-    /// Whether the primary mouse button was double-clicked this frame.
-    pub mouse_double_clicked: bool,
-    /// Whether the secondary mouse button is held.
-    pub mouse_secondary_down: bool,
-    /// Whether the secondary mouse button was pressed this frame.
-    pub mouse_secondary_pressed: bool,
-    /// Whether the secondary mouse button was released this frame.
-    pub mouse_secondary_released: bool,
-    /// Whether either Shift key is currently held.
-    pub shift_down: bool,
-    /// Whether either Alt key is currently held.
-    pub alt_down: bool,
-    /// Scroll delta for this frame (positive = up).
-    pub wheel_delta: f32,
-    /// Key press captured this frame (ASCII).
-    pub key_pressed: Option<char>,
-    /// Files dropped onto the window this frame.
-    pub dropped_files: Vec<PathBuf>,
-}
+use super::errors::GuiError;
+use super::requests::{OpenParentedMode, OpenParentedRequest};
+use super::types::{HostWindow, InputState};
+use super::{pack_size, unpack_size};
 
-/// Policy for handling repeated `open_parented` calls.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum OpenParentedMode {
-    /// Reuse an existing window if it matches the parent handle.
-    ReuseIfOpen,
-    /// Always recreate the window and UI state.
-    Recreate,
-}
-
-/// Request payload for opening a parented GUI window.
-///
-/// This bundles state and callbacks so call sites do not need wide function
-/// signatures when opening Patchbay windows.
-pub struct OpenParentedRequest<State, Init, Build, Reduce> {
-    /// Window title shown by the host.
-    pub title: String,
-    /// Initial logical window size.
-    pub size: Size,
-    /// Initial user-provided UI state.
-    pub state: State,
-    /// One-time state initialization callback.
-    pub on_init: Init,
-    /// Per-frame declarative tree builder.
-    pub build: Build,
-    /// UI action reducer callback.
-    pub reduce: Reduce,
-    /// Reuse behavior for repeated open calls.
-    pub mode: OpenParentedMode,
-}
-
-impl<State, Init, Build, Reduce> OpenParentedRequest<State, Init, Build, Reduce> {
-    /// Build an open request using [`OpenParentedMode::ReuseIfOpen`].
-    pub fn new(
-        title: String,
-        size: Size,
-        state: State,
-        on_init: Init,
-        build: Build,
-        reduce: Reduce,
-    ) -> Self {
-        Self {
-            title,
-            size,
-            state,
-            on_init,
-            build,
-            reduce,
-            mode: OpenParentedMode::ReuseIfOpen,
-        }
-    }
-
-    /// Override the default reuse mode.
-    pub fn with_mode(mut self, mode: OpenParentedMode) -> Self {
-        self.mode = mode;
-        self
-    }
-}
-
-/// Errors returned by the Patchbay GUI system.
-#[derive(thiserror::Error, Debug)]
-pub enum GuiError {
-    /// The host did not provide a parent window.
-    #[error("no parent window was provided")]
-    NoParent,
-    /// The raw window handle is not supported on this platform.
-    #[error("unsupported window handle for this platform")]
-    UnsupportedHandle,
-    /// Failed to create the native window.
-    #[error("failed to create Win32 window")]
-    WindowCreateFailed,
-    /// Failed to locate a compatible GPU adapter.
-    #[error("no compatible GPU adapter found")]
-    AdapterNotFound,
-    /// Surface creation failed.
-    #[error("failed to create wgpu surface")]
-    Surface(#[source] wgpu::CreateSurfaceError),
-    /// Device creation failed.
-    #[error("failed to create wgpu device")]
-    Device(#[source] wgpu::RequestDeviceError),
-    /// Surface has no supported formats.
-    #[error("wgpu surface reports no supported formats")]
-    SurfaceFormat,
-    /// Failed to acquire the next swapchain frame.
-    #[error("failed to acquire next swapchain texture")]
-    SurfaceAcquire(#[source] wgpu::SurfaceError),
-    /// GUI thread failed to start.
-    #[error("failed to spawn GUI thread")]
-    ThreadSpawn,
-    /// Device cache mutex was poisoned.
-    #[error("renderer device cache mutex poisoned")]
-    DeviceCachePoison,
-}
-
-/// Handle to an open GUI window.
-#[derive(Clone, Debug)]
-pub struct HostWindow {
-    parent: Option<RawWindowHandle>,
-    parent_hwnd: Option<isize>,
-    handle: Option<WindowHandle>,
-    device_cache: Arc<Mutex<Option<Arc<RendererDevice>>>>,
-    resize_request: Arc<AtomicU64>,
-    last_size: Arc<AtomicU64>,
-    aspect_ratio: Arc<AtomicU32>,
-}
-
-impl Default for HostWindow {
-    fn default() -> Self {
-        Self {
-            parent: None,
-            parent_hwnd: None,
-            handle: None,
-            device_cache: Arc::new(Mutex::new(None)),
-            resize_request: Arc::new(AtomicU64::new(0)),
-            last_size: Arc::new(AtomicU64::new(0)),
-            aspect_ratio: Arc::new(AtomicU32::new(0)),
-        }
-    }
+/// Raw Win32 parent handles extracted from a CLAP host parent handle.
+struct ParentWindowHandles {
+    /// Parent window handle value.
+    hwnd: isize,
+    /// Parent module instance handle value.
+    hinstance: isize,
 }
 
 impl HostWindow {
@@ -296,20 +156,10 @@ impl HostWindow {
     }
 
     /// Access the OS-level window handle if one exists.
-    pub fn handle(&self) -> Option<WindowHandle> {
+    pub fn handle(&self) -> Option<crate::win32::WindowHandle> {
         self.handle.clone()
     }
-}
 
-/// Raw Win32 parent handles extracted from a CLAP host parent handle.
-struct ParentWindowHandles {
-    /// Parent window handle value.
-    hwnd: isize,
-    /// Parent module instance handle value.
-    hinstance: isize,
-}
-
-impl HostWindow {
     /// Clamp requested open size to at least one pixel per dimension.
     fn normalize_open_size(size: Size) -> Size {
         Size {
@@ -408,29 +258,5 @@ impl HostWindow {
         let handle = spawn_window_thread(request)?;
         self.handle = Some(handle);
         Ok(())
-    }
-}
-
-fn pack_size(width: u32, height: u32) -> u64 {
-    ((width as u64) << 32) | (height as u64)
-}
-
-fn unpack_size(value: u64) -> Option<(u32, u32)> {
-    if value == 0 {
-        return None;
-    }
-    let width = (value >> 32) as u32;
-    let height = (value & 0xFFFF_FFFF) as u32;
-    Some((width, height))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn pack_unpack_roundtrip() {
-        let packed = pack_size(640, 480);
-        assert_eq!(unpack_size(packed), Some((640, 480)));
     }
 }
