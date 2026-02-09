@@ -11,7 +11,7 @@ mod declarative;
 #[cfg(target_os = "windows")]
 mod host;
 #[cfg(not(target_os = "windows"))]
-#[path = "host_non_windows.rs"]
+#[path = "host_non_windows/mod.rs"]
 mod host;
 mod logging;
 #[cfg(target_os = "windows")]

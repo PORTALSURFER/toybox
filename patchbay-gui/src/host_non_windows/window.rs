@@ -1,0 +1,126 @@
+//! HostWindow behavior for non-Windows stubs.
+
+use std::sync::atomic::Ordering;
+
+use raw_window_handle::RawWindowHandle;
+
+use crate::canvas::Size;
+use crate::declarative::{UiAction, UiSpec};
+
+use super::errors::GuiError;
+use super::requests::OpenParentedRequest;
+use super::types::{HostWindow, InputState, WindowHandle};
+use super::{pack_size, unpack_size};
+
+impl HostWindow {
+    /// Assign the raw parent handle supplied by the CLAP host.
+    pub fn set_parent(&mut self, parent: RawWindowHandle) {
+        self.parent = Some(parent);
+    }
+
+    /// Return the most recent logical size reported by the window.
+    pub fn last_size(&self) -> Option<(u32, u32)> {
+        unpack_size(self.last_size.load(Ordering::Acquire))
+    }
+
+    /// Request a logical resize from the GUI thread.
+    pub fn request_resize(&self, width: u32, height: u32) {
+        self.resize_request
+            .store(pack_size(width, height), Ordering::Release);
+    }
+
+    /// Return true if a native window has been created.
+    pub fn is_open(&self) -> bool {
+        self.handle.is_some()
+    }
+
+    /// Show the native window if it exists.
+    pub fn show(&self) {
+        if let Some(handle) = &self.handle {
+            handle.set_visible(true);
+        }
+    }
+
+    /// Hide the native window if it exists.
+    pub fn hide(&self) {
+        if let Some(handle) = &self.handle {
+            handle.set_visible(false);
+        }
+    }
+
+    /// Set a desired aspect ratio for host-driven resizing.
+    pub fn set_aspect_ratio(&mut self, ratio: Option<f32>) {
+        let bits = ratio
+            .filter(|value| value.is_finite() && *value > 0.0)
+            .unwrap_or(0.0);
+        self.aspect_ratio.store(bits.to_bits(), Ordering::Release);
+    }
+
+    /// Open a parented Patchbay GUI window.
+    ///
+    /// This always returns [`GuiError::UnsupportedHandle`] on non-Windows
+    /// platforms. The method exists so clients compile cross-platform.
+    pub fn open_parented<State, Init, Build, Reduce>(
+        &mut self,
+        title: String,
+        size: (u32, u32),
+        state: State,
+        on_init: Init,
+        build: Build,
+        reduce: Reduce,
+    ) -> Result<(), GuiError>
+    where
+        Init: FnMut(&mut State) + Send + 'static,
+        Build: FnMut(&InputState, &State) -> UiSpec + Send + 'static,
+        Reduce: FnMut(&mut State, UiAction) + Send + 'static,
+        State: Send + 'static,
+    {
+        self.open_parented_with(OpenParentedRequest::new(
+            title,
+            Size {
+                width: size.0.max(1),
+                height: size.1.max(1),
+            },
+            state,
+            on_init,
+            build,
+            reduce,
+        ))
+    }
+
+    /// Open a parented Patchbay GUI window with explicit reuse policy.
+    ///
+    /// This always returns [`GuiError::UnsupportedHandle`] on non-Windows
+    /// platforms. The method exists so clients compile cross-platform.
+    pub fn open_parented_with<State, Init, Build, Reduce>(
+        &mut self,
+        request: OpenParentedRequest<State, Init, Build, Reduce>,
+    ) -> Result<(), GuiError>
+    where
+        Init: FnMut(&mut State) + Send + 'static,
+        Build: FnMut(&InputState, &State) -> UiSpec + Send + 'static,
+        Reduce: FnMut(&mut State, UiAction) + Send + 'static,
+        State: Send + 'static,
+    {
+        let OpenParentedRequest {
+            title: _title,
+            size,
+            state: _state,
+            on_init: _on_init,
+            build: _build,
+            reduce: _reduce,
+            mode: _mode,
+        } = request;
+        if self.parent.is_none() {
+            return Err(GuiError::NoParent);
+        }
+        self.last_size
+            .store(pack_size(size.width, size.height), Ordering::Release);
+        Err(GuiError::UnsupportedHandle)
+    }
+
+    /// Access the OS-level window handle if one exists.
+    pub fn handle(&self) -> Option<WindowHandle> {
+        self.handle.clone()
+    }
+}
