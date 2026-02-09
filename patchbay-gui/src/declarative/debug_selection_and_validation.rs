@@ -83,81 +83,153 @@ fn validate_node(
     seen_keys: &mut std::collections::HashSet<String>,
 ) -> Result<(), DeclarativeError> {
     match node {
-        Node::Panel(panel) => {
-            validate_non_empty_key(&panel.key, "Panel")?;
-            validate_unique_key(&panel.key, seen_keys)?;
-            validate_node(&panel.content, seen_keys)?;
-        }
-        Node::Row(flex) | Node::Column(flex) => {
-            for child in &flex.children {
-                validate_node(child, seen_keys)?;
-            }
-        }
-        Node::Grid(grid) => {
-            if grid.template.columns.is_empty() {
-                return Err(DeclarativeError::EmptyGridColumns);
-            }
-            if matches!(grid.kind, GridKind::SectionColumn | GridKind::SectionRow) {
-                validate_section_tracks(grid)?;
-                for child in &grid.children {
-                    if !is_container_node(child) {
-                        return Err(DeclarativeError::InvalidSectionChild {
-                            node_kind: node_kind_name(child),
-                        });
-                    }
-                }
-            }
-            for child in &grid.children {
-                validate_node(child, seen_keys)?;
-            }
-        }
-        Node::Absolute(absolute) => {
-            for child in &absolute.children {
-                validate_node(&child.node, seen_keys)?;
-            }
-        }
+        Node::Panel(panel) => validate_panel_node(panel, seen_keys)?,
+        Node::Row(flex) | Node::Column(flex) => validate_flex_children(&flex.children, seen_keys)?,
+        Node::Grid(grid) => validate_grid_node(grid, seen_keys)?,
+        Node::Absolute(absolute) => validate_absolute_node(absolute, seen_keys)?,
         Node::Label(_) | Node::Spacer(_) | Node::Indicator(_) => {}
-        Node::Knob(knob) => {
-            validate_non_empty_key(&knob.key, "Knob")?;
-            validate_unique_key(&knob.key, seen_keys)?;
-            validate_value_range("Knob", &knob.key, knob.range)?;
-            validate_control_value("Knob", &knob.key, knob.value, knob.range)?;
+        Node::Knob(knob) => validate_knob_node(knob, seen_keys)?,
+        Node::Slider(slider) => validate_slider_node(slider, seen_keys)?,
+        Node::Toggle(toggle) => validate_toggle_node(toggle, seen_keys)?,
+        Node::Button(button) => validate_button_node(button, seen_keys)?,
+        Node::Dropdown(dropdown) => validate_dropdown_node(dropdown, seen_keys)?,
+        Node::Region(region) => validate_region_node(region, seen_keys)?,
+    }
+    Ok(())
+}
+
+/// Validate panel key constraints and recurse into panel content.
+fn validate_panel_node(
+    panel: &PanelSpec,
+    seen_keys: &mut std::collections::HashSet<String>,
+) -> Result<(), DeclarativeError> {
+    validate_non_empty_key(&panel.key, "Panel")?;
+    validate_unique_key(&panel.key, seen_keys)?;
+    validate_node(&panel.content, seen_keys)
+}
+
+/// Validate a flat list of child nodes.
+fn validate_flex_children(
+    children: &[Node],
+    seen_keys: &mut std::collections::HashSet<String>,
+) -> Result<(), DeclarativeError> {
+    for child in children {
+        validate_node(child, seen_keys)?;
+    }
+    Ok(())
+}
+
+/// Validate a grid node and recurse through children.
+fn validate_grid_node(
+    grid: &GridSpec,
+    seen_keys: &mut std::collections::HashSet<String>,
+) -> Result<(), DeclarativeError> {
+    if grid.template.columns.is_empty() {
+        return Err(DeclarativeError::EmptyGridColumns);
+    }
+    validate_section_grid_children(grid)?;
+    validate_flex_children(&grid.children, seen_keys)
+}
+
+/// Validate section-grid-only track and child-container constraints.
+fn validate_section_grid_children(grid: &GridSpec) -> Result<(), DeclarativeError> {
+    if !matches!(grid.kind, GridKind::SectionColumn | GridKind::SectionRow) {
+        return Ok(());
+    }
+
+    validate_section_tracks(grid)?;
+    for child in &grid.children {
+        if !is_container_node(child) {
+            return Err(DeclarativeError::InvalidSectionChild {
+                node_kind: node_kind_name(child),
+            });
         }
-        Node::Slider(slider) => {
-            validate_non_empty_key(&slider.key, "Slider")?;
-            validate_unique_key(&slider.key, seen_keys)?;
-            validate_value_range("Slider", &slider.key, slider.range)?;
-            validate_control_value("Slider", &slider.key, slider.value, slider.range)?;
-            if let Some(control_size) = slider.control_size {
-                validate_control_size("Slider", &slider.key, control_size)?;
-            }
-        }
-        Node::Toggle(toggle) => {
-            validate_non_empty_key(&toggle.key, "Toggle")?;
-            validate_unique_key(&toggle.key, seen_keys)?;
-            if let Some(control_size) = toggle.control_size {
-                validate_control_size("Toggle", &toggle.key, control_size)?;
-            }
-        }
-        Node::Button(button) => {
-            validate_non_empty_key(&button.key, "Button")?;
-            validate_unique_key(&button.key, seen_keys)?;
-            if let Some(control_size) = button.control_size {
-                validate_control_size("Button", &button.key, control_size)?;
-            }
-        }
-        Node::Dropdown(dropdown) => {
-            validate_non_empty_key(&dropdown.key, "Dropdown")?;
-            validate_unique_key(&dropdown.key, seen_keys)?;
-            validate_dropdown_selection(dropdown)?;
-            if let Some(control_size) = dropdown.control_size {
-                validate_control_size("Dropdown", &dropdown.key, control_size)?;
-            }
-        }
-        Node::Region(region) => {
-            validate_non_empty_key(&region.key, "Region")?;
-            validate_unique_key(&region.key, seen_keys)?;
-        }
+    }
+    Ok(())
+}
+
+/// Validate absolute-positioned children recursively.
+fn validate_absolute_node(
+    absolute: &AbsoluteSpec,
+    seen_keys: &mut std::collections::HashSet<String>,
+) -> Result<(), DeclarativeError> {
+    for child in &absolute.children {
+        validate_node(&child.node, seen_keys)?;
+    }
+    Ok(())
+}
+
+/// Validate knob constraints.
+fn validate_knob_node(
+    knob: &KnobSpec,
+    seen_keys: &mut std::collections::HashSet<String>,
+) -> Result<(), DeclarativeError> {
+    validate_non_empty_key(&knob.key, "Knob")?;
+    validate_unique_key(&knob.key, seen_keys)?;
+    validate_value_range("Knob", &knob.key, knob.range)?;
+    validate_control_value("Knob", &knob.key, knob.value, knob.range)
+}
+
+/// Validate slider constraints.
+fn validate_slider_node(
+    slider: &SliderSpec,
+    seen_keys: &mut std::collections::HashSet<String>,
+) -> Result<(), DeclarativeError> {
+    validate_non_empty_key(&slider.key, "Slider")?;
+    validate_unique_key(&slider.key, seen_keys)?;
+    validate_value_range("Slider", &slider.key, slider.range)?;
+    validate_control_value("Slider", &slider.key, slider.value, slider.range)?;
+    validate_optional_control_size("Slider", &slider.key, slider.control_size)
+}
+
+/// Validate toggle constraints.
+fn validate_toggle_node(
+    toggle: &ToggleSpec,
+    seen_keys: &mut std::collections::HashSet<String>,
+) -> Result<(), DeclarativeError> {
+    validate_non_empty_key(&toggle.key, "Toggle")?;
+    validate_unique_key(&toggle.key, seen_keys)?;
+    validate_optional_control_size("Toggle", &toggle.key, toggle.control_size)
+}
+
+/// Validate button constraints.
+fn validate_button_node(
+    button: &ButtonSpec,
+    seen_keys: &mut std::collections::HashSet<String>,
+) -> Result<(), DeclarativeError> {
+    validate_non_empty_key(&button.key, "Button")?;
+    validate_unique_key(&button.key, seen_keys)?;
+    validate_optional_control_size("Button", &button.key, button.control_size)
+}
+
+/// Validate dropdown constraints.
+fn validate_dropdown_node(
+    dropdown: &DropdownSpec,
+    seen_keys: &mut std::collections::HashSet<String>,
+) -> Result<(), DeclarativeError> {
+    validate_non_empty_key(&dropdown.key, "Dropdown")?;
+    validate_unique_key(&dropdown.key, seen_keys)?;
+    validate_dropdown_selection(dropdown)?;
+    validate_optional_control_size("Dropdown", &dropdown.key, dropdown.control_size)
+}
+
+/// Validate region constraints.
+fn validate_region_node(
+    region: &RegionSpec,
+    seen_keys: &mut std::collections::HashSet<String>,
+) -> Result<(), DeclarativeError> {
+    validate_non_empty_key(&region.key, "Region")?;
+    validate_unique_key(&region.key, seen_keys)
+}
+
+/// Validate an optional control size override when supplied.
+fn validate_optional_control_size(
+    node_kind: &'static str,
+    key: &str,
+    control_size: Option<Size>,
+) -> Result<(), DeclarativeError> {
+    if let Some(control_size) = control_size {
+        validate_control_size(node_kind, key, control_size)?;
     }
     Ok(())
 }
