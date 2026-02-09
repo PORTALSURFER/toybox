@@ -242,9 +242,13 @@
                     WidgetId::new(201),
                     "VERY LONG SLIDER LABEL FOR DENSE LAYOUTS",
                     &mut value,
-                    (0.0, 1.0),
-                    width,
-                    height,
+                    SliderConfig {
+                        range: (0.0, 1.0),
+                        size: Size {
+                            width: width as u32,
+                            height: height as u32,
+                        },
+                    },
                 );
             },
         );

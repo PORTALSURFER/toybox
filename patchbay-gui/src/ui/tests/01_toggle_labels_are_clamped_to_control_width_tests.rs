@@ -141,7 +141,18 @@
 
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
-            ui.slider(WidgetId::new(2), "GAIN", &mut value, (0.0, 1.0), 100, 16);
+            ui.slider(
+                WidgetId::new(2),
+                "GAIN",
+                &mut value,
+                SliderConfig {
+                    range: (0.0, 1.0),
+                    size: Size {
+                        width: 100,
+                        height: 16,
+                    },
+                },
+            );
         }
 
         input.mouse_pressed = false;
@@ -149,7 +160,18 @@
 
         {
             let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
-            let response = ui.slider(WidgetId::new(2), "GAIN", &mut value, (0.0, 1.0), 100, 16);
+            let response = ui.slider(
+                WidgetId::new(2),
+                "GAIN",
+                &mut value,
+                SliderConfig {
+                    range: (0.0, 1.0),
+                    size: Size {
+                        width: 100,
+                        height: 16,
+                    },
+                },
+            );
             assert!(response.changed);
         }
     }

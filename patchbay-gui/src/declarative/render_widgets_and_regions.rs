@@ -275,59 +275,60 @@ fn render_text_command(
 
 /// Convert low-level region interaction responses into declarative UI actions.
 fn push_region_actions(key: &str, response: RegionResponse, actions: &mut Vec<UiAction>) {
-    let local_pointer = response.local_pointer;
-    let raw_local_pointer = response.raw_local_pointer;
-    actions.push(UiAction::RegionHover {
+    let key = key.to_string();
+    actions.push(region_hover_action(&key, response));
+    push_region_interaction_when(response.pressed, &key, RegionInteractionKind::Pressed, response, actions);
+    push_region_interaction_when(
+        response.released,
+        &key,
+        RegionInteractionKind::Released,
+        response,
+        actions,
+    );
+    push_region_interaction_when(response.dragged, &key, RegionInteractionKind::Dragged, response, actions);
+    push_region_interaction_when(
+        response.secondary_clicked,
+        &key,
+        RegionInteractionKind::SecondaryClicked,
+        response,
+        actions,
+    );
+    push_region_interaction_when(
+        response.double_clicked,
+        &key,
+        RegionInteractionKind::DoubleClicked,
+        response,
+        actions,
+    );
+}
+
+/// Build a hover action from a region interaction response.
+fn region_hover_action(key: &str, response: RegionResponse) -> UiAction {
+    UiAction::RegionHover {
         key: key.to_string(),
         hovered: response.hovered,
-        local_pointer,
-    });
+        local_pointer: response.local_pointer,
+    }
+}
 
-    if response.pressed {
-        actions.push(UiAction::RegionInteracted {
-            key: key.to_string(),
-            kind: RegionInteractionKind::Pressed,
-            local_pointer,
-            raw_local_pointer,
-            alt_down: response.alt_down,
-        });
+/// Append a region interaction action when its trigger condition is true.
+fn push_region_interaction_when(
+    condition: bool,
+    key: &str,
+    kind: RegionInteractionKind,
+    response: RegionResponse,
+    actions: &mut Vec<UiAction>,
+) {
+    if !condition {
+        return;
     }
-    if response.released {
-        actions.push(UiAction::RegionInteracted {
-            key: key.to_string(),
-            kind: RegionInteractionKind::Released,
-            local_pointer,
-            raw_local_pointer,
-            alt_down: response.alt_down,
-        });
-    }
-    if response.dragged {
-        actions.push(UiAction::RegionInteracted {
-            key: key.to_string(),
-            kind: RegionInteractionKind::Dragged,
-            local_pointer,
-            raw_local_pointer,
-            alt_down: response.alt_down,
-        });
-    }
-    if response.secondary_clicked {
-        actions.push(UiAction::RegionInteracted {
-            key: key.to_string(),
-            kind: RegionInteractionKind::SecondaryClicked,
-            local_pointer,
-            raw_local_pointer,
-            alt_down: response.alt_down,
-        });
-    }
-    if response.double_clicked {
-        actions.push(UiAction::RegionInteracted {
-            key: key.to_string(),
-            kind: RegionInteractionKind::DoubleClicked,
-            local_pointer,
-            raw_local_pointer,
-            alt_down: response.alt_down,
-        });
-    }
+    actions.push(UiAction::RegionInteracted {
+        key: key.to_string(),
+        kind,
+        local_pointer: response.local_pointer,
+        raw_local_pointer: response.raw_local_pointer,
+        alt_down: response.alt_down,
+    });
 }
 
 /// Render an indicator node.

@@ -127,28 +127,41 @@ impl<'a> Ui<'a> {
 
     /// Draw a button with the given label.
     pub fn button(&mut self, id: WidgetId, label: &str, width: i32, height: i32) -> ButtonResponse {
-        let width = width.max(1);
-        let height = height.max(1);
+        let rect = self.resolve_button_rect(width, height);
+        let response = self.resolve_button_interaction(id, rect);
+        self.draw_button_visuals(rect, label, response.hovered);
+        self.advance_button_cursor(rect);
+        response
+    }
+
+    /// Resolve the button rectangle from current layout cursor and requested size.
+    fn resolve_button_rect(&mut self, width: i32, height: i32) -> Rect {
         let control_size = Size {
-            width: width as u32,
-            height: height as u32,
+            width: width.max(1) as u32,
+            height: height.max(1) as u32,
         };
         let rect = Rect {
             origin: self.layout.cursor,
             size: control_size,
         };
         self.track_rect_internal(rect);
+        rect
+    }
+
+    /// Resolve hover/click state for a button interaction.
+    fn resolve_button_interaction(&mut self, id: WidgetId, rect: Rect) -> ButtonResponse {
         let hovered = self.pointer_inside_clipped_rect(rect);
         if hovered {
             self.state.hot = Some(id);
         }
-        let mut response = ButtonResponse {
+        ButtonResponse {
             hovered,
-            clicked: false,
-        };
-        if hovered && self.mouse_pressed() {
-            response.clicked = true;
+            clicked: hovered && self.mouse_pressed(),
         }
+    }
+
+    /// Draw button body, outline, and clamped label text.
+    fn draw_button_visuals(&mut self, rect: Rect, label: &str, hovered: bool) {
         let fill = if hovered {
             self.theme.knob_hover
         } else {
@@ -158,7 +171,7 @@ impl<'a> Ui<'a> {
         self.stroke_rect_clipped(rect, 1, self.theme.knob_outline);
         let text_pos = Point {
             x: rect.origin.x + 4,
-            y: rect.origin.y + (height - (7 * self.theme.text_scale as i32)) / 2,
+            y: rect.origin.y + (rect.size.height as i32 - (7 * self.theme.text_scale as i32)) / 2,
         };
         let _ = self.draw_text_single_line_clamped(
             text_pos,
@@ -167,9 +180,11 @@ impl<'a> Ui<'a> {
             self.theme.text,
             false,
         );
+    }
 
-        self.layout.cursor.y = rect.origin.y + height + self.layout.spacing;
-        response
+    /// Advance the vertical layout cursor after drawing a button.
+    fn advance_button_cursor(&mut self, rect: Rect) {
+        self.layout.cursor.y = rect.origin.y + rect.size.height as i32 + self.layout.spacing;
     }
 
     /// Draw a button with a stable key and a dynamic label.

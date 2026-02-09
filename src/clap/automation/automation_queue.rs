@@ -7,7 +7,9 @@ use clack_plugin::events::Pckn;
 use clack_plugin::events::io::OutputEvents;
 use clack_plugin::utils::{ClapId, Cookie};
 
-use crate::clap::params::{push_param_gesture_begin, push_param_gesture_end, push_param_value};
+use crate::clap::params::{
+    ParamEventContext, push_param_gesture_begin, push_param_gesture_end, push_param_value,
+};
 
 use super::{
     AutomationConfig, AutomationDrainStats, AutomationDropPolicy, AutomationEnqueueStatus,
@@ -189,11 +191,13 @@ fn push_automation_event(output: &mut OutputEvents<'_>, event: AutomationEvent) 
         }
         AutomationEvent::Value(param_id, value) => push_param_value(
             output,
-            0,
             param_id,
             value,
-            Pckn::match_all(),
-            Cookie::empty(),
+            ParamEventContext {
+                time: 0,
+                pckn: Pckn::match_all(),
+                cookie: Cookie::empty(),
+            },
         )
         .is_ok(),
     }

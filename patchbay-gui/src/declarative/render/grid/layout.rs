@@ -105,24 +105,14 @@ fn prepare_grid_layout(grid: &GridSpec, rect: Rect, tokens: &ThemeTokens) -> Opt
     let inner = inset_rect(rect, grid.template.padding);
     let intrinsic = measure_grid_intrinsic_sizes(grid, tokens);
     let row_tracks = expanded_row_tracks(grid, rows);
-    let column_widths = resolve_grid_axis(
-        &grid.template.columns,
+    let (column_widths, row_heights) = resolve_grid_tracks(ResolveGridTracksRequest {
+        grid,
         columns,
         rows,
-        grid.template.column_gap.max(0),
-        inner.size.width,
-        true,
-        &intrinsic,
-    );
-    let row_heights = resolve_grid_axis(
-        &row_tracks,
-        columns,
-        rows,
-        grid.template.row_gap.max(0),
-        inner.size.height,
-        false,
-        &intrinsic,
-    );
+        inner,
+        row_tracks: &row_tracks,
+        intrinsic: &intrinsic,
+    });
     Some(PreparedGridLayout {
         columns,
         rows,
@@ -132,6 +122,45 @@ fn prepare_grid_layout(grid: &GridSpec, rect: Rect, tokens: &ThemeTokens) -> Opt
         row_heights,
         row_gap: grid.template.row_gap.max(0),
     })
+}
+
+/// Resolve column widths and row heights for the current grid bounds.
+fn resolve_grid_tracks(request: ResolveGridTracksRequest<'_>) -> (Vec<u32>, Vec<u32>) {
+    let column_widths = resolve_grid_axis(GridAxisResolveRequest {
+        tracks: &request.grid.template.columns,
+        columns: request.columns,
+        rows: request.rows,
+        gap: request.grid.template.column_gap.max(0),
+        available: request.inner.size.width,
+        is_columns: true,
+        intrinsic: request.intrinsic,
+    });
+    let row_heights = resolve_grid_axis(GridAxisResolveRequest {
+        tracks: request.row_tracks,
+        columns: request.columns,
+        rows: request.rows,
+        gap: request.grid.template.row_gap.max(0),
+        available: request.inner.size.height,
+        is_columns: false,
+        intrinsic: request.intrinsic,
+    });
+    (column_widths, row_heights)
+}
+
+/// Inputs required to resolve the full set of grid tracks for one layout pass.
+struct ResolveGridTracksRequest<'a> {
+    /// Source grid specification.
+    grid: &'a GridSpec,
+    /// Resolved column count.
+    columns: usize,
+    /// Resolved row count.
+    rows: usize,
+    /// Insets-applied inner render bounds.
+    inner: Rect,
+    /// Expanded row track definitions.
+    row_tracks: &'a [TrackSize],
+    /// Measured intrinsic child sizes.
+    intrinsic: &'a [Size],
 }
 
 /// Count row tracks needed to fit all children in the configured column count.

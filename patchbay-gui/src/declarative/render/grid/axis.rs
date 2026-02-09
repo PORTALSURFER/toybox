@@ -1,28 +1,42 @@
 /// Resolve one grid axis using track definitions and available space.
-fn resolve_grid_axis(
-    tracks: &[TrackSize],
-    columns: usize,
-    rows: usize,
-    gap: i32,
-    available: u32,
-    is_columns: bool,
-    intrinsic: &[Size],
-) -> Vec<u32> {
-    let axis = if is_columns {
+fn resolve_grid_axis(request: GridAxisResolveRequest<'_>) -> Vec<u32> {
+    let axis = if request.is_columns {
         GridAxis::Columns
     } else {
         GridAxis::Rows
     };
-    let axis_count = if is_columns { columns } else { rows };
+    let axis_count = if request.is_columns {
+        request.columns
+    } else {
+        request.rows
+    };
     resolve_grid_axis_plan(&GridAxisPlan {
-        tracks,
+        tracks: request.tracks,
         axis_count,
-        columns,
-        gap,
-        available,
+        columns: request.columns,
+        gap: request.gap,
+        available: request.available,
         axis,
-        intrinsic,
+        intrinsic: request.intrinsic,
     })
+}
+
+/// Input request for resolving one grid axis.
+struct GridAxisResolveRequest<'a> {
+    /// Track-size definitions for the resolved axis.
+    tracks: &'a [TrackSize],
+    /// Total number of grid columns.
+    columns: usize,
+    /// Total number of grid rows.
+    rows: usize,
+    /// Gap value between tracks on this axis.
+    gap: i32,
+    /// Available axis size before gap subtraction.
+    available: u32,
+    /// Whether the resolved axis is columns (`true`) or rows (`false`).
+    is_columns: bool,
+    /// Intrinsic child measurements used for `Auto` tracks.
+    intrinsic: &'a [Size],
 }
 
 /// Resolve one grid axis from an already-built axis plan.

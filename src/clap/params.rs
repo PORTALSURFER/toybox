@@ -190,28 +190,47 @@ pub fn parse_toggle_text(text: &CStr, on_label: &str, off_label: &str) -> Option
     }
 }
 
+/// Shared metadata used when emitting CLAP parameter events.
+#[derive(Clone, Copy)]
+pub struct ParamEventContext {
+    /// Event sample time within the current audio block.
+    pub time: u32,
+    /// Port/channel/key/note selector for this event.
+    pub pckn: Pckn,
+    /// Opaque host cookie forwarded unchanged.
+    pub cookie: Cookie,
+}
+
 /// Push a CLAP parameter value event into an output event list.
 pub fn push_param_value(
     output: &mut OutputEvents<'_>,
-    time: u32,
     param_id: ClapId,
     value: f64,
-    pckn: Pckn,
-    cookie: Cookie,
+    context: ParamEventContext,
 ) -> Result<(), TryPushError> {
-    output.try_push(ParamValueEvent::new(time, param_id, pckn, value, cookie))
+    output.try_push(ParamValueEvent::new(
+        context.time,
+        param_id,
+        context.pckn,
+        value,
+        context.cookie,
+    ))
 }
 
 /// Push a CLAP parameter modulation event into an output event list.
 pub fn push_param_mod(
     output: &mut OutputEvents<'_>,
-    time: u32,
     param_id: ClapId,
     amount: f64,
-    pckn: Pckn,
-    cookie: Cookie,
+    context: ParamEventContext,
 ) -> Result<(), TryPushError> {
-    output.try_push(ParamModEvent::new(time, param_id, pckn, amount, cookie))
+    output.try_push(ParamModEvent::new(
+        context.time,
+        param_id,
+        context.pckn,
+        amount,
+        context.cookie,
+    ))
 }
 
 /// Push a CLAP parameter gesture begin event into an output event list.
@@ -235,8 +254,8 @@ pub fn push_param_gesture_end(
 #[cfg(test)]
 mod tests {
     use super::{
-        ParamBuilder, push_param_gesture_begin, push_param_gesture_end, push_param_mod,
-        push_param_value,
+        ParamBuilder, ParamEventContext, push_param_gesture_begin, push_param_gesture_end,
+        push_param_mod, push_param_value,
     };
 
     use clack_plugin::events::Pckn;
@@ -253,20 +272,24 @@ mod tests {
         push_param_gesture_begin(&mut output, 0, param_id).unwrap();
         push_param_value(
             &mut output,
-            0,
             param_id,
             0.75,
-            Pckn::match_all(),
-            Cookie::empty(),
+            ParamEventContext {
+                time: 0,
+                pckn: Pckn::match_all(),
+                cookie: Cookie::empty(),
+            },
         )
         .unwrap();
         push_param_mod(
             &mut output,
-            0,
             param_id,
             0.25,
-            Pckn::match_all(),
-            Cookie::empty(),
+            ParamEventContext {
+                time: 0,
+                pckn: Pckn::match_all(),
+                cookie: Cookie::empty(),
+            },
         )
         .unwrap();
         push_param_gesture_end(&mut output, 0, param_id).unwrap();

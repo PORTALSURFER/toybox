@@ -67,6 +67,15 @@ struct SliderVisualState {
     fill: Color,
 }
 
+/// Public slider configuration shared across keyed and non-keyed slider APIs.
+#[derive(Clone, Copy)]
+pub struct SliderConfig {
+    /// Inclusive slider value range.
+    pub range: (f32, f32),
+    /// Slider control footprint.
+    pub size: Size,
+}
+
 impl<'a> Ui<'a> {
     /// Draw a horizontal slider with the given label and value.
     ///
@@ -78,17 +87,23 @@ impl<'a> Ui<'a> {
         id: WidgetId,
         label: &str,
         value: &mut f32,
-        range: (f32, f32),
-        width: i32,
-        height: i32,
+        config: SliderConfig,
     ) -> SliderResponse {
+        let width = config.size.width.max(1) as i32;
+        let height = config.size.height.max(1) as i32;
         let layout = self.resolve_slider_layout(label, width, height);
         let mut response = self.begin_slider_interaction(id, layout.rect);
 
-        response.changed |= self.apply_slider_drag(id, layout.rect, range, value);
-        response.changed |= self.apply_slider_wheel(response.hovered, range, value);
+        response.changed |= self.apply_slider_drag(id, layout.rect, config.range, value);
+        response.changed |= self.apply_slider_wheel(response.hovered, config.range, value);
 
-        let visuals = self.resolve_slider_visuals(layout.rect, layout.height, range, *value, response);
+        let visuals = self.resolve_slider_visuals(
+            layout.rect,
+            layout.height,
+            config.range,
+            *value,
+            response,
+        );
         self.draw_slider_visuals(visuals);
         self.advance_slider_cursor(layout.rect, layout.block_size);
         response
@@ -270,12 +285,10 @@ impl<'a> Ui<'a> {
         key: &str,
         label: &str,
         value: &mut f32,
-        range: (f32, f32),
-        width: i32,
-        height: i32,
+        config: SliderConfig,
     ) -> SliderResponse {
         let id = WidgetId::from_label(key);
-        self.slider(id, label, value, range, width, height)
+        self.slider(id, label, value, config)
     }
 
     /// Render a slider in a fixed rectangle without affecting surrounding layout.
@@ -295,9 +308,13 @@ impl<'a> Ui<'a> {
                     request.id,
                     request.label,
                     value,
-                    request.range,
-                    request.rect.size.width.max(1) as i32,
-                    request.control_size.height.max(1) as i32,
+                    SliderConfig {
+                        range: request.range,
+                        size: Size {
+                            width: request.rect.size.width.max(1),
+                            height: request.control_size.height.max(1),
+                        },
+                    },
                 );
             });
             response

@@ -8,51 +8,110 @@ pub fn render_checked(
     origin: Point,
 ) -> Result<RenderResult, DeclarativeError> {
     validate_spec(spec)?;
-    let tokens = spec.root.tokens.unwrap_or_default();
-    let plan = plan_root_render(spec, ui.input().window_size);
-    let resolved = plan.layout_size;
+    let tokens = root_theme_tokens(spec);
+    let plan = root_render_plan(spec, ui);
+    let mut actions = Vec::new();
+    let mut debug_border_candidates = Vec::new();
+    let response = render_root_frame_and_collect(
+        spec,
+        ui,
+        RootRenderPassState {
+            origin,
+            tokens: &tokens,
+            resolved: plan.layout_size,
+            actions: &mut actions,
+            debug_border_candidates: &mut debug_border_candidates,
+        },
+    );
+    draw_selected_container_debug_border(ui, &debug_border_candidates);
+    Ok(build_render_result(plan, response, actions))
+}
 
-    let style = RootFrameStyle {
+/// Resolve root-level theme tokens for a checked render pass.
+fn root_theme_tokens(spec: &UiSpec) -> ThemeTokens {
+    spec.root.tokens.unwrap_or_default()
+}
+
+/// Build the root render plan using the current UI window size.
+fn root_render_plan(spec: &UiSpec, ui: &Ui<'_>) -> RootRenderPlan {
+    plan_root_render(spec, ui.input().window_size)
+}
+
+/// Render the root frame while collecting actions and debug candidates.
+fn render_root_frame_and_collect(
+    spec: &UiSpec,
+    ui: &mut Ui<'_>,
+    state: RootRenderPassState<'_>,
+) -> crate::ui::RootFrameResponse {
+    let style = root_frame_style(spec, state.tokens);
+    let mut ctx = RenderCtx {
+        tokens: state.tokens,
+        actions: state.actions,
+        debug_border_candidates: state.debug_border_candidates,
+        depth: 1,
+    };
+    let response =
+        ui.root_frame_with_key_at(&spec.root.key, style, Some(state.resolved), state.origin, |ui, rect| {
+            render_node(&spec.root.content, rect, ui, &mut ctx);
+        });
+    collect_container_debug_border_candidate(
+        ctx.debug_border_candidates,
+        ui,
+        response.outer_rect,
+        ContainerKind::RootFrame,
+        0,
+    );
+    response
+}
+
+/// Mutable state bundle shared during one root-frame render pass.
+struct RootRenderPassState<'a> {
+    /// Root origin where the frame should be rendered.
+    origin: Point,
+    /// Resolved theme tokens used for rendering.
+    tokens: &'a ThemeTokens,
+    /// Resolved root layout size.
+    resolved: Size,
+    /// Collected typed actions for this frame.
+    actions: &'a mut Vec<UiAction>,
+    /// Candidate debug border targets discovered during render.
+    debug_border_candidates: &'a mut Vec<DebugBorderCandidate>,
+}
+
+/// Build the root frame style from root spec and resolved tokens.
+fn root_frame_style<'a>(spec: &'a UiSpec, tokens: &ThemeTokens) -> RootFrameStyle<'a> {
+    RootFrameStyle {
         title: spec.root.title.as_deref(),
         padding: spec.root.padding,
         background: Some(tokens.colors.surface),
         outline: Some(tokens.colors.border),
-        header_height: Some(panel_header_height(spec.root.title.as_deref(), &tokens)),
-    };
+        header_height: Some(panel_header_height(spec.root.title.as_deref(), tokens)),
+    }
+}
 
-    let mut actions = Vec::new();
-    let mut debug_border_candidates = Vec::new();
-    let response = {
-        let mut ctx = RenderCtx {
-            tokens: &tokens,
-            actions: &mut actions,
-            debug_border_candidates: &mut debug_border_candidates,
-            depth: 1,
-        };
-        let response =
-            ui.root_frame_with_key_at(&spec.root.key, style, Some(resolved), origin, |ui, rect| {
-                render_node(&spec.root.content, rect, ui, &mut ctx);
-            });
-        collect_container_debug_border_candidate(
-            ctx.debug_border_candidates,
-            ui,
-            response.outer_rect,
-            ContainerKind::RootFrame,
-            0,
-        );
-        response
-    };
-    if let Some(candidate) = select_container_debug_border_candidate(&debug_border_candidates)
+/// Draw the selected container debug border if a valid candidate exists.
+fn draw_selected_container_debug_border(
+    ui: &mut Ui<'_>,
+    debug_border_candidates: &[DebugBorderCandidate],
+) {
+    if let Some(candidate) = select_container_debug_border_candidate(debug_border_candidates)
         && let Some(color) = container_debug_border_color(candidate.kind, candidate.depth)
         && let Some(draw_rect) = debug_border_draw_rect(candidate.rect, 1)
     {
         ui.debug_stroke_rect(draw_rect, 1, color);
     }
+}
 
-    Ok(RenderResult {
-        measured_size: resolved,
+/// Build the final checked render result payload.
+fn build_render_result(
+    plan: RootRenderPlan,
+    response: crate::ui::RootFrameResponse,
+    actions: Vec<UiAction>,
+) -> RenderResult {
+    RenderResult {
+        measured_size: plan.layout_size,
         actions,
         resolved_scale: plan.resolved_scale,
         content_rect: response.content_rect,
-    })
+    }
 }

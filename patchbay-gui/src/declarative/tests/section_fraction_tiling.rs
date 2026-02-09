@@ -1,22 +1,22 @@
 
     #[test]
     fn section_tracks_allocate_percentages_before_fill_remainder() {
-        let widths = resolve_grid_axis(
-            &[
+        let widths = resolve_grid_axis(GridAxisResolveRequest {
+            tracks: &[
                 TrackSize::Percent(25),
                 TrackSize::Percent(35),
                 TrackSize::Fill,
             ],
-            3,
-            1,
-            0,
-            200,
-            true,
-            &[Size {
+            columns: 3,
+            rows: 1,
+            gap: 0,
+            available: 200,
+            is_columns: true,
+            intrinsic: &[Size {
                 width: 0,
                 height: 0,
             }; 3],
-        );
+        });
         assert_eq!(widths, vec![50, 70, 80]);
         assert_eq!(widths.iter().sum::<u32>(), 200);
     }
@@ -129,21 +129,21 @@
         let Node::Grid(root_grid) = spec.root.content.as_ref() else {
             panic!("expected grid-backed root sections");
         };
-        let row_heights = resolve_grid_axis(
-            &root_grid.template.rows,
-            1,
-            root_grid.children.len(),
-            root_grid.template.row_gap,
-            measured.height,
-            false,
-            &vec![
+        let row_heights = resolve_grid_axis(GridAxisResolveRequest {
+            tracks: &root_grid.template.rows,
+            columns: 1,
+            rows: root_grid.children.len(),
+            gap: root_grid.template.row_gap,
+            available: measured.height,
+            is_columns: false,
+            intrinsic: &vec![
                 Size {
                     width: 0,
                     height: 0,
                 };
                 root_grid.children.len()
             ],
-        );
+        });
         assert_tracks_tile_parent_exactly(
             measured.height,
             root_grid.template.row_gap,
@@ -176,21 +176,21 @@
         let Node::Grid(root_grid) = spec.root.content.as_ref() else {
             panic!("expected grid-backed root sections");
         };
-        let column_widths = resolve_grid_axis(
-            &root_grid.template.columns,
-            root_grid.template.columns.len(),
-            1,
-            root_grid.template.column_gap,
-            measured.width,
-            true,
-            &vec![
+        let column_widths = resolve_grid_axis(GridAxisResolveRequest {
+            tracks: &root_grid.template.columns,
+            columns: root_grid.template.columns.len(),
+            rows: 1,
+            gap: root_grid.template.column_gap,
+            available: measured.width,
+            is_columns: true,
+            intrinsic: &vec![
                 Size {
                     width: 0,
                     height: 0,
                 };
                 root_grid.children.len()
             ],
-        );
+        });
         assert_tracks_tile_parent_exactly(
             measured.width,
             root_grid.template.column_gap,
@@ -224,21 +224,21 @@
         let Node::Grid(root_grid) = spec.root.content.as_ref() else {
             panic!("expected grid-backed root sections");
         };
-        let root_row_heights = resolve_grid_axis(
-            &root_grid.template.rows,
-            1,
-            root_grid.children.len(),
-            root_grid.template.row_gap,
-            measured.height,
-            false,
-            &vec![
+        let root_row_heights = resolve_grid_axis(GridAxisResolveRequest {
+            tracks: &root_grid.template.rows,
+            columns: 1,
+            rows: root_grid.children.len(),
+            gap: root_grid.template.row_gap,
+            available: measured.height,
+            is_columns: false,
+            intrinsic: &vec![
                 Size {
                     width: 0,
                     height: 0,
                 };
                 root_grid.children.len()
             ],
-        );
+        });
         assert_tracks_tile_parent_exactly(
             measured.height,
             root_grid.template.row_gap,
@@ -252,21 +252,21 @@
         let Node::Grid(controls_grid) = controls_panel.content.as_ref() else {
             panic!("expected row section grid in controls panel");
         };
-        let controls_column_widths = resolve_grid_axis(
-            &controls_grid.template.columns,
-            controls_grid.template.columns.len(),
-            1,
-            controls_grid.template.column_gap,
-            measured.width,
-            true,
-            &vec![
+        let controls_column_widths = resolve_grid_axis(GridAxisResolveRequest {
+            tracks: &controls_grid.template.columns,
+            columns: controls_grid.template.columns.len(),
+            rows: 1,
+            gap: controls_grid.template.column_gap,
+            available: measured.width,
+            is_columns: true,
+            intrinsic: &vec![
                 Size {
                     width: 0,
                     height: 0,
                 };
                 controls_grid.children.len()
             ],
-        );
+        });
         assert_tracks_tile_parent_exactly(
             measured.width,
             controls_grid.template.column_gap,
@@ -280,21 +280,21 @@
         let Node::Grid(right_grid) = right_panel.content.as_ref() else {
             panic!("expected nested column section grid in right panel");
         };
-        let nested_row_heights = resolve_grid_axis(
-            &right_grid.template.rows,
-            1,
-            right_grid.children.len(),
-            right_grid.template.row_gap,
-            root_row_heights[2],
-            false,
-            &vec![
+        let nested_row_heights = resolve_grid_axis(GridAxisResolveRequest {
+            tracks: &right_grid.template.rows,
+            columns: 1,
+            rows: right_grid.children.len(),
+            gap: right_grid.template.row_gap,
+            available: root_row_heights[2],
+            is_columns: false,
+            intrinsic: &vec![
                 Size {
                     width: 0,
                     height: 0,
                 };
                 right_grid.children.len()
             ],
-        );
+        });
         assert_tracks_tile_parent_exactly(
             root_row_heights[2],
             right_grid.template.row_gap,
