@@ -44,39 +44,10 @@ impl Renderer {
 
     /// Render the uploaded canvas texture to the current surface frame.
     pub fn render(&mut self) -> Result<(), GuiError> {
-        let output = match self.surface.get_current_texture() {
-            Ok(output) => output,
-            Err(err) => {
-                if should_reconfigure_surface(&err) {
-                    self.surface.configure(&self.device.device, &self.config);
-                    self.surface.get_current_texture().map_err(|err| {
-                        log_line_safe(&format!(
-                            "renderer: get_current_texture after reconfigure error: {err:?}"
-                        ));
-                        GuiError::SurfaceAcquire(err)
-                    })?
-                } else {
-                    log_line_safe(&format!("renderer: get_current_texture error: {err:?}"));
-                    return Err(GuiError::SurfaceAcquire(err));
-                }
-            }
-        };
-        let surface_view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
+        let output = self.acquire_surface_texture()?;
+        let surface_view = Self::surface_view(&output);
         self.scene.reset();
-        let transform = self.presentation_transform.unwrap_or_else(|| {
-            PresentationTransform::stretch(self.config.width, self.config.height, self.canvas_size)
-        });
-        let scene_transform = Affine::new([
-            transform.scale_x as f64,
-            0.0,
-            0.0,
-            transform.scale_y as f64,
-            transform.offset_x as f64,
-            transform.offset_y as f64,
-        ]);
+        let scene_transform = self.resolve_scene_transform();
         self.scene.draw_image(&self.canvas_image, scene_transform);
         self.vector_painter.append_to_scene(
             &mut self.scene,
@@ -84,22 +55,82 @@ impl Renderer {
             scene_transform,
         );
 
-        if let Err(err) = self.vello_renderer.render_to_texture(
-            &self.device.device,
-            &self.device.queue,
-            &self.scene,
-            &self.render_target_view,
-            &RenderParams {
-                base_color: VelloColor::BLACK,
-                width: self.config.width,
-                height: self.config.height,
-                antialiasing_method: AaConfig::Area,
-            },
-        ) {
-            log_line_safe(&format!("renderer: vello render_to_texture error: {err:?}"));
-            return Err(GuiError::SurfaceAcquire(wgpu::SurfaceError::Other));
-        }
+        self.render_scene_to_target()?;
+        self.present_output(&surface_view, output);
+        Ok(())
+    }
 
+    /// Acquire the next surface frame, reconfiguring once on recoverable errors.
+    fn acquire_surface_texture(&self) -> Result<wgpu::SurfaceTexture, GuiError> {
+        match self.surface.get_current_texture() {
+            Ok(output) => Ok(output),
+            Err(err) => self.acquire_surface_texture_after_error(err),
+        }
+    }
+
+    /// Retry surface acquisition after an initial get-current-texture failure.
+    fn acquire_surface_texture_after_error(
+        &self,
+        err: wgpu::SurfaceError,
+    ) -> Result<wgpu::SurfaceTexture, GuiError> {
+        if should_reconfigure_surface(&err) {
+            self.surface.configure(&self.device.device, &self.config);
+            return self.surface.get_current_texture().map_err(|retry_err| {
+                log_line_safe(&format!(
+                    "renderer: get_current_texture after reconfigure error: {retry_err:?}"
+                ));
+                GuiError::SurfaceAcquire(retry_err)
+            });
+        }
+        log_line_safe(&format!("renderer: get_current_texture error: {err:?}"));
+        Err(GuiError::SurfaceAcquire(err))
+    }
+
+    /// Create a default texture view for a surface output frame.
+    fn surface_view(output: &wgpu::SurfaceTexture) -> wgpu::TextureView {
+        output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default())
+    }
+
+    /// Resolve the affine transform used to map canvas coordinates to the surface.
+    fn resolve_scene_transform(&self) -> Affine {
+        let transform = self.presentation_transform.unwrap_or_else(|| {
+            PresentationTransform::stretch(self.config.width, self.config.height, self.canvas_size)
+        });
+        Affine::new([
+            transform.scale_x as f64,
+            0.0,
+            0.0,
+            transform.scale_y as f64,
+            transform.offset_x as f64,
+            transform.offset_y as f64,
+        ])
+    }
+
+    /// Render the assembled scene into the intermediate render target texture.
+    fn render_scene_to_target(&mut self) -> Result<(), GuiError> {
+        self.vello_renderer
+            .render_to_texture(
+                &self.device.device,
+                &self.device.queue,
+                &self.scene,
+                &self.render_target_view,
+                &RenderParams {
+                    base_color: VelloColor::BLACK,
+                    width: self.config.width,
+                    height: self.config.height,
+                    antialiasing_method: AaConfig::Area,
+                },
+            )
+            .map_err(|err| {
+                log_line_safe(&format!("renderer: vello render_to_texture error: {err:?}"));
+                GuiError::SurfaceAcquire(wgpu::SurfaceError::Other)
+            })
+    }
+
+    /// Blit the offscreen target to the surface and present the frame.
+    fn present_output(&self, surface_view: &wgpu::TextureView, output: wgpu::SurfaceTexture) {
         let mut encoder =
             self.device
                 .device
@@ -110,11 +141,10 @@ impl Renderer {
             &self.device.device,
             &mut encoder,
             &self.render_target_view,
-            &surface_view,
+            surface_view,
         );
         self.device.queue.submit(Some(encoder.finish()));
         output.present();
-        Ok(())
     }
 
     /// Write pixels into the canvas texture using the given row stride.
