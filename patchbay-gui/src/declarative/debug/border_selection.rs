@@ -1,0 +1,60 @@
+/// Pick exactly one container debug-border target for this frame.
+///
+/// Selection order:
+/// 1. deepest container depth
+/// 2. smallest area (more specific subsection)
+/// 3. latest rendered candidate (stable tie-breaker)
+fn select_container_debug_border_candidate(
+    candidates: &[DebugBorderCandidate],
+) -> Option<DebugBorderCandidate> {
+    let mut best_index: Option<usize> = None;
+    for (index, candidate) in candidates.iter().copied().enumerate() {
+        match best_index {
+            None => best_index = Some(index),
+            Some(current_index) => {
+                let current = candidates[current_index];
+                let better_depth = candidate.depth > current.depth;
+                let same_depth = candidate.depth == current.depth;
+                let smaller_area = candidate_area(candidate) < candidate_area(current);
+                let same_area = candidate_area(candidate) == candidate_area(current);
+                let later_render = index > current_index;
+                if better_depth || (same_depth && (smaller_area || (same_area && later_render))) {
+                    best_index = Some(index);
+                }
+            }
+        }
+    }
+    best_index.map(|index| candidates[index])
+}
+
+/// Compute a comparable area metric for candidate ranking.
+fn candidate_area(candidate: DebugBorderCandidate) -> u64 {
+    u64::from(candidate.rect.size.width) * u64::from(candidate.rect.size.height)
+}
+
+/// Return whether a hovered container should render the debug layout border.
+fn should_draw_container_debug_border(
+    kind: ContainerKind,
+    depth: usize,
+    pointer_inside: bool,
+) -> bool {
+    kind != ContainerKind::RootFrame && depth > 1 && pointer_inside
+}
+
+/// Return a pixel-safe debug border rectangle that stays inside viewport bounds.
+///
+/// The debug stroke helper can lose bottom/right edges when a container reaches
+/// the viewport edge. Shrinking the border box by one stroke thickness on the
+/// max edges keeps all four lines visible.
+fn debug_border_draw_rect(rect: Rect, thickness: u32) -> Option<Rect> {
+    if thickness == 0 || rect.size.width <= thickness || rect.size.height <= thickness {
+        return None;
+    }
+    Some(Rect {
+        origin: rect.origin,
+        size: Size {
+            width: rect.size.width.saturating_sub(thickness),
+            height: rect.size.height.saturating_sub(thickness),
+        },
+    })
+}
