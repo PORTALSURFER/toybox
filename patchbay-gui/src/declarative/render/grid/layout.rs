@@ -1,11 +1,35 @@
 /// Render a grid container.
 fn render_grid(grid: &GridSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx<'_>) {
-    let Some(layout) = prepare_grid_layout(grid, rect, ctx.tokens) else {
+    let Some(pass) = prepare_grid_render_pass(grid, rect, ctx.tokens) else {
         return;
     };
-    let spacing = compute_grid_column_spacing(grid, &layout);
-    render_grid_children(grid, &layout, &spacing, ui, ctx);
+    render_prepared_grid(&pass, ui, ctx);
+    emit_grid_debug_candidate(rect, ui, ctx);
+}
 
+/// Fully prepared render inputs for a grid container.
+struct PreparedGridRenderPass<'a> {
+    /// Source grid specification.
+    grid: &'a GridSpec,
+    /// Resolved layout tracks and intrinsic measurements.
+    layout: PreparedGridLayout,
+    /// Horizontal spacing values derived from justification.
+    spacing: GridColumnSpacing,
+}
+
+/// Build a render pass for a grid when children are present.
+fn prepare_grid_render_pass<'a>(
+    grid: &'a GridSpec,
+    rect: Rect,
+    tokens: &ThemeTokens,
+) -> Option<PreparedGridRenderPass<'a>> {
+    let layout = prepare_grid_layout(grid, rect, tokens)?;
+    let spacing = compute_grid_column_spacing(grid, &layout);
+    Some(PreparedGridRenderPass { grid, layout, spacing })
+}
+
+/// Record the current grid bounds as a debug-border candidate.
+fn emit_grid_debug_candidate(rect: Rect, ui: &Ui<'_>, ctx: &mut RenderCtx<'_>) {
     collect_container_debug_border_candidate(
         ctx.debug_border_candidates,
         ui,
@@ -13,6 +37,15 @@ fn render_grid(grid: &GridSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx
         ContainerKind::Grid,
         ctx.depth,
     );
+}
+
+/// Render a previously prepared grid pass.
+fn render_prepared_grid(
+    pass: &PreparedGridRenderPass<'_>,
+    ui: &mut Ui<'_>,
+    ctx: &mut RenderCtx<'_>,
+) {
+    render_grid_children(pass.grid, &pass.layout, &pass.spacing, ui, ctx);
 }
 
 /// Prepared grid geometry and track sizing for a single render pass.
