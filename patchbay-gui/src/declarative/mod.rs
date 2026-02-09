@@ -4,7 +4,10 @@
 //! typed actions. UI state mutation is intentionally kept outside of the tree
 //! via an explicit reducer step.
 
-include!("errors_actions_root_render.rs");
+include!("contracts/errors.rs");
+include!("contracts/ui_actions.rs");
+include!("contracts/render_result.rs");
+include!("contracts/root_transform.rs");
 include!("root_spec_and_node.rs");
 include!("node_builders_and_sections.rs");
 include!("builder_helpers_and_layout_box.rs");
