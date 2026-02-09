@@ -37,7 +37,9 @@ fn resolve_grid_axis_plan(plan: &GridAxisPlan<'_>) -> Vec<u32> {
 /// Axis selection for grid resolution.
 #[derive(Copy, Clone)]
 enum GridAxis {
+    /// Resolve track sizes along the horizontal column axis.
     Columns,
+    /// Resolve track sizes along the vertical row axis.
     Rows,
 }
 
@@ -61,12 +63,19 @@ impl GridAxis {
 
 /// Parameters required to resolve one grid axis.
 struct GridAxisPlan<'a> {
+    /// Track-size definitions for the resolved axis.
     tracks: &'a [TrackSize],
+    /// Number of tracks that must be produced on this axis.
     axis_count: usize,
+    /// Grid column count used to map flattened child indices.
     columns: usize,
+    /// Gap size between adjacent tracks on this axis.
     gap: i32,
+    /// Total axis space available before gap subtraction.
     available: u32,
+    /// Axis mode that controls index and intrinsic component lookup.
     axis: GridAxis,
+    /// Intrinsic child measurements used for `Auto` track sizing.
     intrinsic: &'a [Size],
 }
 
