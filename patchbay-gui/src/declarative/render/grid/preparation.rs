@@ -1,12 +1,3 @@
-/// Render a grid container.
-fn render_grid(grid: &GridSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx<'_>) {
-    let Some(pass) = prepare_grid_render_pass(grid, rect, ctx.tokens) else {
-        return;
-    };
-    render_prepared_grid(&pass, ui, ctx);
-    emit_grid_debug_candidate(rect, ui, ctx);
-}
-
 /// Fully prepared render inputs for a grid container.
 struct PreparedGridRenderPass<'a> {
     /// Source grid specification.
@@ -15,37 +6,6 @@ struct PreparedGridRenderPass<'a> {
     layout: PreparedGridLayout,
     /// Horizontal spacing values derived from justification.
     spacing: GridColumnSpacing,
-}
-
-/// Build a render pass for a grid when children are present.
-fn prepare_grid_render_pass<'a>(
-    grid: &'a GridSpec,
-    rect: Rect,
-    tokens: &ThemeTokens,
-) -> Option<PreparedGridRenderPass<'a>> {
-    let layout = prepare_grid_layout(grid, rect, tokens)?;
-    let spacing = compute_grid_column_spacing(grid, &layout);
-    Some(PreparedGridRenderPass { grid, layout, spacing })
-}
-
-/// Record the current grid bounds as a debug-border candidate.
-fn emit_grid_debug_candidate(rect: Rect, ui: &Ui<'_>, ctx: &mut RenderCtx<'_>) {
-    collect_container_debug_border_candidate(
-        ctx.debug_border_candidates,
-        ui,
-        rect,
-        ContainerKind::Grid,
-        ctx.depth,
-    );
-}
-
-/// Render a previously prepared grid pass.
-fn render_prepared_grid(
-    pass: &PreparedGridRenderPass<'_>,
-    ui: &mut Ui<'_>,
-    ctx: &mut RenderCtx<'_>,
-) {
-    render_grid_children(pass.grid, &pass.layout, &pass.spacing, ui, ctx);
 }
 
 /// Prepared grid geometry and track sizing for a single render pass.
@@ -74,24 +34,19 @@ struct GridColumnSpacing {
     column_gaps: Vec<i32>,
 }
 
-/// Shared immutable inputs used while rendering grid rows.
-struct GridRowRenderContext<'a> {
-    /// Source grid specification.
+/// Build a render pass for a grid when children are present.
+fn prepare_grid_render_pass<'a>(
     grid: &'a GridSpec,
-    /// Prepared geometry reused by every row.
-    layout: &'a PreparedGridLayout,
-    /// Column spacing and leading offset derived from justification.
-    spacing: &'a GridColumnSpacing,
-}
-
-/// Row-local placement parameters for one render pass.
-struct GridRowGeometry {
-    /// Zero-based row index.
-    row: usize,
-    /// Row top edge in surface coordinates.
-    y: i32,
-    /// Row track height.
-    height: u32,
+    rect: Rect,
+    tokens: &ThemeTokens,
+) -> Option<PreparedGridRenderPass<'a>> {
+    let layout = prepare_grid_layout(grid, rect, tokens)?;
+    let spacing = compute_grid_column_spacing(grid, &layout);
+    Some(PreparedGridRenderPass {
+        grid,
+        layout,
+        spacing,
+    })
 }
 
 /// Compute grid tracks and intrinsic measurements before rendering children.
@@ -207,87 +162,5 @@ fn compute_grid_column_spacing(grid: &GridSpec, layout: &PreparedGridLayout) -> 
     GridColumnSpacing {
         leading_space: extra_spaces.first().copied().unwrap_or(0),
         column_gaps,
-    }
-}
-
-/// Render all children into the prepared grid cells.
-fn render_grid_children(
-    grid: &GridSpec,
-    layout: &PreparedGridLayout,
-    spacing: &GridColumnSpacing,
-    ui: &mut Ui<'_>,
-    ctx: &mut RenderCtx<'_>,
-) {
-    let row_ctx = GridRowRenderContext {
-        grid,
-        layout,
-        spacing,
-    };
-    let mut y = layout.inner.origin.y;
-    for (row, height) in layout.row_heights.iter().copied().enumerate().take(layout.rows) {
-        render_grid_row(GridRowGeometry { row, y, height }, &row_ctx, ui, ctx);
-        y += height as i32 + layout.row_gap;
-    }
-}
-
-/// Render a single grid row.
-fn render_grid_row(
-    row_geometry: GridRowGeometry,
-    row_ctx: &GridRowRenderContext<'_>,
-    ui: &mut Ui<'_>,
-    ctx: &mut RenderCtx<'_>,
-) {
-    let mut x = row_ctx.layout.inner.origin.x + row_ctx.spacing.leading_space;
-    for (col, width) in row_ctx
-        .layout
-        .column_widths
-        .iter()
-        .copied()
-        .enumerate()
-        .take(row_ctx.layout.columns)
-    {
-        let index = row_geometry.row * row_ctx.layout.columns + col;
-        if let Some(child) = row_ctx.grid.children.get(index) {
-            let cell_rect = Rect {
-                origin: Point { x, y: row_geometry.y },
-                size: Size {
-                    width,
-                    height: row_geometry.height,
-                },
-            };
-            render_grid_child(child, cell_rect, row_ctx.layout.intrinsic[index], ui, ctx);
-        }
-        x += width as i32 + row_ctx.spacing.column_gaps.get(col).copied().unwrap_or(0);
-    }
-}
-
-/// Render one child node inside a resolved grid cell.
-fn render_grid_child(
-    child: &Node,
-    cell_rect: Rect,
-    measured: Size,
-    ui: &mut Ui<'_>,
-    ctx: &mut RenderCtx<'_>,
-) {
-    let layout = node_layout(child);
-    let resolved = clamp_size_to_available(resolve_size(layout, measured, cell_rect.size), cell_rect.size);
-    ctx.depth += 1;
-    render_node(
-        child,
-        Rect {
-            origin: cell_rect.origin,
-            size: resolved,
-        },
-        ui,
-        ctx,
-    );
-    ctx.depth = ctx.depth.saturating_sub(1);
-}
-
-/// Clamp a resolved child size so it cannot exceed the available slot size.
-fn clamp_size_to_available(resolved: Size, available: Size) -> Size {
-    Size {
-        width: resolved.width.min(available.width),
-        height: resolved.height.min(available.height),
     }
 }
