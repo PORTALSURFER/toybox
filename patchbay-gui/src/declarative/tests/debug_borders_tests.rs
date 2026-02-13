@@ -1,7 +1,7 @@
     use super::*;
     use crate::canvas::Canvas;
     use crate::host::InputState;
-    use crate::ui::{Layout, MainPalette, Theme, UiState};
+use crate::ui::{Layout, Theme, UiState};
 
     #[cfg(feature = "layout-debug-borders")]
     #[test]

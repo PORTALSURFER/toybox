@@ -1,0 +1,88 @@
+use super::super::*;
+
+#[test]
+fn clamp_size_to_available_caps_oversized_children() {
+    let available = Size {
+        width: 60,
+        height: 40,
+    };
+    let resolved = Size {
+        width: 80,
+        height: 70,
+    };
+    let clamped = clamp_size_to_available(resolved, available);
+    assert_eq!(clamped, available);
+}
+
+#[test]
+fn rejects_duplicate_widget_keys() {
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        Node::column(vec![
+            Node::Knob(KnobSpec::new("k", "A", 0.5, (0.0, 1.0))),
+            Node::Knob(KnobSpec::new("k", "B", 0.5, (0.0, 1.0))),
+        ]),
+    ));
+    let error = measure_checked(&spec).expect_err("expected duplicate key error");
+    assert!(matches!(error, DeclarativeError::DuplicateNodeKey { .. }));
+}
+
+#[test]
+fn rejects_root_key_collision_with_child() {
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "dup",
+        Node::Panel(PanelSpec::new("dup", label("content"))),
+    ));
+    let error = measure_checked(&spec).expect_err("expected duplicate key error");
+    assert!(matches!(error, DeclarativeError::DuplicateNodeKey { key } if key == "dup"));
+}
+
+#[test]
+fn measures_grid_from_template_and_children() {
+    let grid = GridSpec::new(
+        GridTemplate::new(vec![TrackSize::Px(32), TrackSize::Fr(1)]),
+        vec![
+            Node::Spacer(SpacerSpec::new(Size {
+                width: 10,
+                height: 12,
+            })),
+            Node::Spacer(SpacerSpec::new(Size {
+                width: 20,
+                height: 14,
+            })),
+        ],
+    );
+    let spec = UiSpec::new(RootFrameSpec::new("root", Node::Grid(grid)));
+    let measured = measure_checked(&spec).expect("measurement should succeed");
+    assert!(measured.width >= 32);
+    assert!(measured.height >= 14);
+}
+
+#[test]
+fn grid_gap_xy_affects_measured_width_and_height_independently() {
+    let grid = GridSpec::new(
+        GridTemplate::columns_fr(2).gap_xy(3, 7),
+        vec![
+            spacer(Size {
+                width: 10,
+                height: 10,
+            }),
+            spacer(Size {
+                width: 10,
+                height: 10,
+            }),
+            spacer(Size {
+                width: 10,
+                height: 10,
+            }),
+            spacer(Size {
+                width: 10,
+                height: 10,
+            }),
+        ],
+    );
+    let spec = UiSpec::new(RootFrameSpec::new("root", Node::Grid(grid)).padding(0));
+    let measured = measure_checked(&spec).expect("measurement should succeed");
+    assert_eq!(measured.width, 23);
+    assert_eq!(measured.height, 27);
+}
