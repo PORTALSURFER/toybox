@@ -186,7 +186,7 @@ mod tests {
 
     #[test]
     fn check_payload_length_matches_max() {
-        assert_eq!(check_payload_length(MAX_STATE_PAYLOAD_BYTES), Ok(()));
+        assert!(check_payload_length(MAX_STATE_PAYLOAD_BYTES).is_ok());
         let error = check_payload_length(MAX_STATE_PAYLOAD_BYTES + 1).expect_err("expected payload size check");
         assert!(matches!(error, PluginError::Message(msg) if msg == VERSIONED_STATE_PAYLOAD_TOO_LARGE_ERROR));
     }

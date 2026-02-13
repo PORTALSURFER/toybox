@@ -13,6 +13,7 @@ use toybox_vst3_ffi::Steinberg::{
     int32,
     int64,
     tresult,
+    FUnknown,
     FUnknownVtbl,
     IBStream,
     IBStreamVtbl,
@@ -76,7 +77,7 @@ static STREAM_VTABLE: IBStreamVtbl = IBStreamVtbl {
 };
 
 unsafe extern "system" fn fake_query_interface(
-    _this: *mut IBStream,
+    _this: *mut FUnknown,
     _iid: *const TUID,
     obj: *mut *mut c_void,
 ) -> tresult {
@@ -87,11 +88,11 @@ unsafe extern "system" fn fake_query_interface(
     kNoInterface
 }
 
-unsafe extern "system" fn fake_add_ref(_this: *mut IBStream) -> u32 {
+unsafe extern "system" fn fake_add_ref(_this: *mut FUnknown) -> u32 {
     1
 }
 
-unsafe extern "system" fn fake_release(_this: *mut IBStream) -> u32 {
+unsafe extern "system" fn fake_release(_this: *mut FUnknown) -> u32 {
     1
 }
 
