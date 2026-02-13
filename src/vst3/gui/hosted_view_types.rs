@@ -23,9 +23,13 @@ pub trait Vst3HostedGui {
 /// Reusable VST3 `IPlugView` implementation for host-parented Patchbay GUIs.
 #[cfg(feature = "gui")]
 pub struct HostedVst3View<G: Vst3HostedGui> {
+    /// Latest host-facing rectangle in plugin coordinates used for resize behavior.
     rect: Cell<ViewRect>,
+    /// Tracks whether a native host parent has already been attached.
     attached: Cell<bool>,
+    /// Minimum logical size exposed by `getSize` and size-constraint fallbacks.
     default_size: (i32, i32),
+    /// GUI instance shared with FFI callbacks and synchronized under a mutex.
     gui: Mutex<G>,
 }
 
@@ -43,6 +47,7 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
         }
     }
 
+    /// Synchronize the cached rectangle from the hosted GUI's latest reported size.
     fn sync_rect_from_gui(&self) {
         let Ok(gui) = self.gui.lock() else {
             return;
@@ -52,14 +57,17 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
         }
     }
 
+    /// Return the minimum logical size used as the default resize floor.
     fn minimum_size(&self) -> (i32, i32) {
         self.default_size
     }
 
+    /// Compute the width-to-height ratio derived from the default logical size.
     fn uniform_ratio(&self) -> f32 {
         self.default_size.0 as f32 / self.default_size.1.max(1) as f32
     }
 
+    /// Constrain a requested resize while preserving aspect ratio and minimum size.
     fn constrain_uniform_size(&self, requested_width: i32, requested_height: i32) -> (i32, i32) {
         let (min_width, min_height) = self.minimum_size();
         let ratio = self.uniform_ratio();

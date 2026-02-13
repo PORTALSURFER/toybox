@@ -39,7 +39,7 @@ fn parent_handle_conversion_rejects_null_parent() {
 #[test]
 fn parent_handle_conversion_rejects_unsupported_platform() {
     let bogus_platform = c"bogus".as_ptr();
-    let parent = 1usize as *mut std::ffi::c_void;
+    let parent = std::ptr::dangling_mut::<std::ffi::c_void>();
     let converted = unsafe { parent_to_raw_window_handle(parent, bogus_platform) };
     assert!(converted.is_none());
 }
