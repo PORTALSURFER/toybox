@@ -31,7 +31,7 @@ impl HostWindow {
     }
 
     /// Spawn a new parented window and store its handle.
-    fn spawn_parented_window<State, Init, Build, Reduce>(
+    pub(super) fn spawn_parented_window<State, Init, Build, Reduce>(
         &mut self,
         parent: ParentWindowHandles,
         title: String,

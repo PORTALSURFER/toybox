@@ -70,7 +70,7 @@ impl HostWindow {
     }
 
     /// Clamp requested open size to at least one pixel per dimension.
-    fn normalize_open_size(size: Size) -> Size {
+    pub(super) fn normalize_open_size(size: Size) -> Size {
         Size {
             width: size.width.max(1),
             height: size.height.max(1),
@@ -78,7 +78,7 @@ impl HostWindow {
     }
 
     /// Persist the latest requested logical size for host polling.
-    fn record_last_size(&self, size: Size) {
+    pub(super) fn record_last_size(&self, size: Size) {
         self.last_size
             .store(pack_size(size.width, size.height), Ordering::Release);
     }

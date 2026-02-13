@@ -12,14 +12,6 @@ use crate::win32::SpawnCallbacks;
 
 use super::ParentWindowHandles;
 
-/// Parsed Win32 parent handles extracted from the host parent pointer.
-pub(super) struct ParentWindowHandles {
-    /// Parent window handle value.
-    pub(super) hwnd: isize,
-    /// Parent module instance handle value.
-    pub(super) hinstance: isize,
-}
-
 impl HostWindow {
     /// Open a parented Patchbay GUI window.
     ///
