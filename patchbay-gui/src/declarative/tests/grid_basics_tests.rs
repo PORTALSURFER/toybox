@@ -1,5 +1,3 @@
-use super::*;
-
     #[test]
     fn clamp_size_to_available_caps_oversized_children() {
         let available = Size {
