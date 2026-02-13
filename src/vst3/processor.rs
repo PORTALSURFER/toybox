@@ -121,14 +121,14 @@ mod tests {
         let mut input_channel_buffers = vec![input_left.as_mut_ptr(), input_right.as_mut_ptr()];
         let mut output_channel_buffers = vec![output_left.as_mut_ptr(), output_right.as_mut_ptr()];
 
-        let mut input_bus = AudioBusBuffers {
+        let input_bus = AudioBusBuffers {
             numChannels: 2,
             silenceFlags: 0,
             __field0: AudioBusBuffers__type0 {
                 channelBuffers32: input_channel_buffers.as_mut_ptr(),
             },
         };
-        let mut output_bus = AudioBusBuffers {
+        let output_bus = AudioBusBuffers {
             numChannels: 2,
             silenceFlags: 0,
             __field0: AudioBusBuffers__type0 {
