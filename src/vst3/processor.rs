@@ -113,8 +113,8 @@ mod tests {
         data.numInputs = 1;
         data.numOutputs = 1;
         data.numSamples = 64;
-        data.inputs = std::ptr::null();
-        data.outputs = std::ptr::null();
+        data.inputs = std::ptr::null_mut();
+        data.outputs = std::ptr::null_mut();
         assert!(unsafe { super::stereo_f32_buffers(&data) }.is_none());
     }
 }
