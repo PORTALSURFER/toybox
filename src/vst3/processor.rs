@@ -33,10 +33,17 @@ pub unsafe fn stereo_f32_buffers<'a>(data: &'a ProcessData) -> Option<StereoAudi
         return None;
     }
 
-    let num_samples = data.numSamples as usize;
+    if data.inputs.is_null() || data.outputs.is_null() {
+        return None;
+    }
 
-    let input_buses = unsafe { slice::from_raw_parts(data.inputs, data.numInputs as usize) };
-    let output_buses = unsafe { slice::from_raw_parts(data.outputs, data.numOutputs as usize) };
+    let num_samples = usize::try_from(data.numSamples).ok()?;
+
+    let input_bus_count = usize::try_from(data.numInputs).ok()?;
+    let output_bus_count = usize::try_from(data.numOutputs).ok()?;
+
+    let input_buses = unsafe { slice::from_raw_parts(data.inputs, input_bus_count) };
+    let output_buses = unsafe { slice::from_raw_parts(data.outputs, output_bus_count) };
 
     if input_buses[0].numChannels != 2 || output_buses[0].numChannels != 2 {
         return None;
@@ -78,4 +85,36 @@ pub unsafe fn stereo_f32_buffers<'a>(data: &'a ProcessData) -> Option<StereoAudi
 /// Return the VST3 success status used for a normal process block completion.
 pub const fn process_ok() -> tresult {
     kResultOk
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::mem;
+
+    fn zeroed_process_data() -> ProcessData {
+        // SAFETY: This produces a valid zeroed baseline for `ProcessData` test
+        // scaffolding; individual fields are overwritten for each scenario.
+        unsafe { mem::zeroed() }
+    }
+
+    #[test]
+    fn stereo_f32_buffers_rejects_non_stereo_bus_layout() {
+        let mut data = zeroed_process_data();
+        data.numInputs = 2;
+        data.numOutputs = 1;
+        data.numSamples = 0;
+        assert!(unsafe { super::stereo_f32_buffers(&data) }.is_none());
+    }
+
+    #[test]
+    fn stereo_f32_buffers_rejects_missing_bus_pointers() {
+        let mut data = zeroed_process_data();
+        data.numInputs = 1;
+        data.numOutputs = 1;
+        data.numSamples = 64;
+        data.inputs = std::ptr::null();
+        data.outputs = std::ptr::null();
+        assert!(unsafe { super::stereo_f32_buffers(&data) }.is_none());
+    }
 }

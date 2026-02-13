@@ -50,6 +50,9 @@ On non-Windows targets it performs a no-op and prints an informational warning.
 - Debug bundle: `cargo build -p toybox-minimal-vst3 --features toybox/vst3`
 - Release bundle: `cargo build -p toybox-minimal-vst3 --features toybox/vst3 --release`
 
+When `VST3_SDK_DIR` is not set, non-Windows or minimal workflows should build the
+non-VST3 targets without invoking the VST3 bundle path.
+
 On Windows, output paths are:
 
 - Debug binary:

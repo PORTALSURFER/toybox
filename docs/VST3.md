@@ -22,6 +22,20 @@ Toybox resolves the VST3 SDK from this environment variable:
 2. Build with VST3 enabled:
 - Add `features = ["vst3"]` to your `toybox` dependency.
 
+When compiling against `toybox` with VST3 enabled on CI or locally, set:
+
+- PowerShell:
+  ```powershell
+  $env:VST3_SDK_DIR = "C:\\path\\to\\vst3sdk"
+  ```
+- Bash/zsh:
+  ```bash
+  export VST3_SDK_DIR=/path/to/vst3sdk
+  ```
+
+If you are running the default repository checks, the workflow only exercises VST3
+builds when `VST3_SDK_DIR` is set.
+
 Example dependency:
 
 ```toml
