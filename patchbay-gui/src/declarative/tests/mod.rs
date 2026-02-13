@@ -1,4 +1,5 @@
-include!("debug_validation_and_grid_basics.rs");
+include!("debug_borders_tests.rs");
+include!("grid_basics_tests.rs");
 include!("validation_layout_tokens_and_sections.rs");
 include!("section_fraction_tiling.rs");
 include!("helpers_and_measurement.rs");

@@ -73,6 +73,9 @@ pub fn read_versioned_payload(
     if magic != expected_magic {
         return Err(PluginError::Message(VERSIONED_STATE_PAYLOAD_HEADER_ERROR));
     }
+    if supported_versions.is_empty() {
+        return Err(PluginError::Message(VERSIONED_STATE_PAYLOAD_HEADER_ERROR));
+    }
     if !supported_versions.contains(&version) {
         return Err(PluginError::Message(VERSIONED_STATE_PAYLOAD_HEADER_ERROR));
     }
@@ -134,6 +137,20 @@ mod tests {
     }
 
     #[test]
+    fn versioned_payload_roundtrip_empty_payload() {
+        let mut data = Vec::new();
+        let mut output = OutputStream::from_writer(&mut data);
+        let payload: [u8; 0] = [];
+        write_versioned_payload(&mut output, MAGIC, 1, &payload).expect("should write empty payload");
+
+        let mut cursor = data.as_slice();
+        let mut input = InputStream::from_reader(&mut cursor);
+        let decoded = read_versioned_payload(&mut input, MAGIC, &[1]).expect("should read payload");
+        assert_eq!(decoded.version, 1);
+        assert!(decoded.payload.is_empty());
+    }
+
+    #[test]
     fn write_rejects_oversized_payload() {
         let mut data = Vec::new();
         let mut output = OutputStream::from_writer(&mut data);
@@ -158,6 +175,23 @@ mod tests {
         let mut input = InputStream::from_reader(&mut cursor);
         let error = read_versioned_payload(&mut input, MAGIC, &[2, 3])
             .expect_err("expected version check");
+        match error {
+            PluginError::Message(message) => {
+                assert_eq!(message, VERSIONED_STATE_PAYLOAD_HEADER_ERROR);
+            }
+            other => panic!("unexpected error variant: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn read_rejects_empty_version_list() {
+        let mut data = Vec::new();
+        let mut output = OutputStream::from_writer(&mut data);
+        write_versioned_payload(&mut output, MAGIC, 1, &[1, 2, 3]).expect("should write payload");
+
+        let mut cursor = data.as_slice();
+        let mut input = InputStream::from_reader(&mut cursor);
+        let error = read_versioned_payload(&mut input, MAGIC, &[]).expect_err("expected version list check");
         match error {
             PluginError::Message(message) => {
                 assert_eq!(message, VERSIONED_STATE_PAYLOAD_HEADER_ERROR);
