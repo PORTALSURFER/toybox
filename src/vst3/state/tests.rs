@@ -200,6 +200,13 @@ fn encode_decode_round_trip() {
 }
 
 #[test]
+#[should_panic(expected = "VST3 state payload is too large")]
+fn encode_panics_on_oversized_payload() {
+    let payload = vec![0u8; STATE_LIMIT + 1];
+    let _ = encode_versioned_payload(MAGIC, 2, &payload);
+}
+
+#[test]
 fn write_all_rejects_null_stream() {
     let error = unsafe { write_all(ptr::null_mut(), &[1, 2, 3]) };
     assert_eq!(error, Err(StreamError::NullStream));

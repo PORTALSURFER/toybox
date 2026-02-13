@@ -10,6 +10,10 @@ use toybox_vst3_ffi::Steinberg::{IBStream, IBStreamTrait, int32, kResultOk};
 /// Re-exported here to keep VST3 and CLAP helper limits consistent.
 pub use crate::state::MAX_STATE_PAYLOAD_BYTES;
 
+/// Panic message used by the compatibility wrapper when payload encoding exceeds
+/// the supported size.
+const VST3_STATE_PAYLOAD_TOO_LARGE_ERROR: &str = "VST3 state payload is too large";
+
 /// Serialized state payload read from a versioned stream.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VersionedPayload {
@@ -141,11 +145,16 @@ pub unsafe fn read_exact(stream: *mut IBStream, bytes: &mut [u8]) -> Result<(), 
 /// payload length exceeds [`MAX_STATE_PAYLOAD_BYTES`]; use
 /// [`try_encode_versioned_payload`] for fallible handling.
 ///
+/// # Panics
+///
+/// Panics with [`VST3_STATE_PAYLOAD_TOO_LARGE_ERROR`] when encoding would
+/// exceed [`MAX_STATE_PAYLOAD_BYTES`].
+///
 /// The format is little-endian:
 /// `magic:u32 | version:u32 | payload_len:u32 | payload`.
 pub fn encode_versioned_payload(magic: u32, version: u32, payload: &[u8]) -> Vec<u8> {
     let Ok(bytes) = try_encode_versioned_payload(magic, version, payload) else {
-        panic!("VST3 state payload is too large");
+        panic!("{VST3_STATE_PAYLOAD_TOO_LARGE_ERROR}");
     };
 
     bytes

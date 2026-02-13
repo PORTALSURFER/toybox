@@ -181,6 +181,34 @@ mod tests {
     }
 
     #[test]
+    fn stereo_f32_buffers_rejects_non_stereo_input_channels() {
+        let mut fixture = stereo_process_data_with_samples(64);
+        fixture._input_buses[0].numChannels = 1;
+        assert!(unsafe { super::stereo_f32_buffers(&fixture.process_data) }.is_none());
+    }
+
+    #[test]
+    fn stereo_f32_buffers_rejects_non_stereo_output_channels() {
+        let mut fixture = stereo_process_data_with_samples(64);
+        fixture._output_buses[0].numChannels = 1;
+        assert!(unsafe { super::stereo_f32_buffers(&fixture.process_data) }.is_none());
+    }
+
+    #[test]
+    fn stereo_f32_buffers_rejects_null_input_channel_buffer() {
+        let mut fixture = stereo_process_data_with_samples(64);
+        fixture._input_channel_buffers[0] = ptr::null_mut();
+        assert!(unsafe { super::stereo_f32_buffers(&fixture.process_data) }.is_none());
+    }
+
+    #[test]
+    fn stereo_f32_buffers_rejects_null_output_channel_buffer() {
+        let mut fixture = stereo_process_data_with_samples(64);
+        fixture._output_channel_buffers[0] = ptr::null_mut();
+        assert!(unsafe { super::stereo_f32_buffers(&fixture.process_data) }.is_none());
+    }
+
+    #[test]
     fn stereo_f32_buffers_rejects_missing_bus_pointers() {
         let mut fixture = stereo_process_data_with_samples(64);
         fixture.process_data.inputs = ptr::null_mut();
