@@ -28,7 +28,19 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets --features gui -- -D warnings
+
+      - name: Lint toybox VST3 feature (SDK optional)
+        if: ${{ vars.VST3_SDK_DIR != '' }}
+        env:
+          VST3_SDK_DIR: ${{ vars.VST3_SDK_DIR }}
+        run: cargo clippy -p toybox --all-targets --features vst3 -- -D warnings
+
+      - name: Test toybox VST3 feature (SDK optional)
+        if: ${{ vars.VST3_SDK_DIR != '' }}
+        env:
+          VST3_SDK_DIR: ${{ vars.VST3_SDK_DIR }}
+        run: cargo test -p toybox --features vst3
 
       - name: Run toybox state helper tests
         run: cargo test -p toybox clap::state

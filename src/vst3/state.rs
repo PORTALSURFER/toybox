@@ -161,11 +161,12 @@ pub fn try_encode_versioned_payload(
     payload: &[u8],
 ) -> Result<Vec<u8>, StreamError> {
     check_payload_length(payload.len())?;
+    let payload_len = u32::try_from(payload.len()).map_err(|_| StreamError::PayloadTooLarge)?;
 
     let mut bytes = Vec::with_capacity(12 + payload.len());
     bytes.extend_from_slice(&magic.to_le_bytes());
     bytes.extend_from_slice(&version.to_le_bytes());
-    bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+    bytes.extend_from_slice(&payload_len.to_le_bytes());
     bytes.extend_from_slice(payload);
     Ok(bytes)
 }

@@ -91,6 +91,7 @@ pub const fn process_ok() -> tresult {
 mod tests {
     use super::*;
     use std::mem;
+    use std::ptr;
 
     fn zeroed_process_data() -> ProcessData {
         // SAFETY: This produces a valid zeroed baseline for `ProcessData` test
@@ -115,6 +116,43 @@ mod tests {
         data.numSamples = 64;
         data.inputs = std::ptr::null_mut();
         data.outputs = std::ptr::null_mut();
+        assert!(unsafe { super::stereo_f32_buffers(&data) }.is_none());
+    }
+
+    #[test]
+    fn stereo_f32_buffers_rejects_negative_sample_count() {
+        let mut data = zeroed_process_data();
+        data.numInputs = 1;
+        data.numOutputs = 1;
+        data.numSamples = -1;
+        let mut input_bus = 1u8;
+        let mut output_bus = 2u8;
+        data.inputs = ptr::from_mut(&mut input_bus).cast();
+        data.outputs = ptr::from_mut(&mut output_bus).cast();
+        assert!(unsafe { super::stereo_f32_buffers(&data) }.is_none());
+    }
+
+    #[test]
+    fn stereo_f32_buffers_rejects_missing_input_bus_pointer() {
+        let mut data = zeroed_process_data();
+        data.numInputs = 1;
+        data.numOutputs = 1;
+        data.numSamples = 64;
+        let mut input_bus = 1u8;
+        data.inputs = ptr::null_mut();
+        data.outputs = ptr::from_mut(&mut input_bus).cast();
+        assert!(unsafe { super::stereo_f32_buffers(&data) }.is_none());
+    }
+
+    #[test]
+    fn stereo_f32_buffers_rejects_missing_output_bus_pointer() {
+        let mut data = zeroed_process_data();
+        data.numInputs = 1;
+        data.numOutputs = 1;
+        data.numSamples = 64;
+        let mut output_bus = 1u8;
+        data.inputs = ptr::from_mut(&mut output_bus).cast();
+        data.outputs = ptr::null_mut();
         assert!(unsafe { super::stereo_f32_buffers(&data) }.is_none());
     }
 }

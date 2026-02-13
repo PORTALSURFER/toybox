@@ -220,11 +220,8 @@ mod tests {
         let mut cursor = data.as_slice();
         let mut input = InputStream::from_reader(&mut cursor);
         let error = read_versioned_payload(&mut input, MAGIC, &[1]).expect_err("truncated payload");
-        match error {
-            PluginError::Message(message) => {
-                assert_ne!(message, VERSIONED_STATE_PAYLOAD_HEADER_ERROR);
-            }
-            _ => {}
+        if let PluginError::Message(message) = error {
+            assert_ne!(message, VERSIONED_STATE_PAYLOAD_HEADER_ERROR);
         }
     }
 }
