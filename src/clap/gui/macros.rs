@@ -51,18 +51,26 @@ macro_rules! patchbay_clap_gui_callbacks {
             &mut self,
             configuration: $crate::clack_extensions::gui::GuiConfiguration,
         ) -> bool {
-            configuration.api_type
-                == $crate::clack_extensions::gui::GuiApiType::default_for_current_platform()
-                    .expect("Unsupported platform")
-                && !configuration.is_floating
+            let Some(api_type) =
+                $crate::clack_extensions::gui::GuiApiType::default_for_current_platform()
+            else {
+                return false;
+            };
+
+            configuration.api_type == api_type && !configuration.is_floating
         }
 
         fn get_preferred_api(
             &'_ mut self,
         ) -> Option<$crate::clack_extensions::gui::GuiConfiguration<'_>> {
+            let Some(api_type) =
+                $crate::clack_extensions::gui::GuiApiType::default_for_current_platform()
+            else {
+                return None;
+            };
+
             Some($crate::clack_extensions::gui::GuiConfiguration {
-                api_type: $crate::clack_extensions::gui::GuiApiType::default_for_current_platform()
-                    .expect("Unsupported platform"),
+                api_type,
                 is_floating: false,
             })
         }

@@ -32,7 +32,7 @@ pub use crate::vst3::processor::{StereoAudioBuffers, process_ok, stereo_f32_buff
 pub use crate::vst3::registration::{Vst3FactoryClass, create_plugin_factory};
 pub use crate::vst3::state::{
     StreamError, VersionedPayload, decode_versioned_payload, encode_versioned_payload, read_exact,
-    read_versioned_payload, write_all, write_versioned_payload,
+    read_versioned_payload, try_encode_versioned_payload, write_all, write_versioned_payload,
 };
 
 pub use crate::vst3_plugin_entry;

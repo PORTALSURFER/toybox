@@ -3,9 +3,13 @@
 //! This module is intentionally split into focused submodules to keep file and
 //! function size manageable while preserving a flat public API for callers.
 
+/// Parameter event application logic for applying host events to plugin state.
 mod event_apply;
+/// Parameter event serialization helpers used by automation and output paths.
 mod event_output;
+/// Parameter metadata helpers for parameter registration and descriptions.
 mod metadata;
+/// Toggle text mapping helpers for boolean parameter value I/O.
 mod toggle_text;
 
 pub use event_apply::{apply_param_events, apply_param_events_from_unknown};

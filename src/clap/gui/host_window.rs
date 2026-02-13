@@ -4,12 +4,13 @@ use crate::logging::log_line_safe;
 use clack_extensions::gui::GuiSize;
 use clack_plugin::plugin::PluginError;
 use patchbay_gui::{
-    HostWindow, OpenParentedRequest as PatchbayOpenParentedRequest, Size, UiAction, UiSpec,
+    HostWindow, OpenParentedCallbacks, OpenParentedRequest as PatchbayOpenParentedRequest, Size,
+    UiAction, UiSpec,
 };
 use raw_window_handle::RawWindowHandle;
 
 use super::error_mapping::map_gui_error;
-use super::{GuiOpenRequest, HostResizePolicy};
+use super::{GuiOpenCallbacks, GuiOpenRequest, HostResizePolicy};
 
 /// Wrapper around a Patchbay GUI window for a CLAP editor.
 #[derive(Default)]
@@ -118,6 +119,16 @@ impl GuiHostWindow {
 
     /// Open a parented Patchbay GUI window.
     ///
+    /// # Deprecated
+    ///
+    /// Prefer [`Self::open_parented_with`] with a [`GuiOpenRequest`].
+    /// This adapter preserves compatibility while keeping wide callback wiring in one
+    /// request value.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use open_parented_with(GuiOpenRequest::with_callbacks(...))"
+    )]
+    ///
     /// The caller supplies the initial state, a declarative UI builder, and an
     /// action reducer. The helper handles resize requests and stores the last
     /// logical size.
@@ -136,12 +147,22 @@ impl GuiHostWindow {
         Reduce: FnMut(&mut State, UiAction) + Send + 'static,
         State: Send + 'static,
     {
-        self.open_parented_with(GuiOpenRequest::new(
-            title, size, state, on_init, build, reduce,
+        self.open_parented_with(GuiOpenRequest::with_callbacks(
+            title,
+            size,
+            GuiOpenCallbacks::new(state, on_init, build, reduce),
         ))
     }
 
     /// Open a parented window, reusing it if it is already open.
+    ///
+    /// # Deprecated
+    ///
+    /// Prefer [`Self::open_parented_with`] with a [`GuiOpenRequest`].
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use open_parented_with(GuiOpenRequest::with_callbacks(...).with_mode(ReuseIfOpen))"
+    )]
     ///
     /// This mirrors Patchbay's default behavior: if a window is already open
     /// and attached to the same parent, the new state is ignored and the
@@ -162,8 +183,12 @@ impl GuiHostWindow {
         State: Send + 'static,
     {
         self.open_parented_with(
-            GuiOpenRequest::new(title, size, state, on_init, build, reduce)
-                .with_mode(patchbay_gui::OpenParentedMode::ReuseIfOpen),
+            GuiOpenRequest::with_callbacks(
+                title,
+                size,
+                GuiOpenCallbacks::new(state, on_init, build, reduce),
+            )
+            .with_mode(patchbay_gui::OpenParentedMode::ReuseIfOpen),
         )
     }
 
@@ -183,28 +208,28 @@ impl GuiHostWindow {
         let GuiOpenRequest {
             title,
             size,
+            callbacks,
+            mode,
+        } = request;
+        let GuiOpenCallbacks {
             state,
             on_init,
             build,
             reduce,
-            mode,
-        } = request;
+        } = callbacks;
         log_line_safe(&format!(
             "toybox/gui: open_parented title=\"{}\" requested_size={}x{} mode={mode:?}",
             title, size.0, size.1
         ));
         self.inner
             .open_parented_with(
-                PatchbayOpenParentedRequest::new(
+                PatchbayOpenParentedRequest::with_callbacks(
                     title,
                     Size {
                         width: size.0.max(1),
                         height: size.1.max(1),
                     },
-                    state,
-                    on_init,
-                    build,
-                    reduce,
+                    OpenParentedCallbacks::new(state, on_init, build, reduce),
                 )
                 .with_mode(mode),
             )

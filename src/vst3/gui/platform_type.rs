@@ -20,7 +20,14 @@ pub const fn default_platform_type() -> FIDString {
 }
 
 /// Compare a requested host platform string with an expected `FIDString`.
-pub fn platform_type_matches(requested: *const c_char, expected: FIDString) -> bool {
+///
+/// # Safety
+///
+/// `requested` and `expected` must be valid pointers to null-terminated C
+/// strings. Passing null or invalid pointers is still handled by returning
+/// false for null pointers, but invalid non-null pointers can cause undefined
+/// behavior when converted with `CStr::from_ptr`.
+pub unsafe fn platform_type_matches(requested: *const c_char, expected: FIDString) -> bool {
     if requested.is_null() || expected.is_null() {
         return false;
     }

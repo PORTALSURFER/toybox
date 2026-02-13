@@ -5,6 +5,11 @@ use std::fmt;
 use toybox_vst3_ffi::ComRef;
 use toybox_vst3_ffi::Steinberg::{IBStream, IBStreamTrait, int32, kResultOk};
 
+/// Shared maximum accepted state payload size in bytes.
+///
+/// Re-exported here to keep VST3 and CLAP helper limits consistent.
+pub use crate::state::MAX_STATE_PAYLOAD_BYTES;
+
 /// Serialized state payload read from a versioned stream.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VersionedPayload {
@@ -29,6 +34,8 @@ pub enum StreamError {
     UnsupportedVersion,
     /// The serialized state header is malformed.
     InvalidHeader,
+    /// The payload length exceeds `MAX_STATE_PAYLOAD_BYTES`.
+    PayloadTooLarge,
 }
 
 impl fmt::Display for StreamError {
@@ -40,11 +47,25 @@ impl fmt::Display for StreamError {
             StreamError::InvalidMagic => write!(f, "state payload magic mismatch"),
             StreamError::UnsupportedVersion => write!(f, "state payload version is unsupported"),
             StreamError::InvalidHeader => write!(f, "state payload header is invalid"),
+            StreamError::PayloadTooLarge => {
+                write!(f, "state payload exceeds max supported size")
+            }
         }
     }
 }
 
 impl std::error::Error for StreamError {}
+
+/// Validate that a payload length is within the supported state limit.
+///
+/// Returns [`StreamError::PayloadTooLarge`] when the length exceeds
+/// [`MAX_STATE_PAYLOAD_BYTES`].
+fn check_payload_length(length: usize) -> Result<(), StreamError> {
+    if length > MAX_STATE_PAYLOAD_BYTES {
+        return Err(StreamError::PayloadTooLarge);
+    }
+    Ok(())
+}
 
 /// Write all bytes to a VST3 `IBStream`.
 ///
@@ -59,11 +80,12 @@ pub unsafe fn write_all(stream: *mut IBStream, bytes: &[u8]) -> Result<(), Strea
     let mut written_total = 0usize;
     while written_total < bytes.len() {
         let remaining = &bytes[written_total..];
+        let chunk = remaining.len().min(i32::MAX as usize);
         let mut written: int32 = 0;
         let result = unsafe {
             stream.write(
                 remaining.as_ptr().cast_mut().cast(),
-                remaining.len() as int32,
+                chunk as int32,
                 &mut written,
             )
         };
@@ -92,11 +114,12 @@ pub unsafe fn read_exact(stream: *mut IBStream, bytes: &mut [u8]) -> Result<(), 
     let mut read_total = 0usize;
     while read_total < bytes.len() {
         let remaining = &mut bytes[read_total..];
+        let chunk = remaining.len().min(i32::MAX as usize);
         let mut read: int32 = 0;
         let result = unsafe {
             stream.read(
-                remaining.as_mut_ptr().cast(),
-                remaining.len() as int32,
+                remaining[..chunk].as_mut_ptr().cast(),
+                chunk as int32,
                 &mut read,
             )
         };
@@ -114,15 +137,37 @@ pub unsafe fn read_exact(stream: *mut IBStream, bytes: &mut [u8]) -> Result<(), 
 
 /// Encode a versioned state payload into a byte vector.
 ///
+/// This remains a compatibility API for existing callers. It will panic if the
+/// payload length exceeds [`MAX_STATE_PAYLOAD_BYTES`]; use
+/// [`try_encode_versioned_payload`] for fallible handling.
+///
 /// The format is little-endian:
 /// `magic:u32 | version:u32 | payload_len:u32 | payload`.
 pub fn encode_versioned_payload(magic: u32, version: u32, payload: &[u8]) -> Vec<u8> {
+    let Ok(bytes) = try_encode_versioned_payload(magic, version, payload) else {
+        panic!("VST3 state payload is too large");
+    };
+
+    bytes
+}
+
+/// Encode a versioned state payload into a byte vector.
+///
+/// Returns [`StreamError::PayloadTooLarge`] when payload length exceeds
+/// [`MAX_STATE_PAYLOAD_BYTES`].
+pub fn try_encode_versioned_payload(
+    magic: u32,
+    version: u32,
+    payload: &[u8],
+) -> Result<Vec<u8>, StreamError> {
+    check_payload_length(payload.len())?;
+
     let mut bytes = Vec::with_capacity(12 + payload.len());
     bytes.extend_from_slice(&magic.to_le_bytes());
     bytes.extend_from_slice(&version.to_le_bytes());
     bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
     bytes.extend_from_slice(payload);
-    bytes
+    Ok(bytes)
 }
 
 /// Decode a versioned state payload from bytes.
@@ -146,6 +191,7 @@ pub fn decode_versioned_payload(
     }
 
     let payload_len = u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]) as usize;
+    check_payload_length(payload_len)?;
     if bytes.len() != 12 + payload_len {
         return Err(StreamError::InvalidHeader);
     }
@@ -167,7 +213,7 @@ pub unsafe fn write_versioned_payload(
     version: u32,
     payload: &[u8],
 ) -> Result<(), StreamError> {
-    let bytes = encode_versioned_payload(magic, version, payload);
+    let bytes = try_encode_versioned_payload(magic, version, payload)?;
     // SAFETY: caller guarantees `stream` points to a valid IBStream.
     unsafe { write_all(stream, &bytes) }
 }
@@ -185,45 +231,26 @@ pub unsafe fn read_versioned_payload(
     let mut header = [0u8; 12];
     // SAFETY: caller guarantees `stream` points to a valid IBStream.
     unsafe { read_exact(stream, &mut header) }?;
+
+    let magic = u32::from_le_bytes([header[0], header[1], header[2], header[3]]);
+    if magic != expected_magic {
+        return Err(StreamError::InvalidMagic);
+    }
+
+    let version = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
+    if !accepted_versions.contains(&version) {
+        return Err(StreamError::UnsupportedVersion);
+    }
+
     let payload_len = u32::from_le_bytes([header[8], header[9], header[10], header[11]]) as usize;
+    check_payload_length(payload_len)?;
 
     let mut payload = vec![0u8; payload_len];
     // SAFETY: caller guarantees `stream` points to a valid IBStream.
     unsafe { read_exact(stream, &mut payload) }?;
 
-    let mut bytes = Vec::with_capacity(12 + payload_len);
-    bytes.extend_from_slice(&header);
-    bytes.extend_from_slice(&payload);
-
-    decode_versioned_payload(&bytes, expected_magic, accepted_versions)
+    Ok(VersionedPayload { version, payload })
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{StreamError, decode_versioned_payload, encode_versioned_payload};
-
-    #[test]
-    fn encode_decode_round_trip() {
-        let payload = encode_versioned_payload(0x4D475354, 2, &[1, 2, 3, 4]);
-        let decoded =
-            decode_versioned_payload(&payload, 0x4D475354, &[1, 2]).expect("payload should decode");
-        assert_eq!(decoded.version, 2);
-        assert_eq!(decoded.payload, vec![1, 2, 3, 4]);
-    }
-
-    #[test]
-    fn rejects_invalid_magic() {
-        let payload = encode_versioned_payload(0x11111111, 1, &[]);
-        let err = decode_versioned_payload(&payload, 0x22222222, &[1])
-            .expect_err("magic mismatch should fail");
-        assert_eq!(err, StreamError::InvalidMagic);
-    }
-
-    #[test]
-    fn rejects_unsupported_version() {
-        let payload = encode_versioned_payload(0x11111111, 9, &[]);
-        let err = decode_versioned_payload(&payload, 0x11111111, &[1, 2])
-            .expect_err("unsupported version should fail");
-        assert_eq!(err, StreamError::UnsupportedVersion);
-    }
-}
+mod tests;

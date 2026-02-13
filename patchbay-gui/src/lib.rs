@@ -35,7 +35,9 @@ pub use crate::declarative::{
 };
 #[cfg(not(target_os = "windows"))]
 pub use crate::host::WindowHandle;
-pub use crate::host::{GuiError, HostWindow, InputState, OpenParentedMode, OpenParentedRequest};
+pub use crate::host::{
+    GuiError, HostWindow, InputState, OpenParentedCallbacks, OpenParentedMode, OpenParentedRequest,
+};
 pub use crate::ui::MainPalette;
 #[cfg(target_os = "windows")]
 pub use crate::win32::WindowHandle;

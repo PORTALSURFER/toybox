@@ -90,9 +90,7 @@ pub unsafe fn latest_param_point(
     changes: *mut IParameterChanges,
     target_param_id: ParamID,
 ) -> Option<(i32, ParamValue)> {
-    let Some(changes) = (unsafe { ComRef::from_raw(changes) }) else {
-        return None;
-    };
+    let changes = (unsafe { ComRef::from_raw(changes) })?;
 
     let queue_count = unsafe { changes.getParameterCount() };
     for queue_index in 0..queue_count {

@@ -3,7 +3,7 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
     unsafe fn isPlatformTypeSupported(&self, r#type: FIDString) -> tresult {
         #[cfg(target_os = "windows")]
         {
-            bool_to_tresult(platform_type_matches(r#type, kPlatformTypeHWND))
+            bool_to_tresult(unsafe { platform_type_matches(r#type, kPlatformTypeHWND) })
         }
 
         #[cfg(not(target_os = "windows"))]

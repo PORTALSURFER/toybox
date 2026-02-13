@@ -8,11 +8,15 @@ use std::io::{Read, Write};
 use clack_plugin::plugin::PluginError;
 use clack_plugin::stream::{InputStream, OutputStream};
 
-/// Maximum accepted state payload size in bytes.
+/// Shared maximum accepted state payload size in bytes.
 ///
-/// This limit protects hosts/plugins from accidentally allocating unbounded
-/// memory when a payload header is corrupted.
-pub const MAX_STATE_PAYLOAD_BYTES: usize = 16 * 1024 * 1024;
+/// Re-exported here to keep CLAP helpers in sync with the VST3 helper limit.
+pub use crate::state::MAX_STATE_PAYLOAD_BYTES;
+
+/// Error returned when serialized payloads exceed the supported size.
+const VERSIONED_STATE_PAYLOAD_TOO_LARGE_ERROR: &str = "Plugin state payload exceeds max size";
+/// Error returned when payload header validation fails.
+const VERSIONED_STATE_PAYLOAD_HEADER_ERROR: &str = "Invalid plugin state payload";
 
 /// Decoded versioned state payload.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,11 +39,8 @@ pub fn write_versioned_payload(
     version: u32,
     payload: &[u8],
 ) -> Result<(), PluginError> {
-    if payload.len() > MAX_STATE_PAYLOAD_BYTES {
-        return Err(PluginError::Message(
-            "Plugin state payload exceeds max size",
-        ));
-    }
+    check_payload_length(payload.len())?;
+
     let payload_len = u32::try_from(payload.len())
         .map_err(|_| PluginError::Message("Plugin state payload exceeds u32 header size"))?;
 
@@ -70,19 +71,28 @@ pub fn read_versioned_payload(
     let payload_len = read_u32(input)? as usize;
 
     if magic != expected_magic {
-        return Err(PluginError::Message("Invalid plugin state payload"));
+        return Err(PluginError::Message(VERSIONED_STATE_PAYLOAD_HEADER_ERROR));
     }
     if !supported_versions.contains(&version) {
-        return Err(PluginError::Message("Unsupported plugin state version"));
+        return Err(PluginError::Message(VERSIONED_STATE_PAYLOAD_HEADER_ERROR));
     }
-    if payload_len > MAX_STATE_PAYLOAD_BYTES {
-        return Err(PluginError::Message("Invalid plugin state payload"));
-    }
+    check_payload_length(payload_len)?;
 
     let mut payload = vec![0u8; payload_len];
     input.read_exact(&mut payload)?;
 
     Ok(VersionedStatePayload { version, payload })
+}
+
+/// Validate that a decoded or encoded payload length does not exceed
+/// [`MAX_STATE_PAYLOAD_BYTES`].
+fn check_payload_length(payload_len: usize) -> Result<(), PluginError> {
+    if payload_len > MAX_STATE_PAYLOAD_BYTES {
+        return Err(PluginError::Message(
+            VERSIONED_STATE_PAYLOAD_TOO_LARGE_ERROR,
+        ));
+    }
+    Ok(())
 }
 
 /// Read a little-endian `u32` from a CLAP input stream.
@@ -97,19 +107,27 @@ mod tests {
     use clack_common::stream::{InputStream, OutputStream};
     use clack_plugin::plugin::PluginError;
 
-    use super::{MAX_STATE_PAYLOAD_BYTES, read_versioned_payload, write_versioned_payload};
+    use super::{
+        MAX_STATE_PAYLOAD_BYTES,
+        read_versioned_payload,
+        write_versioned_payload,
+        VERSIONED_STATE_PAYLOAD_HEADER_ERROR,
+        VERSIONED_STATE_PAYLOAD_TOO_LARGE_ERROR,
+        check_payload_length,
+    };
+
+    const MAGIC: u32 = u32::from_le_bytes(*b"TEST");
 
     #[test]
     fn versioned_payload_roundtrip() {
         let mut data = Vec::new();
         let mut output = OutputStream::from_writer(&mut data);
         let payload = [1u8, 2u8, 3u8, 4u8];
-        write_versioned_payload(&mut output, u32::from_le_bytes(*b"TEST"), 3, &payload)
-            .expect("should write payload");
+        write_versioned_payload(&mut output, MAGIC, 3, &payload).expect("should write payload");
 
         let mut cursor = data.as_slice();
         let mut input = InputStream::from_reader(&mut cursor);
-        let decoded = read_versioned_payload(&mut input, u32::from_le_bytes(*b"TEST"), &[2, 3])
+        let decoded = read_versioned_payload(&mut input, MAGIC, &[2, 3])
             .expect("should read payload");
         assert_eq!(decoded.version, 3);
         assert_eq!(decoded.payload, payload);
@@ -120,13 +138,93 @@ mod tests {
         let mut data = Vec::new();
         let mut output = OutputStream::from_writer(&mut data);
         let payload = vec![0u8; MAX_STATE_PAYLOAD_BYTES + 1];
-        let error = write_versioned_payload(&mut output, u32::from_le_bytes(*b"TEST"), 1, &payload)
+        let error = write_versioned_payload(&mut output, MAGIC, 1, &payload)
             .expect_err("expected payload size check");
         match error {
             PluginError::Message(message) => {
-                assert_eq!(message, "Plugin state payload exceeds max size");
+                assert_eq!(message, VERSIONED_STATE_PAYLOAD_TOO_LARGE_ERROR);
             }
             other => panic!("unexpected error variant: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn read_rejects_unsupported_version() {
+        let mut data = Vec::new();
+        let mut output = OutputStream::from_writer(&mut data);
+        write_versioned_payload(&mut output, MAGIC, 1, &[1, 2, 3, 4]).expect("should write payload");
+
+        let mut cursor = data.as_slice();
+        let mut input = InputStream::from_reader(&mut cursor);
+        let error = read_versioned_payload(&mut input, MAGIC, &[2, 3])
+            .expect_err("expected version check");
+        match error {
+            PluginError::Message(message) => {
+                assert_eq!(message, VERSIONED_STATE_PAYLOAD_HEADER_ERROR);
+            }
+            other => panic!("unexpected error variant: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn read_rejects_bad_magic() {
+        let mut data = Vec::new();
+        let mut output = OutputStream::from_writer(&mut data);
+        write_versioned_payload(&mut output, MAGIC, 1, &[5, 6, 7]).expect("should write payload");
+
+        let mut cursor = data.as_slice();
+        let mut input = InputStream::from_reader(&mut cursor);
+        let bad_magic = u32::from_le_bytes(*b"NOPE");
+        let error = read_versioned_payload(&mut input, bad_magic, &[1]).expect_err("expected magic check");
+        match error {
+            PluginError::Message(message) => {
+                assert_eq!(message, VERSIONED_STATE_PAYLOAD_HEADER_ERROR);
+            }
+            other => panic!("unexpected error variant: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn check_payload_length_matches_max() {
+        assert_eq!(check_payload_length(MAX_STATE_PAYLOAD_BYTES), Ok(()));
+        let error = check_payload_length(MAX_STATE_PAYLOAD_BYTES + 1).expect_err("expected payload size check");
+        assert!(matches!(error, PluginError::Message(msg) if msg == VERSIONED_STATE_PAYLOAD_TOO_LARGE_ERROR));
+    }
+
+    #[test]
+    fn read_rejects_oversized_header_length() {
+        let payload_len = u32::try_from(MAX_STATE_PAYLOAD_BYTES + 1).expect("length fits u32");
+        let mut data = Vec::new();
+        data.extend_from_slice(&MAGIC.to_le_bytes());
+        data.extend_from_slice(&1u32.to_le_bytes());
+        data.extend_from_slice(&payload_len.to_le_bytes());
+
+        let mut cursor = data.as_slice();
+        let mut input = InputStream::from_reader(&mut cursor);
+        let error = read_versioned_payload(&mut input, MAGIC, &[1]).expect_err("header too long");
+        match error {
+            PluginError::Message(message) => {
+                assert_eq!(message, VERSIONED_STATE_PAYLOAD_TOO_LARGE_ERROR);
+            }
+            other => panic!("unexpected error variant: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn read_rejects_truncated_payload() {
+        let mut data = Vec::new();
+        write_versioned_payload(&mut OutputStream::from_writer(&mut data), MAGIC, 1, &[1, 2, 3, 4])
+            .expect("write payload");
+        data.truncate(6);
+
+        let mut cursor = data.as_slice();
+        let mut input = InputStream::from_reader(&mut cursor);
+        let error = read_versioned_payload(&mut input, MAGIC, &[1]).expect_err("truncated payload");
+        match error {
+            PluginError::Message(message) => {
+                assert_ne!(message, VERSIONED_STATE_PAYLOAD_HEADER_ERROR);
+            }
+            _ => {}
         }
     }
 }

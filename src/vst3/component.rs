@@ -22,10 +22,8 @@ pub fn copy_cstring(source: &str, destination: &mut [c_char]) {
         *dst = *src as c_char;
     }
 
-    if bytes.len() > destination.len() {
-        if let Some(last) = destination.last_mut() {
-            *last = 0;
-        }
+    if bytes.len() > destination.len() && let Some(last) = destination.last_mut() {
+        *last = 0;
     }
 }
 

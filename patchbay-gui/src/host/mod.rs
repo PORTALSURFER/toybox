@@ -6,7 +6,7 @@ mod types;
 mod window;
 
 pub use errors::GuiError;
-pub use requests::{OpenParentedMode, OpenParentedRequest};
+pub use requests::{OpenParentedCallbacks, OpenParentedMode, OpenParentedRequest};
 pub use types::{HostWindow, InputState};
 
 /// Pack a width/height pair into an atomic payload.

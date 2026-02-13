@@ -30,14 +30,14 @@ impl Class for GainView {
 
 impl IPlugViewTrait for GainView {
     unsafe fn isPlatformTypeSupported(&self, r#type: FIDString) -> tresult {
-        bool_to_tresult(platform_type_matches(r#type, default_platform_type()))
+        bool_to_tresult(unsafe { platform_type_matches(r#type, default_platform_type()) })
     }
 
     unsafe fn attached(&self, parent: *mut c_void, r#type: FIDString) -> tresult {
         if parent.is_null() {
             return kInvalidArgument;
         }
-        if !platform_type_matches(r#type, default_platform_type()) {
+        if !unsafe { platform_type_matches(r#type, default_platform_type()) } {
             return kResultFalse;
         }
 

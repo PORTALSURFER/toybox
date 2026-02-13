@@ -9,7 +9,7 @@ mod types;
 mod window;
 
 pub use errors::GuiError;
-pub use requests::{OpenParentedMode, OpenParentedRequest};
+pub use requests::{OpenParentedCallbacks, OpenParentedMode, OpenParentedRequest};
 pub use types::{HostWindow, InputState, WindowHandle};
 
 /// Pack a size into a compact atomic payload.
@@ -40,28 +40,39 @@ mod tests {
 
     #[test]
     fn open_parented_reports_unsupported_after_parent() {
+        fn init_state(_: &mut ()) {}
+
+        fn build_root_frame(_: &crate::InputState, _: &()) -> UiSpec {
+            UiSpec::new(crate::declarative::RootFrameSpec::new(
+                "root",
+                crate::declarative::Node::Spacer(crate::declarative::SpacerSpec::new(
+                    crate::canvas::Size {
+                        width: 1,
+                        height: 1,
+                    },
+                )),
+            ))
+        }
+
+        fn reduce_action(_: &mut (), _: crate::declarative::UiAction) {}
+
         let mut host = HostWindow::default();
         host.set_parent(raw_window_handle::RawWindowHandle::AppKit(
             raw_window_handle::AppKitWindowHandle::empty(),
         ));
-        let result = host.open_parented(
+        let result = host.open_parented_with(OpenParentedRequest::with_callbacks(
             "Stub".into(),
-            (320, 200),
-            (),
-            |_state| {},
-            |_input, _state| {
-                UiSpec::new(crate::declarative::RootFrameSpec::new(
-                    "root",
-                    crate::declarative::Node::Spacer(crate::declarative::SpacerSpec::new(
-                        crate::canvas::Size {
-                            width: 1,
-                            height: 1,
-                        },
-                    )),
-                ))
+            crate::canvas::Size {
+                width: 320,
+                height: 200,
             },
-            |_state, _action| {},
-        );
+            OpenParentedCallbacks::new(
+                (),
+                init_state,
+                build_root_frame,
+                reduce_action,
+            ),
+        ));
         assert!(matches!(result, Err(GuiError::UnsupportedHandle)));
     }
 }

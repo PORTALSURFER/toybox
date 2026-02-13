@@ -27,7 +27,7 @@ impl Vst3HostedGui for MockHostedGui {
 
 #[test]
 fn platform_type_matches_expected_constant() {
-    assert!(platform_type_matches(kPlatformTypeHWND, kPlatformTypeHWND));
+    assert!(unsafe { platform_type_matches(kPlatformTypeHWND, kPlatformTypeHWND) });
 }
 
 #[test]

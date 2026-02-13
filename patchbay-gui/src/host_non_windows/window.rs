@@ -8,7 +8,7 @@ use crate::canvas::Size;
 use crate::declarative::{UiAction, UiSpec};
 
 use super::errors::GuiError;
-use super::requests::OpenParentedRequest;
+use super::requests::{OpenParentedCallbacks, OpenParentedRequest};
 use super::types::{HostWindow, InputState, WindowHandle};
 use super::{pack_size, unpack_size};
 
@@ -58,6 +58,16 @@ impl HostWindow {
 
     /// Open a parented Patchbay GUI window.
     ///
+    /// # Deprecated
+    ///
+    /// Prefer [`Self::open_parented_with`] with an [`OpenParentedRequest`].
+    /// This adapter preserves compatibility while keeping wide callback wiring in one
+    /// request value.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use open_parented_with(OpenParentedRequest::with_callbacks(...))"
+    )]
+    ///
     /// This always returns [`GuiError::UnsupportedHandle`] on non-Windows
     /// platforms. The method exists so clients compile cross-platform.
     pub fn open_parented<State, Init, Build, Reduce>(
@@ -75,16 +85,13 @@ impl HostWindow {
         Reduce: FnMut(&mut State, UiAction) + Send + 'static,
         State: Send + 'static,
     {
-        self.open_parented_with(OpenParentedRequest::new(
+        self.open_parented_with(OpenParentedRequest::with_callbacks(
             title,
             Size {
                 width: size.0.max(1),
                 height: size.1.max(1),
             },
-            state,
-            on_init,
-            build,
-            reduce,
+            OpenParentedCallbacks::new(state, on_init, build, reduce),
         ))
     }
 
@@ -105,10 +112,7 @@ impl HostWindow {
         let OpenParentedRequest {
             title: _title,
             size,
-            state: _state,
-            on_init: _on_init,
-            build: _build,
-            reduce: _reduce,
+            callbacks: _callbacks,
             mode: _mode,
         } = request;
         if self.parent.is_none() {

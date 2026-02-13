@@ -7,6 +7,7 @@
 
 pub mod clap;
 pub mod dsp;
+mod state;
 #[cfg(feature = "gui")]
 pub mod gui;
 #[cfg(feature = "gui")]

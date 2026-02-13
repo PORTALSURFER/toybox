@@ -13,7 +13,7 @@ use crate::win32::{
 };
 
 use super::errors::GuiError;
-use super::requests::{OpenParentedMode, OpenParentedRequest};
+use super::requests::{OpenParentedCallbacks, OpenParentedMode, OpenParentedRequest};
 use super::types::{HostWindow, InputState};
 use super::{pack_size, unpack_size};
 
@@ -82,6 +82,16 @@ impl HostWindow {
 
     /// Open a parented Patchbay GUI window.
     ///
+    /// # Deprecated
+    ///
+    /// Prefer [`Self::open_parented_with`] with an [`OpenParentedRequest`].
+    /// This adapter preserves compatibility while keeping wide callback wiring in one
+    /// request value.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use open_parented_with(OpenParentedRequest::with_callbacks(...))"
+    )]
+    ///
     /// The caller supplies initial state plus callbacks for initialization,
     /// per-frame declarative spec building, and action reduction.
     ///
@@ -101,16 +111,13 @@ impl HostWindow {
         Reduce: FnMut(&mut State, UiAction) + Send + 'static,
         State: Send + 'static,
     {
-        self.open_parented_with(OpenParentedRequest::new(
+        self.open_parented_with(OpenParentedRequest::with_callbacks(
             title,
             Size {
                 width: size.0.max(1),
                 height: size.1.max(1),
             },
-            state,
-            on_init,
-            build,
-            reduce,
+            OpenParentedCallbacks::new(state, on_init, build, reduce),
         ))
     }
 
@@ -134,10 +141,7 @@ impl HostWindow {
         let OpenParentedRequest {
             title,
             size,
-            state,
-            on_init,
-            build,
-            reduce,
+            callbacks,
             mode,
         } = request;
         let size = Self::normalize_open_size(size);
@@ -146,6 +150,12 @@ impl HostWindow {
         if self.reuse_or_destroy_existing_window(parent.hwnd, mode, size) {
             return Ok(());
         }
+        let OpenParentedCallbacks {
+            state,
+            on_init,
+            build,
+            reduce,
+        } = callbacks;
         let callbacks = SpawnCallbacks {
             state,
             on_init,

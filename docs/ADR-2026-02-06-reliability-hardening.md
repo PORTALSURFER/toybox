@@ -47,6 +47,6 @@ remained:
 2. Run `cargo update -p <crate>` (or `cargo update`) to refresh `Cargo.lock`.
 3. Run:
    - `./scripts/check_pinned_git_deps.sh`
-   - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+   - `./scripts/check_lints.sh`
    - `cargo test --workspace`
 4. Commit manifest and lockfile updates together.
