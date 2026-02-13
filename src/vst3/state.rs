@@ -4,7 +4,9 @@ use std::fmt;
 
 pub use crate::state::MAX_STATE_PAYLOAD_BYTES;
 
+/// Internal codec helpers for VST3 payload encoding and decoding.
 mod codec;
+/// Internal stream adapters for reading/writing versioned VST3 state payloads.
 mod io;
 
 pub use codec::{decode_versioned_payload, try_encode_versioned_payload};
@@ -90,4 +92,8 @@ pub fn encode_versioned_payload(magic: u32, version: u32, payload: &[u8]) -> Vec
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    mod codec_tests;
+    mod io_helpers;
+    mod io_tests;
+}

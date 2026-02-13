@@ -1,6 +1,6 @@
 use super::{check_payload_length, StreamError, VersionedPayload};
 use toybox_vst3_ffi::ComRef;
-use toybox_vst3_ffi::Steinberg::{IBStream, IBStreamTrait, int32, kResultOk};
+use toybox_vst3_ffi::Steinberg::{int32, kResultOk, IBStream, IBStreamTrait};
 
 /// Write all bytes to a VST3 `IBStream`.
 ///
@@ -119,4 +119,3 @@ pub unsafe fn read_versioned_payload(
 
     Ok(VersionedPayload { version, payload })
 }
-

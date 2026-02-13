@@ -2,7 +2,7 @@
 
 use std::slice;
 
-use toybox_vst3_ffi::Steinberg::Vst::ProcessData;
+use toybox_vst3_ffi::Steinberg::Vst::{AudioBusBuffers, ProcessData};
 use toybox_vst3_ffi::Steinberg::{kResultOk, tresult};
 
 /// Borrowed stereo f32 buffers extracted from VST3 process data.
@@ -19,6 +19,9 @@ pub struct StereoAudioBuffers<'a> {
     pub output_right: &'a mut [f32],
 }
 
+/// Expected number of channels for stereo audio processing.
+const STEREO_CHANNEL_COUNT: usize = 2;
+
 /// Build stereo f32 process slices from a VST3 process block.
 ///
 /// Returns `None` when the block is not exactly one stereo input bus and one
@@ -29,49 +32,20 @@ pub struct StereoAudioBuffers<'a> {
 /// `data` must be a valid process block for the duration of the returned
 /// borrow.
 pub unsafe fn stereo_f32_buffers<'a>(data: &'a ProcessData) -> Option<StereoAudioBuffers<'a>> {
-    if data.numInputs != 1 || data.numOutputs != 1 {
+    if !has_stereo_bus_layout(data) {
         return None;
     }
 
     let num_samples = usize::try_from(data.numSamples).ok()?;
+    let (input_buses, output_buses) = unsafe { read_bus_lists(data)? };
 
-    if data.inputs.is_null() || data.outputs.is_null() {
-        return None;
-    }
+    let (input_left_ptr, input_right_ptr) = unsafe { stereo_channel_ptrs(&input_buses[0])? };
+    let (output_left_ptr, output_right_ptr) = unsafe { stereo_channel_ptrs(&output_buses[0])? };
 
-    let input_bus_count = usize::try_from(data.numInputs).ok()?;
-    let output_bus_count = usize::try_from(data.numOutputs).ok()?;
-
-    let input_buses = unsafe { slice::from_raw_parts(data.inputs, input_bus_count) };
-    let output_buses = unsafe { slice::from_raw_parts(data.outputs, output_bus_count) };
-
-    if input_buses[0].numChannels != 2 || output_buses[0].numChannels != 2 {
-        return None;
-    }
-
-    let input_channels = unsafe {
-        slice::from_raw_parts(
-            input_buses[0].__field0.channelBuffers32,
-            input_buses[0].numChannels as usize,
-        )
-    };
-    let output_channels = unsafe {
-        slice::from_raw_parts(
-            output_buses[0].__field0.channelBuffers32,
-            output_buses[0].numChannels as usize,
-        )
-    };
-
-    if input_channels.iter().any(|channel| channel.is_null())
-        || output_channels.iter().any(|channel| channel.is_null())
-    {
-        return None;
-    }
-
-    let input_left = unsafe { slice::from_raw_parts(input_channels[0], num_samples) };
-    let input_right = unsafe { slice::from_raw_parts(input_channels[1], num_samples) };
-    let output_left = unsafe { slice::from_raw_parts_mut(output_channels[0], num_samples) };
-    let output_right = unsafe { slice::from_raw_parts_mut(output_channels[1], num_samples) };
+    let input_left = unsafe { slice::from_raw_parts(input_left_ptr, num_samples) };
+    let input_right = unsafe { slice::from_raw_parts(input_right_ptr, num_samples) };
+    let output_left = unsafe { slice::from_raw_parts_mut(output_left_ptr, num_samples) };
+    let output_right = unsafe { slice::from_raw_parts_mut(output_right_ptr, num_samples) };
 
     Some(StereoAudioBuffers {
         num_samples,
@@ -82,6 +56,47 @@ pub unsafe fn stereo_f32_buffers<'a>(data: &'a ProcessData) -> Option<StereoAudi
     })
 }
 
+/// Validate the bus layout for stereo processing.
+///
+/// The helper requires one input bus and one output bus, and both bus pointers
+/// must be non-null.
+#[inline]
+fn has_stereo_bus_layout(data: &ProcessData) -> bool {
+    data.numInputs == 1 && data.numOutputs == 1 && !data.inputs.is_null() && !data.outputs.is_null()
+}
+
+/// Read immutable bus slices from the VST3 process block.
+///
+/// Returns `None` when either bus count is negative or otherwise invalid for
+/// safe slicing.
+#[inline]
+unsafe fn read_bus_lists(data: &ProcessData) -> Option<(&[AudioBusBuffers], &[AudioBusBuffers])> {
+    let input_bus_count = usize::try_from(data.numInputs).ok()?;
+    let output_bus_count = usize::try_from(data.numOutputs).ok()?;
+    Some((
+        unsafe { slice::from_raw_parts(data.inputs, input_bus_count) },
+        unsafe { slice::from_raw_parts(data.outputs, output_bus_count) },
+    ))
+}
+
+/// Extract mutable channel pointers for stereo data layout.
+///
+/// Returns `None` if the bus is not stereo or either channel pointer is null.
+#[inline]
+unsafe fn stereo_channel_ptrs(bus: &AudioBusBuffers) -> Option<(*mut f32, *mut f32)> {
+    if bus.numChannels != STEREO_CHANNEL_COUNT as i32 {
+        return None;
+    }
+
+    let channels =
+        unsafe { slice::from_raw_parts(bus.__field0.channelBuffers32, STEREO_CHANNEL_COUNT) };
+    if channels.iter().any(|channel| channel.is_null()) {
+        return None;
+    }
+
+    Some((channels[0], channels[1]))
+}
+
 /// Return the VST3 success status used for a normal process block completion.
 pub const fn process_ok() -> tresult {
     kResultOk
@@ -89,10 +104,10 @@ pub const fn process_ok() -> tresult {
 
 #[cfg(test)]
 mod tests {
-    use toybox_vst3_ffi::Steinberg::Vst::{AudioBusBuffers, AudioBusBuffers__type0};
     use super::*;
     use std::mem;
     use std::ptr;
+    use toybox_vst3_ffi::Steinberg::Vst::{AudioBusBuffers, AudioBusBuffers__type0};
 
     struct StereoProcessFixture {
         process_data: ProcessData,
