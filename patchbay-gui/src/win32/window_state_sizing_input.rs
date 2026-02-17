@@ -47,8 +47,8 @@ where
     }
 
     fn apply_child_size_request(&self, size: Size) {
-        let width = size.width.max(1) as i32;
-        let height = size.height.max(1) as i32;
+        let width = (size.width.max(1) as u64).min(i32::MAX as u64) as i32;
+        let height = (size.height.max(1) as u64).min(i32::MAX as u64) as i32;
         unsafe {
             let _ = SetWindowPos(
                 self.hwnd,

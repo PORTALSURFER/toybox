@@ -235,3 +235,37 @@ fn plan_root_render_none_mode_keeps_top_left_anchor_with_zoom() {
     );
     assert_eq!(plan.resolved_scale, 2.0);
 }
+
+#[test]
+fn plan_root_render_tiny_surface_clamps_surface_rect_within_window_bounds() {
+    let spec = UiSpec::new(
+        RootFrameSpec::new(
+            "root",
+            Node::Region(RegionSpec::new(
+                "plot",
+                Size {
+                    width: 420,
+                    height: 258,
+                },
+            )),
+        )
+        .padding(0)
+        .layout(LayoutBox::fixed(420, 258))
+        .design_size(Size {
+            width: 420,
+            height: 258,
+        })
+        .scale_mode(RootScaleMode::UniformFit),
+    );
+
+    let surface = Size {
+        width: 3,
+        height: 2,
+    };
+    let plan = plan_root_render(&spec, surface);
+
+    assert!(plan.transform.content_rect_surface.size.width <= surface.width);
+    assert!(plan.transform.content_rect_surface.size.height <= surface.height);
+    assert!(plan.transform.content_rect_surface.origin.x >= 0);
+    assert!(plan.transform.content_rect_surface.origin.y >= 0);
+}

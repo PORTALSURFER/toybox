@@ -36,6 +36,10 @@ fn resolve_surface_content_rect(
     resolved_scale: f32,
     scale_mode: RootScaleMode,
 ) -> Rect {
+    debug_assert!(resolved_scale.is_finite());
+    debug_assert!(layout_size.width > 0 && layout_size.height > 0);
+    debug_assert!(surface.width > 0 && surface.height > 0);
+
     let surface_width = surface.width.max(1) as f32;
     let surface_height = surface.height.max(1) as f32;
     let scaled_width = match scale_mode {
@@ -89,6 +93,9 @@ fn resolve_surface_scale(
     resolved_scale: f32,
     scale_mode: RootScaleMode,
 ) -> (f32, f32) {
+    debug_assert!(content_rect_surface.width > 0 && content_rect_surface.height > 0);
+    debug_assert!(resolved_scale.is_finite());
+
     match scale_mode {
         RootScaleMode::None => {
             let layout_width = layout_size.width.max(1) as f32;
@@ -144,9 +151,33 @@ pub(crate) fn plan_root_render(spec: &UiSpec, surface_size: Size) -> RootRenderP
         content_rect_surface,
     };
 
-    RootRenderPlan {
+    let plan = RootRenderPlan {
         layout_size,
         resolved_scale,
         transform,
-    }
+    };
+
+    debug_assert!(plan.layout_size.width > 0 && plan.layout_size.height > 0);
+    debug_assert!(plan.transform.scale_x.is_finite() && plan.transform.scale_y.is_finite());
+    debug_assert!(
+        plan.transform.offset_x >= 0.0 && plan.transform.offset_y >= 0.0
+    );
+    debug_assert!(
+        plan.transform.content_rect_surface.origin.x >= 0
+            && plan.transform.content_rect_surface.origin.y >= 0
+    );
+    debug_assert!(
+        plan.transform
+            .content_rect_surface
+            .origin
+            .x as u32
+            <= surface.width
+            && plan.transform
+                .content_rect_surface
+                .origin
+                .y as u32
+                <= surface.height
+    );
+
+    plan
 }
