@@ -201,18 +201,18 @@ fn hosted_view_constraint_does_not_preserve_ratio_when_disabled() {
 }
 
 #[test]
-fn hosted_view_host_resize_flow_prefers_requested_size_when_aspect_lock_disabled() {
+fn hosted_view_host_resize_flow_simulates_vst3_growth_sequence() {
     let view = HostedVst3View::new(
         MockHostedGui {
             last_size: Mutex::new(None),
             resize_request: std::sync::Mutex::new(None),
         },
-        320,
-        200,
+        2,
+        2,
     )
     .preserve_aspect_ratio(false);
 
-    let sizes = [(420, 240), (500, 320), (600, 360), (640, 480)];
+    let sizes = [(2, 2), (4, 4), (8, 8)];
     for (width, height) in sizes {
         let mut rect = view_rect(width, height);
         let constrained = unsafe { view.checkSizeConstraint(&mut rect) };
@@ -228,20 +228,20 @@ fn hosted_view_host_resize_flow_prefers_requested_size_when_aspect_lock_disabled
 
     let mut resolved = view_rect(0, 0);
     assert_eq!(unsafe { view.getSize(&mut resolved) }, kResultOk);
-    assert_eq!(resolved.right - resolved.left, 640);
-    assert_eq!(resolved.bottom - resolved.top, 480);
+    assert_eq!(resolved.right - resolved.left, 8);
+    assert_eq!(resolved.bottom - resolved.top, 8);
 
     let gui = view.gui.lock().expect("gui mutex should not be poisoned");
     let last_size = gui
         .last_size
         .lock()
         .expect("last_size mutex should not be poisoned");
-    assert_eq!(*last_size, Some((640, 480)));
+    assert_eq!(*last_size, Some((8, 8)));
     let resize_request = gui
         .resize_request
         .lock()
         .expect("resize mutex should not be poisoned");
-    assert_eq!(*resize_request, Some((640, 480)));
+    assert_eq!(*resize_request, Some((8, 8)));
 }
 
 #[cfg(target_os = "windows")]

@@ -4,14 +4,11 @@ fn client_size_changed(current: Size, next: Size) -> bool {
 
 fn resolved_layout_size_for_resize_request(
     requested: Size,
-    host_client: Option<(u32, u32)>,
+    _host_client: Option<(u32, u32)>,
 ) -> Size {
-    match host_client {
-        Some((width, height)) => Size {
-            width: width.max(1),
-            height: height.max(1),
-        },
-        None => requested,
+    Size {
+        width: requested.width.max(1),
+        height: requested.height.max(1),
     }
 }
 

@@ -39,7 +39,7 @@ mod tests {
     }
 
     #[test]
-    fn resize_request_prefers_host_client_size_when_available() {
+    fn resize_request_prefers_requested_size_even_if_host_client_reported() {
         let requested = Size {
             width: 500,
             height: 300,
@@ -48,8 +48,8 @@ mod tests {
         assert_eq!(
             resolved,
             Size {
-                width: 640,
-                height: 400,
+                width: 500,
+                height: 300,
             }
         );
     }
