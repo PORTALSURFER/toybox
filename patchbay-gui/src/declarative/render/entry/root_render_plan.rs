@@ -10,6 +10,15 @@ fn clamp_non_zero_size(size: Size) -> Size {
 fn resolve_root_scale(root: &RootFrameSpec, measured: Size, surface: Size) -> f32 {
     let design = clamp_non_zero_size(root.design_size.unwrap_or(measured));
     let zoom_override = root.zoom_override.unwrap_or(1.0);
+    let normalized_zoom = normalize_zoom_override(zoom_override);
+
+    #[cfg(feature = "layout-overflow-warnings")]
+    if (zoom_override - normalized_zoom).abs() > f32::EPSILON {
+        eprintln!(
+            "patchbay-gui warning: replacing invalid root zoom override ({zoom_override:?}) with {normalized_zoom:.3}"
+        );
+    }
+
     debug_assert!(zoom_override > 0.0, "Zoom override must be positive");
     debug_assert!(zoom_override.is_finite(), "Zoom override must be finite");
     let base = match root.scale_mode {
@@ -20,9 +29,34 @@ fn resolve_root_scale(root: &RootFrameSpec, measured: Size, surface: Size) -> f3
             fit_width.min(fit_height)
         }
     };
-    let scaled = base * zoom_override;
+    let scaled = base * normalized_zoom;
     debug_assert!(scaled.is_finite(), "Resolved root scale must be finite");
     scaled.clamp(0.0, 8.0)
+}
+
+/// Return a safe zoom factor for root rendering.
+///
+/// Invalid values (non-finite or non-positive) fall back to `1.0`.
+fn normalize_zoom_override(raw_zoom: f32) -> f32 {
+    if raw_zoom.is_finite() && raw_zoom > 0.0 {
+        raw_zoom
+    } else {
+        1.0
+    }
+}
+
+#[cfg(test)]
+mod root_scale_tests {
+    use super::normalize_zoom_override;
+
+    #[test]
+    fn normalize_zoom_override_falls_back_to_default_for_invalid_values() {
+        assert_eq!(normalize_zoom_override(-1.0), 1.0);
+        assert_eq!(normalize_zoom_override(0.0), 1.0);
+        assert_eq!(normalize_zoom_override(f32::NAN), 1.0);
+        assert_eq!(normalize_zoom_override(f32::INFINITY), 1.0);
+        assert_eq!(normalize_zoom_override(2.5), 2.5);
+    }
 }
 
 /// Resolve the design-space viewport used for root layout.
