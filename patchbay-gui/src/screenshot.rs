@@ -4,11 +4,11 @@
 //! RGBA buffer. It intentionally mirrors the two-pass transform flow used by the
 //! live window renderer so pointer mapping and root sizing stay consistent.
 
+use crate::Canvas;
 use crate::canvas::{Point, Size};
-use crate::declarative::{render_checked, RenderResult, UiSpec, RootTransform};
+use crate::declarative::{RenderResult, RootTransform, UiSpec, render_checked};
 use crate::host::InputState;
 use crate::ui::{Layout, Theme, Ui, UiState};
-use crate::Canvas;
 
 /// Pixel data and metadata for one rendered declarative frame.
 #[derive(Debug)]
@@ -43,19 +43,22 @@ fn remap_canvas_to_surface(
 
     for y in 0..surface_size.height as i32 {
         for x in 0..surface_size.width as i32 {
-            let mapped = transform.surface_to_design(Point { x, y });
-            if mapped.x < 0
-                || mapped.y < 0
-                || mapped.x >= source_size.width as i32
-                || mapped.y >= source_size.height as i32
+            let surface_point = Point { x, y };
+            let content = transform.content_rect_surface;
+            if surface_point.x < content.origin.x
+                || surface_point.y < content.origin.y
+                || surface_point.x >= content.origin.x + content.size.width as i32
+                || surface_point.y >= content.origin.y + content.size.height as i32
             {
                 continue;
             }
+            let mapped = transform.surface_to_design_clamped(surface_point);
             let source_x = mapped.x as usize;
             let source_y = mapped.y as usize;
             let source_index = (source_y * source_stride) + (source_x * 4);
             let output_index = (y as usize) * output_stride + (x as usize * 4);
-            output[output_index..output_index + 4].copy_from_slice(&source[source_index..source_index + 4]);
+            output[output_index..output_index + 4]
+                .copy_from_slice(&source[source_index..source_index + 4]);
         }
     }
     output
@@ -70,7 +73,10 @@ fn remap_canvas_to_surface(
 /// - second pass: render using transformed pointer coordinates
 ///
 /// This is currently intended for test and CI screenshot generation only.
-pub fn render_spec_to_frame<Build>(size: Size, mut build_spec: Build) -> Result<RenderedFrame, String>
+pub fn render_spec_to_frame<Build>(
+    size: Size,
+    mut build_spec: Build,
+) -> Result<RenderedFrame, String>
 where
     Build: FnMut(&InputState) -> UiSpec,
 {
@@ -92,7 +98,9 @@ where
 
     let spec = build_spec(&mapped_input);
     let plan = crate::declarative::plan_root_render(&spec, mapped_input.window_size);
-    mapped_input.pointer_pos = plan.transform.surface_to_design_clamped(mapped_input.pointer_pos);
+    mapped_input.pointer_pos = plan
+        .transform
+        .surface_to_design_clamped(mapped_input.pointer_pos);
 
     let layout_size = plan.layout_size;
     let mut canvas = Canvas::new(layout_size.width, layout_size.height);
@@ -162,13 +170,22 @@ mod tests {
 
         let output = remap_canvas_to_surface(
             &source,
-            Size { width: 2, height: 2 },
-            Size { width: 4, height: 4 },
+            Size {
+                width: 2,
+                height: 2,
+            },
+            Size {
+                width: 4,
+                height: 4,
+            },
             &transform,
         );
 
         assert_eq!(output.len(), 4 * 4 * 4);
-        assert_eq!(&output[0..16], &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(
+            &output[0..16],
+            &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        );
         assert_eq!(
             &output[16..32],
             &[0, 0, 0, 0, 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 0, 0]
@@ -177,6 +194,65 @@ mod tests {
             &output[32..48],
             &[0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0]
         );
-        assert_eq!(&output[48..64], &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(
+            &output[48..64],
+            &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        );
+    }
+
+    #[test]
+    fn remap_canvas_to_surface_keeps_full_content_width_for_integral_scale() {
+        let source = vec![
+            255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255,
+        ];
+        let transform = RootTransform {
+            scale_x: 2.0,
+            scale_y: 2.0,
+            offset_x: 0.0,
+            offset_y: 0.0,
+            content_rect_design: Rect {
+                origin: Point { x: 0, y: 0 },
+                size: Size {
+                    width: 2,
+                    height: 2,
+                },
+            },
+            content_rect_surface: Rect {
+                origin: Point { x: 0, y: 0 },
+                size: Size {
+                    width: 4,
+                    height: 4,
+                },
+            },
+        };
+
+        let output = remap_canvas_to_surface(
+            &source,
+            Size {
+                width: 2,
+                height: 2,
+            },
+            Size {
+                width: 4,
+                height: 4,
+            },
+            &transform,
+        );
+
+        assert_eq!(output.len(), 4 * 4 * 4);
+        assert_eq!(
+            &output[0..16],
+            &[
+                255, 0, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255
+            ]
+        );
+        assert_eq!(
+            &output[16..32],
+            &[
+                0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255
+            ]
+        );
+        assert_eq!(&output[32..48], &output[16..32]);
+        assert_eq!(&output[48..64], &output[16..32]);
     }
 }

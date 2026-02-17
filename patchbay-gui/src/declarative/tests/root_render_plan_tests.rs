@@ -144,6 +144,60 @@ fn plan_root_render_uniform_fit_keeps_shared_scale_for_non_integer_ratio() {
 }
 
 #[test]
+fn uniform_fit_layout_size_is_clamped_to_design_viewport() {
+    let spec = UiSpec::new(
+        RootFrameSpec::new(
+            "root",
+            Node::Region(RegionSpec::new(
+                "plot",
+                Size {
+                    width: 10,
+                    height: 10,
+                },
+            )),
+        )
+        .padding(0)
+        .layout(LayoutBox::fixed(200, 100))
+        .design_size(Size {
+            width: 100,
+            height: 50,
+        })
+        .scale_mode(RootScaleMode::UniformFit),
+    );
+
+    let plan = plan_root_render(
+        &spec,
+        Size {
+            width: 420,
+            height: 200,
+        },
+    );
+
+    assert_eq!(plan.layout_size, Size { width: 100, height: 50 });
+    assert_eq!(plan.resolved_scale, 4.0);
+    assert_eq!(
+        plan.transform.scale_x,
+        4.0,
+        "UniformFit scale should stay shared across axes"
+    );
+    assert_eq!(
+        plan.transform.scale_y,
+        4.0,
+        "UniformFit scale should stay shared across axes"
+    );
+    assert_eq!(
+        plan.transform.content_rect_surface,
+        Rect {
+            origin: Point { x: 10, y: 0 },
+            size: Size {
+                width: 400,
+                height: 200,
+            },
+        }
+    );
+}
+
+#[test]
 fn plan_root_render_none_mode_keeps_top_left_anchor_with_zoom() {
     let spec = UiSpec::new(
         RootFrameSpec::new(

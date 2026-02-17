@@ -97,6 +97,16 @@ fn resolve_surface_scale(
     }
 }
 
+/// In UniformFit mode, keep layout size within the design viewport.
+fn clamp_layout_for_uniform_fit(layout_size: Size, layout_viewport: Size) -> Size {
+    let bounded_width = layout_size.width.min(layout_viewport.width);
+    let bounded_height = layout_size.height.min(layout_viewport.height);
+    Size {
+        width: bounded_width,
+        height: bounded_height,
+    }
+}
+
 /// Build resolved root render metadata for a UI frame.
 pub(crate) fn plan_root_render(spec: &UiSpec, surface_size: Size) -> RootRenderPlan {
     let surface = clamp_non_zero_size(surface_size);
@@ -106,6 +116,10 @@ pub(crate) fn plan_root_render(spec: &UiSpec, surface_size: Size) -> RootRenderP
     let layout_viewport = resolve_root_layout_viewport(&spec.root, measured, surface);
     let layout_size =
         clamp_non_zero_size(resolve_size(spec.root.layout, measured, layout_viewport));
+    let layout_size = match spec.root.scale_mode {
+        RootScaleMode::None => layout_size,
+        RootScaleMode::UniformFit => clamp_layout_for_uniform_fit(layout_size, layout_viewport),
+    };
     let content_rect_surface =
         resolve_surface_content_rect(layout_size, surface, resolved_scale, spec.root.scale_mode);
     let (scale_x, scale_y) = resolve_surface_scale(
