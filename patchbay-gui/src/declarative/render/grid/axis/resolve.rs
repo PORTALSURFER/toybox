@@ -56,7 +56,7 @@ fn apply_auto_tracks(plan: &GridAxisPlan<'_>, result: &mut [u32]) {
     }
 }
 
-/// Assign percent tracks as fixed percentages of available axis space.
+/// Assign percent tracks as fixed percentages of remaining axis space.
 fn assign_percent_tracks(plan: &GridAxisPlan<'_>, result: &mut [u32]) {
     let percent_weights: Vec<u8> = (0..plan.axis_count)
         .map(|index| match axis_track(plan, index) {
@@ -71,22 +71,25 @@ fn assign_percent_tracks(plan: &GridAxisPlan<'_>, result: &mut [u32]) {
 
     let total_gap = plan.gap.max(0) as u32 * plan.axis_count.saturating_sub(1) as u32;
     let available_for_tracks = plan.available.saturating_sub(total_gap);
+    let used_before_percent = result.iter().copied().sum::<u32>();
+    let available_for_percent = available_for_tracks.saturating_sub(used_before_percent);
     let should_normalize = total_percent > 100;
-    if should_normalize {
+    if should_normalize || used_before_percent > available_for_tracks {
         emit_grid_axis_overflow_warning(
             plan.axis,
             plan.axis_count,
-            percent_weights.iter().copied().map(u32::from).collect(),
             total_percent,
             plan.available,
             available_for_tracks,
+            used_before_percent,
+            available_for_percent,
         );
     }
 
     let target_total = if should_normalize {
-        available_for_tracks
+        available_for_percent
     } else {
-        available_for_tracks
+        available_for_percent
             .saturating_mul(total_percent as u32)
             .saturating_div(100)
     };
@@ -106,10 +109,11 @@ fn assign_percent_tracks(plan: &GridAxisPlan<'_>, result: &mut [u32]) {
 fn emit_grid_axis_overflow_warning(
     _axis: GridAxis,
     _axis_count: usize,
-    _weights: Vec<u32>,
     _total_percent: u16,
     _available: u32,
     _available_for_tracks: u32,
+    _used_before_percent: u32,
+    _available_for_percent: u32,
 ) {
     #[cfg(feature = "layout-overflow-warnings")]
     {
@@ -118,18 +122,19 @@ fn emit_grid_axis_overflow_warning(
             GridAxis::Rows => "rows",
         };
         eprintln!(
-            "patchbay-gui warning: grid {axis} axis has total percent tracks { _total_percent } and {} track slots with no room to honor absolute widths; normalizing to fit {} px",
-            _axis_count,
-            _available_for_tracks,
+            "patchbay-gui warning: grid {axis} axis has total percent tracks { _total_percent } and { _axis_count } tracks; assigning percent tracks into { _available_for_percent } px after absolute tracks and gaps",
         );
+        if _used_before_percent > _available_for_tracks {
+            eprintln!(
+                "patchbay-gui warning: fixed/auto tracks consume {_used_before_percent} px before percent tracks; no remaining space ({_available_for_percent}px)",
+            );
+        }
+        if _available == 0 {
+            eprintln!(
+                "patchbay-gui warning: grid {axis} axis received zero available space; percent tracks are clamped to zero",
+            );
+        }
     }
-
-    debug_assert!(
-        _total_percent <= 100,
-        "grid {axis:?} percent total {_total_percent} exceeds 100",
-        axis = _axis,
-    );
-    let _ = (_weights, _available);
 }
 
 /// Distribute remaining space to fill tracks, otherwise FR tracks.

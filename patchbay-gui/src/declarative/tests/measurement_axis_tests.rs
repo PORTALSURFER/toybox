@@ -55,6 +55,83 @@ fn resolve_grid_axis_distributes_fr_remainder_without_slack() {
 }
 
 #[test]
+fn resolve_grid_axis_percent_tracks_shrink_for_fixed_tracks_and_gaps() {
+    let widths = resolve_grid_axis(GridAxisResolveRequest {
+        tracks: &[TrackSize::Px(60), TrackSize::Percent(60), TrackSize::Percent(40)],
+        columns: 3,
+        rows: 1,
+        gap: 2,
+        available: 302,
+        is_columns: true,
+        intrinsic: &[Size {
+            width: 0,
+            height: 0,
+        }; 3],
+    });
+    assert_eq!(widths, vec![60, 143, 95]);
+    assert_eq!(widths.iter().sum::<u32>(), 298);
+}
+
+#[test]
+fn resolve_grid_axis_percent_tracks_shrink_for_auto_tracks_and_gap_space() {
+    let widths = resolve_grid_axis(GridAxisResolveRequest {
+        tracks: &[
+            TrackSize::Px(70),
+            TrackSize::Auto,
+            TrackSize::Percent(75),
+            TrackSize::Percent(25),
+        ],
+        columns: 4,
+        rows: 1,
+        gap: 4,
+        available: 400,
+        is_columns: true,
+        intrinsic: &[
+            Size {
+                width: 30,
+                height: 0,
+            },
+            Size {
+                width: 44,
+                height: 0,
+            },
+            Size {
+                width: 12,
+                height: 0,
+            },
+            Size {
+                width: 28,
+                height: 0,
+            },
+        ],
+    });
+    assert_eq!(widths, vec![70, 44, 206, 68]);
+    assert_eq!(widths.iter().sum::<u32>(), 388);
+}
+
+#[test]
+fn resolve_grid_axis_percent_tracks_normalize_and_fit_when_over_subscribed() {
+    let widths = resolve_grid_axis(GridAxisResolveRequest {
+        tracks: &[
+            TrackSize::Px(80),
+            TrackSize::Percent(90),
+            TrackSize::Percent(90),
+        ],
+        columns: 3,
+        rows: 1,
+        gap: 0,
+        available: 250,
+        is_columns: true,
+        intrinsic: &[Size {
+            width: 0,
+            height: 0,
+        }; 3],
+    });
+    assert_eq!(widths, vec![80, 85, 85]);
+    assert_eq!(widths.iter().sum::<u32>(), 250);
+}
+
+#[test]
 fn root_frame_sized_uses_window_size_with_minimum_floor() {
     let root = root_frame_sized(
         "root",
