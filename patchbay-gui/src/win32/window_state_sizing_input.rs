@@ -6,18 +6,11 @@ where
     State: Send + 'static,
 {
     fn on_resize(&mut self) {
-        let width = (self.input.window_size.width.max(1)) as i32;
-        let height = (self.input.window_size.height.max(1)) as i32;
-        unsafe {
-            let _ = SetWindowPos(
-                self.hwnd,
-                None,
-                0,
-                0,
-                width,
-                height,
-                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
-            );
+        let Some((width, height)) = self.current_client_size() else {
+            return;
+        };
+        if self.should_apply_client_size(width, height) {
+            self.apply_layout_size(Size { width, height }, true);
         }
     }
 
