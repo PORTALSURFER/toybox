@@ -1,7 +1,8 @@
 use super::*;
+use std::sync::Mutex;
 
 struct MockHostedGui {
-    last_size: Option<(u32, u32)>,
+    last_size: Mutex<Option<(u32, u32)>>,
     resize_request: std::sync::Mutex<Option<(u32, u32)>>,
 }
 
@@ -15,10 +16,16 @@ impl Vst3HostedGui for MockHostedGui {
     fn close(&mut self) {}
 
     fn last_size(&self) -> Option<(u32, u32)> {
-        self.last_size
+        *self
+            .last_size
+            .lock()
+            .expect("last_size mutex should not be poisoned")
     }
 
     fn request_resize(&self, width: u32, height: u32) {
+        if let Ok(mut current) = self.last_size.lock() {
+            *current = Some((width, height));
+        }
         if let Ok(mut slot) = self.resize_request.lock() {
             *slot = Some((width, height));
         }
@@ -48,7 +55,7 @@ fn parent_handle_conversion_rejects_unsupported_platform() {
 fn hosted_view_reports_default_size_before_attach() {
     let view = HostedVst3View::new(
         MockHostedGui {
-            last_size: None,
+            last_size: Mutex::new(None),
             resize_request: std::sync::Mutex::new(None),
         },
         420,
@@ -65,7 +72,7 @@ fn hosted_view_reports_default_size_before_attach() {
 fn hosted_view_size_constraint_applies_minimum_default_size() {
     let view = HostedVst3View::new(
         MockHostedGui {
-            last_size: Some((777, 333)),
+            last_size: Mutex::new(Some((777, 333))),
             resize_request: std::sync::Mutex::new(None),
         },
         420,
@@ -82,7 +89,7 @@ fn hosted_view_size_constraint_applies_minimum_default_size() {
 fn hosted_view_size_constraint_keeps_requested_size_when_larger_than_minimum() {
     let view = HostedVst3View::new(
         MockHostedGui {
-            last_size: None,
+            last_size: Mutex::new(None),
             resize_request: std::sync::Mutex::new(None),
         },
         320,
@@ -99,7 +106,7 @@ fn hosted_view_size_constraint_keeps_requested_size_when_larger_than_minimum() {
 fn hosted_view_size_constraint_blocks_non_uniform_resize() {
     let view = HostedVst3View::new(
         MockHostedGui {
-            last_size: None,
+            last_size: Mutex::new(None),
             resize_request: std::sync::Mutex::new(None),
         },
         320,
@@ -116,7 +123,7 @@ fn hosted_view_size_constraint_blocks_non_uniform_resize() {
 fn hosted_view_on_size_applies_resize_to_hosted_gui() {
     let view = HostedVst3View::new(
         MockHostedGui {
-            last_size: None,
+            last_size: Mutex::new(None),
             resize_request: std::sync::Mutex::new(None),
         },
         320,
@@ -140,7 +147,7 @@ fn hosted_view_on_size_applies_resize_to_hosted_gui() {
 fn hosted_view_attach_rejects_null_parent() {
     let view = HostedVst3View::new(
         MockHostedGui {
-            last_size: None,
+            last_size: Mutex::new(None),
             resize_request: std::sync::Mutex::new(None),
         },
         320,
@@ -154,7 +161,7 @@ fn hosted_view_attach_rejects_null_parent() {
 fn hosted_view_allows_direct_resize_when_aspect_ratio_disabled() {
     let view = HostedVst3View::new(
         MockHostedGui {
-            last_size: None,
+            last_size: Mutex::new(None),
             resize_request: std::sync::Mutex::new(None),
         },
         320,
@@ -179,7 +186,7 @@ fn hosted_view_allows_direct_resize_when_aspect_ratio_disabled() {
 fn hosted_view_constraint_does_not_preserve_ratio_when_disabled() {
     let view = HostedVst3View::new(
         MockHostedGui {
-            last_size: None,
+            last_size: Mutex::new(None),
             resize_request: std::sync::Mutex::new(None),
         },
         320,
@@ -191,6 +198,50 @@ fn hosted_view_constraint_does_not_preserve_ratio_when_disabled() {
     assert_eq!(result, kResultOk);
     assert_eq!(rect.right - rect.left, 500);
     assert_eq!(rect.bottom - rect.top, 200);
+}
+
+#[test]
+fn hosted_view_host_resize_flow_prefers_requested_size_when_aspect_lock_disabled() {
+    let view = HostedVst3View::new(
+        MockHostedGui {
+            last_size: Mutex::new(None),
+            resize_request: std::sync::Mutex::new(None),
+        },
+        320,
+        200,
+    )
+    .preserve_aspect_ratio(false);
+
+    let sizes = [(420, 240), (500, 320), (600, 360), (640, 480)];
+    for (width, height) in sizes {
+        let mut rect = view_rect(width, height);
+        let constrained = unsafe { view.checkSizeConstraint(&mut rect) };
+        assert_eq!(constrained, kResultOk);
+        assert_eq!(rect.right - rect.left, width);
+        assert_eq!(rect.bottom - rect.top, height);
+
+        let on_size = unsafe { view.onSize(&mut rect) };
+        assert_eq!(on_size, kResultOk);
+        assert_eq!(rect.right - rect.left, width);
+        assert_eq!(rect.bottom - rect.top, height);
+    }
+
+    let mut resolved = view_rect(0, 0);
+    assert_eq!(unsafe { view.getSize(&mut resolved) }, kResultOk);
+    assert_eq!(resolved.right - resolved.left, 640);
+    assert_eq!(resolved.bottom - resolved.top, 480);
+
+    let gui = view.gui.lock().expect("gui mutex should not be poisoned");
+    let last_size = gui
+        .last_size
+        .lock()
+        .expect("last_size mutex should not be poisoned");
+    assert_eq!(*last_size, Some((640, 480)));
+    let resize_request = gui
+        .resize_request
+        .lock()
+        .expect("resize mutex should not be poisoned");
+    assert_eq!(*resize_request, Some((640, 480)));
 }
 
 #[cfg(target_os = "windows")]

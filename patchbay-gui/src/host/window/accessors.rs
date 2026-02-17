@@ -5,8 +5,8 @@ use std::sync::atomic::Ordering;
 use raw_window_handle::RawWindowHandle;
 
 use crate::canvas::Size;
-use crate::host::{pack_size, unpack_size};
 use crate::host::types::HostWindow;
+use crate::host::{pack_size, unpack_size};
 use crate::win32::WindowHandle;
 
 impl HostWindow {
@@ -32,9 +32,18 @@ impl HostWindow {
     }
 
     /// Request a logical resize from the GUI thread.
+    ///
+    /// The requested size is also recorded immediately so callers observing
+    /// `last_size` can react to host-size negotiation before the next render
+    /// tick applies the resize request.
     pub fn request_resize(&self, width: u32, height: u32) {
+        let size = Size {
+            width: width.max(1),
+            height: height.max(1),
+        };
+        self.record_last_size(size);
         self.resize_request
-            .store(pack_size(width, height), Ordering::Release);
+            .store(pack_size(size.width, size.height), Ordering::Release);
     }
 
     /// Return true if a native window has been created.

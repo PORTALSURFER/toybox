@@ -24,9 +24,18 @@ impl HostWindow {
     }
 
     /// Request a logical resize from the GUI thread.
+    ///
+    /// The requested size is recorded immediately so callers can observe host
+    /// size negotiation progress even before the resize request is consumed.
     pub fn request_resize(&self, width: u32, height: u32) {
+        let size = Size {
+            width: width.max(1),
+            height: height.max(1),
+        };
+        self.last_size
+            .store(pack_size(size.width, size.height), Ordering::Release);
         self.resize_request
-            .store(pack_size(width, height), Ordering::Release);
+            .store(pack_size(size.width, size.height), Ordering::Release);
     }
 
     /// Return true if a native window has been created.
