@@ -49,8 +49,31 @@ fn root_frame_sized_uses_window_size_with_minimum_floor() {
     );
     assert_eq!(
         root.layout,
-        LayoutBox::fixed(420, 400).max(420, 400),
+        LayoutBox::fixed(420, 400),
         "root should clamp to min width and use host-provided height"
+    );
+    assert_eq!(root.scale_mode, RootScaleMode::None);
+    assert_eq!(root.design_size, None);
+}
+
+#[test]
+fn root_frame_sized_uses_expanded_host_size() {
+    let root = root_frame_sized(
+        "root",
+        label("x"),
+        Size {
+            width: 420,
+            height: 258,
+        },
+        Size {
+            width: 840,
+            height: 516,
+        },
+    );
+    assert_eq!(
+        root.layout,
+        LayoutBox::fixed(840, 516),
+        "root should track host-provided size when host is larger than minimum"
     );
     assert_eq!(root.scale_mode, RootScaleMode::None);
     assert_eq!(root.design_size, None);

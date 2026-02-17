@@ -126,6 +126,9 @@ impl RootFrameSpec {
 /// This helper standardizes the "host-sized layout" model: root layout uses the
 /// current host window size while preserving a minimum authored baseline.
 /// Root-level scale mode remains [`RootScaleMode::None`].
+///
+/// Layout is resolved with an absolute floor, not a clipping cap, so content can
+/// still report a larger intrinsic requirement when needed.
 pub fn root_frame_sized(
     key: impl Into<String>,
     content: Node,
@@ -134,7 +137,5 @@ pub fn root_frame_sized(
 ) -> RootFrameSpec {
     let resolved_width = window_size.width.max(min_size.width);
     let resolved_height = window_size.height.max(min_size.height);
-    RootFrameSpec::new(key, content).layout(
-        LayoutBox::fixed(resolved_width, resolved_height).max(resolved_width, resolved_height),
-    )
+    RootFrameSpec::new(key, content).layout(LayoutBox::fixed(resolved_width, resolved_height))
 }
