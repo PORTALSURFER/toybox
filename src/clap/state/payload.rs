@@ -84,6 +84,7 @@ pub fn read_versioned_payload(
     Ok(VersionedStatePayload { version, payload })
 }
 
+/// Validate a payload length against the framework's maximum serialized size.
 fn check_payload_length(payload_len: usize) -> Result<(), PluginError> {
     if payload_len > MAX_STATE_PAYLOAD_BYTES {
         return Err(PluginError::Message(
@@ -93,6 +94,7 @@ fn check_payload_length(payload_len: usize) -> Result<(), PluginError> {
     Ok(())
 }
 
+/// Read a little-endian `u32` value from a CLAP stream payload header.
 fn read_u32(input: &mut InputStream) -> Result<u32, PluginError> {
     let mut bytes = [0u8; 4];
     input.read_exact(&mut bytes)?;

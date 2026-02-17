@@ -23,6 +23,10 @@ pub struct RenderedFrame {
     pub render_result: RenderResult,
 }
 
+/// Copy rendered canvas pixels into a surface-sized buffer using the resolved root transform.
+///
+/// Pixels outside the transformed content rectangle stay transparent so the helper
+/// can be used to generate headless screenshots that match on-screen composition.
 fn remap_canvas_to_surface(
     source: &[u8],
     source_size: Size,

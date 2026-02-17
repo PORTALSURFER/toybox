@@ -1,8 +1,11 @@
 //! Parameter helpers for VST3 controller and processor implementations.
 
+use std::slice;
+use std::str::FromStr;
+
 use toybox_vst3_ffi::ComRef;
 use toybox_vst3_ffi::Steinberg::Vst::{
-    IParamValueQueueTrait, IParameterChanges, IParameterChangesTrait, ParamID, ParamValue,
+    IParamValueQueueTrait, IParameterChanges, IParameterChangesTrait, ParamID, ParamValue, TChar,
 };
 use toybox_vst3_ffi::Steinberg::kResultTrue;
 
@@ -119,9 +122,71 @@ pub unsafe fn latest_param_point(
     None
 }
 
+/// Parse a NUL-terminated Windows UTF-16 CLAP/VST3 text buffer into `f64`.
+///
+/// The implementation accepts optional suffixes such as `%`, `"dB"`, and `"x"`.
+/// ignores outer whitespace.
+///
+/// # Safety
+///
+/// Callers must guarantee `text` points to a valid NUL-terminated UTF-16 buffer.
+pub unsafe fn parse_tchar_f64(text: *mut TChar) -> Option<f64> {
+    if text.is_null() {
+        return None;
+    }
+
+    let length = unsafe { crate::vst3::gui::tchar_len(text as *const TChar) };
+    let utf16 = unsafe { slice::from_raw_parts(text.cast::<u16>(), length) };
+    let parsed = String::from_utf16(utf16).ok()?;
+    let normalized = parsed
+        .trim()
+        .trim_end_matches('x')
+        .trim_end_matches('%')
+        .trim_end_matches("dB")
+        .trim();
+    f64::from_str(normalized).ok()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::ParamRange;
+    use super::{parse_tchar_f64, ParamRange};
+    use toybox_vst3_ffi::Steinberg::Vst::TChar;
+
+    #[test]
+    fn parse_tchar_f64_trims_and_parses_suffixes() {
+        let mut percent: Vec<TChar> = b"42%".iter().map(|byte| u16::from(*byte) as TChar)
+            .chain(Some(0))
+            .collect();
+
+        let parsed = unsafe { parse_tchar_f64(percent.as_mut_ptr()) };
+        assert_eq!(parsed, Some(42.0));
+
+        let mut decibel: Vec<TChar> = b" -6 dB "
+            .iter()
+            .map(|byte| u16::from(*byte) as TChar)
+            .chain(Some(0))
+            .collect();
+        let parsed = unsafe { parse_tchar_f64(decibel.as_mut_ptr()) };
+        assert_eq!(parsed, Some(-6.0));
+
+        let mut linear: Vec<TChar> = b" 1.00x "
+            .iter()
+            .map(|byte| u16::from(*byte) as TChar)
+            .chain(Some(0))
+            .collect();
+        let parsed = unsafe { parse_tchar_f64(linear.as_mut_ptr()) };
+        assert_eq!(parsed, Some(1.0));
+    }
+
+    #[test]
+    fn parse_tchar_f64_handles_invalid_and_empty_text() {
+        let mut invalid: Vec<TChar> = b"abc".iter().map(|byte| u16::from(*byte) as TChar)
+            .chain(Some(0))
+            .collect();
+
+        assert_eq!(unsafe { parse_tchar_f64(invalid.as_mut_ptr()) }, None);
+        assert_eq!(unsafe { parse_tchar_f64(core::ptr::null_mut()) }, None);
+    }
 
     #[test]
     fn plain_to_normalized_clamps_to_bounds() {

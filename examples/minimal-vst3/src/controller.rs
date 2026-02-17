@@ -8,7 +8,7 @@ use toybox::vst3::prelude::Steinberg::*;
 use toybox::vst3::prelude::*;
 
 use crate::constants::PARAM_GAIN_ID;
-use crate::params::{gain_to_normalized, normalized_to_gain, parse_tchar_f64};
+use crate::params::{gain_to_normalized, normalized_to_gain};
 use crate::state_io::{load_normalized_gain, store_normalized_gain};
 use crate::view::GainView;
 

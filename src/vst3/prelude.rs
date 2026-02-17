@@ -27,7 +27,9 @@ pub use crate::vst3::gui::{
     bool_to_tresult, copy_wstring, default_platform_type, platform_type_matches, tchar_len,
     view_rect,
 };
-pub use crate::vst3::params::{ParamRange, for_each_param_point, latest_param_point};
+pub use crate::vst3::params::{
+    ParamRange, for_each_param_point, latest_param_point, parse_tchar_f64,
+};
 pub use crate::vst3::processor::{StereoAudioBuffers, process_ok, stereo_f32_buffers};
 pub use crate::vst3::registration::{Vst3FactoryClass, create_plugin_factory};
 pub use crate::vst3::state::{

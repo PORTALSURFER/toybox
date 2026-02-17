@@ -79,6 +79,10 @@ fn resolve_surface_content_rect(
     }
 }
 
+/// Resolve per-axis scale factors from layout coordinates to surface coordinates.
+///
+/// In `RootScaleMode::UniformFit`, the scale is uniform, while `None` maps the
+/// layout directly into the available content rectangle.
 fn resolve_surface_scale(
     layout_size: Size,
     content_rect_surface: Size,
