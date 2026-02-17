@@ -40,6 +40,7 @@ pub use crate::clap::params::{
     push_param_mod, push_param_value, write_toggle_text,
 };
 pub use crate::clap::process::{ProcessContext, min_len, split_channel};
+pub use crate::clap::transport::transport_state_from_transport;
 pub use crate::clap::registration::register_default_extensions;
 #[cfg(feature = "gui")]
 pub use crate::clap::registration::register_default_extensions_with_gui;

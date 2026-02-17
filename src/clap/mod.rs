@@ -12,5 +12,6 @@ pub mod gui;
 pub mod params;
 pub mod prelude;
 pub mod process;
+pub mod transport;
 pub mod registration;
 pub mod state;
