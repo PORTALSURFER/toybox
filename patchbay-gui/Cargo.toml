@@ -15,7 +15,7 @@ skrifa = "0.40"
 toybox-process-log = { path = "../crates/process-log" }
 
 [features]
-default = ["layout-debug-borders"]
+default = []
 layout-debug-borders = []
 layout-overflow-warnings = []
 
