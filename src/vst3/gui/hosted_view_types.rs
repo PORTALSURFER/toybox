@@ -29,6 +29,8 @@ pub struct HostedVst3View<G: Vst3HostedGui> {
     attached: Cell<bool>,
     /// Minimum logical size exposed by `getSize` and size-constraint fallbacks.
     default_size: (i32, i32),
+    /// Whether resize operations should preserve a uniform aspect ratio.
+    preserve_aspect_ratio: bool,
     /// GUI instance shared with FFI callbacks and synchronized under a mutex.
     gui: Mutex<G>,
 }
@@ -43,8 +45,18 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
             rect: Cell::new(view_rect(width, height)),
             attached: Cell::new(false),
             default_size: (width, height),
+            preserve_aspect_ratio: true,
             gui: Mutex::new(gui),
         }
+    }
+
+    /// Control whether host resize requests preserve a uniform aspect ratio.
+    ///
+    /// When `false`, VST3 size requests are applied as received.
+    /// When `true`, width/height are adjusted to keep the default aspect ratio.
+    pub fn preserve_aspect_ratio(mut self, keep_ratio: bool) -> Self {
+        self.preserve_aspect_ratio = keep_ratio;
+        self
     }
 
     /// Synchronize the cached rectangle from the hosted GUI's latest reported size.
@@ -73,6 +85,9 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
         let ratio = self.uniform_ratio();
         let clamped_width = requested_width.max(min_width).max(1);
         let clamped_height = requested_height.max(min_height).max(1);
+        if !self.preserve_aspect_ratio {
+            return (clamped_width, clamped_height);
+        }
         let current = self.rect.get();
         let current_width = (current.right - current.left).max(1);
         let current_height = (current.bottom - current.top).max(1);

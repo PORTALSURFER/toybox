@@ -150,6 +150,49 @@ fn hosted_view_attach_rejects_null_parent() {
     assert_eq!(result, kInvalidArgument);
 }
 
+#[test]
+fn hosted_view_allows_direct_resize_when_aspect_ratio_disabled() {
+    let view = HostedVst3View::new(
+        MockHostedGui {
+            last_size: None,
+            resize_request: std::sync::Mutex::new(None),
+        },
+        320,
+        200,
+    )
+    .preserve_aspect_ratio(false);
+    let mut rect = view_rect(500, 200);
+    let result = unsafe { view.onSize(&mut rect) };
+    assert_eq!(result, kResultOk);
+    assert_eq!(rect.right - rect.left, 500);
+    assert_eq!(rect.bottom - rect.top, 200);
+
+    let gui = view.gui.lock().expect("gui mutex should not be poisoned");
+    let resize = gui
+        .resize_request
+        .lock()
+        .expect("resize mutex should not be poisoned");
+    assert_eq!(*resize, Some((500, 200)));
+}
+
+#[test]
+fn hosted_view_constraint_does_not_preserve_ratio_when_disabled() {
+    let view = HostedVst3View::new(
+        MockHostedGui {
+            last_size: None,
+            resize_request: std::sync::Mutex::new(None),
+        },
+        320,
+        200,
+    )
+    .preserve_aspect_ratio(false);
+    let mut rect = view_rect(500, 200);
+    let result = unsafe { view.checkSizeConstraint(&mut rect) };
+    assert_eq!(result, kResultOk);
+    assert_eq!(rect.right - rect.left, 500);
+    assert_eq!(rect.bottom - rect.top, 200);
+}
+
 #[cfg(target_os = "windows")]
 #[test]
 fn parent_handle_conversion_maps_hwnd() {
