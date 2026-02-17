@@ -5,6 +5,7 @@
 //! directly. Immediate-mode authoring APIs are intentionally not re-exported.
 
 pub use patchbay_gui::{Canvas, Color, MainPalette, Point, Rect, Size};
+pub use patchbay_gui::{render_spec_to_frame, RenderedFrame};
 
 /// Strict declarative GUI types and rendering helpers.
 pub mod declarative {

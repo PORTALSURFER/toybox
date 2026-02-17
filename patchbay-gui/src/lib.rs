@@ -14,6 +14,7 @@ mod host;
 #[path = "host_non_windows/mod.rs"]
 mod host;
 mod logging;
+mod screenshot;
 #[cfg(target_os = "windows")]
 mod renderer;
 mod ui;
@@ -39,5 +40,6 @@ pub use crate::host::{
     GuiError, HostWindow, InputState, OpenParentedCallbacks, OpenParentedMode, OpenParentedRequest,
 };
 pub use crate::ui::MainPalette;
+pub use crate::screenshot::{render_spec_to_frame, RenderedFrame};
 #[cfg(target_os = "windows")]
 pub use crate::win32::WindowHandle;

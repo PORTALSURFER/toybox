@@ -24,6 +24,11 @@ impl GuiHostWindow {
         self.inner.is_open()
     }
 
+    /// Return the native window handle currently attached to this GUI host window.
+    pub fn handle(&self) -> Option<patchbay_gui::WindowHandle> {
+        self.inner.handle()
+    }
+
     /// Show the native window if it exists.
     pub fn show(&self) {
         log_line_safe("toybox/gui: show");
