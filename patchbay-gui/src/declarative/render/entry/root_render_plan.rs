@@ -11,6 +11,7 @@ fn resolve_root_scale(root: &RootFrameSpec, measured: Size, surface: Size) -> f3
     let design = clamp_non_zero_size(root.design_size.unwrap_or(measured));
     let zoom_override = root.zoom_override.unwrap_or(1.0);
     debug_assert!(zoom_override > 0.0, "Zoom override must be positive");
+    debug_assert!(zoom_override.is_finite(), "Zoom override must be finite");
     let base = match root.scale_mode {
         RootScaleMode::None => 1.0,
         RootScaleMode::UniformFit => {
@@ -20,6 +21,7 @@ fn resolve_root_scale(root: &RootFrameSpec, measured: Size, surface: Size) -> f3
         }
     };
     let scaled = base * zoom_override;
+    debug_assert!(scaled.is_finite(), "Resolved root scale must be finite");
     scaled.clamp(0.0, 8.0)
 }
 
@@ -179,6 +181,16 @@ pub(crate) fn plan_root_render(spec: &UiSpec, surface_size: Size) -> RootRenderP
                 .origin
                 .y as u32
                 <= surface.height
+    );
+    debug_assert!(
+        (plan.transform.content_rect_surface.origin.x as u32)
+            .saturating_add(plan.transform.content_rect_surface.size.width)
+            <= surface.width
+    );
+    debug_assert!(
+        (plan.transform.content_rect_surface.origin.y as u32)
+            .saturating_add(plan.transform.content_rect_surface.size.height)
+            <= surface.height
     );
 
     plan

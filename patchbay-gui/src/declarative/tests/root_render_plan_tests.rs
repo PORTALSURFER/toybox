@@ -266,8 +266,27 @@ fn plan_root_render_tiny_surface_clamps_surface_rect_within_window_bounds() {
 
     let expected_scale = (3.0_f32 / 420.0).min(2.0 / 258.0);
     assert!((plan.resolved_scale - expected_scale).abs() < f32::EPSILON);
+    assert_eq!(plan.transform.content_rect_surface.origin.y, 0);
     assert!(plan.transform.content_rect_surface.size.width <= surface.width);
     assert!(plan.transform.content_rect_surface.size.height <= surface.height);
+    assert!(
+        (plan
+            .transform
+            .content_rect_surface
+            .origin
+            .x as u32)
+            .saturating_add(plan.transform.content_rect_surface.size.width)
+            <= surface.width
+    );
+    assert!(
+        (plan
+            .transform
+            .content_rect_surface
+            .origin
+            .y as u32)
+            .saturating_add(plan.transform.content_rect_surface.size.height)
+            <= surface.height
+    );
     assert!(plan.transform.content_rect_surface.origin.x >= 0);
     assert!(plan.transform.content_rect_surface.origin.y >= 0);
 }
