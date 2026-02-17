@@ -26,53 +26,57 @@ fn measure_panel(panel: &PanelSpec, tokens: &ThemeTokens) -> Size {
         .unwrap_or_else(|| panel_header_height(panel.title.as_deref(), tokens))
         .max(0) as u32;
     let padding = panel.padding.max(0) as u32;
+    let padding_total = padding.saturating_mul(2);
     let measured = Size {
-        width: content.width + padding * 2,
-        height: content.height + padding * 2 + header,
+        width: content.width.saturating_add(padding_total),
+        height: content
+            .height
+            .saturating_add(padding_total)
+            .saturating_add(header),
     };
     resolve_size(panel.layout, measured, measured)
 }
 
 /// Measure a flex container intrinsically.
 fn measure_flex(flex: &FlexSpec, tokens: &ThemeTokens, axis: Axis) -> Size {
-    let mut total_main = 0i32;
-    let mut max_cross = 0i32;
-    let mut child_count = 0i32;
+    let mut total_main = 0u64;
+    let mut max_cross = 0u64;
+    let mut child_count = 0u64;
 
     for child in &flex.children {
         let child_size = measure_node(child, tokens);
         let (main, cross) = match axis {
-            Axis::Horizontal => (child_size.width as i32, child_size.height as i32),
-            Axis::Vertical => (child_size.height as i32, child_size.width as i32),
+            Axis::Horizontal => (u64::from(child_size.width), u64::from(child_size.height)),
+            Axis::Vertical => (u64::from(child_size.height), u64::from(child_size.width)),
         };
-        total_main += main;
+        total_main = total_main.saturating_add(main);
         max_cross = max_cross.max(cross);
-        child_count += 1;
+        child_count = child_count.saturating_add(1);
     }
 
-    let gap = flex.gap.max(0);
-    let gap_total = gap * child_count.saturating_sub(1);
-    total_main += gap_total;
+    let gap = u64::from(flex.gap.max(0) as u32);
+    let gap_total = gap.saturating_mul(child_count.saturating_sub(1));
+    total_main = total_main.saturating_add(gap_total);
 
     let (main_padding, cross_padding) = match axis {
         Axis::Horizontal => (
-            flex.padding.left + flex.padding.right,
-            flex.padding.top + flex.padding.bottom,
+            i32_to_nonnegative_u64(flex.padding.left) + i32_to_nonnegative_u64(flex.padding.right),
+            i32_to_nonnegative_u64(flex.padding.top) + i32_to_nonnegative_u64(flex.padding.bottom),
         ),
         Axis::Vertical => (
-            flex.padding.top + flex.padding.bottom,
-            flex.padding.left + flex.padding.right,
+            i32_to_nonnegative_u64(flex.padding.top) + i32_to_nonnegative_u64(flex.padding.bottom),
+            i32_to_nonnegative_u64(flex.padding.left) + i32_to_nonnegative_u64(flex.padding.right),
         ),
     };
 
     let measured = match axis {
         Axis::Horizontal => Size {
-            width: (total_main + main_padding).max(0) as u32,
-            height: (max_cross + cross_padding).max(0) as u32,
+            width: total_main.saturating_add(main_padding).min(u32::MAX as u64) as u32,
+            height: max_cross.saturating_add(cross_padding).min(u32::MAX as u64) as u32,
         },
         Axis::Vertical => Size {
-            width: (max_cross + cross_padding).max(0) as u32,
-            height: (total_main + main_padding).max(0) as u32,
+            width: max_cross.saturating_add(cross_padding).min(u32::MAX as u64) as u32,
+            height: total_main.saturating_add(main_padding).min(u32::MAX as u64) as u32,
         },
     };
 
@@ -81,13 +85,15 @@ fn measure_flex(flex: &FlexSpec, tokens: &ThemeTokens, axis: Axis) -> Size {
 
 /// Measure an absolute container intrinsically.
 fn measure_absolute(absolute: &AbsoluteSpec, tokens: &ThemeTokens) -> Size {
-    let mut max_x = 0i32;
-    let mut max_y = 0i32;
+    let mut max_x = 0i64;
+    let mut max_y = 0i64;
 
     for child in &absolute.children {
         let size = measure_node(&child.node, tokens);
-        max_x = max_x.max(child.origin.x + size.width as i32);
-        max_y = max_y.max(child.origin.y + size.height as i32);
+        let right = i64::from(child.origin.x) + i64::from(size.width);
+        let bottom = i64::from(child.origin.y) + i64::from(size.height);
+        max_x = max_x.max(right);
+        max_y = max_y.max(bottom);
     }
 
     resolve_size(
@@ -101,6 +107,11 @@ fn measure_absolute(absolute: &AbsoluteSpec, tokens: &ThemeTokens) -> Size {
             height: max_y.max(0) as u32,
         },
     )
+}
+
+/// Convert a signed axis delta to a non-negative `u64` width contribution.
+fn i32_to_nonnegative_u64(value: i32) -> u64 {
+    value.max(0) as u64
 }
 
 /// Resolve a measured size against box constraints.

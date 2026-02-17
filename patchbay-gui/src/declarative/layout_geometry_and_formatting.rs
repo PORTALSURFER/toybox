@@ -84,23 +84,33 @@ fn format_value(value: f32) -> String {
 
 /// Measure monospaced bitmap text bounds at a given scale.
 fn text_size(text: &str, scale: u32) -> Size {
-    let scale = scale.max(1) as i32;
-    let mut max_cols = 0i32;
-    let mut lines = 1i32;
-    let mut current = 0i32;
+    let scale = scale.max(1) as u64;
+    let mut max_cols = 0u64;
+    let mut lines = 1u64;
+    let mut current = 0u64;
     for ch in text.chars() {
         if ch == '\n' {
             max_cols = max_cols.max(current);
             current = 0;
-            lines += 1;
+            lines = lines.saturating_add(1);
         } else {
-            current += 1;
+            current = current.saturating_add(1);
         }
     }
     max_cols = max_cols.max(current);
+
+    let width = max_cols
+        .saturating_mul(6)
+        .saturating_mul(scale)
+        .min(u64::from(u32::MAX));
+    let height = lines
+        .saturating_mul(8)
+        .saturating_mul(scale)
+        .min(u64::from(u32::MAX));
+
     Size {
-        width: (max_cols * 6 * scale).max(0) as u32,
-        height: (lines * 8 * scale).max(0) as u32,
+        width: width as u32,
+        height: height as u32,
     }
 }
 

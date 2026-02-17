@@ -124,3 +124,15 @@ fn label_with_explicit_box_does_not_expand_root_width() {
         }
     );
 }
+
+#[test]
+fn text_size_saturates_huge_scale_without_overflow() {
+    let measured = text_size("scale", u32::MAX);
+    assert_eq!(
+        measured,
+        Size {
+            width: u32::MAX,
+            height: u32::MAX,
+        }
+    );
+}
