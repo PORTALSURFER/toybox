@@ -68,7 +68,28 @@ fn assign_percent_tracks(plan: &GridAxisPlan<'_>, result: &mut [u32]) {
     if total_percent == 0 {
         return;
     }
-    let target_total = plan.available.saturating_mul(total_percent as u32).saturating_div(100);
+
+    let total_gap = plan.gap.max(0) as u32 * plan.axis_count.saturating_sub(1) as u32;
+    let available_for_tracks = plan.available.saturating_sub(total_gap);
+    let should_normalize = total_percent > 100;
+    if should_normalize {
+        emit_grid_axis_overflow_warning(
+            plan.axis,
+            plan.axis_count,
+            percent_weights.iter().copied().map(u32::from).collect(),
+            total_percent,
+            plan.available,
+            available_for_tracks,
+        );
+    }
+
+    let target_total = if should_normalize {
+        available_for_tracks
+    } else {
+        available_for_tracks
+            .saturating_mul(total_percent as u32)
+            .saturating_div(100)
+    };
     let weights: Vec<u32> = percent_weights.iter().map(|percent| u32::from(*percent)).collect();
     let assigned = distribute_weighted_u32(target_total, &weights);
     for (index, value) in assigned.into_iter().enumerate() {
@@ -76,6 +97,39 @@ fn assign_percent_tracks(plan: &GridAxisPlan<'_>, result: &mut [u32]) {
             result[index] = value;
         }
     }
+}
+
+/// Emit optional overflow diagnostics when percent tracks cannot be honored exactly.
+///
+/// In debug builds with `layout-overflow-warnings`, logs a normalization warning so
+/// layouts that over-subscribe percent space are easier to diagnose.
+fn emit_grid_axis_overflow_warning(
+    _axis: GridAxis,
+    _axis_count: usize,
+    _weights: Vec<u32>,
+    _total_percent: u16,
+    _available: u32,
+    _available_for_tracks: u32,
+) {
+    #[cfg(feature = "layout-overflow-warnings")]
+    {
+        let axis = match _axis {
+            GridAxis::Columns => "columns",
+            GridAxis::Rows => "rows",
+        };
+        eprintln!(
+            "patchbay-gui warning: grid {axis} axis has total percent tracks { _total_percent } and {} track slots with no room to honor absolute widths; normalizing to fit {} px",
+            _axis_count,
+            _available_for_tracks,
+        );
+    }
+
+    debug_assert!(
+        _total_percent <= 100,
+        "grid {axis:?} percent total {_total_percent} exceeds 100",
+        axis = _axis,
+    );
+    let _ = (_weights, _available);
 }
 
 /// Distribute remaining space to fill tracks, otherwise FR tracks.

@@ -17,7 +17,7 @@ struct GridAxisResolveRequest<'a> {
 }
 
 /// Axis selection for grid resolution.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 enum GridAxis {
     /// Resolve track sizes along the horizontal column axis.
     Columns,
