@@ -1,23 +1,27 @@
 
 /// Measure monospaced bitmap text bounds at the given scale.
 fn text_size(text: &str, scale: u32) -> Size {
-    let scale = scale.max(1) as i32;
-    let mut max_cols = 0i32;
-    let mut lines = 1i32;
-    let mut current = 0i32;
+    let scale = u64::from(scale.max(1));
+    let mut max_cols = 0u64;
+    let mut lines = 1u64;
+    let mut current = 0u64;
     for ch in text.chars() {
         if ch == '\n' {
             max_cols = max_cols.max(current);
             current = 0;
-            lines += 1;
+            lines = lines.saturating_add(1);
         } else {
-            current += 1;
+            current = current.saturating_add(1);
         }
     }
     max_cols = max_cols.max(current);
+    let char_width = 6u64.saturating_mul(scale);
+    let char_height = 8u64.saturating_mul(scale);
     Size {
-        width: (max_cols * 6 * scale).max(0) as u32,
-        height: (lines * 8 * scale).max(0) as u32,
+        width: u32::try_from(max_cols.saturating_mul(char_width))
+            .unwrap_or(u32::MAX),
+        height: u32::try_from(lines.saturating_mul(char_height))
+            .unwrap_or(u32::MAX),
     }
 }
 
@@ -35,11 +39,8 @@ fn fit_text_single_line_ellipsis(text: &str, max_width: u32, scale: u32) -> Stri
         return single_line;
     }
 
-    let char_width = 6 * scale.max(1);
-    if char_width == 0 {
-        return String::new();
-    }
-    let max_chars = (max_width / char_width) as usize;
+    let char_width = 6u64.saturating_mul(scale.max(1).into());
+    let max_chars = (u64::from(max_width) / char_width) as usize;
     if max_chars == 0 {
         return String::new();
     }
@@ -68,11 +69,8 @@ fn fit_text_single_line_hard_clamp(text: &str, max_width: u32, scale: u32) -> St
         return single_line;
     }
 
-    let char_width = 6 * scale.max(1);
-    if char_width == 0 {
-        return String::new();
-    }
-    let max_chars = (max_width / char_width) as usize;
+    let char_width = 6u64.saturating_mul(scale.max(1).into());
+    let max_chars = (u64::from(max_width) / char_width) as usize;
     if max_chars == 0 {
         return String::new();
     }
@@ -101,8 +99,29 @@ fn centered_text_origin_on_x(
     text_width: u32,
     target_center_x: i32,
 ) -> i32 {
-    let raw = target_center_x - text_width as i32 / 2;
+    let raw = (i64::from(target_center_x) - i64::from(text_width) / 2).clamp(
+        i64::from(i32::MIN),
+        i64::from(i32::MAX),
+    );
     let min_x = left_bound;
-    let max_x = left_bound + (max_width as i32 - text_width as i32).max(0);
-    raw.clamp(min_x, max_x)
+    let span = max_width.saturating_sub(text_width);
+    let max_x = left_bound.saturating_add(span.try_into().unwrap_or(i32::MAX));
+    raw.clamp(i64::from(min_x), i64::from(max_x)) as i32
+}
+
+#[cfg(test)]
+mod text_helpers_tests {
+    use super::*;
+
+    #[test]
+    fn text_size_saturates_for_extreme_scale() {
+        let size = text_size("HELLO", u32::MAX);
+        assert_eq!(size.width, u32::MAX);
+    }
+
+    #[test]
+    fn centered_origin_handles_saturated_span() {
+        assert_eq!(centered_text_origin_on_x(-10, u32::MAX, u32::MAX, 40), -10);
+        assert_eq!(centered_text_origin_on_x(10, u32::MAX, u32::MAX, -100), 10);
+    }
 }

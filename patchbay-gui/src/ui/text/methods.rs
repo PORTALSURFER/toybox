@@ -65,7 +65,7 @@ impl<'a> Ui<'a> {
         color: Color,
         track_bounds: bool,
     ) -> Size {
-        let line_height = 8 * self.theme.text_scale.max(1);
+        let line_height = text_line_height(self.theme.text_scale.max(1));
         if max_height < line_height {
             return Size {
                 width: 0,
@@ -155,11 +155,18 @@ impl<'a> Ui<'a> {
     /// Draw a label at the current cursor and advance the cursor.
     pub fn label(&mut self, text: &str) {
         let pos = self.layout.cursor;
-        let line_height = 8 * self.theme.text_scale as i32;
+        let line_height = text_line_height(self.theme.text_scale.max(1));
         self.draw_text_internal(pos, text, self.theme.text, self.theme.text_scale);
         let size = text_size(text, self.theme.text_scale);
         self.track_rect_internal(Rect { origin: pos, size });
-        self.layout.cursor.y += line_height + self.layout.spacing;
+        self.layout
+            .cursor
+            .y = self
+            .layout
+            .cursor
+            .y
+            .saturating_add(i32::try_from(line_height).unwrap_or(i32::MAX))
+            .saturating_add(self.layout.spacing);
     }
 
     /// Format a knob value using compact decimal precision.
@@ -178,4 +185,10 @@ impl<'a> Ui<'a> {
         }
         text
     }
+}
+
+/// Return a stable, bounded line height for monospaced text.
+fn text_line_height(text_scale: u32) -> u32 {
+    let height = 8u64.saturating_mul(u64::from(text_scale));
+    u32::try_from(height).unwrap_or(u32::MAX)
 }
