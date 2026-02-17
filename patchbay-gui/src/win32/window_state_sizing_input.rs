@@ -67,14 +67,23 @@ where
         if unsafe { GetCursorPos(&mut point) }.is_err() {
             return;
         }
-        let mut window_rect = windows::Win32::Foundation::RECT::default();
-        if unsafe { GetWindowRect(self.hwnd, &mut window_rect) }.is_err() {
+        if unsafe { ScreenToClient(self.hwnd, &mut point) }.is_err() {
             return;
         }
-        self.input.pointer_pos = Point {
-            x: point.x - window_rect.left,
-            y: point.y - window_rect.top,
-        };
+
+        if let Some((width, height)) = self.current_client_size() {
+            let clamped_x = point.x.clamp(0, width.saturating_sub(1) as i32);
+            let clamped_y = point.y.clamp(0, height.saturating_sub(1) as i32);
+            self.input.pointer_pos = Point {
+                x: clamped_x,
+                y: clamped_y,
+            };
+        } else {
+            self.input.pointer_pos = Point {
+                x: point.x,
+                y: point.y,
+            };
+        }
     }
 
     fn sync_mouse_buttons(&mut self) {
