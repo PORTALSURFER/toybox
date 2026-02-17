@@ -117,9 +117,9 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
         let height_delta = (clamped_height - current_height).abs();
 
         // Keep a single resize path by default (width-driven) to prevent
-        // branch switching while dragging. Only use height-driven sizing when
-        // the host is clearly performing a vertical-only resize gesture.
-        if width_delta <= 1 && height_delta > 1 {
+        // branch switching while dragging. Use height-driven sizing when the
+        // host is resizing mostly vertically (or at least not changing width).
+        if width_delta <= 1 && height_delta > 0 {
             let width = ((clamped_height as f32) * ratio).round() as i32;
             (
                 width.max(min_width).max(1),

@@ -145,6 +145,29 @@ fn hosted_view_size_constraint_blocks_non_uniform_resize() {
 }
 
 #[test]
+fn hosted_view_size_constraint_tracks_small_vertical_growth() {
+    let view = HostedVst3View::new(
+        MockHostedGui {
+            last_size: Mutex::new(None),
+            resize_request: std::sync::Mutex::new(None),
+        },
+        320,
+        200,
+    );
+    let mut rect = view_rect(500, 200);
+    let result = unsafe { view.onSize(&mut rect) };
+    assert_eq!(result, kResultOk);
+    assert_eq!(rect.right - rect.left, 500);
+    assert_eq!(rect.bottom - rect.top, 313);
+
+    let mut next = view_rect(500, 314);
+    let result = unsafe { view.onSize(&mut next) };
+    assert_eq!(result, kResultOk);
+    assert_eq!(next.right - next.left, 502);
+    assert_eq!(next.bottom - next.top, 314);
+}
+
+#[test]
 fn hosted_view_on_size_applies_resize_to_hosted_gui() {
     let view = HostedVst3View::new(
         MockHostedGui {
