@@ -9,17 +9,29 @@ where
         let Some((width, height)) = self.current_client_size() else {
             return;
         };
-        if self.should_apply_client_size(width, height) {
-            self.apply_layout_size(Size { width, height }, true);
-        }
+        self.apply_layout_size_if_needed(Size { width, height }, true);
+    }
+
+    fn on_resize_from_message(&mut self, width: u32, height: u32) {
+        let width = width.max(1);
+        let height = height.max(1);
+        self.apply_layout_size_if_needed(Size { width, height }, true);
     }
 
     fn sync_client_size_if_needed(&mut self) {
         let Some((width, height)) = self.current_client_size() else {
             return;
         };
-        if self.should_apply_client_size(width, height) {
-            self.apply_layout_size(Size { width, height }, false);
+        self.apply_layout_size_if_needed(Size { width, height }, false);
+    }
+
+    fn apply_layout_size_if_needed(&mut self, size: Size, sync_pointer: bool) {
+        let size = Size {
+            width: size.width.max(1),
+            height: size.height.max(1),
+        };
+        if self.should_apply_client_size(size.width, size.height) {
+            self.apply_layout_size(size, sync_pointer);
         }
     }
 

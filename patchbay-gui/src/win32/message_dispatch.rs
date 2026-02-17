@@ -11,16 +11,24 @@ where
         wparam: WPARAM,
         lparam: LPARAM,
     ) -> Option<LRESULT> {
-        self.handle_frame_messages(message)
+        self.handle_frame_messages(message, wparam, lparam)
             .or_else(|| self.handle_pointer_messages(message, wparam, lparam))
             .or_else(|| self.handle_input_messages(message, wparam))
             .or_else(|| self.handle_paint_timer_messages(message, wparam))
     }
 
-    fn handle_frame_messages(&mut self, message: u32) -> Option<LRESULT> {
+    fn handle_frame_messages(
+        &mut self,
+        message: u32,
+        _wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> Option<LRESULT> {
         match message {
             WM_SIZE => {
-                self.on_resize();
+                let raw_size = lparam.0 as u32;
+                let width = raw_size & 0xFFFF;
+                let height = (raw_size >> 16) & 0xFFFF;
+                self.on_resize_from_message(width, height);
                 Some(LRESULT(0))
             }
             WM_NCHITTEST => Some(LRESULT(HTCLIENT as isize)),
