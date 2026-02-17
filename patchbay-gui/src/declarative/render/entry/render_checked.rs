@@ -23,7 +23,7 @@ pub fn render_checked(
             debug_border_candidates: &mut debug_border_candidates,
         },
     );
-    draw_selected_container_debug_border(ui, &debug_border_candidates);
+    draw_layout_debug_borders(ui, &debug_border_candidates);
     Ok(build_render_result(plan, response, actions))
 }
 
@@ -100,6 +100,30 @@ fn draw_selected_container_debug_border(
     {
         ui.debug_stroke_rect(draw_rect, 1, color);
     }
+}
+
+/// Draw all matching layout border candidates for dense debug inspection.
+#[cfg(feature = "layout-debug-borders")]
+fn draw_all_container_debug_borders(ui: &mut Ui<'_>, candidates: &[DebugBorderCandidate]) {
+    for candidate in candidates {
+        let Some(color) = container_debug_border_color(candidate.kind, candidate.depth) else {
+            continue;
+        };
+        if let Some(draw_rect) = debug_border_draw_rect(candidate.rect, 1) {
+            ui.debug_stroke_rect(draw_rect, 1, color);
+        }
+    }
+}
+
+/// Render debug borders according to the configured debug mode.
+fn draw_layout_debug_borders(ui: &mut Ui<'_>, candidates: &[DebugBorderCandidate]) {
+    #[cfg(feature = "layout-debug-borders")]
+    if should_draw_all_layout_debug_borders() {
+        draw_all_container_debug_borders(ui, candidates);
+        return;
+    }
+
+    draw_selected_container_debug_border(ui, candidates);
 }
 
 /// Build the final checked render result payload.

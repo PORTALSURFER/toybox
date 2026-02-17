@@ -1,4 +1,4 @@
-    use super::*;
+use super::*;
     use crate::canvas::Canvas;
     use crate::host::InputState;
 use crate::ui::{Layout, Theme, UiState};
@@ -151,6 +151,48 @@ use crate::ui::{Layout, Theme, UiState};
         let selected = select_container_debug_border_candidate(&candidates)
             .expect("expected a selected debug border candidate");
         assert_eq!(selected.kind, ContainerKind::Grid);
+    }
+
+    #[cfg(feature = "layout-debug-borders")]
+    #[test]
+    fn debug_border_env_toggle_controls_all_candidates_mode() {
+        const ENV_VAR: &str = "PATCHBAY_DEBUG_ALL_LAYOUT_BORDERS";
+
+        // SAFETY: tests are single-threaded and isolate temporary env overrides
+        // within the same process for deterministic feature-flag behavior.
+        unsafe { std::env::remove_var(ENV_VAR) };
+        assert!(!should_draw_all_layout_debug_borders());
+        assert!(!should_draw_all_layout_debug_borders_from_env(Err(
+            std::env::VarError::NotPresent
+        )));
+
+        // SAFETY: see above.
+        unsafe { std::env::set_var(ENV_VAR, "1") };
+        assert!(should_draw_all_layout_debug_borders());
+        assert!(should_draw_all_layout_debug_borders_from_env(Ok("1".to_string())));
+
+        // SAFETY: see above.
+        unsafe { std::env::set_var(ENV_VAR, "TRUE") };
+        assert!(should_draw_all_layout_debug_borders());
+
+        // SAFETY: see above.
+        unsafe { std::env::set_var(ENV_VAR, "false") };
+        assert!(!should_draw_all_layout_debug_borders());
+
+        // SAFETY: see above.
+        unsafe { std::env::remove_var(ENV_VAR) };
+    }
+
+    #[cfg(feature = "layout-debug-borders")]
+    #[test]
+    fn debug_border_all_mode_accepts_case_variants() {
+        assert!(should_draw_all_layout_debug_borders_from_env(Ok("true".to_string())));
+        assert!(should_draw_all_layout_debug_borders_from_env(Ok("On".to_string())));
+        assert!(should_draw_all_layout_debug_borders_from_env(Ok("yes".to_string())));
+        assert!(!should_draw_all_layout_debug_borders_from_env(Ok(
+            "off".to_string()
+        )));
+        assert!(!should_draw_all_layout_debug_borders_from_env(Ok("0".to_string())));
     }
 
     #[test]

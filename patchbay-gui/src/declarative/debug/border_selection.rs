@@ -41,6 +41,18 @@ fn should_draw_container_debug_border(
     kind != ContainerKind::RootFrame && depth > 1 && pointer_inside
 }
 
+#[cfg(feature = "layout-debug-borders")]
+fn should_draw_all_layout_debug_borders() -> bool {
+    should_draw_all_layout_debug_borders_from_env(std::env::var("PATCHBAY_DEBUG_ALL_LAYOUT_BORDERS"))
+}
+
+#[cfg(feature = "layout-debug-borders")]
+fn should_draw_all_layout_debug_borders_from_env(
+    env_value: Result<String, std::env::VarError>,
+) -> bool {
+    matches!(env_value.ok().as_deref(), Some("1" | "true" | "True" | "TRUE" | "yes" | "Yes" | "YES" | "on" | "On" | "ON"))
+}
+
 /// Return a pixel-safe debug border rectangle that stays inside viewport bounds.
 ///
 /// The debug stroke helper can lose bottom/right edges when a container reaches
