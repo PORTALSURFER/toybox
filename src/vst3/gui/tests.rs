@@ -86,6 +86,31 @@ fn hosted_view_size_constraint_applies_minimum_default_size() {
 }
 
 #[test]
+fn hosted_view_size_constraint_allows_sizes_below_minimum_when_disabled() {
+    let view = HostedVst3View::new(
+        MockHostedGui {
+            last_size: Mutex::new(None),
+            resize_request: std::sync::Mutex::new(None),
+        },
+        420,
+        240,
+    )
+    .preserve_aspect_ratio(false)
+    .enforce_minimum_size(false);
+    let mut rect = view_rect(10, 10);
+    let result = unsafe { view.checkSizeConstraint(&mut rect) };
+    assert_eq!(result, kResultOk);
+    assert_eq!(rect.right - rect.left, 10);
+    assert_eq!(rect.bottom - rect.top, 10);
+
+    let mut on_size = view_rect(10, 10);
+    let result = unsafe { view.onSize(&mut on_size) };
+    assert_eq!(result, kResultOk);
+    assert_eq!(on_size.right - on_size.left, 10);
+    assert_eq!(on_size.bottom - on_size.top, 10);
+}
+
+#[test]
 fn hosted_view_size_constraint_keeps_requested_size_when_larger_than_minimum() {
     let view = HostedVst3View::new(
         MockHostedGui {

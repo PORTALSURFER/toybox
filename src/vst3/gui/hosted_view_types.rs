@@ -31,6 +31,8 @@ pub struct HostedVst3View<G: Vst3HostedGui> {
     default_size: (i32, i32),
     /// Whether resize operations should preserve a uniform aspect ratio.
     preserve_aspect_ratio: bool,
+    /// Whether requested sizes are clamped to the declared minimum when resizing.
+    enforce_minimum_size: bool,
     /// GUI instance shared with FFI callbacks and synchronized under a mutex.
     gui: Mutex<G>,
 }
@@ -46,6 +48,7 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
             attached: Cell::new(false),
             default_size: (width, height),
             preserve_aspect_ratio: true,
+            enforce_minimum_size: false,
             gui: Mutex::new(gui),
         }
     }
@@ -56,6 +59,16 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
     /// When `true`, width/height are adjusted to keep the default aspect ratio.
     pub fn preserve_aspect_ratio(mut self, keep_ratio: bool) -> Self {
         self.preserve_aspect_ratio = keep_ratio;
+        self
+    }
+
+    /// Control whether host resize requests are clamped to the default minimum
+    /// size when aspect-ratio preservation is disabled.
+    ///
+    /// The 1px floor always remains; this flag only controls the default-size
+    /// floor for hosts that keep `preserve_aspect_ratio(false)`.
+    pub fn enforce_minimum_size(mut self, enforce: bool) -> Self {
+        self.enforce_minimum_size = enforce;
         self
     }
 
@@ -81,7 +94,16 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
 
     /// Constrain a requested resize while preserving aspect ratio and minimum size.
     fn constrain_uniform_size(&self, requested_width: i32, requested_height: i32) -> (i32, i32) {
-        let (min_width, min_height) = self.minimum_size();
+        let enforce_minimum_size = if self.preserve_aspect_ratio {
+            true
+        } else {
+            self.enforce_minimum_size
+        };
+        let (min_width, min_height) = if enforce_minimum_size {
+            self.minimum_size()
+        } else {
+            (1, 1)
+        };
         let ratio = self.uniform_ratio();
         let clamped_width = requested_width.max(min_width).max(1);
         let clamped_height = requested_height.max(min_height).max(1);
