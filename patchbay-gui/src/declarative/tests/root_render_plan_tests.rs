@@ -1,7 +1,7 @@
 use super::super::*;
 
 #[test]
-fn plan_root_render_uniform_fit_fills_surface_content() {
+fn plan_root_render_uniform_fit_centers_letterboxed_content() {
     let spec = UiSpec::new(
         RootFrameSpec::new(
             "root",
@@ -41,13 +41,15 @@ fn plan_root_render_uniform_fit_fills_surface_content() {
     assert_eq!(
         plan.transform.content_rect_surface,
         Rect {
-            origin: Point { x: 0, y: 0 },
+            origin: Point { x: 0, y: 75 },
             size: Size {
                 width: 300,
-                height: 300,
+                height: 150,
             },
         }
     );
+    assert_eq!(plan.transform.scale_x, 3.0);
+    assert_eq!(plan.transform.scale_y, 3.0);
 }
 
 #[test]
@@ -83,6 +85,10 @@ fn root_transform_surface_to_design_maps_letterboxed_coordinates() {
     assert_eq!(
         plan.transform.surface_to_design(Point { x: 150, y: 150 }),
         Point { x: 50, y: 25 }
+    );
+    assert_eq!(
+        plan.transform.surface_to_design(Point { x: 150, y: 74 }),
+        Point { x: 50, y: 0 }
     );
 }
 

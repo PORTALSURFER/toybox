@@ -36,16 +36,35 @@ fn resolve_surface_content_rect(
     resolved_scale: f32,
     scale_mode: RootScaleMode,
 ) -> Rect {
-    let scaled_width = (layout_size.width.max(1) as f32 * resolved_scale)
-        .round()
-        .max(1.0);
-    let scaled_height = (layout_size.height.max(1) as f32 * resolved_scale)
-        .round()
-        .max(1.0);
+    let surface_width = surface.width.max(1) as f32;
+    let surface_height = surface.height.max(1) as f32;
+    let scaled_width = match scale_mode {
+        RootScaleMode::None => (layout_size.width.max(1) as f32 * resolved_scale)
+            .round()
+            .max(1.0)
+            .min(surface_width),
+        RootScaleMode::UniformFit => (layout_size.width.max(1) as f32 * resolved_scale)
+            .round()
+            .max(1.0)
+            .min(surface_width),
+    };
+    let scaled_height = match scale_mode {
+        RootScaleMode::None => (layout_size.height.max(1) as f32 * resolved_scale)
+            .round()
+            .max(1.0)
+            .min(surface_height),
+        RootScaleMode::UniformFit => (layout_size.height.max(1) as f32 * resolved_scale)
+            .round()
+            .max(1.0)
+            .min(surface_height),
+    };
 
     let (origin_x, origin_y): (f32, f32) = match scale_mode {
         RootScaleMode::None => (0.0, 0.0),
-        RootScaleMode::UniformFit => (0.0, 0.0),
+        RootScaleMode::UniformFit => (
+            (surface_width - scaled_width) / 2.0,
+            (surface_height - scaled_height) / 2.0,
+        ),
     };
 
     Rect {
@@ -54,14 +73,8 @@ fn resolve_surface_content_rect(
             y: origin_y.round() as i32,
         },
         size: Size {
-            width: match scale_mode {
-                RootScaleMode::None => scaled_width as u32,
-                RootScaleMode::UniformFit => surface.width.max(1),
-            },
-            height: match scale_mode {
-                RootScaleMode::None => scaled_height as u32,
-                RootScaleMode::UniformFit => surface.height.max(1),
-            },
+            width: scaled_width as u32,
+            height: scaled_height as u32,
         },
     }
 }

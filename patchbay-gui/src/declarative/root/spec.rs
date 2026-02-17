@@ -17,10 +17,11 @@ pub enum RootScaleMode {
     #[default]
     None,
     /// Fit the authored design size to the current window using root-canvas
-    /// transform scaling.
+    /// transform scaling while preserving aspect ratio. Content is centered in
+    /// any remaining surface area.
     ///
-    /// When host and design aspect ratios differ, scaling is resolved per axis
-    /// so content fills the available window area.
+    /// When host and design aspect ratios differ, remaining surface area is
+    /// letterboxed.
     UniformFit,
 }
 
