@@ -126,15 +126,15 @@ fn clip_rect_to_bounds(rect: Rect, bounds: Rect) -> Option<Rect> {
 fn emit_layout_overflow_warning(_rect: Rect, _bounds: Rect, _message: &str) {
     #[cfg(feature = "layout-overflow-warnings")]
     eprintln!(
-        "patchbay-gui layout overflow: {message}: rect ({}, {}) + ({}, {}) outside ({}, {}) + ({}, {})",
-        rect.origin.x,
-        rect.origin.y,
-        rect.size.width,
-        rect.size.height,
-        bounds.origin.x,
-        bounds.origin.y,
-        bounds.size.width,
-        bounds.size.height,
+        "patchbay-gui layout overflow: {_message}: rect ({}, {}) + ({}, {}) outside ({}, {}) + ({}, {})",
+        _rect.origin.x,
+        _rect.origin.y,
+        _rect.size.width,
+        _rect.size.height,
+        _bounds.origin.x,
+        _bounds.origin.y,
+        _bounds.size.width,
+        _bounds.size.height,
     );
 }
 
