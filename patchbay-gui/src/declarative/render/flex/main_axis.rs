@@ -18,9 +18,9 @@ fn resolve_flex_main_lengths(
     let mut fill_weight_sum = 0u32;
     for (index, child) in flex.children.iter().enumerate() {
         let layout = node_layout(child);
-        let measured_main = axis.main(intrinsic[index]) as i32;
+        let measured_main = to_i32_saturating(axis.main(intrinsic[index]));
         let value = match axis.main_length(layout) {
-            Length::Px(px) => px as i32,
+            Length::Px(px) => to_i32_saturating(px),
             Length::Auto => measured_main,
             Length::Fill(_) => 0,
         };

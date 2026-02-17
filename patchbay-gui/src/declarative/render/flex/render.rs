@@ -7,7 +7,7 @@ fn render_flex(flex: &FlexSpec, rect: Rect, ui: &mut Ui<'_>, axis: Axis, ctx: &m
 
     let gap = flex.gap.max(0);
     let inner = inset_rect(rect, flex.padding);
-    let available_main = axis.main(inner.size) as i32;
+    let available_main = to_i32_saturating(axis.main(inner.size));
     let intrinsic = measure_flex_intrinsic_children(flex, ctx.tokens);
     let resolved_main = resolve_flex_main_lengths(flex, axis, &intrinsic, gap, available_main);
     let main_spacing =
@@ -87,9 +87,9 @@ fn resolve_flex_child_cross_size(
     available_cross: i32,
     align: Align,
 ) -> i32 {
-    let intrinsic_cross = axis.cross(intrinsic) as i32;
+    let intrinsic_cross = to_i32_saturating(axis.cross(intrinsic));
     match axis.cross_length(layout) {
-        Length::Px(px) => px as i32,
+        Length::Px(px) => to_i32_saturating(px),
         Length::Fill(_) => available_cross,
         Length::Auto => {
             if align == Align::Stretch {
@@ -110,11 +110,19 @@ fn resolve_flex_child_cross_origin(
     cross_size: i32,
     align: Align,
 ) -> i32 {
-    match align {
-        Align::Start | Align::Stretch => axis.origin_cross(inner.origin),
-        Align::Center => axis.origin_cross(inner.origin) + (available_cross - cross_size) / 2,
-        Align::End => axis.origin_cross(inner.origin) + (available_cross - cross_size),
-    }
+    let available_cross = available_cross.max(0);
+    let clamped_cross_size = cross_size.max(0).min(available_cross);
+    let base_origin = axis.origin_cross(inner.origin);
+    let target = if available_cross == 0 {
+        0
+    } else {
+        match align {
+            Align::Start | Align::Stretch => 0,
+            Align::Center => (available_cross - clamped_cross_size) / 2,
+            Align::End => available_cross - clamped_cross_size,
+        }
+    };
+    base_origin + target.max(0).min(available_cross - clamped_cross_size)
 }
 
 /// Emit the debug-border candidate for the flex container.

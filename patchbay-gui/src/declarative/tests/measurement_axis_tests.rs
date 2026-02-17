@@ -1,6 +1,27 @@
 use super::super::*;
 
 #[test]
+fn resolve_flex_child_cross_origin_clamps_oversized_children_to_container() {
+    let inner = Rect {
+        origin: Point { x: 10, y: 5 },
+        size: Size { width: 120, height: 80 },
+    };
+    let oversized_child = resolve_flex_child_cross_origin(Axis::Horizontal, inner, 10, 24, Align::Center);
+    assert_eq!(oversized_child, 5);
+
+    let end_aligned = resolve_flex_child_cross_origin(Axis::Horizontal, inner, 10, 24, Align::End);
+    assert_eq!(end_aligned, 5);
+
+    let stretched = resolve_flex_child_cross_origin(Axis::Horizontal, inner, 10, 24, Align::Stretch);
+    assert_eq!(stretched, 5);
+}
+
+#[test]
+fn axis_cross_to_i32_is_saturating_for_large_sizes() {
+    assert_eq!(to_i32_saturating(u32::MAX), i32::MAX);
+}
+
+#[test]
 fn resolve_grid_axis_distributes_fr_remainder_without_slack() {
     let row_heights = resolve_grid_axis(GridAxisResolveRequest {
         tracks: &[TrackSize::Fr(7), TrackSize::Fr(63), TrackSize::Fr(30)],

@@ -24,10 +24,15 @@ impl FlexRenderContext {
         Self {
             axis,
             inner,
-            available_cross: axis.cross(inner.size) as i32,
+            available_cross: to_i32_saturating(axis.cross(inner.size)),
             align,
         }
     }
+}
+
+/// Convert a `u32` length into a non-wrapping `i32` using saturation.
+fn to_i32_saturating(value: u32) -> i32 {
+    i32::try_from(value).unwrap_or(i32::MAX)
 }
 
 /// Pre-resolved lengths used while placing flex children.
