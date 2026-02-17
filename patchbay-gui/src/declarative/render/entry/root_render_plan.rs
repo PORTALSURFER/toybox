@@ -10,6 +10,7 @@ fn clamp_non_zero_size(size: Size) -> Size {
 fn resolve_root_scale(root: &RootFrameSpec, measured: Size, surface: Size) -> f32 {
     let design = clamp_non_zero_size(root.design_size.unwrap_or(measured));
     let zoom_override = root.zoom_override.unwrap_or(1.0);
+    debug_assert!(zoom_override > 0.0, "Zoom override must be positive");
     let base = match root.scale_mode {
         RootScaleMode::None => 1.0,
         RootScaleMode::UniformFit => {
@@ -18,7 +19,8 @@ fn resolve_root_scale(root: &RootFrameSpec, measured: Size, surface: Size) -> f3
             fit_width.min(fit_height)
         }
     };
-    (base * zoom_override).clamp(0.1, 8.0)
+    let scaled = base * zoom_override;
+    scaled.clamp(0.0, 8.0)
 }
 
 /// Resolve the design-space viewport used for root layout.
