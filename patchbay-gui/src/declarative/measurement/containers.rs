@@ -142,6 +142,7 @@ fn resolve_axis(
     min: Option<u32>,
     max: Option<u32>,
 ) -> u32 {
+    maybe_warn_layout_bound_order(min, max, "layout-axis");
     let base = match length {
         Length::Auto => measured,
         Length::Px(px) => px.max(measured),
@@ -154,3 +155,24 @@ fn resolve_axis(
         min_applied
     }
 }
+
+/// Emit a debug-only warning when min/max constraints are ordered invalidly.
+#[cfg(debug_assertions)]
+fn maybe_warn_layout_bound_order(min: Option<u32>, max: Option<u32>, axis: &'static str) {
+    match (min, max) {
+        (Some(min_value), Some(max_value)) if min_value > max_value => {
+            debug_assert!(
+                false,
+                "{axis}: layout min constraint ({min_value}) exceeds max constraint ({max_value})"
+            );
+            #[cfg(feature = "layout-overflow-warnings")]
+            eprintln!(
+                "patchbay-gui warning: {axis} min ({min_value}) exceeds max ({max_value})"
+            );
+        }
+        _ => {}
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn maybe_warn_layout_bound_order(_min: Option<u32>, _max: Option<u32>, _axis: &'static str) {}
