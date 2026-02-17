@@ -62,6 +62,82 @@ fn offset_rect(rect: Rect, origin: Point) -> Rect {
     }
 }
 
+/// Return the overlap between two rectangles, if any.
+fn rect_intersection(first: Rect, second: Rect) -> Option<Rect> {
+    let min_x = first.origin.x.max(second.origin.x);
+    let min_y = first.origin.y.max(second.origin.y);
+
+    let first_width = i32::try_from(first.size.width).unwrap_or(i32::MAX);
+    let second_width = i32::try_from(second.size.width).unwrap_or(i32::MAX);
+    let first_height = i32::try_from(first.size.height).unwrap_or(i32::MAX);
+    let second_height = i32::try_from(second.size.height).unwrap_or(i32::MAX);
+
+    let first_right = first.origin.x.saturating_add(first_width);
+    let second_right = second.origin.x.saturating_add(second_width);
+    let max_x = first_right.min(second_right);
+
+    let first_bottom = first.origin.y.saturating_add(first_height);
+    let second_bottom = second.origin.y.saturating_add(second_height);
+    let max_y = first_bottom.min(second_bottom);
+
+    let width = (max_x - min_x).max(0);
+    let height = (max_y - min_y).max(0);
+    if width == 0 || height == 0 {
+        return None;
+    }
+
+    Some(Rect {
+        origin: Point {
+            x: min_x,
+            y: min_y,
+        },
+        size: Size {
+            width: u32::try_from(width).expect("intersection width must be non-negative"),
+            height: u32::try_from(height).expect("intersection height must be non-negative"),
+        },
+    })
+}
+
+/// Clamp a rectangle to container bounds and optionally emit overflow warnings.
+fn clip_rect_to_bounds(rect: Rect, bounds: Rect) -> Option<Rect> {
+    let clipped = rect_intersection(rect, bounds);
+    match clipped {
+        Some(clipped_rect) if clipped_rect != rect => {
+            emit_layout_overflow_warning(
+                rect,
+                clipped_rect,
+                "layout rect is partially outside parent bounds",
+            );
+            Some(clipped_rect)
+        }
+        Some(clipped_rect) => Some(clipped_rect),
+        None => {
+            emit_layout_overflow_warning(
+                rect,
+                bounds,
+                "layout rect does not intersect parent bounds",
+            );
+            None
+        }
+    }
+}
+
+/// Emit a debug warning when a layout rectangle extends beyond container bounds.
+fn emit_layout_overflow_warning(_rect: Rect, _bounds: Rect, _message: &str) {
+    #[cfg(feature = "layout-overflow-warnings")]
+    eprintln!(
+        "patchbay-gui layout overflow: {message}: rect ({}, {}) + ({}, {}) outside ({}, {}) + ({}, {})",
+        rect.origin.x,
+        rect.origin.y,
+        rect.size.width,
+        rect.size.height,
+        bounds.origin.x,
+        bounds.origin.y,
+        bounds.size.width,
+        bounds.size.height,
+    );
+}
+
 /// Format control values for generated labels.
 fn format_value(value: f32) -> String {
     let mut text = if value.abs() >= 1.0 {

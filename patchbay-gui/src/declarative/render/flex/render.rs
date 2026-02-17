@@ -30,6 +30,10 @@ fn render_flex_children(
         render_ctx.axis.origin_main(render_ctx.inner.origin) + solved.main_spacing.leading_offset;
     for (index, child) in flex.children.iter().enumerate() {
         let child_rect = resolve_flex_child_rect(child, index, cursor_main, render_ctx, solved);
+        let Some(child_rect) = clip_rect_to_bounds(child_rect, render_ctx.inner) else {
+            cursor_main = advance_flex_cursor(cursor_main, index, solved);
+            continue;
+        };
         ctx.depth += 1;
         render_node(child, child_rect, ui, ctx);
         ctx.depth = ctx.depth.saturating_sub(1);

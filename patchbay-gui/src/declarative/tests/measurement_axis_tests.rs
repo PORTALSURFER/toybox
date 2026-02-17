@@ -168,6 +168,72 @@ fn node_layout_helpers_apply_constraints_when_supported() {
 }
 
 #[test]
+fn clip_rect_to_bounds_keeps_rects_inside_bounds() {
+    let rect = Rect {
+        origin: Point { x: 4, y: 6 },
+        size: Size {
+            width: 40,
+            height: 50,
+        },
+    };
+    let bounds = Rect {
+        origin: Point { x: 0, y: 0 },
+        size: Size {
+            width: 100,
+            height: 100,
+        },
+    };
+
+    let clipped = clip_rect_to_bounds(rect, bounds).expect("in-bounds rect should remain");
+    assert_eq!(clipped, rect);
+}
+
+#[test]
+fn clip_rect_to_bounds_clamps_rect_partially_outside_bounds() {
+    let rect = Rect {
+        origin: Point { x: 80, y: 40 },
+        size: Size {
+            width: 50,
+            height: 30,
+        },
+    };
+    let bounds = Rect {
+        origin: Point { x: 0, y: 0 },
+        size: Size {
+            width: 100,
+            height: 100,
+        },
+    };
+
+    let clipped = clip_rect_to_bounds(rect, bounds)
+        .expect("partially overlapping rect should still render with clipped area");
+    assert_eq!(clipped.origin.x, 80);
+    assert_eq!(clipped.size.width, 20);
+    assert_eq!(clipped.origin.y, 40);
+    assert_eq!(clipped.size.height, 30);
+}
+
+#[test]
+fn clip_rect_to_bounds_returns_none_for_disjoint_rect() {
+    let rect = Rect {
+        origin: Point { x: 160, y: 160 },
+        size: Size {
+            width: 20,
+            height: 20,
+        },
+    };
+    let bounds = Rect {
+        origin: Point { x: 0, y: 0 },
+        size: Size {
+            width: 100,
+            height: 100,
+        },
+    };
+
+    assert_eq!(clip_rect_to_bounds(rect, bounds), None);
+}
+
+#[test]
 #[cfg(not(debug_assertions))]
 fn resolve_axis_with_inverted_min_max_constraints_still_clamps_to_max() {
     let resolved = resolve_axis(

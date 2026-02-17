@@ -11,6 +11,9 @@ fn render_absolute(absolute: &AbsoluteSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &m
             },
             size: resolved,
         };
+        let Some(child_rect) = clip_rect_to_bounds(child_rect, rect) else {
+            continue;
+        };
         ctx.depth += 1;
         render_node(&child.node, child_rect, ui, ctx);
         ctx.depth = ctx.depth.saturating_sub(1);

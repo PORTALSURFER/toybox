@@ -75,7 +75,14 @@ fn render_grid_row(
                     height: row_geometry.height,
                 },
             };
-            render_grid_child(child, cell_rect, row_ctx.layout.intrinsic[index], ui, ctx);
+            render_grid_child(
+                child,
+                row_ctx.layout.inner,
+                cell_rect,
+                row_ctx.layout.intrinsic[index],
+                ui,
+                ctx,
+            );
         }
         x += width as i32 + row_ctx.spacing.column_gaps.get(col).copied().unwrap_or(0);
     }
@@ -84,6 +91,7 @@ fn render_grid_row(
 /// Render one child node inside a resolved grid cell.
 fn render_grid_child(
     child: &Node,
+    container_bounds: Rect,
     cell_rect: Rect,
     measured: Size,
     ui: &mut Ui<'_>,
@@ -91,16 +99,15 @@ fn render_grid_child(
 ) {
     let layout = node_layout(child);
     let resolved = clamp_size_to_available(resolve_size(layout, measured, cell_rect.size), cell_rect.size);
+    let child_rect = Rect {
+        origin: cell_rect.origin,
+        size: resolved,
+    };
+    let Some(clipped_rect) = clip_rect_to_bounds(child_rect, container_bounds) else {
+        return;
+    };
     ctx.depth += 1;
-    render_node(
-        child,
-        Rect {
-            origin: cell_rect.origin,
-            size: resolved,
-        },
-        ui,
-        ctx,
-    );
+    render_node(child, clipped_rect, ui, ctx);
     ctx.depth = ctx.depth.saturating_sub(1);
 }
 
