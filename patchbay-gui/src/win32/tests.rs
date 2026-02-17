@@ -39,16 +39,32 @@ mod tests {
     }
 
     #[test]
-    fn resize_request_prefers_requested_size_even_if_host_client_reported() {
+    fn resize_request_uses_host_client_size_when_available() {
         let requested = Size {
             width: 500,
             height: 300,
         };
-        let resolved = resolved_layout_size_for_resize_request(requested, Some((640, 400)));
+        let resolved = resolved_layout_size_for_resize_request(requested, Some((640, 400)), None);
         assert_eq!(
             resolved,
             Size {
-                width: 500,
+                width: 640,
+                height: 400,
+            }
+        );
+    }
+
+    #[test]
+    fn resize_request_uses_configured_aspect_ratio_when_set() {
+        let requested = Size {
+            width: 500,
+            height: 300,
+        };
+        let resolved = resolved_layout_size_for_resize_request(requested, None, Some(16.0 / 9.0));
+        assert_eq!(
+            resolved,
+            Size {
+                width: 533,
                 height: 300,
             }
         );
@@ -60,7 +76,24 @@ mod tests {
             width: 777,
             height: 333,
         };
-        let resolved = resolved_layout_size_for_resize_request(requested, None);
+        let resolved = resolved_layout_size_for_resize_request(requested, None, None);
         assert_eq!(resolved, requested);
+    }
+
+    #[test]
+    fn resize_request_prefers_host_client_with_aspect_ratio() {
+        let requested = Size {
+            width: 777,
+            height: 333,
+        };
+        let resolved =
+            resolved_layout_size_for_resize_request(requested, Some((640, 500)), Some(4.0 / 3.0));
+        assert_eq!(
+            resolved,
+            Size {
+                width: 640,
+                height: 480,
+            }
+        );
     }
 }

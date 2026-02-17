@@ -38,7 +38,11 @@ where
             self.apply_child_size_request(requested);
             host_client_size = self.current_client_size();
         }
-        let target = resolved_layout_size_for_resize_request(requested, host_client_size);
+        let target = resolved_layout_size_for_resize_request(
+            requested,
+            host_client_size,
+            self.configured_aspect_ratio(),
+        );
         self.apply_layout_size(target, true);
     }
 
@@ -89,7 +93,9 @@ where
                 }
             }
             Err(err) => {
-                log_line_safe(&format!("win32: declarative render validation error: {err}"));
+                log_line_safe(&format!(
+                    "win32: declarative render validation error: {err}"
+                ));
             }
         }
         ui.draw_overlays();
@@ -115,7 +121,8 @@ where
     }
 
     fn present_canvas(&mut self) -> bool {
-        self.renderer.upload(self.canvas.size(), self.canvas.pixels());
+        self.renderer
+            .upload(self.canvas.size(), self.canvas.pixels());
         self.renderer.render().is_ok()
     }
 

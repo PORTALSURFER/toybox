@@ -58,9 +58,6 @@ where
     /// including transient non-aspect values. Filtering those samples causes
     /// visible slide/snap artifacts while users drag-resize plugin windows.
     fn should_apply_client_size(&self, width: u32, height: u32) -> bool {
-        // Keep the configured ratio plumbed for host negotiation paths, but do
-        // not gate live client-size adoption on ratio matching.
-        let _ = self.configured_aspect_ratio();
         client_size_changed(
             self.canonical_layout_size,
             Size {
