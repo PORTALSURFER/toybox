@@ -226,6 +226,32 @@ fn justify_weighting_and_distribution_cover_new_modes() {
 }
 
 #[test]
+fn resolve_flex_fill_remainder_keeps_total_exact_for_uneven_weights() {
+    let flex = FlexSpec::row(vec![
+        label("").layout(LayoutBox::auto().with_width(Length::Fill(1))),
+        label("").layout(LayoutBox::auto().with_width(Length::Fill(1))),
+        label("").layout(LayoutBox::auto().with_width(Length::Fill(1))),
+    ]);
+    let intrinsic = vec![
+        Size {
+            width: 0,
+            height: 1,
+        },
+        Size {
+            width: 0,
+            height: 1,
+        },
+        Size {
+            width: 0,
+            height: 1,
+        },
+    ];
+    let resolved = resolve_flex_main_lengths(&flex, Axis::Horizontal, &intrinsic, 0, 100);
+    assert_eq!(resolved, vec![34, 33, 33]);
+    assert_eq!(resolved.iter().sum::<i32>(), 100);
+}
+
+#[test]
 fn node_layout_helpers_apply_constraints_when_supported() {
     let node = panel("main", label("x")).fill_width();
     match node {

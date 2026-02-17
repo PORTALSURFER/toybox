@@ -42,16 +42,39 @@ fn distribute_flex_fill_remainder(
     fill_weight_sum: u32,
     mut resolved_main: Vec<i32>,
 ) -> Vec<i32> {
+    if flex.children.is_empty() {
+        return resolved_main;
+    }
+
     if fill_weight_sum == 0 {
         return resolved_main;
     }
+
+    let remainder_i64 = i64::from(remainder);
+    let fill_weight_sum_i64 = i64::from(fill_weight_sum);
+    let mut used = 0i64;
     for (index, child) in flex.children.iter().enumerate() {
         let weight = axis.main_length(node_layout(child)).fill_weight();
         if weight > 0 {
-            let extra = ((remainder as i64) * (weight as i64) / (fill_weight_sum as i64)) as i32;
+            let extra = (remainder_i64 * i64::from(weight) / fill_weight_sum_i64) as i32;
             resolved_main[index] += extra;
+            used += i64::from(extra);
         }
     }
+
+    let mut remaining = (remainder_i64 - used).max(0);
+    let mut cursor = 0usize;
+    while remaining > 0 {
+        let index = cursor % flex.children.len();
+        let child = &flex.children[index];
+        let weight = axis.main_length(node_layout(child)).fill_weight();
+        if weight > 0 {
+            resolved_main[index] = resolved_main[index].saturating_add(1);
+            remaining -= 1;
+        }
+        cursor = cursor.saturating_add(1);
+    }
+
     resolved_main
 }
 

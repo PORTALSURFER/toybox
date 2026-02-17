@@ -19,8 +19,8 @@ fn resolve_root_scale(root: &RootFrameSpec, measured: Size, surface: Size) -> f3
         );
     }
 
-    debug_assert!(zoom_override > 0.0, "Zoom override must be positive");
-    debug_assert!(zoom_override.is_finite(), "Zoom override must be finite");
+    debug_assert!(normalized_zoom > 0.0, "Zoom override must be positive");
+    debug_assert!(normalized_zoom.is_finite(), "Zoom override must be finite");
     let base = match root.scale_mode {
         RootScaleMode::None => 1.0,
         RootScaleMode::UniformFit => {

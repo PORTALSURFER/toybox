@@ -237,6 +237,45 @@ fn plan_root_render_none_mode_keeps_top_left_anchor_with_zoom() {
 }
 
 #[test]
+fn plan_root_render_replaces_invalid_zoom_override_with_default_scale() {
+    let spec = UiSpec::new(
+        RootFrameSpec::new(
+            "root",
+            Node::Region(RegionSpec::new(
+                "plot",
+                Size {
+                    width: 64,
+                    height: 48,
+                },
+            )),
+        )
+        .padding(0)
+        .layout(LayoutBox::fixed(64, 48))
+        .zoom_override(-1.0),
+    );
+
+    let plan = plan_root_render(
+        &spec,
+        Size {
+            width: 160,
+            height: 120,
+        },
+    );
+
+    assert_eq!(plan.resolved_scale, 1.0);
+    assert_eq!(
+        plan.transform.content_rect_surface,
+        Rect {
+            origin: Point { x: 0, y: 0 },
+            size: Size {
+                width: 64,
+                height: 48,
+            },
+        }
+    );
+}
+
+#[test]
 fn plan_root_render_tiny_surface_clamps_surface_rect_within_window_bounds() {
     let spec = UiSpec::new(
         RootFrameSpec::new(
