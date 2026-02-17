@@ -329,3 +329,83 @@ fn plan_root_render_tiny_surface_clamps_surface_rect_within_window_bounds() {
     assert!(plan.transform.content_rect_surface.origin.x >= 0);
     assert!(plan.transform.content_rect_surface.origin.y >= 0);
 }
+
+#[test]
+fn plan_root_render_stable_across_jittering_host_sizes() {
+    let spec = UiSpec::new(
+        RootFrameSpec::new(
+            "root",
+            Node::Region(RegionSpec::new(
+                "plot",
+                Size {
+                    width: 420,
+                    height: 258,
+                },
+            )),
+        )
+        .padding(0)
+        .layout(LayoutBox::fixed(420, 258))
+        .design_size(Size {
+            width: 420,
+            height: 258,
+        })
+        .scale_mode(RootScaleMode::UniformFit),
+    );
+
+    let host_sizes = [
+        Size { width: 420, height: 258 },
+        Size { width: 1, height: 1 },
+        Size { width: 1024, height: 320 },
+        Size { width: 2, height: 3 },
+        Size { width: 16, height: 16 },
+        Size { width: 420, height: 258 },
+        Size { width: 640, height: 480 },
+        Size { width: 3, height: 2 },
+    ];
+
+    let mut repeated_host_scale = None;
+    let repeated_host_size = Size {
+        width: 420,
+        height: 258,
+    };
+
+    for host_size in host_sizes {
+        let plan = plan_root_render(&spec, host_size);
+
+        let expected_scale =
+            (host_size.width as f32 / 420.0).min(host_size.height as f32 / 258.0);
+        if host_size.width >= 420 && host_size.height >= 258 {
+            assert!(
+                (plan.resolved_scale - expected_scale).abs() < 1e-6,
+                "expected exact uniform-fit scale for oversized host, got {}, expected {}",
+                plan.resolved_scale,
+                expected_scale
+            );
+        } else {
+            assert!(plan.resolved_scale <= expected_scale + 1e-6);
+        }
+        assert!(plan.resolved_scale.is_finite());
+        assert!(plan.resolved_scale > 0.0);
+
+        assert!(plan.transform.content_rect_surface.origin.x >= 0);
+        assert!(plan.transform.content_rect_surface.origin.y >= 0);
+        assert!(
+            (plan.transform.content_rect_surface.origin.x as u32)
+                .saturating_add(plan.transform.content_rect_surface.size.width)
+                <= host_size.width
+        );
+        assert!(
+            (plan.transform.content_rect_surface.origin.y as u32)
+                .saturating_add(plan.transform.content_rect_surface.size.height)
+                <= host_size.height
+        );
+
+        if host_size == repeated_host_size {
+            if let Some(last_scale) = repeated_host_scale {
+                assert_eq!(plan.resolved_scale, last_scale);
+            } else {
+                repeated_host_scale = Some(plan.resolved_scale);
+            }
+        }
+    }
+}
