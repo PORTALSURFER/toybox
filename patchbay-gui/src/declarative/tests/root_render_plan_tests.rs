@@ -90,6 +90,14 @@ fn root_transform_surface_to_design_maps_letterboxed_coordinates() {
         plan.transform.surface_to_design(Point { x: 150, y: 74 }),
         Point { x: 50, y: 0 }
     );
+    assert_eq!(
+        plan.transform.surface_to_design(Point { x: 150, y: 0 }),
+        Point { x: 50, y: -25 }
+    );
+    assert_eq!(
+        plan.transform.surface_to_design_clamped(Point { x: 150, y: 0 }),
+        Point { x: 50, y: 0 }
+    );
 }
 
 #[test]

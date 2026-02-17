@@ -17,8 +17,10 @@ pub(crate) struct RootTransform {
 }
 
 impl RootTransform {
-    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     /// Map a point from surface space back into design space.
+    ///
+    /// The returned coordinate is the true inverse-mapped point before any
+    /// content-rect clipping.
     pub(crate) fn surface_to_design(&self, point: Point) -> Point {
         let inv_x = if self.scale_x.abs() <= f32::EPSILON {
             1.0
@@ -33,6 +35,26 @@ impl RootTransform {
         Point {
             x: ((point.x as f32 - self.offset_x) * inv_x).round() as i32,
             y: ((point.y as f32 - self.offset_y) * inv_y).round() as i32,
+        }
+    }
+
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    /// Map a surface point into design space and clamp to the design content bounds.
+    pub(crate) fn surface_to_design_clamped(&self, point: Point) -> Point {
+        let mapped = self.surface_to_design(point);
+        let max_x = self
+            .content_rect_design
+            .size
+            .width
+            .saturating_sub(1) as i32;
+        let max_y = self
+            .content_rect_design
+            .size
+            .height
+            .saturating_sub(1) as i32;
+        Point {
+            x: mapped.x.clamp(0, max_x),
+            y: mapped.y.clamp(0, max_y),
         }
     }
 }

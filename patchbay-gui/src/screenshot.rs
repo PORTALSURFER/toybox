@@ -44,14 +44,15 @@ fn remap_canvas_to_surface(
     for y in 0..surface_size.height as i32 {
         for x in 0..surface_size.width as i32 {
             let mapped = transform.surface_to_design(Point { x, y });
-            let source_x = mapped.x.clamp(
-                0,
-                (source_size.width.saturating_sub(1)) as i32,
-            ) as usize;
-            let source_y = mapped.y.clamp(
-                0,
-                (source_size.height.saturating_sub(1)) as i32,
-            ) as usize;
+            if mapped.x < 0
+                || mapped.y < 0
+                || mapped.x >= source_size.width as i32
+                || mapped.y >= source_size.height as i32
+            {
+                continue;
+            }
+            let source_x = mapped.x as usize;
+            let source_y = mapped.y as usize;
             let source_index = (source_y * source_stride) + (source_x * 4);
             let output_index = (y as usize) * output_stride + (x as usize * 4);
             output[output_index..output_index + 4].copy_from_slice(&source[source_index..source_index + 4]);
@@ -87,11 +88,11 @@ where
     let mut mapped_input = input.clone();
     mapped_input.pointer_pos = initial_plan
         .transform
-        .surface_to_design(mapped_input.pointer_pos);
+        .surface_to_design_clamped(mapped_input.pointer_pos);
 
     let spec = build_spec(&mapped_input);
     let plan = crate::declarative::plan_root_render(&spec, mapped_input.window_size);
-    mapped_input.pointer_pos = plan.transform.surface_to_design(mapped_input.pointer_pos);
+    mapped_input.pointer_pos = plan.transform.surface_to_design_clamped(mapped_input.pointer_pos);
 
     let layout_size = plan.layout_size;
     let mut canvas = Canvas::new(layout_size.width, layout_size.height);
@@ -126,4 +127,56 @@ where
         pixels,
         render_result,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::canvas::Rect;
+
+    #[test]
+    fn remap_canvas_to_surface_drops_out_of_bounds_source_pixels() {
+        let source = vec![
+            255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255,
+        ];
+        let transform = RootTransform {
+            scale_x: 1.0,
+            scale_y: 1.0,
+            offset_x: 1.0,
+            offset_y: 1.0,
+            content_rect_design: Rect {
+                origin: Point { x: 0, y: 0 },
+                size: Size {
+                    width: 2,
+                    height: 2,
+                },
+            },
+            content_rect_surface: Rect {
+                origin: Point { x: 1, y: 1 },
+                size: Size {
+                    width: 2,
+                    height: 2,
+                },
+            },
+        };
+
+        let output = remap_canvas_to_surface(
+            &source,
+            Size { width: 2, height: 2 },
+            Size { width: 4, height: 4 },
+            &transform,
+        );
+
+        assert_eq!(output.len(), 4 * 4 * 4);
+        assert_eq!(&output[0..16], &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(
+            &output[16..32],
+            &[0, 0, 0, 0, 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 0, 0]
+        );
+        assert_eq!(
+            &output[32..48],
+            &[0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0]
+        );
+        assert_eq!(&output[48..64], &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    }
 }
