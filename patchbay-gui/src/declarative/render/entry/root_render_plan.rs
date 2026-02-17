@@ -114,6 +114,10 @@ fn resolve_surface_scale(
 
 /// In UniformFit mode, keep layout size within the design viewport.
 fn clamp_layout_for_uniform_fit(layout_size: Size, layout_viewport: Size) -> Size {
+    if layout_size.width > layout_viewport.width || layout_size.height > layout_viewport.height {
+        warn_uniform_fit_clamp(layout_size, layout_viewport);
+    }
+
     let bounded_width = layout_size.width.min(layout_viewport.width);
     let bounded_height = layout_size.height.min(layout_viewport.height);
     Size {
@@ -121,6 +125,20 @@ fn clamp_layout_for_uniform_fit(layout_size: Size, layout_viewport: Size) -> Siz
         height: bounded_height,
     }
 }
+
+#[cfg(feature = "layout-overflow-warnings")]
+/// Emit a debug warning when uniform-fit clipping has to reduce the requested
+/// root layout dimensions to fit the design viewport.
+fn warn_uniform_fit_clamp(requested: Size, viewport: Size) {
+    eprintln!(
+        "patchbay-gui warning: uniform-fit root layout {}x{} exceeds viewport {}x{} and will be clamped",
+        requested.width, requested.height, viewport.width, viewport.height
+    );
+}
+
+#[cfg(not(feature = "layout-overflow-warnings"))]
+/// No-op implementation when overflow diagnostics are disabled.
+fn warn_uniform_fit_clamp(_requested: Size, _viewport: Size) {}
 
 /// Build resolved root render metadata for a UI frame.
 pub(crate) fn plan_root_render(spec: &UiSpec, surface_size: Size) -> RootRenderPlan {
