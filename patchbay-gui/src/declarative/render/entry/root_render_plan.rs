@@ -79,6 +79,24 @@ fn resolve_surface_content_rect(
     }
 }
 
+fn resolve_surface_scale(
+    layout_size: Size,
+    content_rect_surface: Size,
+    resolved_scale: f32,
+    scale_mode: RootScaleMode,
+) -> (f32, f32) {
+    match scale_mode {
+        RootScaleMode::None => {
+            let layout_width = layout_size.width.max(1) as f32;
+            let layout_height = layout_size.height.max(1) as f32;
+            let content_width = content_rect_surface.width.max(1) as f32;
+            let content_height = content_rect_surface.height.max(1) as f32;
+            (content_width / layout_width, content_height / layout_height)
+        }
+        RootScaleMode::UniformFit => (resolved_scale, resolved_scale),
+    }
+}
+
 /// Build resolved root render metadata for a UI frame.
 pub(crate) fn plan_root_render(spec: &UiSpec, surface_size: Size) -> RootRenderPlan {
     let surface = clamp_non_zero_size(surface_size);
@@ -90,9 +108,15 @@ pub(crate) fn plan_root_render(spec: &UiSpec, surface_size: Size) -> RootRenderP
         clamp_non_zero_size(resolve_size(spec.root.layout, measured, layout_viewport));
     let content_rect_surface =
         resolve_surface_content_rect(layout_size, surface, resolved_scale, spec.root.scale_mode);
+    let (scale_x, scale_y) = resolve_surface_scale(
+        layout_size,
+        content_rect_surface.size,
+        resolved_scale,
+        spec.root.scale_mode,
+    );
     let transform = RootTransform {
-        scale_x: content_rect_surface.size.width.max(1) as f32 / layout_size.width as f32,
-        scale_y: content_rect_surface.size.height.max(1) as f32 / layout_size.height as f32,
+        scale_x,
+        scale_y,
         offset_x: content_rect_surface.origin.x as f32,
         offset_y: content_rect_surface.origin.y as f32,
         content_rect_design: Rect {

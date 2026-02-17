@@ -93,6 +93,49 @@ fn root_transform_surface_to_design_maps_letterboxed_coordinates() {
 }
 
 #[test]
+fn plan_root_render_uniform_fit_keeps_shared_scale_for_non_integer_ratio() {
+    let spec = UiSpec::new(
+        RootFrameSpec::new(
+            "root",
+            Node::Region(RegionSpec::new(
+                "plot",
+                Size {
+                    width: 101,
+                    height: 50,
+                },
+            )),
+        )
+        .padding(0)
+        .layout(LayoutBox::fixed(101, 50))
+        .design_size(Size {
+            width: 101,
+            height: 50,
+        })
+        .scale_mode(RootScaleMode::UniformFit),
+    );
+
+    let plan = plan_root_render(
+        &spec,
+        Size {
+            width: 300,
+            height: 300,
+        },
+    );
+
+    assert!((plan.transform.scale_x - plan.transform.scale_y).abs() < f32::EPSILON);
+    assert_eq!(
+        plan.transform.content_rect_surface,
+        Rect {
+            origin: Point { x: 0, y: 76 },
+            size: Size {
+                width: 300,
+                height: 149,
+            },
+        }
+    );
+}
+
+#[test]
 fn plan_root_render_none_mode_keeps_top_left_anchor_with_zoom() {
     let spec = UiSpec::new(
         RootFrameSpec::new(
