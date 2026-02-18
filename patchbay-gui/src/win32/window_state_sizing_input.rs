@@ -71,6 +71,14 @@ where
             return;
         }
 
+        if self.input.mouse_down || self.input.mouse_secondary_down {
+            self.input.pointer_pos = Point {
+                x: point.x,
+                y: point.y,
+            };
+            return;
+        }
+
         if let Some((width, height)) = self.current_client_size() {
             let clamped_x = point.x.clamp(0, width.saturating_sub(1) as i32);
             let clamped_y = point.y.clamp(0, height.saturating_sub(1) as i32);

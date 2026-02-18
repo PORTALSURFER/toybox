@@ -7,6 +7,8 @@ pub struct KnobSpec {
     pub label: String,
     /// Optional value label.
     pub value_label: Option<String>,
+    /// Optional text scale override for knob labels.
+    pub text_scale: Option<u32>,
     /// Current value.
     pub value: f32,
     /// Value range.

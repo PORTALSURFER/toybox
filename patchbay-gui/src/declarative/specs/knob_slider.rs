@@ -10,6 +10,7 @@ impl KnobSpec {
             key: key.into(),
             label: label.into(),
             value_label: None,
+            text_scale: None,
             value,
             range,
             layout: LayoutBox::auto(),
@@ -19,6 +20,14 @@ impl KnobSpec {
     /// Override value label.
     pub fn value_label(mut self, value_label: impl Into<String>) -> Self {
         self.value_label = Some(value_label.into());
+        self
+    }
+
+    /// Override knob label text scale.
+    ///
+    /// A value of `0` is clamped to `1`.
+    pub fn text_scale(mut self, text_scale: u32) -> Self {
+        self.text_scale = Some(text_scale.max(1));
         self
     }
 

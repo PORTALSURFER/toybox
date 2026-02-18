@@ -56,9 +56,14 @@ fn node_fluent_helpers_apply_container_and_style_fields() {
         _ => panic!("expected label node"),
     }
 
-    let knob_node = knob("k", "Drive", 0.5, (0.0, 1.0)).value_label("50%");
+    let knob_node = knob("k", "Drive", 0.5, (0.0, 1.0))
+        .value_label("50%")
+        .text_scale(2);
     match knob_node {
-        Node::Knob(knob) => assert_eq!(knob.value_label.as_deref(), Some("50%")),
+        Node::Knob(knob) => {
+            assert_eq!(knob.value_label.as_deref(), Some("50%"));
+            assert_eq!(knob.text_scale, Some(2));
+        }
         _ => panic!("expected knob node"),
     }
 
@@ -157,6 +162,19 @@ fn measure_knob_matches_shared_block_metrics() {
     let knob = KnobSpec::new("k", "Drive", 0.5, (0.0, 1.0));
     let measured = measure_knob(&knob, &tokens);
     let expected = knob_block_size_for_diameter(90, 3);
+
+    assert_eq!(measured, expected);
+}
+
+#[test]
+fn measure_knob_uses_text_scale_override_when_present() {
+    let mut tokens = ThemeTokens::default();
+    tokens.controls.knob_diameter = 90;
+    tokens.typography.text_scale = 3;
+
+    let knob = KnobSpec::new("k", "Drive", 0.5, (0.0, 1.0)).text_scale(1);
+    let measured = measure_knob(&knob, &tokens);
+    let expected = knob_block_size_for_diameter(90, 1);
 
     assert_eq!(measured, expected);
 }

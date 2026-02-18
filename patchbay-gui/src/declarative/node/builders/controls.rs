@@ -23,6 +23,16 @@ impl Node {
         self
     }
 
+    /// Set knob label text scale for knob nodes.
+    ///
+    /// Non-knob node kinds are returned unchanged.
+    pub fn text_scale(mut self, text_scale: u32) -> Self {
+        if let Self::Knob(knob) = &mut self {
+            knob.text_scale = Some(text_scale.max(1));
+        }
+        self
+    }
+
     /// Set selected option index for dropdown nodes.
     ///
     /// Non-dropdown node kinds are returned unchanged.

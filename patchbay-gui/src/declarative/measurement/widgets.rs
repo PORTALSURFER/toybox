@@ -7,7 +7,8 @@ fn measure_label(label: &LabelSpec, tokens: &ThemeTokens) -> Size {
 /// Measure a knob node.
 fn measure_knob(knob: &KnobSpec, tokens: &ThemeTokens) -> Size {
     let control = tokens.controls.knob_diameter.max(1);
-    let measured = knob_block_size_for_diameter(control, tokens.typography.text_scale);
+    let text_scale = knob.text_scale.unwrap_or(tokens.typography.text_scale);
+    let measured = knob_block_size_for_diameter(control, text_scale);
     resolve_size(knob.layout, measured, measured)
 }
 

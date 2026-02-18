@@ -12,6 +12,7 @@ fn render_knob(
         .value_label
         .clone()
         .unwrap_or_else(|| format_value(knob.value));
+    let text_scale = knob.text_scale.unwrap_or(tokens.typography.text_scale);
     let knob_request = KnobRectRenderRequest::new(
         id,
         &knob.label,
@@ -20,7 +21,7 @@ fn render_knob(
         tokens.controls.knob_diameter,
         rect,
     )
-    .with_text_scale(tokens.typography.text_scale);
+    .with_text_scale(text_scale);
     let response = ui.knob_with_labels_in_rect_scaled(&mut value, knob_request);
     if response.changed {
         actions.push(UiAction::KnobChanged {

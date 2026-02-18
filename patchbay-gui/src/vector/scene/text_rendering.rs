@@ -54,6 +54,7 @@ impl VectorScenePainter {
     }
 
     /// Draw one centered vector text run using measured glyph ink bounds.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn draw_centered_text(
         &mut self,
         scene: &mut Scene,
@@ -191,7 +192,11 @@ impl VectorScenePainter {
     }
 
     /// Measure visible ink span `(left_offset, width)` for one text run.
-    fn measure_text_ink_span(font_ref: &FontRef<'_>, text: &str, font_size: f32) -> Option<(f32, f32)> {
+    fn measure_text_ink_span(
+        font_ref: &FontRef<'_>,
+        text: &str,
+        font_size: f32,
+    ) -> Option<(f32, f32)> {
         let glyph_metrics = font_ref.glyph_metrics(Size::new(font_size), LocationRef::default());
         let charmap = font_ref.charmap();
         let fallback = charmap.map('?');
