@@ -88,8 +88,8 @@ impl<'a> Ui<'a> {
         size
     }
 
-    /// Draw centered single-line text hard-clamped to width bounds.
-    fn draw_text_single_line_hard_clamped_centered_on_x(
+    /// Draw centered single-line hard-clamped text using character width only.
+    fn draw_text_single_line_hard_clamped_centered_on_char_size(
         &mut self,
         origin: Point,
         center_x: i32,
@@ -106,15 +106,19 @@ impl<'a> Ui<'a> {
             };
         }
         let size = text_size(&fitted, self.theme.text_scale);
+        let char_size = character_cell_width(&fitted, self.theme.text_scale);
         let centered_origin = Point {
-            x: centered_text_origin_on_x(origin.x, max_width, size.width, center_x),
+            x: centered_text_origin_on_x(origin.x, max_width, char_size, center_x),
             y: origin.y,
         };
         self.draw_text_internal(centered_origin, &fitted, color, self.theme.text_scale);
         if track_bounds {
             self.track_rect_internal(Rect {
                 origin: centered_origin,
-                size,
+                size: Size {
+                    width: char_size,
+                    height: size.height,
+                },
             });
         }
         size

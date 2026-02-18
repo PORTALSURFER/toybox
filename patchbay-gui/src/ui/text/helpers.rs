@@ -1,4 +1,6 @@
 
+use crate::canvas::glyph_bitmap_for_text;
+
 /// Measure monospaced bitmap text bounds at the given scale.
 fn text_size(text: &str, scale: u32) -> Size {
     let scale = u64::from(scale.max(1));
@@ -92,6 +94,62 @@ fn normalize_knob_value_label(label: &str) -> String {
     }
 }
 
+/// Estimate the rendered width for a text string using glyph ink bounds.
+///
+fn character_cell_width(text: &str, scale: u32) -> u32 {
+    let scale = u64::from(scale.max(1));
+    let mut first_glyph = true;
+    let mut min_col = u64::MAX;
+    let mut max_col = 0u64;
+
+    for (i, ch) in text.chars().enumerate() {
+        let glyph = glyph_bitmap_for_text(ch);
+
+        let mut glyph_min = 5u8;
+        let mut glyph_max = 0u8;
+        for col in 0..5 {
+            for row in glyph.iter() {
+                if (row >> (4 - col)) & 1 == 1 {
+                    glyph_min = glyph_min.min(col as u8);
+                    glyph_max = glyph_max.max(col as u8);
+                    break;
+                }
+            }
+            if glyph_min == 0 && glyph_max == 4 {
+                break;
+            }
+        }
+        if glyph_min == 5 {
+            continue;
+        }
+
+        let base = u64::try_from(i)
+            .unwrap_or(u64::MAX)
+            .saturating_mul(6);
+        let glyph_left = base.saturating_add(u64::from(glyph_min));
+        let glyph_right = base
+            .saturating_add(u64::from(glyph_max.saturating_add(1)));
+        if first_glyph {
+            min_col = glyph_left;
+            max_col = glyph_right;
+            first_glyph = false;
+        } else {
+            min_col = min_col.min(glyph_left);
+            max_col = max_col.max(glyph_right);
+        }
+    }
+
+    if first_glyph {
+        return 0;
+    }
+
+    let width_cells = max_col.saturating_sub(min_col);
+    width_cells
+        .saturating_mul(scale)
+        .try_into()
+        .unwrap_or(u32::MAX)
+}
+
 /// Return a text origin centered on a target x and clamped to bounds.
 fn centered_text_origin_on_x(
     left_bound: i32,
@@ -123,5 +181,13 @@ mod text_helpers_tests {
     fn centered_origin_handles_saturated_span() {
         assert_eq!(centered_text_origin_on_x(-10, u32::MAX, u32::MAX, 40), -10);
         assert_eq!(centered_text_origin_on_x(10, u32::MAX, u32::MAX, -100), 10);
+    }
+
+    #[test]
+    fn character_cell_width_tracks_glyph_ink() {
+        assert_eq!(character_cell_width(" ", 1), 0);
+        assert_eq!(character_cell_width("I", 1), 3);
+        assert_eq!(character_cell_width("I A", 1), 16);
+        assert_eq!(character_cell_width("I", 2), 6);
     }
 }

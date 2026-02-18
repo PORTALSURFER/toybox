@@ -101,3 +101,8 @@ impl BitmapFont {
         }
     }
 }
+
+/// Return a 5x7 glyph bitmap for text measurement helpers.
+pub(crate) fn glyph_bitmap_for_text(ch: char) -> [u8; 7] {
+    BitmapFont::glyph(ch)
+}

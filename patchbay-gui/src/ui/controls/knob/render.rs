@@ -70,7 +70,7 @@ impl<'a> Ui<'a> {
             x: geometry.block_rect.origin.x,
             y: geometry.block_rect.origin.y,
         };
-        let _ = self.draw_text_single_line_hard_clamped_centered_on_x(
+        let _ = self.draw_text_single_line_hard_clamped_centered_on_char_size(
             position,
             geometry.center.x,
             &text,
@@ -90,7 +90,7 @@ impl<'a> Ui<'a> {
             x: geometry.block_rect.origin.x,
             y: geometry.knob_rect.origin.y + geometry.knob_size + geometry.label_gap,
         };
-        let _ = self.draw_text_single_line_hard_clamped_centered_on_x(
+        let _ = self.draw_text_single_line_hard_clamped_centered_on_char_size(
             position,
             geometry.center.x,
             &text,
