@@ -12,11 +12,21 @@ use super::types::LoadedFont;
 /// Try to load a default sans-serif font from known platform locations.
 pub(super) fn load_default_font() -> Option<LoadedFont> {
     let mut candidates = Vec::new();
+
+    // Prefer the repository-bundled monospace face for stable knob/value text
+    // alignment across hosts and developer machines.
+    let bundled_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../assets/Sometype_Mono");
+    candidates.extend([
+        bundled_root.join("static/SometypeMono-Regular.ttf"),
+        bundled_root.join("SometypeMono-VariableFont_wght.ttf"),
+        bundled_root.join("static/SometypeMono-Medium.ttf"),
+    ]);
+
     if let Some(path) = std::env::var_os("PATCHBAY_GUI_FONT_PATH")
         .map(PathBuf::from)
         .filter(|path| path.exists())
     {
-        candidates.push(path);
+        candidates.insert(0, path);
     }
 
     #[cfg(target_os = "windows")]
