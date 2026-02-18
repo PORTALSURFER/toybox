@@ -115,7 +115,19 @@ impl<'a> Ui<'a> {
             },
             y: origin.y,
         };
-        self.draw_text_internal(centered_origin, &fitted, color, self.theme.text_scale);
+        if self.vector_text_enabled {
+            self.vector_commands.push(VectorCommand::CenteredText {
+                left_bound: origin.x,
+                max_width,
+                target_center_x: center_x,
+                origin_y: origin.y,
+                text: fitted.clone(),
+                color,
+                scale: self.theme.text_scale,
+            });
+        } else {
+            self.draw_text_internal(centered_origin, &fitted, color, self.theme.text_scale);
+        }
         if track_bounds {
             self.track_rect_internal(Rect {
                 origin: centered_origin,

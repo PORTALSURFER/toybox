@@ -1,6 +1,49 @@
 use super::super::*;
 use crate::canvas::Canvas;
 use crate::host::InputState;
+use crate::vector::scene::VectorCommand;
+
+fn color_ink_bounds_in_y_band(
+    canvas: &Canvas,
+    color: Color,
+    y_start: i32,
+    y_end: i32,
+) -> Option<(u32, u32)> {
+    let size = canvas.size();
+    if size.width == 0 || size.height == 0 {
+        return None;
+    }
+    let start = y_start.max(0) as u32;
+    let end = y_end.max(y_start).max(0) as u32;
+    let start = start.min(size.height);
+    let end = end.min(size.height);
+    if start >= end {
+        return None;
+    }
+
+    let mut min_x = u32::MAX;
+    let mut max_x_exclusive = 0u32;
+    let pixels = canvas.pixels();
+    for y in start..end {
+        for x in 0..size.width {
+            let idx = ((y * size.width + x) * 4) as usize;
+            let r = pixels[idx];
+            let g = pixels[idx + 1];
+            let b = pixels[idx + 2];
+            let a = pixels[idx + 3];
+            if a != 0 && r == color.r && g == color.g && b == color.b {
+                min_x = min_x.min(x);
+                max_x_exclusive = max_x_exclusive.max(x.saturating_add(1));
+            }
+        }
+    }
+
+    if min_x == u32::MAX || max_x_exclusive <= min_x {
+        None
+    } else {
+        Some((min_x, max_x_exclusive))
+    }
+}
 
 #[test]
 fn knob_indicator_point_uses_arc_coordinate_convention() {
@@ -116,6 +159,121 @@ fn centered_text_origin_on_axis_clamps_to_bounds() {
     assert_eq!(centered_text_origin_on_x(10, 40, 20, 30), 20);
     assert_eq!(centered_text_origin_on_x(10, 40, 20, 8), 10);
     assert_eq!(centered_text_origin_on_x(10, 40, 20, 80), 30);
+}
+
+#[test]
+fn knob_label_ink_centers_match_knob_center_in_canvas_output() {
+    let mut canvas = Canvas::new(220, 220);
+    let mut layout = Layout::default();
+    let mut theme = Theme::default();
+    theme.text_scale = 1;
+    let text_color = theme.text;
+    let mut ui_state = UiState::default();
+    let input = InputState::default();
+    let mut value = 0.5;
+    let knob_diameter = DEFAULT_KNOB_DIAMETER.max(1) as u32;
+    let label_h = knob_label_height(theme.text_scale) as i32;
+    let label_gap = knob_label_gap(theme.text_scale) as i32;
+    let block_size = knob_block_size_for_diameter(knob_diameter, theme.text_scale);
+    let origin = Point { x: 30, y: 24 };
+    let rect = Rect {
+        origin,
+        size: block_size,
+    };
+
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+    let request = KnobRectRenderRequest::new(
+        WidgetId::new(991),
+        "I",
+        "+2.3 dB",
+        (0.0, 1.0),
+        knob_diameter,
+        rect,
+    );
+    let _ = ui.knob_with_labels_in_rect(&mut value, request);
+
+    let knob_diameter_i32 = knob_diameter as i32;
+    let knob_x_offset = ((block_size.width as i32 - knob_diameter_i32) / 2).max(0);
+    let knob_center_x = origin.x + knob_x_offset + knob_diameter_i32 / 2;
+    let knob_origin_y = origin.y + label_h + label_gap;
+    let value_label_y = knob_origin_y + knob_diameter_i32 + label_gap;
+
+    let name_bounds =
+        color_ink_bounds_in_y_band(&canvas, text_color, origin.y, origin.y + label_h)
+            .expect("expected top knob name label ink pixels");
+    let value_bounds = color_ink_bounds_in_y_band(
+        &canvas,
+        text_color,
+        value_label_y,
+        value_label_y + label_h,
+    )
+    .expect("expected bottom knob value label ink pixels");
+
+    let target_twice = i64::from(knob_center_x).saturating_mul(2);
+    let name_width = name_bounds.1.saturating_sub(name_bounds.0);
+    let value_width = value_bounds.1.saturating_sub(value_bounds.0);
+    let name_center_twice = i64::from(name_bounds.0)
+        .saturating_mul(2)
+        .saturating_add(i64::from(name_width));
+    let value_center_twice = i64::from(value_bounds.0)
+        .saturating_mul(2)
+        .saturating_add(i64::from(value_width));
+    let name_delta = (name_center_twice - target_twice).abs();
+    let value_delta = (value_center_twice - target_twice).abs();
+
+    assert!(
+        name_delta <= 1,
+        "name label center mismatch: knob_center_x={} ink_left={} ink_right_exclusive={} ink_center_x2={} target_x2={} delta={}",
+        knob_center_x,
+        name_bounds.0,
+        name_bounds.1,
+        name_center_twice,
+        target_twice,
+        name_delta
+    );
+    assert!(
+        value_delta <= 1,
+        "value label center mismatch: knob_center_x={} ink_left={} ink_right_exclusive={} ink_center_x2={} target_x2={} delta={}",
+        knob_center_x,
+        value_bounds.0,
+        value_bounds.1,
+        value_center_twice,
+        target_twice,
+        value_delta
+    );
+}
+
+#[test]
+fn vector_text_knob_labels_emit_centered_text_commands() {
+    let mut canvas = Canvas::new(220, 220);
+    let mut layout = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let input = InputState::default();
+    let mut value = 0.5;
+    let rect = Rect {
+        origin: Point { x: 30, y: 24 },
+        size: knob_block_size_for_diameter(DEFAULT_KNOB_DIAMETER as u32, theme.text_scale),
+    };
+
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+    ui.set_vector_text_enabled(true);
+    let request = KnobRectRenderRequest::new(
+        WidgetId::new(992),
+        "I",
+        "+2.3 dB",
+        (0.0, 1.0),
+        DEFAULT_KNOB_DIAMETER as u32,
+        rect,
+    );
+    let _ = ui.knob_with_labels_in_rect(&mut value, request);
+    let commands = ui.take_vector_commands();
+    let centered_count = commands
+        .iter()
+        .filter(|command| matches!(command, VectorCommand::CenteredText { .. }))
+        .count();
+
+    assert_eq!(centered_count, 2);
 }
 
 #[test]

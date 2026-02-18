@@ -230,4 +230,25 @@ mod text_helpers_tests {
         assert_eq!(glyph_ink_span("A", 1), (0, 5));
         assert_eq!(glyph_ink_span("I A", 1), (1, 16));
     }
+
+    #[test]
+    fn centered_span_tracks_ink_centroid_for_common_knob_labels() {
+        let target_center_x = 100i32;
+        let target_twice = i64::from(target_center_x).saturating_mul(2);
+        for text in ["I", "MIX", "100%", "+2.3 db"] {
+            let (span_left, span_width) = glyph_ink_span(text, 1);
+            assert!(span_width > 0, "expected non-empty glyph span for '{text}'");
+            let origin =
+                centered_text_origin_on_span(0, u32::MAX, span_left, span_width, target_center_x);
+            let ink_left = i64::from(origin).saturating_add(i64::from(span_left));
+            let ink_center_twice = ink_left
+                .saturating_mul(2)
+                .saturating_add(i64::from(span_width));
+            let delta = (ink_center_twice - target_twice).abs();
+            assert!(
+                delta <= 1,
+                "label='{text}' span_left={span_left} span_width={span_width} origin={origin} ink_center_x2={ink_center_twice} target_x2={target_twice} delta={delta}"
+            );
+        }
+    }
 }

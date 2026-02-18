@@ -22,6 +22,23 @@ pub(crate) enum VectorCommand {
         /// Legacy bitmap-compatible scale.
         scale: u32,
     },
+    /// Draw single-line text centered on a target x using vector glyph bounds.
+    CenteredText {
+        /// Left bound used for clamping within a control block.
+        left_bound: i32,
+        /// Maximum drawable width from `left_bound`.
+        max_width: u32,
+        /// Target center x position for visible glyph ink.
+        target_center_x: i32,
+        /// Top-left y origin in canvas-space pixels.
+        origin_y: i32,
+        /// Text content.
+        text: String,
+        /// Text color.
+        color: Color,
+        /// Legacy bitmap-compatible scale.
+        scale: u32,
+    },
     /// Draw a knob primitive with anti-aliased vector geometry.
     Knob(KnobVisual),
 }
@@ -109,6 +126,25 @@ impl VectorScenePainter {
                     color,
                     scale,
                 } => self.draw_text(scene, *origin, text, *color, *scale, transform),
+                VectorCommand::CenteredText {
+                    left_bound,
+                    max_width,
+                    target_center_x,
+                    origin_y,
+                    text,
+                    color,
+                    scale,
+                } => self.draw_centered_text(
+                    scene,
+                    *left_bound,
+                    *max_width,
+                    *target_center_x,
+                    *origin_y,
+                    text,
+                    *color,
+                    *scale,
+                    transform,
+                ),
                 VectorCommand::Knob(knob) => draw_knob(scene, *knob, transform),
             }
         }
