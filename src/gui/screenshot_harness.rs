@@ -84,11 +84,18 @@ pub fn screenshot_output_path(plugin: &str, width: u32, height: u32) -> Result<P
 }
 
 /// Write an RGBA8 buffer as a PNG file.
-pub fn write_png_rgba8(path: impl AsRef<Path>, width: u32, height: u32, pixels: Vec<u8>) -> Result<(), String> {
+pub fn write_png_rgba8(
+    path: impl AsRef<Path>,
+    width: u32,
+    height: u32,
+    pixels: Vec<u8>,
+) -> Result<(), String> {
     let path = path.as_ref();
     let image = ImageBuffer::<Rgba<u8>, _>::from_vec(width, height, pixels)
         .ok_or_else(|| "failed to build image buffer".to_string())?;
-    image.save(path).map_err(|err| format!("save PNG failed: {err}"))?;
+    image
+        .save(path)
+        .map_err(|err| format!("save PNG failed: {err}"))?;
     Ok(())
 }
 
@@ -109,8 +116,12 @@ where
     }
 
     for size in default_screenshot_sizes(base_size) {
-        let frame = render_spec_to_frame(size, &mut build_spec)
-            .map_err(|err| format!("headless render failed ({plugin} {0}x{1}): {err}", size.width, size.height))?;
+        let frame = render_spec_to_frame(size, &mut build_spec).map_err(|err| {
+            format!(
+                "headless render failed ({plugin} {0}x{1}): {err}",
+                size.width, size.height
+            )
+        })?;
         if frame.width != size.width || frame.height != size.height {
             return Err(format!(
                 "headless render size mismatch ({plugin}): got {}x{}, expected exactly {}x{}",

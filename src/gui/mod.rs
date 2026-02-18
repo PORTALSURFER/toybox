@@ -4,7 +4,9 @@
 //! build UI specs and reduce typed actions without depending on `patchbay-gui`
 //! directly. Immediate-mode authoring APIs are intentionally not re-exported.
 
-pub use patchbay_gui::{Canvas, Color, InputState, MainPalette, Point, Rect, RenderedFrame, Size, render_spec_to_frame};
+pub use patchbay_gui::{
+    Canvas, Color, InputState, MainPalette, Point, Rect, RenderedFrame, Size, render_spec_to_frame,
+};
 
 /// Strict declarative GUI types and rendering helpers.
 pub mod declarative {
