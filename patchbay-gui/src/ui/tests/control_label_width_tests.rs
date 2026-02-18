@@ -79,14 +79,14 @@ fn block_size_helpers_match_rendered_width_contracts() {
     let label_stack_height = knob_diameter
         + knob_label_height(Theme::default().text_scale) * 2
         + knob_label_gap(Theme::default().text_scale) * 2;
-    let expected_knob_width = dial_square_width.max(label_stack_height);
     let theme = Theme::default();
     let mut ui_state = UiState::default();
     let input = InputState::default();
     let ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
 
     let knob = ui.knob_block_size("Pitch Depth", "100%");
-    assert_eq!(knob.width, expected_knob_width);
+    assert_eq!(knob.width, dial_square_width);
+    assert_eq!(knob.height, label_stack_height.max(dial_square_width));
 
     let slider = ui.slider_block_size(
         "Drive",

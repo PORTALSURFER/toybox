@@ -55,6 +55,44 @@ fn resolve_grid_axis_distributes_fr_remainder_without_slack() {
 }
 
 #[test]
+fn resolve_grid_axis_auto_tracks_keep_intrinsic_widths_with_free_space() {
+    let widths = resolve_grid_axis(GridAxisResolveRequest {
+        tracks: &[
+            TrackSize::Auto,
+            TrackSize::Auto,
+            TrackSize::Auto,
+            TrackSize::Auto,
+        ],
+        columns: 4,
+        rows: 1,
+        gap: 0,
+        available: 294,
+        is_columns: true,
+        intrinsic: &[
+            Size {
+                width: 48,
+                height: 0,
+            },
+            Size {
+                width: 48,
+                height: 0,
+            },
+            Size {
+                width: 48,
+                height: 0,
+            },
+            Size {
+                width: 48,
+                height: 0,
+            },
+        ],
+    });
+
+    assert_eq!(widths, vec![48, 48, 48, 48]);
+    assert_eq!(widths.iter().sum::<u32>(), 192);
+}
+
+#[test]
 fn resolve_grid_axis_percent_tracks_shrink_for_fixed_tracks_and_gaps() {
     let widths = resolve_grid_axis(GridAxisResolveRequest {
         tracks: &[TrackSize::Px(60), TrackSize::Percent(60), TrackSize::Percent(40)],

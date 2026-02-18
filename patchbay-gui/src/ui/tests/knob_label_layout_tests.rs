@@ -103,10 +103,7 @@ fn knob_labels_are_clamped_to_knob_width() {
     let mut layout = Layout::default();
     let knob_diameter = layout.knob_size.max(1) as u32;
     let dial_square_width = knob_diameter + (KNOB_BLOCK_SIDE_PADDING.max(0) * 2) as u32;
-    let label_stack_height = knob_diameter
-        + knob_label_height(Theme::default().text_scale) * 2
-        + knob_label_gap(Theme::default().text_scale) * 2;
-    let expected_width = dial_square_width.max(label_stack_height);
+    let expected_width = dial_square_width;
     let theme = Theme::default();
     let mut ui_state = UiState::default();
     let input = InputState::default();
@@ -132,6 +129,15 @@ fn knob_labels_are_clamped_to_knob_width() {
     );
 
     assert_eq!(response.measured_size.width, expected_width);
+}
+
+#[test]
+fn knob_block_width_matches_dial_hit_width_for_tight_tiling() {
+    let knob_diameter = DEFAULT_KNOB_DIAMETER.max(1) as u32;
+    let block = knob_block_size_for_diameter(knob_diameter, Theme::default().text_scale);
+    let dial_hit_width = knob_diameter + (KNOB_BLOCK_SIDE_PADDING.max(0) * 2) as u32;
+
+    assert_eq!(block.width, dial_hit_width);
 }
 
 #[test]

@@ -22,12 +22,11 @@ pub(crate) fn knob_block_size_for_diameter(diameter: u32, text_scale: u32) -> Si
     let knob_diameter = diameter.max(1);
     let label_height = knob_label_height(text_scale);
     let label_gap = knob_label_gap(text_scale);
-    let dial_square_side = knob_diameter + (KNOB_BLOCK_SIDE_PADDING.max(0) * 2) as u32;
+    let dial_square_width = knob_diameter + (KNOB_BLOCK_SIDE_PADDING.max(0) * 2) as u32;
     let label_stack_height = knob_diameter + label_height * 2 + label_gap * 2;
-    let square_side = dial_square_side.max(label_stack_height);
     Size {
-        width: square_side,
-        height: square_side,
+        width: dial_square_width,
+        height: label_stack_height.max(dial_square_width),
     }
 }
 
