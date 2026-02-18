@@ -67,7 +67,7 @@ where
         if unsafe { GetCursorPos(&mut point) }.is_err() {
             return;
         }
-        if unsafe { ScreenToClient(self.hwnd, &mut point) }.is_err() {
+        if !unsafe { ScreenToClient(self.hwnd, &mut point).as_bool() } {
             return;
         }
 
