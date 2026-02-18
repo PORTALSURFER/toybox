@@ -54,6 +54,49 @@ impl<'a> Ui<'a> {
         }
     }
 
+    /// Resolve knob geometry for rect-scoped rendering where the provided rect
+    /// is the knob block bounds.
+    fn resolve_knob_geometry_in_rect(&self, rect: Rect, knob_size: i32) -> KnobGeometry {
+        let label_height = knob_label_height(self.theme.text_scale) as i32;
+        let label_gap = knob_label_gap(self.theme.text_scale) as i32;
+        let knob_x_offset = ((rect.size.width as i32 - knob_size) / 2).max(0);
+        let knob_origin = Point {
+            x: rect.origin.x + knob_x_offset,
+            y: rect.origin.y + label_height + label_gap,
+        };
+        let knob_rect = Rect {
+            origin: knob_origin,
+            size: Size {
+                width: knob_size.max(1) as u32,
+                height: knob_size.max(1) as u32,
+            },
+        };
+        let hit_rect = Rect {
+            origin: Point {
+                x: knob_rect.origin.x - KNOB_BLOCK_SIDE_PADDING,
+                y: knob_rect.origin.y - KNOB_BLOCK_SIDE_PADDING,
+            },
+            size: Size {
+                width: (knob_size + KNOB_BLOCK_SIDE_PADDING * 2).max(1) as u32,
+                height: (knob_size + KNOB_BLOCK_SIDE_PADDING * 2).max(1) as u32,
+            },
+        };
+        let center = Point {
+            x: knob_rect.origin.x + knob_size / 2,
+            y: knob_rect.origin.y + knob_size / 2,
+        };
+        let radius = (knob_size / 2 - 4).max(1);
+        KnobGeometry {
+            block_rect: rect,
+            knob_rect,
+            hit_rect,
+            center,
+            radius,
+            knob_size,
+            label_gap,
+        }
+    }
+
     /// Render helper rectangles used for layout bounds and debug visualization.
     fn draw_knob_bounds(&mut self, geometry: KnobGeometry) {
         self.stroke_rect_clipped(geometry.block_rect, 1, self.theme.knob_indicator);

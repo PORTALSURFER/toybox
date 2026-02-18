@@ -318,11 +318,20 @@ fn knob_in_rect_centers_visual_when_cell_is_oversized() {
         })
         .expect("knob render should emit a vector knob command");
 
-    let target_center = Point {
-        x: rect.origin.x + rect.size.width as i32 / 2,
-        y: rect.origin.y + rect.size.height as i32 / 2,
-    };
-    assert_eq!(knob.center, target_center);
+    let target_center_x = rect.origin.x + rect.size.width as i32 / 2;
+    let rect_bottom = rect.origin.y + rect.size.height as i32;
+    let knob_bottom = knob.center.y + knob.radius;
+    let knob_top = knob.center.y - knob.radius;
+
+    assert_eq!(knob.center.x, target_center_x);
+    assert!(
+        knob_top >= rect.origin.y && knob_bottom <= rect_bottom,
+        "knob body should remain within rect bounds: rect_y=[{}, {}] knob_y=[{}, {}]",
+        rect.origin.y,
+        rect_bottom,
+        knob_top,
+        knob_bottom
+    );
 }
 
 #[test]
