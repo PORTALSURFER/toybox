@@ -6,6 +6,11 @@
 //! exports only declarative authoring primitives and host integration helpers.
 //! The focus is embedding into a host-provided window handle on Windows.
 
+// Keep doc expectations visible at the crate boundary. The workspace lints also
+// enforce this, but having it here makes the standard obvious to contributors.
+#![warn(missing_docs)]
+#![warn(rustdoc::missing_crate_level_docs)]
+
 mod canvas;
 mod declarative;
 #[cfg(target_os = "windows")]
@@ -14,9 +19,9 @@ mod host;
 #[path = "host_non_windows/mod.rs"]
 mod host;
 mod logging;
-mod screenshot;
 #[cfg(target_os = "windows")]
 mod renderer;
+mod screenshot;
 mod ui;
 mod vector;
 #[cfg(target_os = "windows")]
@@ -39,7 +44,7 @@ pub use crate::host::WindowHandle;
 pub use crate::host::{
     GuiError, HostWindow, InputState, OpenParentedCallbacks, OpenParentedMode, OpenParentedRequest,
 };
+pub use crate::screenshot::{RenderedFrame, render_spec_to_frame};
 pub use crate::ui::MainPalette;
-pub use crate::screenshot::{render_spec_to_frame, RenderedFrame};
 #[cfg(target_os = "windows")]
 pub use crate::win32::WindowHandle;

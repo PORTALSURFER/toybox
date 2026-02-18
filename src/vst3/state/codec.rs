@@ -1,4 +1,4 @@
-use super::{check_payload_length, StreamError, VersionedPayload};
+use super::{StreamError, VersionedPayload, check_payload_length};
 
 /// Encode a versioned state payload into a byte vector.
 ///

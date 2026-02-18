@@ -66,12 +66,7 @@ mod tests {
                 width: 320,
                 height: 200,
             },
-            OpenParentedCallbacks::new(
-                (),
-                init_state,
-                build_root_frame,
-                reduce_action,
-            ),
+            OpenParentedCallbacks::new((), init_state, build_root_frame, reduce_action),
         ));
         assert!(matches!(result, Err(GuiError::UnsupportedHandle)));
     }

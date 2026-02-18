@@ -7,6 +7,7 @@ edition = "2024"
 clack-plugin = { git = "https://github.com/prokopyl/clack.git", rev = "36602d61bb192e2779a68fddf985e7664f161fb1", package = "clack-plugin" }
 clack-extensions = { git = "https://github.com/prokopyl/clack.git", rev = "36602d61bb192e2779a68fddf985e7664f161fb1", package = "clack-extensions", features = ["params", "clack-plugin", "audio-ports", "note-ports", "state", "gui", "raw-window-handle_05"] }
 clack-common = { git = "https://github.com/prokopyl/clack.git", rev = "36602d61bb192e2779a68fddf985e7664f161fb1", package = "clack-common" }
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 mts_esp = { git = "https://github.com/PORTALSURFER/mts-esp-rs", rev = "d107a979e44c1b16dcc72dfd47cdd8dac77854ca", package = "mts-esp-rs" }
 patchbay-gui = { path = "patchbay-gui", version = "0.1.0", optional = true }
 raw-window-handle = { version = "0.5.2", optional = true }
@@ -16,6 +17,7 @@ toybox-process-log = { path = "crates/process-log" }
 [features]
 default = []
 gui = ["dep:patchbay-gui", "dep:raw-window-handle"]
+screenshot-test = ["gui", "dep:image"]
 vst3 = ["dep:toybox-vst3-ffi"]
 
 [lints]

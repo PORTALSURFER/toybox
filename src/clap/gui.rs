@@ -10,5 +10,5 @@ mod types;
 pub use patchbay_gui::{Color, InputState, OpenParentedMode, ThemeTokens};
 
 pub use host_window::GuiHostWindow;
-pub use requester::{host_param_requester, HostParamRequester};
+pub use requester::{HostParamRequester, host_param_requester};
 pub use types::{GuiOpenCallbacks, GuiOpenRequest, HostResizePolicy};

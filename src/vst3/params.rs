@@ -149,12 +149,14 @@ pub unsafe fn parse_tchar_f64(text: *mut TChar) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_tchar_f64, ParamRange};
+    use super::{ParamRange, parse_tchar_f64};
     use toybox_vst3_ffi::Steinberg::Vst::TChar;
 
     #[test]
     fn parse_tchar_f64_trims_and_parses_suffixes() {
-        let mut percent: Vec<TChar> = b"42%".iter().map(|byte| u16::from(*byte) as TChar)
+        let mut percent: Vec<TChar> = b"42%"
+            .iter()
+            .map(|byte| u16::from(*byte) as TChar)
             .chain(Some(0))
             .collect();
 
@@ -180,7 +182,9 @@ mod tests {
 
     #[test]
     fn parse_tchar_f64_handles_invalid_and_empty_text() {
-        let mut invalid: Vec<TChar> = b"abc".iter().map(|byte| u16::from(*byte) as TChar)
+        let mut invalid: Vec<TChar> = b"abc"
+            .iter()
+            .map(|byte| u16::from(*byte) as TChar)
             .chain(Some(0))
             .collect();
 

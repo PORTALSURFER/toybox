@@ -34,7 +34,8 @@ impl HostParamRequester {
 /// framework's parented window runtime.
 pub fn host_param_requester(host: HostSharedHandle<'_>) -> Option<HostParamRequester> {
     let params = host.get_extension::<HostParams>()?;
-    let host = unsafe { std::mem::transmute::<HostSharedHandle<'_>, HostSharedHandle<'static>>(host) };
+    let host =
+        unsafe { std::mem::transmute::<HostSharedHandle<'_>, HostSharedHandle<'static>>(host) };
 
     Some(HostParamRequester { host, params })
 }

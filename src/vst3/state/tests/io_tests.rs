@@ -4,8 +4,8 @@ use std::ptr;
 
 use super::io_helpers::{FakeStream, MAGIC};
 use crate::vst3::state::{
-    encode_versioned_payload, read_versioned_payload, write_all, write_versioned_payload,
-    StreamError, MAX_STATE_PAYLOAD_BYTES as STATE_LIMIT,
+    MAX_STATE_PAYLOAD_BYTES as STATE_LIMIT, StreamError, encode_versioned_payload,
+    read_versioned_payload, write_all, write_versioned_payload,
 };
 
 fn header_with_payload_len(payload_len: u32) -> Vec<u8> {

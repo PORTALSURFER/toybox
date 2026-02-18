@@ -21,7 +21,9 @@ pub struct ProcessContext<'a> {
 ///
 /// The boolean flag reports whether the output buffer aliases the output bus for
 /// in-place processing.
-pub fn split_channel<'a, T>(pair: ChannelPair<'a, T>) -> (Option<&'a [T]>, Option<&'a mut [T]>, bool) {
+pub fn split_channel<'a, T>(
+    pair: ChannelPair<'a, T>,
+) -> (Option<&'a [T]>, Option<&'a mut [T]>, bool) {
     match pair {
         ChannelPair::InputOnly(input) => (Some(input), None, false),
         ChannelPair::OutputOnly(output) => (None, Some(output), false),
@@ -82,12 +84,14 @@ mod tests {
         let mut in_place = [4.0_f32, 5.0, 6.0];
         let mut output = [7.0_f32, 8.0, 9.0];
 
-        let (left_input, left_output, left_in_place) = split_channel(ChannelPair::InputOnly(&input));
+        let (left_input, left_output, left_in_place) =
+            split_channel(ChannelPair::InputOnly(&input));
         assert_eq!(left_input.map(|buffer| buffer.len()), Some(3));
         assert!(left_output.is_none());
         assert!(!left_in_place);
 
-        let (out_input, out_output, out_in_place) = split_channel(ChannelPair::InPlace(&mut in_place));
+        let (out_input, out_output, out_in_place) =
+            split_channel(ChannelPair::InPlace(&mut in_place));
         assert!(out_input.is_none());
         assert_eq!(out_output.map(|buffer| buffer.len()), Some(3));
         assert!(out_in_place);

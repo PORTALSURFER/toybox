@@ -110,7 +110,19 @@ fn clip_rect_to_bounds(rect: Rect, bounds: Rect) -> Option<Rect> {
             );
             Some(clipped_rect)
         }
-        Some(clipped_rect) => Some(clipped_rect),
+        Some(clipped_rect) => {
+            debug_assert!(clipped_rect.origin.x >= bounds.origin.x);
+            debug_assert!(clipped_rect.origin.y >= bounds.origin.y);
+            debug_assert!(
+                clipped_rect.origin.x.saturating_add(clipped_rect.size.width as i32)
+                    <= bounds.origin.x.saturating_add(bounds.size.width as i32)
+            );
+            debug_assert!(
+                clipped_rect.origin.y.saturating_add(clipped_rect.size.height as i32)
+                    <= bounds.origin.y.saturating_add(bounds.size.height as i32)
+            );
+            Some(clipped_rect)
+        }
         None => {
             emit_layout_overflow_warning(
                 rect,

@@ -2,8 +2,8 @@
 
 use std::mem;
 use std::ptr;
-use toybox_vst3_ffi::Steinberg::Vst::{AudioBusBuffers, AudioBusBuffers__type0};
 use toybox_vst3_ffi::Steinberg::Vst::ProcessData;
+use toybox_vst3_ffi::Steinberg::Vst::{AudioBusBuffers, AudioBusBuffers__type0};
 
 struct StereoProcessFixture {
     process_data: ProcessData,

@@ -142,7 +142,7 @@ fn resolve_axis(
     min: Option<u32>,
     max: Option<u32>,
 ) -> u32 {
-    maybe_warn_layout_bound_order(min, max, "layout-axis");
+    let (min, max) = normalize_axis_bounds(min, max, "layout-axis");
     let base = match length {
         Length::Auto => measured,
         Length::Px(px) => px.max(measured),
@@ -157,18 +157,39 @@ fn resolve_axis(
 }
 
 /// Emit a warning when min/max constraints are ordered invalidly.
-fn maybe_warn_layout_bound_order(min: Option<u32>, max: Option<u32>, axis: &'static str) {
+fn normalize_axis_bounds(
+    min: Option<u32>,
+    max: Option<u32>,
+    axis: &'static str,
+) -> (Option<u32>, Option<u32>) {
     match (min, max) {
         (Some(min_value), Some(max_value)) if min_value > max_value => {
-            #[cfg(feature = "layout-overflow-warnings")]
-            eprintln!(
-                "patchbay-gui warning: {axis} min ({min_value}) exceeds max ({max_value})"
-            );
-            debug_assert!(
-                false,
-                "{axis}: layout min constraint ({min_value}) exceeds max constraint ({max_value})"
-            );
+            emit_layout_bound_warning(axis, min_value, max_value);
+            (
+                Some(max_value),
+                Some(max_value),
+            )
         }
-        _ => {}
+        _ => (min, max),
     }
+}
+
+#[cfg(feature = "layout-overflow-warnings")]
+/// Emit a layout warning when axis min/max constraints are invalid and need
+/// normalization.
+fn emit_layout_bound_warning(axis: &'static str, min: u32, max: u32) {
+    eprintln!("patchbay-gui warning: {axis} min ({min}) exceeds max ({max}); normalizing to {max}");
+    debug_assert!(
+        false,
+        "{axis}: layout min constraint ({min}) exceeds max constraint ({max})"
+    );
+}
+
+#[cfg(not(feature = "layout-overflow-warnings"))]
+/// Compile-time assertion guard used when overflow diagnostics are disabled.
+fn emit_layout_bound_warning(_axis: &'static str, _min: u32, _max: u32) {
+    debug_assert!(
+        false,
+        "{_axis}: layout min constraint ({_min}) exceeds max constraint ({_max})"
+    );
 }

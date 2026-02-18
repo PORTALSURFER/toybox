@@ -109,8 +109,10 @@ impl HostWindow {
                 && handle.parent_matches(parent_hwnd)
                 && mode == OpenParentedMode::ReuseIfOpen
             {
-                self.resize_request
-                    .store(pack_size(size.width, size.height), std::sync::atomic::Ordering::Release);
+                self.resize_request.store(
+                    pack_size(size.width, size.height),
+                    std::sync::atomic::Ordering::Release,
+                );
                 self.show();
                 return true;
             }

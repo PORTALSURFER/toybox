@@ -5,7 +5,8 @@
 //! directly. Immediate-mode authoring APIs are intentionally not re-exported.
 
 pub use patchbay_gui::{Canvas, Color, MainPalette, Point, Rect, Size};
-pub use patchbay_gui::{render_spec_to_frame, RenderedFrame};
+pub use patchbay_gui::host::InputState;
+pub use patchbay_gui::{RenderedFrame, render_spec_to_frame};
 
 /// Strict declarative GUI types and rendering helpers.
 pub mod declarative {
@@ -21,3 +22,10 @@ pub mod declarative {
         slider, spacer, toggle, weighted, weighted_section_lengths,
     };
 }
+
+/// Screenshot test helpers for declarative UIs.
+///
+/// This module is feature-gated so plugins can opt into screenshot testing
+/// without pulling screenshot-only dependencies into release builds.
+#[cfg(feature = "screenshot-test")]
+pub mod screenshot_harness;

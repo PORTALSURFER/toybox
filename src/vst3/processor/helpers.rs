@@ -88,7 +88,8 @@ unsafe fn stereo_channel_ptrs(bus: &AudioBusBuffers) -> Option<(*mut f32, *mut f
         return None;
     }
 
-    let channels = unsafe { slice::from_raw_parts(bus.__field0.channelBuffers32, STEREO_CHANNEL_COUNT) };
+    let channels =
+        unsafe { slice::from_raw_parts(bus.__field0.channelBuffers32, STEREO_CHANNEL_COUNT) };
     if channels.iter().any(|channel| channel.is_null()) {
         return None;
     }

@@ -6,6 +6,4 @@
 pub mod payload;
 
 pub use crate::state::MAX_STATE_PAYLOAD_BYTES;
-pub use payload::{
-    read_versioned_payload, write_versioned_payload, VersionedStatePayload,
-};
+pub use payload::{VersionedStatePayload, read_versioned_payload, write_versioned_payload};

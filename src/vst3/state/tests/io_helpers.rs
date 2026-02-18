@@ -3,8 +3,8 @@
 use std::ffi::c_void;
 use std::ptr;
 use toybox_vst3_ffi::Steinberg::{
-    int32, int64, kInvalidArgument, kNoInterface, kResultOk, tresult, FUnknown, FUnknownVtbl,
-    IBStream, IBStreamVtbl, TUID,
+    FUnknown, FUnknownVtbl, IBStream, IBStreamVtbl, TUID, int32, int64, kInvalidArgument,
+    kNoInterface, kResultOk, tresult,
 };
 
 /// Fixed platform-independent marker used by stream test fixtures.

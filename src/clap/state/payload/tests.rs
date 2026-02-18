@@ -4,12 +4,9 @@ use clack_common::stream::{InputStream, OutputStream};
 use clack_plugin::plugin::PluginError;
 
 use super::{
-    check_payload_length,
-    read_versioned_payload,
+    MAX_STATE_PAYLOAD_BYTES, VERSIONED_STATE_PAYLOAD_HEADER_ERROR,
+    VERSIONED_STATE_PAYLOAD_TOO_LARGE_ERROR, check_payload_length, read_versioned_payload,
     write_versioned_payload,
-    MAX_STATE_PAYLOAD_BYTES,
-    VERSIONED_STATE_PAYLOAD_HEADER_ERROR,
-    VERSIONED_STATE_PAYLOAD_TOO_LARGE_ERROR,
 };
 
 const MAGIC: u32 = u32::from_le_bytes(*b"TEST");
@@ -65,7 +62,8 @@ fn read_rejects_unsupported_version() {
 
     let mut cursor = data.as_slice();
     let mut input = InputStream::from_reader(&mut cursor);
-    let error = read_versioned_payload(&mut input, MAGIC, &[2, 3]).expect_err("expected version check");
+    let error =
+        read_versioned_payload(&mut input, MAGIC, &[2, 3]).expect_err("expected version check");
     match error {
         PluginError::Message(message) => {
             assert_eq!(message, VERSIONED_STATE_PAYLOAD_HEADER_ERROR);
@@ -82,7 +80,8 @@ fn read_rejects_empty_version_list() {
 
     let mut cursor = data.as_slice();
     let mut input = InputStream::from_reader(&mut cursor);
-    let error = read_versioned_payload(&mut input, MAGIC, &[]).expect_err("expected version list check");
+    let error =
+        read_versioned_payload(&mut input, MAGIC, &[]).expect_err("expected version list check");
     match error {
         PluginError::Message(message) => {
             assert_eq!(message, VERSIONED_STATE_PAYLOAD_HEADER_ERROR);
@@ -100,7 +99,8 @@ fn read_rejects_bad_magic() {
     let mut cursor = data.as_slice();
     let mut input = InputStream::from_reader(&mut cursor);
     let bad_magic = u32::from_le_bytes(*b"NOPE");
-    let error = read_versioned_payload(&mut input, bad_magic, &[1]).expect_err("expected magic check");
+    let error =
+        read_versioned_payload(&mut input, bad_magic, &[1]).expect_err("expected magic check");
     match error {
         PluginError::Message(message) => {
             assert_eq!(message, VERSIONED_STATE_PAYLOAD_HEADER_ERROR);
@@ -112,7 +112,8 @@ fn read_rejects_bad_magic() {
 #[test]
 fn check_payload_length_matches_max() {
     assert!(check_payload_length(MAX_STATE_PAYLOAD_BYTES).is_ok());
-    let error = check_payload_length(MAX_STATE_PAYLOAD_BYTES + 1).expect_err("expected payload size check");
+    let error =
+        check_payload_length(MAX_STATE_PAYLOAD_BYTES + 1).expect_err("expected payload size check");
     assert!(matches!(
         error,
         PluginError::Message(msg) if msg == VERSIONED_STATE_PAYLOAD_TOO_LARGE_ERROR
@@ -141,8 +142,13 @@ fn read_rejects_oversized_header_length() {
 #[test]
 fn read_rejects_truncated_payload() {
     let mut data = Vec::new();
-    write_versioned_payload(&mut OutputStream::from_writer(&mut data), MAGIC, 1, &[1, 2, 3, 4])
-        .expect("write payload");
+    write_versioned_payload(
+        &mut OutputStream::from_writer(&mut data),
+        MAGIC,
+        1,
+        &[1, 2, 3, 4],
+    )
+    .expect("write payload");
     data.truncate(6);
 
     let mut cursor = data.as_slice();

@@ -4,4 +4,4 @@ mod helpers;
 #[cfg(test)]
 mod tests;
 
-pub use helpers::{process_ok, stereo_f32_buffers, StereoAudioBuffers};
+pub use helpers::{StereoAudioBuffers, process_ok, stereo_f32_buffers};

@@ -1,6 +1,6 @@
 use crate::vst3::state::{
-    check_payload_length, decode_versioned_payload, encode_versioned_payload,
-    try_encode_versioned_payload, StreamError, MAX_STATE_PAYLOAD_BYTES,
+    MAX_STATE_PAYLOAD_BYTES, StreamError, check_payload_length, decode_versioned_payload,
+    encode_versioned_payload, try_encode_versioned_payload,
 };
 
 const MAGIC: u32 = 0x4D475354;

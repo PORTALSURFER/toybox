@@ -1,12 +1,12 @@
 //! Native window spawn helpers for [`HostWindow`].
 
+use crate::host::errors::GuiError;
+use crate::host::types::HostWindow;
 use crate::ui::{Layout, Theme, UiState};
 use crate::win32::{
     SpawnCallbacks, SpawnSharedState, SpawnUiConfig, SpawnWindowConfig, SpawnWindowRequest,
     spawn_window_thread,
 };
-use crate::host::errors::GuiError;
-use crate::host::types::HostWindow;
 
 use super::ParentWindowHandles;
 
@@ -40,7 +40,9 @@ impl HostWindow {
     ) -> Result<(), GuiError>
     where
         Init: FnMut(&mut State) + Send + 'static,
-        Build: FnMut(&crate::host::types::InputState, &State) -> crate::declarative::UiSpec + Send + 'static,
+        Build: FnMut(&crate::host::types::InputState, &State) -> crate::declarative::UiSpec
+            + Send
+            + 'static,
         Reduce: FnMut(&mut State, crate::declarative::UiAction) + Send + 'static,
         State: Send + 'static,
     {

@@ -5,13 +5,18 @@
 //! focuses on small, composable helpers that preserve realtime safety for both
 //! CLAP and VST3 integrations.
 
+// Keep doc expectations visible at the crate boundary. The workspace lints also
+// enforce this, but having it here makes the standard obvious to contributors.
+#![warn(missing_docs)]
+#![warn(rustdoc::missing_crate_level_docs)]
+
 pub mod clap;
 pub mod dsp;
-mod state;
 #[cfg(feature = "gui")]
 pub mod gui;
 #[cfg(feature = "gui")]
 mod logging;
+mod state;
 #[cfg(feature = "vst3")]
 pub mod vst3;
 

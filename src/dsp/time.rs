@@ -1,5 +1,5 @@
 //! Time and unit conversion helpers for DSP code.
-//! 
+//!
 //! This module also hosts transport timing primitives shared by multiple plugin
 //! implementations.
 
