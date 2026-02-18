@@ -175,10 +175,7 @@ fn centered_text_origin_on_span(
 ) -> i32 {
     let span_left = i64::from(span_left);
     let span_width = i64::from(span_width);
-    let raw = (i64::from(target_center_x).saturating_mul(2))
-        .saturating_sub(span_left.saturating_mul(2))
-        .saturating_sub(span_width)
-        / 2;
+    let raw = (i64::from(target_center_x).saturating_sub(span_left)).saturating_sub(span_width / 2);
     let min_x = (i64::from(left_bound)).saturating_sub(span_left);
     let span_span = span_left.saturating_add(span_width);
     let max_x = if span_span >= i64::from(max_width) {
@@ -197,8 +194,8 @@ mod centered_text_helpers_tests {
 
     #[test]
     fn centered_text_origin_on_span_with_left_offset() {
-        assert_eq!(centered_text_origin_on_span(10, 50, 1, 3, 35), 32);
-        assert_eq!(centered_text_origin_on_span(10, 50, 0, 3, 35), 33);
+        assert_eq!(centered_text_origin_on_span(10, 50, 1, 3, 35), 33);
+        assert_eq!(centered_text_origin_on_span(10, 50, 0, 3, 35), 34);
         assert_eq!(centered_text_origin_on_span(10, 10, 1, 3, 35), 16);
     }
 }
