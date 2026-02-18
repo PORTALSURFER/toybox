@@ -54,20 +54,14 @@ impl<'a> Ui<'a> {
         let height = request.control_size.height.max(1) as i32;
         let previous_text_scale = self.theme.text_scale;
         self.theme.text_scale = request.text_scale;
-        let response = {
-            let mut response = DropdownResponse::default();
-            self.with_clip(request.rect, |ui| {
-                response = ui.dropdown(
-                    request.id,
-                    request.label,
-                    request.options,
-                    selected,
-                    request.rect.size.width.max(1) as i32,
-                    height,
-                );
-            });
-            response
-        };
+        let response = self.dropdown(
+            request.id,
+            request.label,
+            request.options,
+            selected,
+            request.rect.size.width.max(1) as i32,
+            height,
+        );
         self.theme.text_scale = previous_text_scale;
         *self.layout = previous;
         response

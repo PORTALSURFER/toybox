@@ -18,7 +18,10 @@ impl<'a> Ui<'a> {
             response.open = menu.open;
             response.changed = menu.changed;
             if response.open {
-                let clip_rect = self.clipped_rect(layout.rect).unwrap_or(layout.rect);
+                let clip_rect = self.current_clip_rect().unwrap_or(Rect {
+                    origin: Point { x: 0, y: 0 },
+                    size: self.canvas.size(),
+                });
                 self.push_dropdown_overlay(layout.rect, options, menu.hovered_index, menu.open_up, clip_rect);
             }
             if menu.pressed {
