@@ -2,7 +2,7 @@
 /// Default rendered knob diameter in pixels for declarative and immediate UIs.
 pub(crate) const DEFAULT_KNOB_DIAMETER: i32 = 32;
 /// Horizontal padding reserved around knob circles and arc rings in block layouts.
-pub(crate) const KNOB_BLOCK_SIDE_PADDING: i32 = 8;
+pub(crate) const KNOB_BLOCK_SIDE_PADDING: i32 = 4;
 
 /// Return the knob label height (in pixels) for a text scale.
 pub(crate) fn knob_label_height(text_scale: u32) -> u32 {
