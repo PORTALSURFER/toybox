@@ -106,9 +106,13 @@ impl<'a> Ui<'a> {
             };
         }
         let size = text_size(&fitted, self.theme.text_scale);
-        let char_size = character_cell_width(&fitted, self.theme.text_scale);
+        let (span_left, char_size) = glyph_ink_span(&fitted, self.theme.text_scale);
         let centered_origin = Point {
-            x: centered_text_origin_on_x(origin.x, max_width, char_size, center_x),
+            x: if span_left == 0 {
+                centered_text_origin_on_x(origin.x, max_width, char_size, center_x)
+            } else {
+                centered_text_origin_on_span(origin.x, max_width, span_left, char_size, center_x)
+            },
             y: origin.y,
         };
         self.draw_text_internal(centered_origin, &fitted, color, self.theme.text_scale);

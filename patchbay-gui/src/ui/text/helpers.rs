@@ -95,8 +95,7 @@ fn normalize_knob_value_label(label: &str) -> String {
 }
 
 /// Estimate the rendered width for a text string using glyph ink bounds.
-///
-fn character_cell_width(text: &str, scale: u32) -> u32 {
+fn glyph_ink_span(text: &str, scale: u32) -> (u32, u32) {
     let scale = u64::from(scale.max(1));
     let mut first_glyph = true;
     let mut min_col = u64::MAX;
@@ -140,14 +139,17 @@ fn character_cell_width(text: &str, scale: u32) -> u32 {
     }
 
     if first_glyph {
-        return 0;
+        return (0, 0);
     }
 
     let width_cells = max_col.saturating_sub(min_col);
-    width_cells
-        .saturating_mul(scale)
-        .try_into()
-        .unwrap_or(u32::MAX)
+    let left_offset_cells = min_col;
+    let width = width_cells.saturating_mul(scale);
+    let left_offset = left_offset_cells.saturating_mul(scale);
+    (
+        u32::try_from(left_offset).unwrap_or(u32::MAX),
+        u32::try_from(width).unwrap_or(u32::MAX),
+    )
 }
 
 /// Return a text origin centered on a target x and clamped to bounds.
@@ -157,14 +159,48 @@ fn centered_text_origin_on_x(
     text_width: u32,
     target_center_x: i32,
 ) -> i32 {
-    let raw = (i64::from(target_center_x) - i64::from(text_width) / 2).clamp(
-        i64::from(i32::MIN),
-        i64::from(i32::MAX),
-    );
-    let min_x = left_bound;
-    let span = max_width.saturating_sub(text_width);
-    let max_x = left_bound.saturating_add(span.try_into().unwrap_or(i32::MAX));
-    raw.clamp(i64::from(min_x), i64::from(max_x)) as i32
+    centered_text_origin_on_span(left_bound, max_width, 0, text_width, target_center_x)
+}
+
+/// Return a text origin centered on a target x and clamped to bounds.
+///
+/// `span_left` is the visible-ink offset from the drawn string origin, and
+/// `span_width` is the visible-ink span in source-space units.
+fn centered_text_origin_on_span(
+    left_bound: i32,
+    max_width: u32,
+    span_left: u32,
+    span_width: u32,
+    target_center_x: i32,
+) -> i32 {
+    let span_left = i64::from(span_left);
+    let span_width = i64::from(span_width);
+    let raw = (i64::from(target_center_x).saturating_mul(2))
+        .saturating_sub(span_left.saturating_mul(2))
+        .saturating_sub(span_width)
+        / 2;
+    let min_x = (i64::from(left_bound)).saturating_sub(span_left);
+    let span_span = span_left.saturating_add(span_width);
+    let max_x = if span_span >= i64::from(max_width) {
+        i64::from(left_bound)
+    } else {
+        (i64::from(left_bound))
+            .saturating_add(i64::from(max_width))
+            .saturating_sub(span_span)
+    };
+    raw.clamp(min_x, max_x) as i32
+}
+
+#[cfg(test)]
+mod centered_text_helpers_tests {
+    use super::*;
+
+    #[test]
+    fn centered_text_origin_on_span_with_left_offset() {
+        assert_eq!(centered_text_origin_on_span(10, 50, 1, 3, 35), 32);
+        assert_eq!(centered_text_origin_on_span(10, 50, 0, 3, 35), 33);
+        assert_eq!(centered_text_origin_on_span(10, 10, 1, 3, 35), 16);
+    }
 }
 
 #[cfg(test)]
@@ -179,15 +215,22 @@ mod text_helpers_tests {
 
     #[test]
     fn centered_origin_handles_saturated_span() {
-        assert_eq!(centered_text_origin_on_x(-10, u32::MAX, u32::MAX, 40), -10);
-        assert_eq!(centered_text_origin_on_x(10, u32::MAX, u32::MAX, -100), 10);
+        assert_eq!(centered_text_origin_on_span(-10, u32::MAX, 0, u32::MAX, 40), -10);
+        assert_eq!(centered_text_origin_on_span(10, u32::MAX, 0, u32::MAX, -100), 10);
     }
 
     #[test]
     fn character_cell_width_tracks_glyph_ink() {
-        assert_eq!(character_cell_width(" ", 1), 0);
-        assert_eq!(character_cell_width("I", 1), 3);
-        assert_eq!(character_cell_width("I A", 1), 16);
-        assert_eq!(character_cell_width("I", 2), 6);
+        assert_eq!(glyph_ink_span(" ", 1).1, 0);
+        assert_eq!(glyph_ink_span("I", 1).1, 3);
+        assert_eq!(glyph_ink_span("I A", 1).1, 16);
+        assert_eq!(glyph_ink_span("I", 2).1, 6);
+    }
+
+    #[test]
+    fn character_cell_bounds_tracks_left_offset() {
+        assert_eq!(glyph_ink_span("I", 1), (1, 3));
+        assert_eq!(glyph_ink_span("A", 1), (0, 5));
+        assert_eq!(glyph_ink_span("I A", 1), (1, 16));
     }
 }
