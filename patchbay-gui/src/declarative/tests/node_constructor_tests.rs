@@ -191,3 +191,10 @@ fn measure_knob_width_tracks_dial_hit_width_for_tight_tiling() {
 
     assert_eq!(measured.width, expected.width);
 }
+
+#[test]
+fn knob_constructor_defaults_to_auto_width_layout() {
+    let knob = KnobSpec::new("k", "Drive", 0.5, (0.0, 1.0));
+
+    assert_eq!(knob.layout.width, Length::Auto);
+}

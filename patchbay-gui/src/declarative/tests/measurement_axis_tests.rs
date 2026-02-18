@@ -250,6 +250,10 @@ fn nested_section_helpers_measure_successfully() {
 
 #[test]
 fn justify_weighting_and_distribution_cover_new_modes() {
+    let start = justify_space_weights(Justify::Start, 4);
+    assert_eq!(start, vec![0, 0, 0, 0, 1]);
+    assert_eq!(distribute_space(27, &start), vec![0, 0, 0, 0, 27]);
+
     let between = justify_space_weights(Justify::SpaceBetween, 3);
     assert_eq!(between, vec![0, 1, 1, 0]);
 
