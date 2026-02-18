@@ -120,11 +120,20 @@ impl<'a> Ui<'a> {
         rect_spec: KnobRectSpec,
     ) -> KnobResponse {
         let previous_layout = *self.layout;
-        self.layout.cursor = rect_spec.rect.origin;
         self.layout.knob_size = self.resolve_knob_size_for_rect(
             rect_spec.rect,
             rect_spec.desired_diameter,
         );
+        let block_size = knob_block_size_for_diameter(
+            self.layout.knob_size.max(1) as u32,
+            self.theme.text_scale,
+        );
+        let offset_x = ((rect_spec.rect.size.width as i32 - block_size.width as i32) / 2).max(0);
+        let offset_y = ((rect_spec.rect.size.height as i32 - block_size.height as i32) / 2).max(0);
+        self.layout.cursor = Point {
+            x: rect_spec.rect.origin.x + offset_x,
+            y: rect_spec.rect.origin.y + offset_y,
+        };
         let mut response = KnobResponse::default();
         self.with_clip(rect_spec.rect, |ui| {
             response = ui.render_knob_from_spec(spec, value);

@@ -178,3 +178,16 @@ fn measure_knob_uses_text_scale_override_when_present() {
 
     assert_eq!(measured, expected);
 }
+
+#[test]
+fn measure_knob_width_tracks_dial_hit_width_for_tight_tiling() {
+    let mut tokens = ThemeTokens::default();
+    tokens.controls.knob_diameter = 48;
+    tokens.typography.text_scale = 3;
+
+    let knob = KnobSpec::new("k", "Drive", 0.5, (0.0, 1.0));
+    let measured = measure_knob(&knob, &tokens);
+    let expected = knob_block_size_for_diameter(48, 3);
+
+    assert_eq!(measured.width, expected.width);
+}
