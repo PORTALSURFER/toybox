@@ -16,7 +16,7 @@ The API is strict and data-only:
 - `UiSpec` / `RootFrameSpec`: root window definition.
 - `Node`: typed tree node.
 - `SlotSpec`: single-child slot node used as the required direct child type for containers.
-- Container nodes: `Panel`, `Row`, `Column`, `Grid`, `Absolute`.
+- Container nodes: `Panel`, `Row`, `Column`, `Grid`, `Absolute`, `Stack`, `ScrollView`, `Wrap`.
 - Widget nodes: `Label`, `Spacer`, `Knob`, `Slider`, `Toggle`, `Button`, `Dropdown`, `Region`, `Indicator`.
 
 Canonical grammar:
@@ -28,10 +28,11 @@ Canonical grammar:
 See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 
 ## Constructors
-- Containers: `row(children)`, `column(children)`, `grid(template, children)`, `panel(key, content)`, `root_frame_sized(...)`
-- Slots/helpers: `slot(child)`, `weighted_slot(node, weight)`, `fraction_slot(node, percent)`, `fill_slot(node)`, `column_slots(...)`, `row_slots(...)`
+- Containers: `row(children)`, `column(children)`, `grid(template, children)`, `panel(key, content)`, `stack(children)`, `scroll_view(content)`, `wrap(children)`, `root_frame_sized(...)`
+- Slots/helpers: `slot(child)`, `weighted_slot(node, weight)`, `fraction_slot(node, percent)`, `fill_slot(node)`, `column_slots(...)`, `row_slots(...)`, `SlotParams`, `SlotMainSize`, `SlotCrossSize`
 - Widgets: `label`, `knob`, `slider`, `toggle`, `button`, `dropdown`, `region`, `indicator`, `spacer`, `surface`
 - Math helper: `weighted_slot_lengths(total, weights)`
+- Engine API: `LayoutEngineState`, `render_checked_with_engine(...)`
 
 ## Fluent Helpers
 - Layout:
@@ -49,8 +50,7 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 - root slot child must be a container
 - containers may only contain slots
 - slots must contain a non-slot child
-- slot tracks must be `Fraction` or `Fill`
-- slot fractions must satisfy total/fill constraints
+- slot percentages must satisfy deterministic total/fill constraints
 - non-root containers must use host-derived `Auto`/`Fill` sizing only (no pixel/min/max constraints)
 - widget semantic checks (ranges, selected index, control size, key uniqueness)
 

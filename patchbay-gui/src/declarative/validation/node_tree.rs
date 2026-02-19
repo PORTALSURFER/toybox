@@ -46,6 +46,18 @@ fn validate_node(
         }
         Node::Grid(grid) => validate_grid_node(grid, seen_keys),
         Node::Absolute(absolute) => validate_absolute_node(absolute, seen_keys),
+        Node::Stack(stack) => {
+            validate_container_layout("Stack", stack.layout.to_layout_box())?;
+            validate_container_children("Stack", &stack.children, seen_keys)
+        }
+        Node::ScrollView(scroll_view) => {
+            validate_container_layout("ScrollView", scroll_view.layout.to_layout_box())?;
+            validate_node(scroll_view.content(), seen_keys)
+        }
+        Node::Wrap(wrap) => {
+            validate_container_layout("Wrap", wrap.layout.to_layout_box())?;
+            validate_container_children("Wrap", &wrap.children, seen_keys)
+        }
         Node::Label(_) | Node::Spacer(_) | Node::Indicator(_) => Ok(()),
         Node::Knob(knob) => validate_knob_node(knob, seen_keys),
         Node::Slider(slider) => validate_slider_node(slider, seen_keys),
@@ -215,7 +227,14 @@ fn validate_optional_control_size(
 fn is_container_node(node: &Node) -> bool {
     matches!(
         node,
-        Node::Panel(_) | Node::Row(_) | Node::Column(_) | Node::Grid(_) | Node::Absolute(_)
+        Node::Panel(_)
+            | Node::Row(_)
+            | Node::Column(_)
+            | Node::Grid(_)
+            | Node::Absolute(_)
+            | Node::Stack(_)
+            | Node::ScrollView(_)
+            | Node::Wrap(_)
     )
 }
 
@@ -244,6 +263,9 @@ fn node_kind_name(node: &Node) -> &'static str {
         Node::Column(_) => "Column",
         Node::Grid(_) => "Grid",
         Node::Absolute(_) => "Absolute",
+        Node::Stack(_) => "Stack",
+        Node::ScrollView(_) => "ScrollView",
+        Node::Wrap(_) => "Wrap",
         Node::Label(_) => "Label",
         Node::Spacer(_) => "Spacer",
         Node::Knob(_) => "Knob",

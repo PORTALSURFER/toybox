@@ -11,6 +11,12 @@ pub enum LayoutContainerKind {
     Grid,
     /// Absolute container.
     Absolute,
+    /// Stack container.
+    Stack,
+    /// Scroll-view container.
+    ScrollView,
+    /// Wrap container.
+    Wrap,
 }
 
 /// Severity level for a runtime layout diagnostic.

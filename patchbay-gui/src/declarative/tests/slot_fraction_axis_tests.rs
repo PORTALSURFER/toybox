@@ -23,7 +23,7 @@ fn slot_tracks_allocate_percentages_before_fill_remainder() {
 }
 
 #[test]
-fn slot_grid_requires_exact_hundred_percent_without_fill() {
+fn slot_grid_allows_weighted_fill_tracks_without_exact_percent_total() {
     let spec = UiSpec::new(root_frame_sized(
         "root",
         column_slots(vec![
@@ -39,14 +39,14 @@ fn slot_grid_requires_exact_hundred_percent_without_fill() {
             height: 180,
         },
     ));
-    let error = measure_checked(&spec).expect_err("fractions below 100% must be rejected");
-    assert!(matches!(
-        error,
-        DeclarativeError::InvalidSlotFractions {
-            total_percent: 30,
-            fill_count: 0
+    let measured = measure_checked(&spec).expect("fill-track weights are normalized to parent bounds");
+    assert_eq!(
+        measured,
+        Size {
+            width: 300,
+            height: 180,
         }
-    ));
+    );
 }
 
 #[test]

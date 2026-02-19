@@ -6,15 +6,18 @@
 ///
 /// Weights are clamped to at least `1` to match [`weighted_slot`].
 pub fn weighted_slot_lengths(total: u32, weights: &[u16]) -> Vec<u32> {
-    let total_percent: u16 = weights.iter().copied().sum();
-    if total_percent == 0 {
+    let total_weight: u32 = weights
+        .iter()
+        .map(|weight| u32::from((*weight).max(1)))
+        .sum();
+    if total_weight == 0 {
         return vec![0; weights.len()];
     }
-    let target_total = total
-        .saturating_mul(total_percent as u32)
-        .saturating_div(100);
-    let normalized: Vec<u32> = weights.iter().map(|weight| u32::from(*weight)).collect();
-    distribute_weighted_u32(target_total, &normalized)
+    let normalized: Vec<u32> = weights
+        .iter()
+        .map(|weight| u32::from((*weight).max(1)))
+        .collect();
+    distribute_weighted_u32(total, &normalized)
 }
 
 /// Create a weighted full-size column slot layout.
@@ -61,9 +64,11 @@ pub fn row_slots(children: Vec<Slot>) -> Node {
 
 /// Convert high-level slot tracks into grid tracks.
 fn slot_track_to_grid_track(child: &Slot) -> TrackSize {
-    match child.size {
-        SlotTrack::Fraction(percent) => TrackSize::Percent(percent),
-        SlotTrack::Fill => TrackSize::Fill,
+    match child.params.size_main {
+        SlotMainSize::Percent(percent) => TrackSize::Percent(percent),
+        SlotMainSize::Fill(weight) => TrackSize::Fr(weight.max(1)),
+        SlotMainSize::Intrinsic => TrackSize::Auto,
+        SlotMainSize::Fixed(px) => TrackSize::Px(px),
     }
 }
 
@@ -71,18 +76,31 @@ fn slot_track_to_grid_track(child: &Slot) -> TrackSize {
 /// horizontal and vertical alignment.
 fn wrap_slot_child(child: Slot) -> Node {
     let mut content = child.node;
-    if matches!(child.align_x, SlotAlign::Stretch) {
+    let (min_width, max_width) = normalize_slot_bounds(child.params.min_width, child.params.max_width);
+    let (min_height, max_height) =
+        normalize_slot_bounds(child.params.min_height, child.params.max_height);
+    let align_x = child.params.align_x_override.unwrap_or(SlotAlign::Start);
+    let align_y = child.params.align_y_override.unwrap_or(SlotAlign::Start);
+    if matches!(align_x, SlotAlign::Stretch) || matches!(child.params.size_cross, SlotCrossSize::Fill) {
         content = content.fill_width();
     }
-    if matches!(child.align_y, SlotAlign::Stretch) {
+    if matches!(align_y, SlotAlign::Stretch) || matches!(child.params.size_cross, SlotCrossSize::Fill) {
         content = content.fill_height();
     }
-    let justify = match child.align_x {
+    if is_widget_node(&content) {
+        let mut layout = node_layout(&content);
+        layout.min_width = min_width;
+        layout.max_width = max_width;
+        layout.min_height = min_height;
+        layout.max_height = max_height;
+        content = content.widget_layout(layout);
+    }
+    let justify = match align_x {
         SlotAlign::Start | SlotAlign::Stretch => Justify::Start,
         SlotAlign::Center => Justify::Center,
         SlotAlign::End => Justify::End,
     };
-    let align = match child.align_y {
+    let align = match align_y {
         SlotAlign::Start => Align::Start,
         SlotAlign::Center => Align::Center,
         SlotAlign::End => Align::End,
@@ -91,9 +109,17 @@ fn wrap_slot_child(child: Slot) -> Node {
     Node::Row(
         FlexSpec::row(vec![content])
             .gap(0)
-            .pad_all(0)
+            .padding(child.params.margin)
             .justify(justify)
             .align(align)
             .layout(ContainerLayout::fill()),
     )
+}
+
+/// Normalize optional slot bounds when min is larger than max.
+fn normalize_slot_bounds(min: Option<u32>, max: Option<u32>) -> (Option<u32>, Option<u32>) {
+    match (min, max) {
+        (Some(min), Some(max)) if min > max => (Some(max), Some(max)),
+        _ => (min, max),
+    }
 }

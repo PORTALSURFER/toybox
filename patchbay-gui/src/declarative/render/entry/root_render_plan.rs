@@ -176,9 +176,21 @@ fn warn_uniform_fit_clamp(_requested: Size, _viewport: Size) {}
 
 /// Build resolved root render metadata for a UI frame.
 pub(crate) fn plan_root_render(spec: &UiSpec, surface_size: Size) -> RootRenderPlan {
+    plan_root_render_with_measured(spec, surface_size, None)
+}
+
+/// Build resolved root render metadata using an optional precomputed root
+/// measurement.
+fn plan_root_render_with_measured(
+    spec: &UiSpec,
+    surface_size: Size,
+    measured_override: Option<Size>,
+) -> RootRenderPlan {
     let surface = clamp_non_zero_size(surface_size);
     let tokens = spec.root.tokens.unwrap_or_default();
-    let measured = clamp_non_zero_size(measure_root_frame(&spec.root, &tokens));
+    let measured = clamp_non_zero_size(
+        measured_override.unwrap_or_else(|| measure_root_frame(&spec.root, &tokens)),
+    );
     let resolved_scale = resolve_root_scale(&spec.root, measured, surface);
     let layout_viewport = resolve_root_layout_viewport(&spec.root, measured, surface);
     let layout_size =

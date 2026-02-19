@@ -30,7 +30,7 @@ fn helper_justify_methods_apply_expected_distribution_modes() {
 #[test]
 fn weighted_child_clamps_zero_weight_to_one() {
     let child = weighted_slot(label("x"), 0);
-    assert_eq!(child.size, SlotTrack::Fraction(1));
+    assert_eq!(child.params.size_main, SlotMainSize::Fill(1));
 }
 
 #[test]
@@ -43,7 +43,7 @@ fn column_slots_apply_weighted_height_fill() {
     assert_eq!(grid.template.columns, vec![TrackSize::Fr(1)]);
     assert_eq!(
         grid.template.rows,
-        vec![TrackSize::Percent(7), TrackSize::Percent(30)]
+        vec![TrackSize::Fr(7), TrackSize::Fr(30)]
     );
     assert_eq!(grid.template.column_gap, 0);
     assert_eq!(grid.template.row_gap, 0);
@@ -69,7 +69,7 @@ fn row_slots_apply_weighted_width_fill() {
     assert_eq!(grid.layout, ContainerLayout::fill());
     assert_eq!(
         grid.template.columns,
-        vec![TrackSize::Percent(70), TrackSize::Percent(30)]
+        vec![TrackSize::Fr(70), TrackSize::Fr(30)]
     );
     assert_eq!(grid.template.rows, vec![TrackSize::Fr(1)]);
     assert_eq!(grid.template.column_gap, 0);

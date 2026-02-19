@@ -263,40 +263,27 @@ Per container:
 
 ---
 
-## Alignment Gaps (Current Code vs Target)
+## Remaining Alignment Gaps (Current Code vs Target)
 
-As of this revision, the most important gaps are:
+The major structural targets are now implemented in code:
 
-1. **Overflow policy surface exists, but policy coverage is still expanding.**  
-   `OverflowPolicy` is first-class on container layouts (`Clip` / `Compress`)
-   and is enforced in flex/grid/absolute placement. Additional container
-   primitives still need explicit policy wiring as they are added.
+- strict root/slot/container/widget tree validation
+- parent-owned `SlotParams` (`size_main`, `size_cross`, margin, bounds, alignment overrides)
+- explicit container overflow policy handling and runtime diagnostics
+- first-class `Stack`, `ScrollView`, and `Wrap` container primitives
+- first-class layout engine state (`LayoutEngineState`) with deterministic measure caching
+- stress coverage for deep nesting and large slot lists
 
-2. **Slot parameters are narrower than target.**  
-   Current strict slots primarily expose main-axis fraction/fill and alignment.
-   Slot-level margin and explicit cross-axis size modes are not first-class.
+Remaining gaps to close for full spec parity:
 
-3. **Container primitive set is incomplete.**  
-   `Stack`, `ScrollView`, and a formal `Wrap/Flow` primitive are not yet
-   implemented as first-class declarative containers.
+1. **Switch/breakpoint container is not implemented yet.**
+   The optional `SwitchLayout` primitive in section 7 is still conceptual.
 
-4. **Compression policy is not yet a documented, public contract.**  
-   Existing distribution logic is deterministic, but the precise compress order
-   and fallback behavior should be explicitly modeled and tested as API-level
-   policy.
+2. **Diagnostics are event-level, not full per-node deltas.**
+   `RenderResult.layout_diagnostics` reports overflow/compression/clamp events,
+   but not full measured-vs-final rect diffs for every node.
 
-5. **Diagnostics depth can be expanded.**  
-   Runtime layout diagnostics are now emitted via `RenderResult.layout_diagnostics`
-   for overflow/clamp events, but broader per-node measure/layout deltas are not
-   yet surfaced.
-
-6. **Dirty-propagation and measure caching are not first-class in declarative
-   layout.**  
-   Current layout is deterministic and fast for present plugin sizes, but
-   explicit subtree dirty tracking and cache keying are not yet exposed as a
-   formal subsystem.
-
-7. **Property/stress coverage can be expanded.**  
-   Golden/unit coverage is strong, but dedicated property tests and large-scale
-   stress tests for deep trees/large slot lists should be added to lock long-run
-   behavior.
+3. **Dirty tracking is root-level cache orchestration, not subtree invalidation.**
+   `LayoutEngineState` currently exposes deterministic root measurement caching
+   and dirty flags; fine-grained subtree dependency/invalidations are not yet
+   modeled as a public contract.

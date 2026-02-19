@@ -21,6 +21,9 @@ fn render_node(node: &Node, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx<'_>
         Node::Column(flex) => render_flex(flex, rect, ui, Axis::Vertical, ctx),
         Node::Grid(grid) => render_grid(grid, rect, ui, ctx),
         Node::Absolute(absolute) => render_absolute(absolute, rect, ui, ctx),
+        Node::Stack(stack) => render_stack(stack, rect, ui, ctx),
+        Node::ScrollView(scroll_view) => render_scroll_view(scroll_view, rect, ui, ctx),
+        Node::Wrap(wrap) => render_wrap(wrap, rect, ui, ctx),
         Node::Label(label) => render_label(label, rect, ui, ctx.tokens),
         Node::Spacer(_) => {}
         Node::Knob(knob) => render_knob(knob, rect, ui, ctx.tokens, ctx.actions),

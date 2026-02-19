@@ -180,17 +180,23 @@ fn rejects_slot_child_when_nested_slot() {
 }
 
 #[test]
-fn rejects_slot_grid_with_px_track() {
+fn rejects_slot_grid_with_invalid_percent_total() {
     let invalid_grid = Node::Grid(GridSpec {
         layout: ContainerLayout::fill(),
-        template: GridTemplate::new(vec![TrackSize::Px(10), TrackSize::Percent(90)])
+        template: GridTemplate::new(vec![TrackSize::Percent(70), TrackSize::Percent(60)])
             .rows(vec![TrackSize::Fr(1)]),
         children: vec![slot(label("left")), slot(label("right"))],
         kind: GridKind::SlotRow,
     });
-    let spec = UiSpec::new(RootFrameSpec::new("root", invalid_grid));
-    let error = measure_checked(&spec).expect_err("expected invalid slot track error");
-    assert!(matches!(error, DeclarativeError::InvalidSlotTrack));
+    let spec = UiSpec::new(RootFrameSpec::new("root", invalid_grid).layout(LayoutBox::fixed(100, 40)));
+    let error = measure_checked(&spec).expect_err("expected invalid slot fractions error");
+    assert!(matches!(
+        error,
+        DeclarativeError::InvalidSlotFractions {
+            total_percent,
+            fill_count
+        } if total_percent == 130 && fill_count == 0
+    ));
 }
 
 #[test]

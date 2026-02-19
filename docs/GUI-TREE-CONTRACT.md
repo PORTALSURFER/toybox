@@ -13,6 +13,9 @@ Container node kinds:
 - `Column`
 - `Grid`
 - `Absolute`
+- `Stack`
+- `ScrollView`
+- `Wrap`
 
 Widget node kinds:
 - `Label`
@@ -25,10 +28,11 @@ Widget node kinds:
 - `Region`
 - `Indicator`
 
-## Slot Track Policy
+## Slot Policy
 For canonical slot-style layouts (`row_slots`, `column_slots`):
-- allowed tracks: `Fraction`, `Fill`
-- disallowed tracks: `Px`
+- slot `size_main` supports `Percent | Fill(weight) | Fixed(px) | Intrinsic`
+- slot `size_cross` supports `Fill | Fixed(px) | Intrinsic`
+- slot constraints/margins are parent-owned (`SlotParams`)
 
 ## Hard Validation Rules
 - root key is required and unique
@@ -37,7 +41,7 @@ For canonical slot-style layouts (`row_slots`, `column_slots`):
 - container direct children must be `Slot`
 - slot child may not be another `Slot`
 - slot child must be `Container | Widget`
-- slot fractions/fills must satisfy deterministic total rules
+- slot percentages/fills must satisfy deterministic total rules
 
 ## Valid Example (4x4 Grid Nested in Slot Layout)
 ```rust

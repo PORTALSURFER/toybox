@@ -7,6 +7,9 @@ fn measure_node(node: &Node, tokens: &ThemeTokens) -> Size {
         Node::Column(flex) => measure_flex(flex, tokens, Axis::Vertical),
         Node::Grid(grid) => measure_grid(grid, tokens),
         Node::Absolute(absolute) => measure_absolute(absolute, tokens),
+        Node::Stack(stack) => measure_stack(stack, tokens),
+        Node::ScrollView(scroll_view) => measure_scroll_view(scroll_view, tokens),
+        Node::Wrap(wrap) => measure_wrap(wrap, tokens),
         Node::Label(label) => measure_label(label, tokens),
         Node::Spacer(spacer) => spacer.size,
         Node::Knob(knob) => measure_knob(knob, tokens),
@@ -108,6 +111,68 @@ fn measure_absolute(absolute: &AbsoluteSpec, tokens: &ThemeTokens) -> Size {
             height: max_y.max(0) as u32,
         },
     )
+}
+
+/// Measure a stack container intrinsically.
+fn measure_stack(stack: &StackSpec, tokens: &ThemeTokens) -> Size {
+    let mut max_width = 0u32;
+    let mut max_height = 0u32;
+    for child in &stack.children {
+        let measured = measure_node(child, tokens);
+        max_width = max_width.max(measured.width);
+        max_height = max_height.max(measured.height);
+    }
+    let measured = Size {
+        width: max_width
+            .saturating_add(stack.padding.left.max(0) as u32)
+            .saturating_add(stack.padding.right.max(0) as u32),
+        height: max_height
+            .saturating_add(stack.padding.top.max(0) as u32)
+            .saturating_add(stack.padding.bottom.max(0) as u32),
+    };
+    resolve_size(stack.layout.to_layout_box(), measured, measured)
+}
+
+/// Measure a scroll-view container intrinsically.
+fn measure_scroll_view(scroll_view: &ScrollViewSpec, tokens: &ThemeTokens) -> Size {
+    let content = measure_node(scroll_view.content(), tokens);
+    let measured = Size {
+        width: content
+            .width
+            .saturating_add(scroll_view.padding.left.max(0) as u32)
+            .saturating_add(scroll_view.padding.right.max(0) as u32),
+        height: content
+            .height
+            .saturating_add(scroll_view.padding.top.max(0) as u32)
+            .saturating_add(scroll_view.padding.bottom.max(0) as u32),
+    };
+    resolve_size(scroll_view.layout.to_layout_box(), measured, measured)
+}
+
+/// Measure a wrap container intrinsically.
+fn measure_wrap(wrap: &WrapSpec, tokens: &ThemeTokens) -> Size {
+    let mut total_width = 0u64;
+    let mut max_height = 0u64;
+    let mut child_count = 0u64;
+    for child in &wrap.children {
+        let measured = measure_node(child, tokens);
+        total_width = total_width.saturating_add(u64::from(measured.width));
+        max_height = max_height.max(u64::from(measured.height));
+        child_count = child_count.saturating_add(1);
+    }
+    let gap_total = u64::from(wrap.column_gap.max(0) as u32).saturating_mul(child_count.saturating_sub(1));
+    let measured = Size {
+        width: total_width
+            .saturating_add(gap_total)
+            .saturating_add(wrap.padding.left.max(0) as u64)
+            .saturating_add(wrap.padding.right.max(0) as u64)
+            .min(u64::from(u32::MAX)) as u32,
+        height: max_height
+            .saturating_add(wrap.padding.top.max(0) as u64)
+            .saturating_add(wrap.padding.bottom.max(0) as u64)
+            .min(u64::from(u32::MAX)) as u32,
+    };
+    resolve_size(wrap.layout.to_layout_box(), measured, measured)
 }
 
 /// Convert a signed axis delta to a non-negative `u64` width contribution.

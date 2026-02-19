@@ -34,6 +34,12 @@ pub enum Node {
     Grid(GridSpec),
     /// Absolute positioning container.
     Absolute(AbsoluteSpec),
+    /// Stack overlay container.
+    Stack(StackSpec),
+    /// Scroll-view viewport container.
+    ScrollView(ScrollViewSpec),
+    /// Flow/wrap container.
+    Wrap(WrapSpec),
     /// Label node.
     Label(LabelSpec),
     /// Spacer node.

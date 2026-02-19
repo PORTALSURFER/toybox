@@ -7,7 +7,15 @@ impl Node {
     /// this request and are returned unchanged.
     pub fn widget_layout(mut self, layout: LayoutBox) -> Self {
         match &mut self {
-            Self::Slot(_) | Self::Panel(_) | Self::Row(_) | Self::Column(_) | Self::Grid(_) | Self::Absolute(_) => {}
+            Self::Slot(_)
+            | Self::Panel(_)
+            | Self::Row(_)
+            | Self::Column(_)
+            | Self::Grid(_)
+            | Self::Absolute(_)
+            | Self::Stack(_)
+            | Self::ScrollView(_)
+            | Self::Wrap(_) => {}
             Self::Label(label) => label.layout = layout,
             Self::Knob(knob) => knob.layout = layout,
             Self::Slider(slider) => slider.layout = layout,
@@ -29,6 +37,9 @@ impl Node {
             Self::Row(flex) | Self::Column(flex) => flex.layout = layout,
             Self::Grid(grid) => grid.layout = layout,
             Self::Absolute(absolute) => absolute.layout = layout,
+            Self::Stack(stack) => stack.layout = layout,
+            Self::ScrollView(scroll_view) => scroll_view.layout = layout,
+            Self::Wrap(wrap) => wrap.layout = layout,
             _ => {}
         }
         self
@@ -45,6 +56,11 @@ impl Node {
             Self::Absolute(absolute) => {
                 absolute.layout = absolute.layout.fill_width().fill_height()
             }
+            Self::Stack(stack) => stack.layout = stack.layout.fill_width().fill_height(),
+            Self::ScrollView(scroll_view) => {
+                scroll_view.layout = scroll_view.layout.fill_width().fill_height()
+            }
+            Self::Wrap(wrap) => wrap.layout = wrap.layout.fill_width().fill_height(),
             Self::Label(label) => label.layout = LayoutBox::fill(),
             Self::Knob(knob) => knob.layout = LayoutBox::fill(),
             Self::Slider(slider) => slider.layout = LayoutBox::fill(),
@@ -63,6 +79,9 @@ impl Node {
             Self::Row(flex) | Self::Column(flex) => flex.layout = flex.layout.fill_width(),
             Self::Grid(grid) => grid.layout = grid.layout.fill_width(),
             Self::Absolute(absolute) => absolute.layout = absolute.layout.fill_width(),
+            Self::Stack(stack) => stack.layout = stack.layout.fill_width(),
+            Self::ScrollView(scroll_view) => scroll_view.layout = scroll_view.layout.fill_width(),
+            Self::Wrap(wrap) => wrap.layout = wrap.layout.fill_width(),
             Self::Label(label) => label.layout = LayoutBox::auto().fill_width(),
             Self::Knob(knob) => knob.layout = LayoutBox::auto().fill_width(),
             Self::Slider(slider) => slider.layout = LayoutBox::auto().fill_width(),
@@ -81,6 +100,11 @@ impl Node {
             Self::Row(flex) | Self::Column(flex) => flex.layout = flex.layout.fill_height(),
             Self::Grid(grid) => grid.layout = grid.layout.fill_height(),
             Self::Absolute(absolute) => absolute.layout = absolute.layout.fill_height(),
+            Self::Stack(stack) => stack.layout = stack.layout.fill_height(),
+            Self::ScrollView(scroll_view) => {
+                scroll_view.layout = scroll_view.layout.fill_height()
+            }
+            Self::Wrap(wrap) => wrap.layout = wrap.layout.fill_height(),
             Self::Label(label) => label.layout = LayoutBox::auto().fill_height(),
             Self::Knob(knob) => knob.layout = LayoutBox::auto().fill_height(),
             Self::Slider(slider) => slider.layout = LayoutBox::auto().fill_height(),
@@ -105,6 +129,11 @@ impl Node {
             Self::Absolute(absolute) => {
                 absolute.layout = absolute.layout.overflow(overflow_policy)
             }
+            Self::Stack(stack) => stack.layout = stack.layout.overflow(overflow_policy),
+            Self::ScrollView(scroll_view) => {
+                scroll_view.layout = scroll_view.layout.overflow(overflow_policy)
+            }
+            Self::Wrap(wrap) => wrap.layout = wrap.layout.overflow(overflow_policy),
             _ => {}
         }
         self
@@ -123,6 +152,10 @@ impl Node {
                 grid.template.column_gap = gap;
                 grid.template.row_gap = gap;
             }
+            Self::Wrap(wrap) => {
+                wrap.column_gap = gap;
+                wrap.row_gap = gap;
+            }
             _ => {}
         }
         self
@@ -135,6 +168,9 @@ impl Node {
         if let Self::Grid(grid) = &mut self {
             grid.template.column_gap = column_gap;
             grid.template.row_gap = row_gap;
+        } else if let Self::Wrap(wrap) = &mut self {
+            wrap.column_gap = column_gap;
+            wrap.row_gap = row_gap;
         }
         self
     }
@@ -147,6 +183,9 @@ impl Node {
             Self::Panel(panel) => panel.padding = value,
             Self::Row(flex) | Self::Column(flex) => flex.padding = EdgeInsets::all(value),
             Self::Grid(grid) => grid.template.padding = EdgeInsets::all(value),
+            Self::Stack(stack) => stack.padding = EdgeInsets::all(value),
+            Self::ScrollView(scroll_view) => scroll_view.padding = EdgeInsets::all(value),
+            Self::Wrap(wrap) => wrap.padding = EdgeInsets::all(value),
             _ => {}
         }
         self
@@ -161,6 +200,11 @@ impl Node {
                 flex.padding = EdgeInsets::symmetric(horizontal, vertical)
             }
             Self::Grid(grid) => grid.template.padding = EdgeInsets::symmetric(horizontal, vertical),
+            Self::Stack(stack) => stack.padding = EdgeInsets::symmetric(horizontal, vertical),
+            Self::ScrollView(scroll_view) => {
+                scroll_view.padding = EdgeInsets::symmetric(horizontal, vertical)
+            }
+            Self::Wrap(wrap) => wrap.padding = EdgeInsets::symmetric(horizontal, vertical),
             _ => {}
         }
         self

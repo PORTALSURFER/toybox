@@ -10,20 +10,22 @@ fn validate_slot_tracks(grid: &GridSpec) -> Result<(), DeclarativeError> {
     }
 
     let mut total_percent = 0u16;
-    let mut fill_count = 0usize;
+    let mut flexible_count = 0usize;
     for track in tracks {
         match *track {
             TrackSize::Percent(percent) => {
                 total_percent = total_percent.saturating_add(percent as u16);
             }
-            TrackSize::Fill => fill_count = fill_count.saturating_add(1),
-            _ => return Err(DeclarativeError::InvalidSlotTrack),
+            TrackSize::Fill | TrackSize::Fr(_) => {
+                flexible_count = flexible_count.saturating_add(1)
+            }
+            TrackSize::Auto | TrackSize::Px(_) => {}
         }
     }
-    if total_percent > 100 || (fill_count == 0 && total_percent != 100) {
+    if total_percent > 100 {
         return Err(DeclarativeError::InvalidSlotFractions {
             total_percent,
-            fill_count,
+            fill_count: flexible_count,
         });
     }
     Ok(())

@@ -5,6 +5,7 @@
 //! via an explicit reducer step.
 
 include!("contracts/errors.rs");
+include!("contracts/layout_engine.rs");
 include!("contracts/layout_diagnostic.rs");
 include!("contracts/ui_actions.rs");
 include!("contracts/render_result.rs");
@@ -20,6 +21,9 @@ include!("specs/grid_template.rs");
 include!("specs/grid_spec.rs");
 include!("specs/panel_spec.rs");
 include!("specs/absolute_spec.rs");
+include!("specs/stack_spec.rs");
+include!("specs/scroll_view_spec.rs");
+include!("specs/wrap_spec.rs");
 include!("specs/label_spec.rs");
 include!("specs/spacer_spec.rs");
 include!("specs/knob_spec.rs");
@@ -47,10 +51,14 @@ include!("render/grid/render_children.rs");
 include!("render/grid/debug.rs");
 include!("render/grid/entry.rs");
 include!("render/absolute.rs");
+include!("render/stack.rs");
+include!("render/scroll_view.rs");
+include!("render/wrap.rs");
 include!("render/label.rs");
 include!("render/dispatch.rs");
 include!("render/widgets.rs");
 include!("render/region.rs");
+include!("layout/overflow_and_diagnostics.rs");
 include!("layout_geometry_and_formatting.rs");
 
 #[cfg(test)]

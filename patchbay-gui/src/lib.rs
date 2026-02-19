@@ -32,12 +32,14 @@ pub use crate::declarative::{
     Align, ButtonSpec, ColorTokens, ContainerLayout, ContainerLength, ControlTokens,
     DeclarativeError, DropdownSpec, EdgeInsets, FlexSpec, GridKind, GridSpec, GridTemplate,
     IndicatorSpec, Justify, KnobSpec, LabelSpec, LayoutBox, LayoutContainerKind, LayoutDiagnostic,
-    LayoutDiagnosticLevel, Length, Node, OverflowPolicy, PanelSpec, RegionInteractionKind,
-    RenderResult, RootFrameSpec, RootScaleMode, SliderSpec, Slot, SlotAlign, SlotSpec, SlotTrack,
-    SpacingTokens, SurfaceCommand, ThemeTokens, ToggleSpec, TrackSize, TypographyTokens, UiAction,
-    UiSpec, WeightedSlot, button, column, column_slots, dropdown, fill_slot, fraction_slot, grid,
-    indicator, knob, label, measure_checked, panel, region, render_checked, root_frame_sized, row,
-    row_slots, slider, slot, spacer, surface, toggle, weighted_slot, weighted_slot_lengths,
+    LayoutDiagnosticLevel, LayoutEngineState, Length, MeasureCacheKey, Node, OverflowPolicy,
+    PanelSpec, RegionInteractionKind, RenderResult, RootFrameSpec, RootScaleMode, ScrollViewSpec,
+    SliderSpec, Slot, SlotAlign, SlotCrossSize, SlotMainSize, SlotParams, SlotSpec, SpacingTokens,
+    StackSpec, SurfaceCommand, ThemeTokens, ToggleSpec, TrackSize, TypographyTokens, UiAction,
+    UiSpec, WeightedSlot, WrapSpec, button, column, column_slots, dropdown, fill_slot,
+    fraction_slot, grid, indicator, knob, label, measure_checked, panel, region, render_checked,
+    render_checked_with_engine, root_frame_sized, row, row_slots, scroll_view, slider, slot,
+    spacer, stack, surface, toggle, weighted_slot, weighted_slot_lengths, wrap,
 };
 #[cfg(not(target_os = "windows"))]
 pub use crate::host::WindowHandle;

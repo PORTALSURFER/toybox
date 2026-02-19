@@ -302,6 +302,23 @@ fn resolve_flex_fill_remainder_keeps_total_exact_for_uneven_weights() {
 }
 
 #[test]
+fn grid_compression_reduces_fill_then_auto_then_px_tracks() {
+    let source = [TrackSize::Fill, TrackSize::Auto, TrackSize::Px(20)];
+
+    let mut resolved = vec![40, 30, 20];
+    compress_tracks_for_overflow_policy(&mut resolved, &source, 70, 0);
+    assert_eq!(resolved, vec![20, 30, 20]);
+
+    let mut resolved = vec![0, 30, 20];
+    compress_tracks_for_overflow_policy(&mut resolved, &source, 40, 0);
+    assert_eq!(resolved, vec![0, 20, 20]);
+
+    let mut resolved = vec![0, 0, 20];
+    compress_tracks_for_overflow_policy(&mut resolved, &source, 10, 0);
+    assert_eq!(resolved, vec![0, 0, 10]);
+}
+
+#[test]
 fn node_layout_helpers_apply_constraints_when_supported() {
     let node = panel("main", label("x")).fill_width();
     match node {
