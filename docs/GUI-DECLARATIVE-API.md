@@ -106,7 +106,7 @@ use toybox::gui::declarative::{
     button, panel, row, root_frame_sized, LayoutBox, UiAction, UiSpec, Size,
 };
 
-fn build(input: &toybox::clap::gui::InputState) -> UiSpec {
+fn build(_input: &toybox::clap::gui::InputState) -> UiSpec {
     let controls = row(vec![
         button("inc", "Increment"),
         button("dec", "Decrement"),
@@ -118,7 +118,6 @@ fn build(input: &toybox::clap::gui::InputState) -> UiSpec {
             "root",
             panel("main", controls).fill(),
             Size { width: 420, height: 258 },
-            input.window_size,
         )
         .layout(LayoutBox::fill()),
     )

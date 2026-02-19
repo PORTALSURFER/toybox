@@ -34,10 +34,6 @@ fn slot_grid_allows_weighted_fill_tracks_without_exact_percent_total() {
             width: 300,
             height: 180,
         },
-        Size {
-            width: 300,
-            height: 180,
-        },
     ));
     let measured = measure_checked(&spec).expect("fill-track weights are normalized to parent bounds");
     assert_eq!(
@@ -57,10 +53,6 @@ fn slot_grid_allows_sub_hundred_percent_when_fill_present() {
             fraction_slot(panel("fixed", label("Fixed")).pad_all(0), 30),
             fill_slot(panel("fill", label("Fill")).pad_all(0)),
         ]),
-        Size {
-            width: 300,
-            height: 180,
-        },
         Size {
             width: 300,
             height: 180,

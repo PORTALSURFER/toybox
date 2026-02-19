@@ -177,7 +177,7 @@ fn rejects_non_slot_root_content() {
         layout: LayoutBox::auto(),
         tokens: None,
         design_size: None,
-        scale_mode: RootScaleMode::None,
+        scale_mode: RootScaleMode::UniformFit,
         zoom_override: None,
         layout_diagnostics_mode: LayoutDiagnosticsMode::EventsOnly,
         content: Box::new(label("not slotted")),
@@ -198,7 +198,7 @@ fn rejects_root_slot_child_when_not_container() {
         layout: LayoutBox::auto(),
         tokens: None,
         design_size: None,
-        scale_mode: RootScaleMode::None,
+        scale_mode: RootScaleMode::UniformFit,
         zoom_override: None,
         layout_diagnostics_mode: LayoutDiagnosticsMode::EventsOnly,
         content: Box::new(slot(label("bad"))),
@@ -240,7 +240,7 @@ fn rejects_slot_child_when_nested_slot() {
         layout: LayoutBox::auto(),
         tokens: None,
         design_size: None,
-        scale_mode: RootScaleMode::None,
+        scale_mode: RootScaleMode::UniformFit,
         zoom_override: None,
         layout_diagnostics_mode: LayoutDiagnosticsMode::EventsOnly,
         content: Box::new(slot(panel(
@@ -302,10 +302,6 @@ fn accepts_canonical_root_slot_tree() {
             width: 320,
             height: 200,
         },
-        Size {
-            width: 320,
-            height: 200,
-        },
     ));
     let measured = measure_checked(&spec).expect("canonical slot tree should validate");
     assert_eq!(
@@ -326,10 +322,6 @@ fn rejects_excessive_tree_depth_before_measurement() {
     let spec = UiSpec::new(root_frame_sized(
         "root",
         node,
-        Size {
-            width: 480,
-            height: 270,
-        },
         Size {
             width: 480,
             height: 270,

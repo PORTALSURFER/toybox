@@ -198,7 +198,7 @@ fn uniform_fit_layout_size_is_clamped_to_design_viewport() {
 }
 
 #[test]
-fn plan_root_render_none_mode_keeps_top_left_anchor_with_zoom() {
+fn plan_root_render_uniform_fit_applies_zoom_after_fit_scale() {
     let spec = UiSpec::new(
         RootFrameSpec::new(
             "root",
@@ -212,6 +212,10 @@ fn plan_root_render_none_mode_keeps_top_left_anchor_with_zoom() {
         )
         .padding(0)
         .layout(LayoutBox::fixed(64, 48))
+        .design_size(Size {
+            width: 64,
+            height: 48,
+        })
         .zoom_override(2.0),
     );
 
@@ -228,12 +232,12 @@ fn plan_root_render_none_mode_keeps_top_left_anchor_with_zoom() {
         Rect {
             origin: Point { x: 0, y: 0 },
             size: Size {
-                width: 128,
-                height: 96,
+                width: 320,
+                height: 200,
             },
         }
     );
-    assert_eq!(plan.resolved_scale, 2.0);
+    assert_eq!(plan.resolved_scale, 8.0);
 }
 
 #[test]
@@ -251,6 +255,10 @@ fn plan_root_render_replaces_invalid_zoom_override_with_default_scale() {
         )
         .padding(0)
         .layout(LayoutBox::fixed(64, 48))
+        .design_size(Size {
+            width: 64,
+            height: 48,
+        })
         .zoom_override(-1.0),
     );
 
@@ -262,14 +270,14 @@ fn plan_root_render_replaces_invalid_zoom_override_with_default_scale() {
         },
     );
 
-    assert_eq!(plan.resolved_scale, 1.0);
+    assert_eq!(plan.resolved_scale, 2.5);
     assert_eq!(
         plan.transform.content_rect_surface,
         Rect {
             origin: Point { x: 0, y: 0 },
             size: Size {
-                width: 64,
-                height: 48,
+                width: 160,
+                height: 120,
             },
         }
     );

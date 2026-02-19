@@ -50,10 +50,6 @@ fn rejects_switch_case_with_invalid_bounds() {
             width: 420,
             height: 258,
         },
-        Size {
-            width: 420,
-            height: 258,
-        },
     ));
 
     let error = measure_checked(&spec).expect_err("expected invalid switch bounds error");
@@ -75,10 +71,6 @@ fn rejects_switch_cases_that_overlap_or_are_unsorted() {
     let spec = UiSpec::new(root_frame_sized(
         "root",
         overlapping,
-        Size {
-            width: 420,
-            height: 258,
-        },
         Size {
             width: 420,
             height: 258,

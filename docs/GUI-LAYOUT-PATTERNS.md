@@ -24,7 +24,6 @@ let root = root_frame_sized(
     "root",
     content,
     Size { width: 420, height: 258 },
-    input.window_size,
 )
 .padding(0);
 ```

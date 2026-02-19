@@ -58,6 +58,7 @@ where
         let initial_spec = (self.build_spec)(&self.input, &self.state);
         let initial_plan = plan_root_render(&initial_spec, self.input.window_size);
         let mut mapped_input = self.input.clone();
+        mapped_input.window_size = initial_plan.layout_size;
         let drag_active = self.input.mouse_down || self.input.mouse_secondary_down;
         mapped_input.pointer_pos = if drag_active {
             initial_plan.transform.surface_to_design(self.input.pointer_pos)
@@ -68,6 +69,7 @@ where
         };
         let spec = (self.build_spec)(&mapped_input, &self.state);
         let plan = plan_root_render(&spec, self.input.window_size);
+        mapped_input.window_size = plan.layout_size;
         mapped_input.pointer_pos = if drag_active {
             plan.transform.surface_to_design(self.input.pointer_pos)
         } else {

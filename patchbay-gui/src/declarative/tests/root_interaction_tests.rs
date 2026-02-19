@@ -56,7 +56,7 @@ fn knob_interaction_is_clamped_to_slot_bounds() {
         ),
         weighted_slot(panel("rest", label("x")).pad_all(0), 80),
     ]);
-    let spec = UiSpec::new(root_frame_sized("root", content, root_size, root_size).padding(0));
+    let spec = UiSpec::new(root_frame_sized("root", content, root_size).padding(0));
 
     let mut canvas = Canvas::new(root_size.width, root_size.height);
     let mut layout = Layout::default();
@@ -102,7 +102,7 @@ fn dropdown_overlay_interaction_can_escape_slot_bounds() {
         ),
         weighted_slot(panel("rest", label("x")).pad_all(0), 75),
     ]);
-    let spec = UiSpec::new(root_frame_sized("root", content, root_size, root_size).padding(0));
+    let spec = UiSpec::new(root_frame_sized("root", content, root_size).padding(0));
 
     let mut ui_state = UiState::default();
     let theme = Theme::default();

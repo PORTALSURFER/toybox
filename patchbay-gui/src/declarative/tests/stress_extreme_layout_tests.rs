@@ -50,7 +50,7 @@ fn stress_depth_500_panel_nesting_fails_fast_with_depth_guard() {
         width: 480,
         height: 270,
     };
-    let spec = UiSpec::new(root_frame_sized("root", node, size, size));
+    let spec = UiSpec::new(root_frame_sized("root", node, size));
     let error = measure_checked(&spec).expect_err("deep tree should fail fast");
     assert!(matches!(
         error,
@@ -77,7 +77,7 @@ fn stress_10k_slot_row_is_deterministic_and_stable() {
         height: 96,
     };
     let content = row_slots(slots).pad_all(0);
-    let spec = UiSpec::new(root_frame_sized("root", content, size, size));
+    let spec = UiSpec::new(root_frame_sized("root", content, size));
 
     let measured = measure_checked(&spec).expect("large slot list should measure");
     assert!(measured.width >= size.width);
@@ -101,7 +101,7 @@ fn stress_10k_scroll_column_is_deterministic_and_stable() {
         width: 640,
         height: 200,
     };
-    let spec = UiSpec::new(root_frame_sized("root", content, size, size));
+    let spec = UiSpec::new(root_frame_sized("root", content, size));
     let measured = measure_checked(&spec).expect("scroll content should measure");
     assert!(measured.width > 0);
     assert!(measured.height > 0);

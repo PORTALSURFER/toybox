@@ -13,15 +13,13 @@ pub(crate) struct RootRenderPlan {
 /// Root frame scaling behavior.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum RootScaleMode {
-    /// Disable root-level scaling and render at authored size.
-    #[default]
-    None,
     /// Fit the authored design size to the current window using root-canvas
     /// transform scaling while preserving aspect ratio. Content is centered in
     /// any remaining surface area.
     ///
     /// When host and design aspect ratios differ, remaining surface area is
     /// letterboxed.
+    #[default]
     UniformFit,
 }
 
@@ -80,7 +78,7 @@ impl RootFrameSpec {
             layout: LayoutBox::auto(),
             tokens: None,
             design_size: None,
-            scale_mode: RootScaleMode::None,
+            scale_mode: RootScaleMode::UniformFit,
             zoom_override: None,
             layout_diagnostics_mode: LayoutDiagnosticsMode::EventsOnly,
             content: Box::new(Node::slot(content)),
@@ -141,21 +139,21 @@ impl RootFrameSpec {
     }
 }
 
-/// Create a root frame sized from host window bounds with a minimum floor.
+/// Create a root frame using a fixed design resolution.
 ///
-/// This helper standardizes the "host-sized layout" model: root layout uses the
-/// current host window size while preserving a minimum authored baseline.
-/// Root-level scale mode remains [`RootScaleMode::None`].
-///
-/// Layout is resolved with an absolute floor, not a clipping cap, so content can
-/// still report a larger intrinsic requirement when needed.
+/// Layout and design space are both anchored to `design_size`. Runtime window
+/// resize only changes render transform scale/offset.
 pub fn root_frame_sized(
     key: impl Into<String>,
     content: Node,
-    min_size: Size,
-    window_size: Size,
+    design_size: Size,
 ) -> RootFrameSpec {
-    let resolved_width = window_size.width.max(min_size.width);
-    let resolved_height = window_size.height.max(min_size.height);
-    RootFrameSpec::new(key, content).layout(LayoutBox::fixed(resolved_width, resolved_height))
+    let design = Size {
+        width: design_size.width.max(1),
+        height: design_size.height.max(1),
+    };
+    RootFrameSpec::new(key, content)
+        .layout(LayoutBox::fixed(design.width, design.height).max(design.width, design.height))
+        .design_size(design)
+        .scale_mode(RootScaleMode::UniformFit)
 }

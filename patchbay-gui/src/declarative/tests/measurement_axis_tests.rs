@@ -170,7 +170,7 @@ fn resolve_grid_axis_percent_tracks_normalize_and_fit_when_over_subscribed() {
 }
 
 #[test]
-fn root_frame_sized_uses_window_size_with_minimum_floor() {
+fn root_frame_sized_anchors_root_to_design_resolution() {
     let root = root_frame_sized(
         "root",
         label("x"),
@@ -178,22 +178,24 @@ fn root_frame_sized_uses_window_size_with_minimum_floor() {
             width: 420,
             height: 258,
         },
-        Size {
-            width: 360,
-            height: 400,
-        },
     );
     assert_eq!(
         root.layout,
-        LayoutBox::fixed(420, 400),
-        "root should clamp to min width and use host-provided height"
+        LayoutBox::fixed(420, 258).max(420, 258),
+        "root should stay anchored to authored design resolution"
     );
-    assert_eq!(root.scale_mode, RootScaleMode::None);
-    assert_eq!(root.design_size, None);
+    assert_eq!(root.scale_mode, RootScaleMode::UniformFit);
+    assert_eq!(
+        root.design_size,
+        Some(Size {
+            width: 420,
+            height: 258
+        })
+    );
 }
 
 #[test]
-fn root_frame_sized_uses_expanded_host_size() {
+fn root_frame_sized_keeps_uniform_fit_scaling_mode() {
     let root = root_frame_sized(
         "root",
         label("x"),
@@ -201,18 +203,20 @@ fn root_frame_sized_uses_expanded_host_size() {
             width: 420,
             height: 258,
         },
-        Size {
-            width: 840,
-            height: 516,
-        },
     );
     assert_eq!(
         root.layout,
-        LayoutBox::fixed(840, 516),
-        "root should track host-provided size when host is larger than minimum"
+        LayoutBox::fixed(420, 258).max(420, 258),
+        "root layout should remain fixed to design resolution under host resize"
     );
-    assert_eq!(root.scale_mode, RootScaleMode::None);
-    assert_eq!(root.design_size, None);
+    assert_eq!(root.scale_mode, RootScaleMode::UniformFit);
+    assert_eq!(
+        root.design_size,
+        Some(Size {
+            width: 420,
+            height: 258
+        })
+    );
 }
 
 #[test]
@@ -233,10 +237,6 @@ fn nested_slot_helpers_measure_successfully() {
             Size {
                 width: 420,
                 height: 258,
-            },
-            Size {
-                width: 840,
-                height: 516,
             },
         )
         .padding(0),

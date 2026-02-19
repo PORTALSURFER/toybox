@@ -383,10 +383,6 @@ fn stress_deeply_nested_panel_tree_measures_without_failure() {
             width: 400,
             height: 240,
         },
-        Size {
-            width: 400,
-            height: 240,
-        },
     ));
     let measured = measure_checked(&spec).expect("deep tree should measure");
     assert!(measured.width > 0 && measured.height > 0);
@@ -409,10 +405,6 @@ fn stress_large_slot_list_measures_without_gaps_or_panics() {
             width: 1200,
             height: 120,
         },
-        Size {
-            width: 1200,
-            height: 120,
-        },
     ));
     let measured = measure_checked(&spec).expect("large slot list should measure");
     assert!(measured.width >= 1200);
@@ -430,10 +422,6 @@ fn layout_is_deterministic_across_repeated_renders_for_multiple_root_sizes() {
         ])
         .gap(6)
         .pad_all(4),
-        Size {
-            width: 420,
-            height: 258,
-        },
         Size {
             width: 420,
             height: 258,

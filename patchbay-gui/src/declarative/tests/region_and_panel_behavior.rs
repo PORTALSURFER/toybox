@@ -159,7 +159,7 @@
                 50,
             ),
         ]);
-        let spec = UiSpec::new(root_frame_sized("root", content, root_size, root_size).padding(0));
+        let spec = UiSpec::new(root_frame_sized("root", content, root_size).padding(0));
 
         let mut canvas = Canvas::new(root_size.width, root_size.height);
         let mut layout = Layout::default();

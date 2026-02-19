@@ -8,7 +8,7 @@ fn clamp_non_zero_size(size: Size) -> Size {
 
 /// Resolve root render scale from viewport and root scaling policy.
 fn resolve_root_scale(root: &RootFrameSpec, measured: Size, surface: Size) -> f32 {
-    let design = clamp_non_zero_size(root.design_size.unwrap_or(measured));
+    let design = resolve_design_size(root, measured);
     let zoom_override = root.zoom_override.unwrap_or(1.0);
     let normalized_zoom = normalize_zoom_override(zoom_override);
 
@@ -21,17 +21,17 @@ fn resolve_root_scale(root: &RootFrameSpec, measured: Size, surface: Size) -> f3
 
     debug_assert!(normalized_zoom > 0.0, "Zoom override must be positive");
     debug_assert!(normalized_zoom.is_finite(), "Zoom override must be finite");
-    let base = match root.scale_mode {
-        RootScaleMode::None => 1.0,
-        RootScaleMode::UniformFit => {
-            let fit_width = surface.width.max(1) as f32 / design.width as f32;
-            let fit_height = surface.height.max(1) as f32 / design.height as f32;
-            fit_width.min(fit_height)
-        }
-    };
+    let fit_width = surface.width.max(1) as f32 / design.width as f32;
+    let fit_height = surface.height.max(1) as f32 / design.height as f32;
+    let base = fit_width.min(fit_height);
     let scaled = base * normalized_zoom;
     debug_assert!(scaled.is_finite(), "Resolved root scale must be finite");
     scaled.clamp(0.0, 8.0)
+}
+
+/// Resolve fixed design-space size for root layout.
+fn resolve_design_size(root: &RootFrameSpec, measured: Size) -> Size {
+    clamp_non_zero_size(root.design_size.unwrap_or(measured))
 }
 
 /// Return a safe zoom factor for root rendering.
@@ -61,10 +61,8 @@ mod root_scale_tests {
 
 /// Resolve the design-space viewport used for root layout.
 fn resolve_root_layout_viewport(root: &RootFrameSpec, measured: Size, surface: Size) -> Size {
-    match root.scale_mode {
-        RootScaleMode::None => clamp_non_zero_size(surface),
-        RootScaleMode::UniformFit => clamp_non_zero_size(root.design_size.unwrap_or(measured)),
-    }
+    let _ = surface;
+    resolve_design_size(root, measured)
 }
 
 /// Resolve surface-space output bounds for transformed root content.
@@ -72,7 +70,6 @@ fn resolve_surface_content_rect(
     layout_size: Size,
     surface: Size,
     resolved_scale: f32,
-    scale_mode: RootScaleMode,
 ) -> Rect {
     debug_assert!(resolved_scale.is_finite());
     debug_assert!(layout_size.width > 0 && layout_size.height > 0);
@@ -80,34 +77,17 @@ fn resolve_surface_content_rect(
 
     let surface_width = surface.width.max(1) as f32;
     let surface_height = surface.height.max(1) as f32;
-    let scaled_width = match scale_mode {
-        RootScaleMode::None => (layout_size.width.max(1) as f32 * resolved_scale)
-            .round()
-            .max(1.0)
-            .min(surface_width),
-        RootScaleMode::UniformFit => (layout_size.width.max(1) as f32 * resolved_scale)
-            .round()
-            .max(1.0)
-            .min(surface_width),
-    };
-    let scaled_height = match scale_mode {
-        RootScaleMode::None => (layout_size.height.max(1) as f32 * resolved_scale)
-            .round()
-            .max(1.0)
-            .min(surface_height),
-        RootScaleMode::UniformFit => (layout_size.height.max(1) as f32 * resolved_scale)
-            .round()
-            .max(1.0)
-            .min(surface_height),
-    };
+    let scaled_width = (layout_size.width.max(1) as f32 * resolved_scale)
+        .round()
+        .max(1.0)
+        .min(surface_width);
+    let scaled_height = (layout_size.height.max(1) as f32 * resolved_scale)
+        .round()
+        .max(1.0)
+        .min(surface_height);
 
-    let (origin_x, origin_y): (f32, f32) = match scale_mode {
-        RootScaleMode::None => (0.0, 0.0),
-        RootScaleMode::UniformFit => (
-            (surface_width - scaled_width) / 2.0,
-            (surface_height - scaled_height) / 2.0,
-        ),
-    };
+    let origin_x = (surface_width - scaled_width) / 2.0;
+    let origin_y = (surface_height - scaled_height) / 2.0;
 
     Rect {
         origin: Point {
@@ -122,28 +102,14 @@ fn resolve_surface_content_rect(
 }
 
 /// Resolve per-axis scale factors from layout coordinates to surface coordinates.
-///
-/// In `RootScaleMode::UniformFit`, the scale is uniform, while `None` maps the
-/// layout directly into the available content rectangle.
 fn resolve_surface_scale(
-    layout_size: Size,
-    content_rect_surface: Size,
+    _layout_size: Size,
+    _content_rect_surface: Size,
     resolved_scale: f32,
-    scale_mode: RootScaleMode,
 ) -> (f32, f32) {
-    debug_assert!(content_rect_surface.width > 0 && content_rect_surface.height > 0);
+    debug_assert!(_content_rect_surface.width > 0 && _content_rect_surface.height > 0);
     debug_assert!(resolved_scale.is_finite());
-
-    match scale_mode {
-        RootScaleMode::None => {
-            let layout_width = layout_size.width.max(1) as f32;
-            let layout_height = layout_size.height.max(1) as f32;
-            let content_width = content_rect_surface.width.max(1) as f32;
-            let content_height = content_rect_surface.height.max(1) as f32;
-            (content_width / layout_width, content_height / layout_height)
-        }
-        RootScaleMode::UniformFit => (resolved_scale, resolved_scale),
-    }
+    (resolved_scale, resolved_scale)
 }
 
 /// In UniformFit mode, keep layout size within the design viewport.
@@ -195,17 +161,12 @@ fn plan_root_render_with_measured(
     let layout_viewport = resolve_root_layout_viewport(&spec.root, measured, surface);
     let layout_size =
         clamp_non_zero_size(resolve_size(spec.root.layout, measured, layout_viewport));
-    let layout_size = match spec.root.scale_mode {
-        RootScaleMode::None => layout_size,
-        RootScaleMode::UniformFit => clamp_layout_for_uniform_fit(layout_size, layout_viewport),
-    };
-    let content_rect_surface =
-        resolve_surface_content_rect(layout_size, surface, resolved_scale, spec.root.scale_mode);
+    let layout_size = clamp_layout_for_uniform_fit(layout_size, layout_viewport);
+    let content_rect_surface = resolve_surface_content_rect(layout_size, surface, resolved_scale);
     let (scale_x, scale_y) = resolve_surface_scale(
         layout_size,
         content_rect_surface.size,
         resolved_scale,
-        spec.root.scale_mode,
     );
     let transform = RootTransform {
         scale_x,

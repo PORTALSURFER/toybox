@@ -36,7 +36,6 @@ fn root_vertical_slots_tile_parent_without_gaps() {
                 weighted_slot(panel("controls", label("Controls")).pad_all(0), 30),
             ]),
             root_size,
-            root_size,
         )
         .padding(0),
     );
@@ -82,7 +81,6 @@ fn root_horizontal_slots_tile_parent_without_gaps() {
                 weighted_slot(panel("center", label("Center")).pad_all(0), 55),
                 weighted_slot(panel("right", label("Right")).pad_all(0), 28),
             ]),
-            root_size,
             root_size,
         )
         .padding(0),
@@ -134,7 +132,7 @@ fn nested_slot_layouts_tile_each_parent_without_gaps() {
         width: 803,
         height: 511,
     };
-    let spec = UiSpec::new(root_frame_sized("root", content, root_size, root_size).padding(0));
+    let spec = UiSpec::new(root_frame_sized("root", content, root_size).padding(0));
     let measured = measure_checked(&spec).expect("measurement should succeed");
     assert_eq!(measured, root_size);
 

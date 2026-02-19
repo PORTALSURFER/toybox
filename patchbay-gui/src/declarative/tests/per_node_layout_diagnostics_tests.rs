@@ -88,10 +88,6 @@ fn switch_layout_records_case_and_fallback_reasons() {
             "root",
             content.clone(),
             Size {
-                width: 100,
-                height: 60,
-            },
-            Size {
                 width: 420,
                 height: 120,
             },
@@ -116,10 +112,6 @@ fn switch_layout_records_case_and_fallback_reasons() {
         root_frame_sized(
             "root",
             content,
-            Size {
-                width: 100,
-                height: 60,
-            },
             Size {
                 width: 700,
                 height: 120,
