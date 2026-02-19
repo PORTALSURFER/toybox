@@ -29,13 +29,13 @@ fn helper_justify_methods_apply_expected_distribution_modes() {
 
 #[test]
 fn weighted_child_clamps_zero_weight_to_one() {
-    let child = weighted(label("x"), 0);
-    assert_eq!(child.size, SectionSize::Fraction(1));
+    let child = weighted_slot(label("x"), 0);
+    assert_eq!(child.size, SlotTrack::Fraction(1));
 }
 
 #[test]
-fn column_sections_apply_weighted_height_fill() {
-    let node = column_sections(vec![weighted(label("A"), 7), weighted(label("B"), 30)]);
+fn column_slots_apply_weighted_height_fill() {
+    let node = column_slots(vec![weighted_slot(label("A"), 7), weighted_slot(label("B"), 30)]);
     let Node::Grid(grid) = node else {
         panic!("expected grid-backed column section container");
     };
@@ -61,8 +61,8 @@ fn column_sections_apply_weighted_height_fill() {
 }
 
 #[test]
-fn row_sections_apply_weighted_width_fill() {
-    let node = row_sections(vec![weighted(label("L"), 70), weighted(label("R"), 30)]);
+fn row_slots_apply_weighted_width_fill() {
+    let node = row_slots(vec![weighted_slot(label("L"), 70), weighted_slot(label("R"), 30)]);
     let Node::Grid(grid) = node else {
         panic!("expected grid-backed row section container");
     };

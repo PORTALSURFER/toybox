@@ -1,6 +1,7 @@
 /// Measure a node's intrinsic content size.
 fn measure_node(node: &Node, tokens: &ThemeTokens) -> Size {
     match node {
+        Node::Slot(slot) => measure_node(&slot.child, tokens),
         Node::Panel(panel) => measure_panel(panel, tokens),
         Node::Row(flex) => measure_flex(flex, tokens, Axis::Horizontal),
         Node::Column(flex) => measure_flex(flex, tokens, Axis::Vertical),

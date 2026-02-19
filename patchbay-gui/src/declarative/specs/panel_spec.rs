@@ -15,12 +15,14 @@ pub struct PanelSpec {
     pub header_height: Option<i32>,
     /// Layout constraints.
     pub layout: LayoutBox,
-    /// Panel content.
+    /// Panel content slot.
     pub content: Box<Node>,
 }
 
 impl PanelSpec {
     /// Create a panel with key and content.
+    ///
+    /// Content is wrapped in a slot so panel remains a container with one slot.
     pub fn new(key: impl Into<String>, content: Node) -> Self {
         Self {
             key: key.into(),
@@ -30,7 +32,7 @@ impl PanelSpec {
             outline: None,
             header_height: None,
             layout: LayoutBox::auto(),
-            content: Box::new(content),
+            content: Box::new(Node::slot(content)),
         }
     }
 

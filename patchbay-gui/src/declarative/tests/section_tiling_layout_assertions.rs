@@ -1,10 +1,19 @@
 use super::super::super::*;
 
-fn expect_section_wrapped_panel<'a>(node: &'a Node, label: &str) -> &'a PanelSpec {
+fn expect_slot_child<'a>(node: &'a Node, label: &str) -> &'a Node {
     match node {
+        Node::Slot(slot) => slot.child.as_ref(),
+        other => panic!("expected {label} slot wrapper, got {other:?}"),
+    }
+}
+
+fn expect_section_wrapped_panel<'a>(node: &'a Node, label: &str) -> &'a PanelSpec {
+    match expect_slot_child(node, label) {
         Node::Row(row) => match row.children.as_slice() {
-            [Node::Panel(panel)] => panel,
-            [other] => panic!("expected {label} row to contain panel, got {other:?}"),
+            [child] => match expect_slot_child(child, label) {
+                Node::Panel(panel) => panel,
+                other => panic!("expected {label} row to contain panel, got {other:?}"),
+            },
             _ => panic!("expected {label} row to contain exactly one child"),
         },
         Node::Panel(panel) => panel,
@@ -21,10 +30,10 @@ fn root_vertical_sections_tile_parent_without_gaps() {
     let spec = UiSpec::new(
         root_frame_sized(
             "root",
-            column_sections(vec![
-                weighted(panel("header", label("Header")).pad_all(0), 7),
-                weighted(panel("curve", label("Curve")).pad_all(0), 63),
-                weighted(panel("controls", label("Controls")).pad_all(0), 30),
+            column_slots(vec![
+                weighted_slot(panel("header", label("Header")).pad_all(0), 7),
+                weighted_slot(panel("curve", label("Curve")).pad_all(0), 63),
+                weighted_slot(panel("controls", label("Controls")).pad_all(0), 30),
             ]),
             root_size,
             root_size,
@@ -34,7 +43,7 @@ fn root_vertical_sections_tile_parent_without_gaps() {
 
     let measured = measure_checked(&spec).expect("measurement should succeed");
     assert_eq!(measured, root_size);
-    let Node::Grid(root_grid) = spec.root.content.as_ref() else {
+    let Node::Grid(root_grid) = expect_slot_child(spec.root.content.as_ref(), "root") else {
         panic!("expected grid-backed root sections");
     };
     let row_heights = resolve_grid_axis(GridAxisResolveRequest {
@@ -68,10 +77,10 @@ fn root_horizontal_sections_tile_parent_without_gaps() {
     let spec = UiSpec::new(
         root_frame_sized(
             "root",
-            row_sections(vec![
-                weighted(panel("left", label("Left")).pad_all(0), 17),
-                weighted(panel("center", label("Center")).pad_all(0), 55),
-                weighted(panel("right", label("Right")).pad_all(0), 28),
+            row_slots(vec![
+                weighted_slot(panel("left", label("Left")).pad_all(0), 17),
+                weighted_slot(panel("center", label("Center")).pad_all(0), 55),
+                weighted_slot(panel("right", label("Right")).pad_all(0), 28),
             ]),
             root_size,
             root_size,
@@ -81,7 +90,7 @@ fn root_horizontal_sections_tile_parent_without_gaps() {
 
     let measured = measure_checked(&spec).expect("measurement should succeed");
     assert_eq!(measured, root_size);
-    let Node::Grid(root_grid) = spec.root.content.as_ref() else {
+    let Node::Grid(root_grid) = expect_slot_child(spec.root.content.as_ref(), "root") else {
         panic!("expected grid-backed root sections");
     };
     let column_widths = resolve_grid_axis(GridAxisResolveRequest {
@@ -108,18 +117,18 @@ fn root_horizontal_sections_tile_parent_without_gaps() {
 
 #[test]
 fn nested_section_layouts_tile_each_parent_without_gaps() {
-    let right_nested = column_sections(vec![
-        weighted(panel("right-top", label("R1")).pad_all(0), 40),
-        weighted(panel("right-bottom", label("R2")).pad_all(0), 60),
+    let right_nested = column_slots(vec![
+        weighted_slot(panel("right-top", label("R1")).pad_all(0), 40),
+        weighted_slot(panel("right-bottom", label("R2")).pad_all(0), 60),
     ]);
-    let controls = row_sections(vec![
-        weighted(panel("knobs", label("Knobs")).pad_all(0), 70),
-        weighted(panel("dropdowns", right_nested).pad_all(0), 30),
+    let controls = row_slots(vec![
+        weighted_slot(panel("knobs", label("Knobs")).pad_all(0), 70),
+        weighted_slot(panel("dropdowns", right_nested).pad_all(0), 30),
     ]);
-    let content = column_sections(vec![
-        weighted(panel("header", label("Header")).pad_all(0), 9),
-        weighted(panel("curve", label("Curve")).pad_all(0), 61),
-        weighted(panel("controls", controls).pad_all(0), 30),
+    let content = column_slots(vec![
+        weighted_slot(panel("header", label("Header")).pad_all(0), 9),
+        weighted_slot(panel("curve", label("Curve")).pad_all(0), 61),
+        weighted_slot(panel("controls", controls).pad_all(0), 30),
     ]);
     let root_size = Size {
         width: 803,
@@ -129,7 +138,7 @@ fn nested_section_layouts_tile_each_parent_without_gaps() {
     let measured = measure_checked(&spec).expect("measurement should succeed");
     assert_eq!(measured, root_size);
 
-    let Node::Grid(root_grid) = spec.root.content.as_ref() else {
+    let Node::Grid(root_grid) = expect_slot_child(spec.root.content.as_ref(), "root") else {
         panic!("expected grid-backed root sections");
     };
     let root_row_heights = resolve_grid_axis(GridAxisResolveRequest {
@@ -154,7 +163,7 @@ fn nested_section_layouts_tile_each_parent_without_gaps() {
     );
 
     let controls_panel = expect_section_wrapped_panel(&root_grid.children[2], "controls");
-    let Node::Grid(controls_grid) = controls_panel.content.as_ref() else {
+    let Node::Grid(controls_grid) = expect_slot_child(controls_panel.content.as_ref(), "controls") else {
         panic!("expected row section grid in controls panel");
     };
     let controls_column_widths = resolve_grid_axis(GridAxisResolveRequest {
@@ -179,7 +188,7 @@ fn nested_section_layouts_tile_each_parent_without_gaps() {
     );
 
     let right_panel = expect_section_wrapped_panel(&controls_grid.children[1], "right");
-    let Node::Grid(right_grid) = right_panel.content.as_ref() else {
+    let Node::Grid(right_grid) = expect_slot_child(right_panel.content.as_ref(), "right") else {
         panic!("expected nested column section grid in right panel");
     };
     let nested_row_heights = resolve_grid_axis(GridAxisResolveRequest {

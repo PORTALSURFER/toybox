@@ -154,7 +154,7 @@ fn justify_space_weights(justify: Justify, child_count: usize) -> Vec<u32> {
     weights
 }
 
-/// Distribute integer space across weighted slots.
+/// Distribute integer space across weighted_slot slots.
 fn distribute_space(total: i32, weights: &[u32]) -> Vec<i32> {
     if total <= 0 || weights.is_empty() {
         return vec![0; weights.len()];

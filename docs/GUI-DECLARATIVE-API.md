@@ -1,103 +1,59 @@
 # Strict Declarative GUI API
 
 ## Summary
-`toybox::gui::declarative` is the only supported authoring surface for plugin UIs.
+`toybox::gui::declarative` is the only supported UI authoring surface.
 
-The API is strictly declarative:
-- Build a pure-data `UiSpec` tree each frame.
-- Render via host integration (`GuiHostWindow::open_parented*`) and `render_checked` internally.
-- Apply emitted `UiAction` values in a reducer.
+The API is strict and data-only:
+- Build a pure `UiSpec` tree each frame.
+- Render through host integration (`render_checked` internally).
+- Handle emitted `UiAction` values in a reducer.
 
-No callback-bearing widget nodes are supported.
+## Core Tree Model
+- `UiSpec` / `RootFrameSpec`: root window definition.
+- `Node`: typed tree node.
+- `SlotSpec`: single-child slot node used as the required direct child type for containers.
+- Container nodes: `Panel`, `Row`, `Column`, `Grid`, `Absolute`.
+- Widget nodes: `Label`, `Spacer`, `Knob`, `Slider`, `Toggle`, `Button`, `Dropdown`, `Region`, `Indicator`.
 
-## Core Model
-- `UiSpec`: top-level UI tree.
-- `RootFrameSpec`: root frame key, sizing, tokens, and content.
-- `Node`: typed containers + controls.
-- `LayoutBox` + `Length`: explicit sizing constraints.
-- `GridTemplate` + `TrackSize`: grid track definitions.
-- `ThemeTokens`: declarative token overrides.
-- `UiAction`: typed interaction output consumed by reducer logic.
-- `DrawCommand`: data-only region drawing primitives (no callbacks).
+Canonical grammar:
+- Root is a special container with exactly one slot.
+- Containers directly host slots.
+- Slots host exactly one child (`Container | Widget`).
+- Widgets are leaves.
 
-## Ergonomic Constructors
-Use helper constructors for common nodes:
-- `row(children)` / `column(children)`
-- `grid(template, children)`
-- `panel(key, content)`
-- `root_frame_sized(key, content, min_size, window_size)`
-- `label(text)`
-- `knob(...)`, `slider(...)`, `toggle(...)`, `button(...)`, `dropdown(...)`
-- `spacer(size)`, `region(key, size)`, `indicator(size, active)`
-- `weighted(node, weight)`, `column_sections(...)`, `row_sections(...)`
-- `weighted_section_lengths(total, weights)` when plugin-side overlay math must
-  mirror Patchbay section sizing
-- `RegionSpec::draw_commands(...)` for declarative custom canvas drawing.
+See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 
-These map directly to `Node::*` variants and keep the tree callback-free.
-Most node helpers also support fluent node chaining:
-- layout: `.layout(...)`, `.fill()`, `.fill_width()`, `.fill_height()`
-- container spacing: `.gap(...)`, `.gap_xy(...)`, `.pad_all(...)`, `.pad_xy(...)`
-- flex distribution: `.align_*()` and `.justify_*()` on row/column nodes
-- panel styling: `.title(...)`, `.background(...)`, `.outline(...)`
-- label styling: `.text_color(...)`
-- control helpers: `.control_size(...)` for slider/toggle/button/dropdown, `.value_label(...)` for knobs, `.selected(...)` for dropdown
+## Constructors
+- Containers: `row(children)`, `column(children)`, `grid(template, children)`, `panel(key, content)`, `root_frame_sized(...)`
+- Slots/helpers: `slot(child)`, `weighted_slot(node, weight)`, `fraction_slot(node, percent)`, `fill_slot(node)`, `column_slots(...)`, `row_slots(...)`
+- Widgets: `label`, `knob`, `slider`, `toggle`, `button`, `dropdown`, `region`, `indicator`, `spacer`, `surface`
+- Math helper: `weighted_slot_lengths(total, weights)`
 
-## Layout Ergonomics
-Use fluent helpers to reduce boilerplate:
-- `FlexSpec`: `gap`, `pad_all`, `pad_xy`, `align_*`, `justify_*`
-- `justify_*` covers `start`, `center`, `end`, `space_between`, `space_around`, and `space_evenly`.
-- `GridTemplate`: `columns_fr`, `rows_fr`, `gap`, `gap_xy`, `pad_all`, `pad_xy`
-- `LayoutBox`: `fill`, `fill_width`, `fill_height`, `fixed`, `fixed_width`, `fixed_height`, `min`, `max`
-
-## Host Integration Pattern
-Use the host window with:
-- build: `FnMut(&InputState, &State) -> UiSpec`
-- reduce: `FnMut(&mut State, UiAction)`
-
-This keeps rendering deterministic and centralizes state mutation in one reducer step.
-
-### CLAP Callback Defaults
-For CLAP plugins, use Toybox callback macros so host/window communication stays in
-the framework layer:
-- `toybox::patchbay_clap_gui_callbacks!(...)` for full default GUI callbacks
-- `toybox::patchbay_clap_resize_callbacks!(...)` for resize-only wiring
-
-This keeps plugin code focused on:
-- DSP behavior
-- declarative UI content (`UiSpec`)
-- reducer logic (`UiAction -> state`)
-
-Resize behavior is enabled by default through `GuiHostWindow`. Plugins can opt
-out when needed:
-- `GuiHostWindow::disable_host_resize()`
-- `GuiHostWindow::set_host_resize_policy(HostResizePolicy::Disabled)`
+## Fluent Helpers
+- Layout: `.layout(...)`, `.fill()`, `.fill_width()`, `.fill_height()`
+- Spacing: `.gap(...)`, `.gap_xy(...)`, `.pad_all(...)`, `.pad_xy(...)`
+- Flex alignment: `.align_*()`, `.justify_*()`
+- Panel styling: `.title(...)`, `.background(...)`, `.outline(...)`
+- Widget tuning: `.control_size(...)`, `.value_label(...)`, `.selected(...)`
 
 ## Validation Guarantees
-`measure_checked` and `render_checked` validate trees and return `DeclarativeError` on invalid specs.
-
-Validation includes:
-- non-empty root frame key
-- non-empty keys for interactive keyed nodes
-- unique keys across root + interactive keyed nodes
-- non-empty grid columns
-- finite, increasing control ranges (`min < max`) for knobs/sliders
-- finite, in-range control values for knobs/sliders
-- dropdown selected index in bounds
-- non-zero explicit `control_size` overrides
+`measure_checked` and `render_checked` hard-fail with `DeclarativeError` when invalid:
+- root key is required and unique
+- root content must be a slot
+- root slot child must be a container
+- containers may only contain slots
+- slots must contain a non-slot child
+- slot tracks must be `Fraction` or `Fill`
+- slot fractions must satisfy total/fill constraints
+- widget semantic checks (ranges, selected index, control size, key uniqueness)
 
 ## Example
 ```rust
 use toybox::gui::declarative::{
-    button, panel, row, LayoutBox, RootFrameSpec, UiAction, UiSpec,
+    button, panel, row, root_frame_sized, LayoutBox, UiAction, UiSpec, Size,
 };
 
-#[derive(Default)]
-struct GuiState {
-    count: u32,
-}
-
-fn build(_input: &toybox::clap::gui::InputState, _state: &GuiState) -> UiSpec {
+fn build(input: &toybox::clap::gui::InputState) -> UiSpec {
     let controls = row(vec![
         button("inc", "Increment"),
         button("dec", "Decrement"),
@@ -105,35 +61,15 @@ fn build(_input: &toybox::clap::gui::InputState, _state: &GuiState) -> UiSpec {
     .justify_space_between();
 
     UiSpec::new(
-        RootFrameSpec::new(
+        root_frame_sized(
             "root",
             panel("main", controls).fill(),
+            Size { width: 420, height: 258 },
+            input.window_size,
         )
         .layout(LayoutBox::fill()),
     )
 }
 
-fn reduce(state: &mut GuiState, action: UiAction) {
-    match action {
-        UiAction::ButtonPressed { key } if key == "inc" => {
-            state.count = state.count.saturating_add(1);
-        }
-        UiAction::ButtonPressed { key } if key == "dec" => {
-            state.count = state.count.saturating_sub(1);
-        }
-        _ => {}
-    }
-}
+fn reduce(_action: UiAction) {}
 ```
-
-## Migration Notes (Hard Break)
-Legacy mixed-mode patterns are removed from the supported surface:
-- no `UiSpec<'_, State>` callback-bearing widget nodes
-- no `WidgetSpec` render closures
-- no immediate-mode public authoring API for plugin UI composition
-
-Migration steps:
-1. Move all UI construction into pure `Node` trees.
-2. Replace per-widget callbacks with reducer handling on `UiAction`.
-3. Replace direct immediate layout code with `row/column/grid/panel` declarative nodes.
-4. Use `measure_checked` in tests to catch key/range/selection/layout mistakes early.

@@ -49,12 +49,12 @@ fn knob_interaction_is_clamped_to_section_bounds() {
         width: 140,
         height: 100,
     };
-    let content = column_sections(vec![
-        weighted(
+    let content = column_slots(vec![
+        weighted_slot(
             panel("tight", knob("k", "K", 0.5, (0.0, 1.0))).pad_all(0),
             20,
         ),
-        weighted(panel("rest", label("x")).pad_all(0), 80),
+        weighted_slot(panel("rest", label("x")).pad_all(0), 80),
     ]);
     let spec = UiSpec::new(root_frame_sized("root", content, root_size, root_size).padding(0));
 
@@ -86,8 +86,8 @@ fn dropdown_overlay_interaction_can_escape_section_bounds() {
         width: 160,
         height: 96,
     };
-    let content = column_sections(vec![
-        weighted(
+    let content = column_slots(vec![
+        weighted_slot(
             panel(
                 "tight",
                 dropdown(
@@ -100,7 +100,7 @@ fn dropdown_overlay_interaction_can_escape_section_bounds() {
             .pad_all(0),
             25,
         ),
-        weighted(panel("rest", label("x")).pad_all(0), 75),
+        weighted_slot(panel("rest", label("x")).pad_all(0), 75),
     ]);
     let spec = UiSpec::new(root_frame_sized("root", content, root_size, root_size).padding(0));
 

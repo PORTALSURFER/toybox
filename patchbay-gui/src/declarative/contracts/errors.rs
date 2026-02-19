@@ -73,28 +73,42 @@ pub enum DeclarativeError {
         max: f32,
     },
     /// Root content must be a container node.
-    #[error("root content must be a container node (got `{node_kind}`)")]
+    #[error("root content must be a slot node (got `{node_kind}`)")]
     InvalidRootContent {
         /// Concrete node variant at root content position.
         node_kind: &'static str,
     },
-    /// Section containers only accept container children.
-    #[error("section child must be a container node (got `{node_kind}`)")]
-    InvalidSectionChild {
-        /// Concrete section-child node kind.
+    /// Root slot must host a container node.
+    #[error("root slot child must be a container node (got `{node_kind}`)")]
+    InvalidRootSlotChild {
+        /// Concrete root-slot child node kind.
+        node_kind: &'static str,
+    },
+    /// Container nodes only accept slot children.
+    #[error("container `{container_kind}` child must be a slot node (got `{node_kind}`)")]
+    InvalidContainerChild {
+        /// Concrete container node kind.
+        container_kind: &'static str,
+        /// Concrete invalid child node kind.
+        node_kind: &'static str,
+    },
+    /// Slot nodes may only host container or widget children.
+    #[error("slot child must be a container or widget node (got `{node_kind}`)")]
+    InvalidSlotChild {
+        /// Concrete slot-child node kind.
         node_kind: &'static str,
     },
     /// Section tracks must use fraction/fill sizing only.
-    #[error("section tracks must use Fraction or Fill definitions")]
-    InvalidSectionTrack,
-    /// Section percentage definitions are malformed.
+    #[error("slot tracks must use Fraction or Fill definitions")]
+    InvalidSlotTrack,
+    /// Slot percentage definitions are malformed.
     #[error(
-        "invalid section fractions: total percent {total_percent}, fill_count {fill_count} (require total <= 100 and total == 100 when fill_count == 0)"
+        "invalid slot fractions: total percent {total_percent}, fill_count {fill_count} (require total <= 100 and total == 100 when fill_count == 0)"
     )]
-    InvalidSectionFractions {
-        /// Sum of fraction percentages in the section.
+    InvalidSlotFractions {
+        /// Sum of fraction-slot percentages in the slot layout.
         total_percent: u16,
-        /// Number of fill tracks in the section.
+        /// Number of fill tracks in the slot layout.
         fill_count: usize,
     },
 }

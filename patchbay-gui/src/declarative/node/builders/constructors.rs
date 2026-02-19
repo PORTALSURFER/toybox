@@ -19,3 +19,8 @@ pub fn row(children: Vec<Node>) -> Node {
 pub fn column(children: Vec<Node>) -> Node {
     Node::column(children)
 }
+
+/// Create a slot container node.
+pub fn slot(child: Node) -> Node {
+    Node::slot(child)
+}

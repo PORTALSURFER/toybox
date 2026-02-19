@@ -13,6 +13,7 @@ struct RenderCtx<'a> {
 /// Render a node subtree and collect actions.
 fn render_node(node: &Node, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx<'_>) {
     ui.with_clip(rect, |ui| match node {
+        Node::Slot(slot) => render_node(&slot.child, rect, ui, ctx),
         Node::Panel(panel) => render_panel(panel, rect, ui, ctx),
         Node::Row(flex) => render_flex(flex, rect, ui, Axis::Horizontal, ctx),
         Node::Column(flex) => render_flex(flex, rect, ui, Axis::Vertical, ctx),

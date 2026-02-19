@@ -26,9 +26,9 @@ fn section_tracks_allocate_percentages_before_fill_remainder() {
 fn section_grid_requires_exact_hundred_percent_without_fill() {
     let spec = UiSpec::new(root_frame_sized(
         "root",
-        column_sections(vec![
-            weighted(panel("top", label("Top")).pad_all(0), 10),
-            weighted(panel("bottom", label("Bottom")).pad_all(0), 20),
+        column_slots(vec![
+            weighted_slot(panel("top", label("Top")).pad_all(0), 10),
+            weighted_slot(panel("bottom", label("Bottom")).pad_all(0), 20),
         ]),
         Size {
             width: 300,
@@ -42,7 +42,7 @@ fn section_grid_requires_exact_hundred_percent_without_fill() {
     let error = measure_checked(&spec).expect_err("fractions below 100% must be rejected");
     assert!(matches!(
         error,
-        DeclarativeError::InvalidSectionFractions {
+        DeclarativeError::InvalidSlotFractions {
             total_percent: 30,
             fill_count: 0
         }
@@ -53,9 +53,9 @@ fn section_grid_requires_exact_hundred_percent_without_fill() {
 fn section_grid_allows_sub_hundred_percent_when_fill_present() {
     let spec = UiSpec::new(root_frame_sized(
         "root",
-        column_sections(vec![
-            fraction(panel("fixed", label("Fixed")).pad_all(0), 30),
-            fill_section(panel("fill", label("Fill")).pad_all(0)),
+        column_slots(vec![
+            fraction_slot(panel("fixed", label("Fixed")).pad_all(0), 30),
+            fill_slot(panel("fill", label("Fill")).pad_all(0)),
         ]),
         Size {
             width: 300,
@@ -77,12 +77,12 @@ fn section_grid_allows_sub_hundred_percent_when_fill_present() {
 }
 
 #[test]
-fn weighted_section_lengths_consume_total_without_gaps() {
-    let heights = weighted_section_lengths(259, &[7, 63, 30]);
+fn weighted_slot_lengths_consume_total_without_gaps() {
+    let heights = weighted_slot_lengths(259, &[7, 63, 30]);
     assert_eq!(heights, vec![18, 163, 78]);
     assert_eq!(heights.iter().sum::<u32>(), 259);
 
-    let widths = weighted_section_lengths(799, &[70, 30]);
+    let widths = weighted_slot_lengths(799, &[70, 30]);
     assert_eq!(widths, vec![559, 240]);
     assert_eq!(widths.iter().sum::<u32>(), 799);
 }

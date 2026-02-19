@@ -217,14 +217,14 @@ fn root_frame_sized_uses_expanded_host_size() {
 
 #[test]
 fn nested_section_helpers_measure_successfully() {
-    let controls = row_sections(vec![
-        weighted(panel("left", label("Knobs")).pad_all(0), 70),
-        weighted(panel("right", label("Dropdowns")).pad_all(0), 30),
+    let controls = row_slots(vec![
+        weighted_slot(panel("left", label("Knobs")).pad_all(0), 70),
+        weighted_slot(panel("right", label("Dropdowns")).pad_all(0), 30),
     ]);
-    let content = column_sections(vec![
-        weighted(panel("header", label("Header")).pad_all(0), 7),
-        weighted(panel("curve", label("Curve")).pad_all(0), 63),
-        weighted(panel("controls", controls).pad_all(0), 30),
+    let content = column_slots(vec![
+        weighted_slot(panel("header", label("Header")).pad_all(0), 7),
+        weighted_slot(panel("curve", label("Curve")).pad_all(0), 63),
+        weighted_slot(panel("controls", controls).pad_all(0), 30),
     ]);
     let spec = UiSpec::new(
         root_frame_sized(

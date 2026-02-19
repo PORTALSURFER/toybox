@@ -5,7 +5,7 @@ pub struct GridSpec {
     pub layout: LayoutBox,
     /// Grid track template.
     pub template: GridTemplate,
-    /// Child nodes in row-major order.
+    /// Slot children in row-major order.
     pub children: Vec<Node>,
     /// Grid semantic role.
     pub kind: GridKind,
@@ -14,6 +14,10 @@ pub struct GridSpec {
 impl GridSpec {
     /// Create a grid specification.
     pub fn new(template: GridTemplate, children: Vec<Node>) -> Self {
+        let children = children
+            .into_iter()
+            .map(Node::slot)
+            .collect();
         Self {
             layout: LayoutBox::auto(),
             template,

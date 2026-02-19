@@ -11,13 +11,17 @@ pub struct FlexSpec {
     pub align: Align,
     /// Main-axis distribution.
     pub justify: Justify,
-    /// Child nodes.
+    /// Slot children.
     pub children: Vec<Node>,
 }
 
 impl FlexSpec {
     /// Create a row spec.
     pub fn row(children: Vec<Node>) -> Self {
+        let children = children
+            .into_iter()
+            .map(Node::slot)
+            .collect();
         Self {
             layout: LayoutBox::auto(),
             gap: 12,
@@ -30,6 +34,10 @@ impl FlexSpec {
 
     /// Create a column spec.
     pub fn column(children: Vec<Node>) -> Self {
+        let children = children
+            .into_iter()
+            .map(Node::slot)
+            .collect();
         Self {
             layout: LayoutBox::auto(),
             gap: 12,

@@ -1,12 +1,12 @@
-/// Validate strict section-track definitions for canonical section grids.
-fn validate_section_tracks(grid: &GridSpec) -> Result<(), DeclarativeError> {
+/// Validate strict slot-track definitions for canonical slot grids.
+fn validate_slot_tracks(grid: &GridSpec) -> Result<(), DeclarativeError> {
     let tracks = match grid.kind {
         GridKind::SectionColumn => &grid.template.rows,
         GridKind::SectionRow => &grid.template.columns,
         GridKind::Standard => return Ok(()),
     };
     if tracks.is_empty() {
-        return Err(DeclarativeError::InvalidSectionTrack);
+        return Err(DeclarativeError::InvalidSlotTrack);
     }
 
     let mut total_percent = 0u16;
@@ -17,11 +17,11 @@ fn validate_section_tracks(grid: &GridSpec) -> Result<(), DeclarativeError> {
                 total_percent = total_percent.saturating_add(percent as u16);
             }
             TrackSize::Fill => fill_count = fill_count.saturating_add(1),
-            _ => return Err(DeclarativeError::InvalidSectionTrack),
+            _ => return Err(DeclarativeError::InvalidSlotTrack),
         }
     }
     if total_percent > 100 || (fill_count == 0 && total_percent != 100) {
-        return Err(DeclarativeError::InvalidSectionFractions {
+        return Err(DeclarativeError::InvalidSlotFractions {
             total_percent,
             fill_count,
         });

@@ -94,3 +94,64 @@ fn rejects_zero_control_size() {
         DeclarativeError::InvalidControlSize { node_kind, .. } if node_kind == "Slider"
     ));
 }
+
+#[test]
+fn rejects_non_slot_root_content() {
+    let spec = UiSpec::new(RootFrameSpec {
+        key: "root".to_string(),
+        title: None,
+        padding: 0,
+        layout: LayoutBox::auto(),
+        tokens: None,
+        design_size: None,
+        scale_mode: RootScaleMode::None,
+        zoom_override: None,
+        content: Box::new(label("not slotted")),
+    });
+    let error = measure_checked(&spec).expect_err("expected invalid root slot error");
+    assert!(matches!(
+        error,
+        DeclarativeError::InvalidRootContent { node_kind } if node_kind == "Label"
+    ));
+}
+
+#[test]
+fn rejects_root_slot_child_when_not_container() {
+    let spec = UiSpec::new(RootFrameSpec {
+        key: "root".to_string(),
+        title: None,
+        padding: 0,
+        layout: LayoutBox::auto(),
+        tokens: None,
+        design_size: None,
+        scale_mode: RootScaleMode::None,
+        zoom_override: None,
+        content: Box::new(slot(label("bad"))),
+    });
+    let error = measure_checked(&spec).expect_err("expected invalid root slot child error");
+    assert!(matches!(
+        error,
+        DeclarativeError::InvalidRootSlotChild { node_kind } if node_kind == "Label"
+    ));
+}
+
+#[test]
+fn rejects_container_children_when_not_slot_wrapped() {
+    let invalid_row = Node::Row(FlexSpec {
+        layout: LayoutBox::auto(),
+        gap: 0,
+        padding: EdgeInsets::default(),
+        align: Align::Start,
+        justify: Justify::Start,
+        children: vec![label("direct child")],
+    });
+    let spec = UiSpec::new(RootFrameSpec::new("root", invalid_row));
+    let error = measure_checked(&spec).expect_err("expected invalid container child error");
+    assert!(matches!(
+        error,
+        DeclarativeError::InvalidContainerChild {
+            container_kind,
+            node_kind
+        } if container_kind == "Row" && node_kind == "Label"
+    ));
+}

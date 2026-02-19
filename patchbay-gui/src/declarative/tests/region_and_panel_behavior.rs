@@ -125,8 +125,8 @@
             width: 200,
             height: 100,
         };
-        let content = row_sections(vec![
-            weighted(
+        let content = row_slots(vec![
+            weighted_slot(
                 panel(
                     "left-panel",
                     Node::Region(RegionSpec::new(
@@ -142,7 +142,7 @@
                 .outline(Color::rgb(15, 20, 25)),
                 50,
             ),
-            weighted(
+            weighted_slot(
                 panel(
                     "right-panel",
                     Node::Region(RegionSpec::new(

@@ -58,12 +58,18 @@ pub struct RootFrameSpec {
     pub scale_mode: RootScaleMode,
     /// Optional zoom multiplier applied after scale mode resolution.
     pub zoom_override: Option<f32>,
-    /// Root content node.
+    /// Root content slot.
+    ///
+    /// Root is treated as a special container and always stores exactly one
+    /// slot child.
     pub content: Box<Node>,
 }
 
 impl RootFrameSpec {
     /// Create a root frame with a key and content node.
+    ///
+    /// The provided content is wrapped in a single slot so root obeys the
+    /// container-slot grammar.
     pub fn new(key: impl Into<String>, content: Node) -> Self {
         Self {
             key: key.into(),
@@ -74,7 +80,7 @@ impl RootFrameSpec {
             design_size: None,
             scale_mode: RootScaleMode::None,
             zoom_override: None,
-            content: Box::new(content),
+            content: Box::new(Node::slot(content)),
         }
     }
 

@@ -28,13 +28,16 @@ impl AbsoluteSpec {
 pub struct AbsoluteChild {
     /// Child origin relative to the container.
     pub origin: Point,
-    /// Child node.
+    /// Slotted child node.
     pub node: Node,
 }
 
 impl AbsoluteChild {
     /// Create a positioned child.
     pub fn new(origin: Point, node: Node) -> Self {
-        Self { origin, node }
+        Self {
+            origin,
+            node: Node::slot(node),
+        }
     }
 }

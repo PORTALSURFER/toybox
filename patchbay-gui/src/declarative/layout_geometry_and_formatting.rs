@@ -2,6 +2,7 @@
 /// Return node layout constraints.
 fn node_layout(node: &Node) -> LayoutBox {
     match node {
+        Node::Slot(slot) => node_layout(&slot.child),
         Node::Panel(panel) => panel.layout,
         Node::Row(flex) | Node::Column(flex) => flex.layout,
         Node::Grid(grid) => grid.layout,

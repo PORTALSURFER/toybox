@@ -5,6 +5,7 @@ impl Node {
     /// this request and are returned unchanged.
     pub fn layout(mut self, layout: LayoutBox) -> Self {
         match &mut self {
+            Self::Slot(_) => {}
             Self::Panel(panel) => panel.layout = layout,
             Self::Row(flex) | Self::Column(flex) => flex.layout = layout,
             Self::Grid(grid) => grid.layout = layout,

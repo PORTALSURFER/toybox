@@ -1,4 +1,4 @@
-/// Distribute integer lengths across weighted slots using largest remainder.
+/// Distribute integer lengths across weighted_slot slots using largest remainder.
 ///
 /// The returned vector length matches `weights.len()`, and the sum of all
 /// returned values equals `total` when at least one weight is non-zero.
