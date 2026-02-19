@@ -273,6 +273,7 @@ The major structural targets are now implemented in code:
 - structured overflow result reporting (`LayoutDiagnosticCode` + `LayoutOverflowSummary`)
 - property-sweep coverage for deterministic outputs, overflow-summary parity,
   and resolved-rect bounds across multiple root sizes
+- golden layout-rect assertions for representative flex/grid container trees
 - first-class `Stack`, `ScrollView`, `Wrap`, and `SwitchLayout` container primitives
 - first-class layout engine state (`LayoutEngineState`) with deterministic measure caching
 - shared Win32 host runtime adoption of persistent `LayoutEngineState` rendering
