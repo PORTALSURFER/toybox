@@ -19,7 +19,13 @@ fn render_aspect_box(
     let measured = measure_node(child, ctx.tokens);
     let layout = node_layout(child);
     let resolved = clamp_size_to_available(
-        resolve_size(layout, measured, child_bounds.size),
+        resolve_size_with_diagnostics(
+            layout,
+            measured,
+            child_bounds.size,
+            ContainerKind::AspectBox,
+            ctx.layout_diagnostics,
+        ),
         child_bounds.size,
     );
     let child_rect = Rect {

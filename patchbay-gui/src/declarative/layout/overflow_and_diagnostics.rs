@@ -110,6 +110,42 @@ fn record_layout_diagnostic(
     });
 }
 
+/// Axis selector for constraint normalization diagnostics.
+#[derive(Clone, Copy)]
+enum ConstraintAxis {
+    /// Width axis normalization.
+    Width,
+    /// Height axis normalization.
+    Height,
+}
+
+/// Record one diagnostic for normalized invalid min/max axis constraints.
+fn record_constraint_normalized_diagnostic(
+    diagnostics: &mut Vec<LayoutDiagnostic>,
+    container_kind: ContainerKind,
+    axis: ConstraintAxis,
+) {
+    let message = match axis {
+        ConstraintAxis::Width => "layout width min constraint exceeded max; normalized to max",
+        ConstraintAxis::Height => "layout height min constraint exceeded max; normalized to max",
+    };
+    let empty = Rect {
+        origin: Point { x: 0, y: 0 },
+        size: Size {
+            width: 0,
+            height: 0,
+        },
+    };
+    record_layout_diagnostic(
+        diagnostics,
+        container_kind,
+        LayoutDiagnosticCode::ConstraintNormalized,
+        message,
+        empty,
+        empty,
+    );
+}
+
 /// Convert internal debug container kind into public diagnostic kind.
 fn layout_container_kind(kind: ContainerKind) -> LayoutContainerKind {
     match kind {

@@ -17,7 +17,13 @@ fn render_scroll_view(
         width: measured.width.max(inner.size.width),
         height: measured.height.max(inner.size.height),
     };
-    let mut resolved = resolve_size(layout, measured, available);
+    let mut resolved = resolve_size_with_diagnostics(
+        layout,
+        measured,
+        available,
+        ContainerKind::ScrollView,
+        ctx.layout_diagnostics,
+    );
     let requested_rect = Rect {
         origin: inner.origin,
         size: resolved,

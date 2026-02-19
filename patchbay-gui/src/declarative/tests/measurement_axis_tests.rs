@@ -404,8 +404,7 @@ fn clip_rect_to_bounds_returns_none_for_disjoint_rect() {
 }
 
 #[test]
-#[cfg(not(debug_assertions))]
-fn resolve_axis_with_inverted_min_max_constraints_still_clamps_to_max() {
+fn resolve_axis_with_inverted_min_max_constraints_clamps_to_max() {
     let resolved = resolve_axis(
         Length::Auto,
         32,
@@ -414,17 +413,4 @@ fn resolve_axis_with_inverted_min_max_constraints_still_clamps_to_max() {
         Some(100),
     );
     assert_eq!(resolved, 100);
-}
-
-#[test]
-#[cfg(debug_assertions)]
-#[should_panic(expected = "layout-axis: layout min constraint (200) exceeds max constraint (100)")]
-fn resolve_axis_with_inverted_min_max_constraints_triggers_debug_assert() {
-    let _ = resolve_axis(
-        Length::Auto,
-        32,
-        128,
-        Some(200),
-        Some(100),
-    );
 }

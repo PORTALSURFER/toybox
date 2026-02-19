@@ -10,7 +10,16 @@ fn render_switch_layout(
     let is_fallback = std::ptr::eq(child, switch_layout.fallback());
     let measured = measure_node(child, ctx.tokens);
     let layout = node_layout(child);
-    let resolved = clamp_size_to_available(resolve_size(layout, measured, rect.size), rect.size);
+    let resolved = clamp_size_to_available(
+        resolve_size_with_diagnostics(
+            layout,
+            measured,
+            rect.size,
+            ContainerKind::SwitchLayout,
+            ctx.layout_diagnostics,
+        ),
+        rect.size,
+    );
     let child_rect = Rect {
         origin: rect.origin,
         size: resolved,

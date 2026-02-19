@@ -9,7 +9,16 @@ fn render_padding_box(
     let child = padding_box.content();
     let measured = measure_node(child, ctx.tokens);
     let layout = node_layout(child);
-    let resolved = clamp_size_to_available(resolve_size(layout, measured, inner.size), inner.size);
+    let resolved = clamp_size_to_available(
+        resolve_size_with_diagnostics(
+            layout,
+            measured,
+            inner.size,
+            ContainerKind::PaddingBox,
+            ctx.layout_diagnostics,
+        ),
+        inner.size,
+    );
     let child_rect = Rect {
         origin: inner.origin,
         size: resolved,

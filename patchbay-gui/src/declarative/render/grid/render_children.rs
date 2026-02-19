@@ -100,7 +100,16 @@ fn render_grid_child(
     ctx: &mut RenderCtx<'_>,
 ) {
     let layout = node_layout(child);
-    let resolved = clamp_size_to_available(resolve_size(layout, measured, cell_rect.size), cell_rect.size);
+    let resolved = clamp_size_to_available(
+        resolve_size_with_diagnostics(
+            layout,
+            measured,
+            cell_rect.size,
+            ContainerKind::Grid,
+            ctx.layout_diagnostics,
+        ),
+        cell_rect.size,
+    );
     let child_rect = Rect {
         origin: cell_rect.origin,
         size: resolved,

@@ -85,6 +85,7 @@ fn summary_from_codes(diagnostics: &[LayoutDiagnostic]) -> LayoutOverflowSummary
                 summary.compressed += 1;
                 summary.total += 1;
             }
+            LayoutDiagnosticCode::ConstraintNormalized => {}
             LayoutDiagnosticCode::StructuralGapDetected => {}
         }
     }

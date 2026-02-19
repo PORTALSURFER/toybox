@@ -17,7 +17,16 @@ fn render_wrap(wrap: &WrapSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx
         .iter()
         .map(|child| {
             let layout = node_layout(child);
-            clamp_size_to_available(resolve_size(layout, measure_node(child, ctx.tokens), available), available)
+            clamp_size_to_available(
+                resolve_size_with_diagnostics(
+                    layout,
+                    measure_node(child, ctx.tokens),
+                    available,
+                    ContainerKind::Wrap,
+                    ctx.layout_diagnostics,
+                ),
+                available,
+            )
         })
         .collect();
 

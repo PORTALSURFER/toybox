@@ -4,7 +4,16 @@ fn render_stack(stack: &StackSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &mut Render
     for child in &stack.children {
         let measured = measure_node(child, ctx.tokens);
         let layout = node_layout(child);
-        let resolved = clamp_size_to_available(resolve_size(layout, measured, inner.size), inner.size);
+        let resolved = clamp_size_to_available(
+            resolve_size_with_diagnostics(
+                layout,
+                measured,
+                inner.size,
+                ContainerKind::Stack,
+                ctx.layout_diagnostics,
+            ),
+            inner.size,
+        );
         let child_rect = align_stack_child_rect(inner, resolved, stack.align_x, stack.align_y);
         let requested_rect = child_rect;
         let Some(child_rect) = overflow_rect_with_policy(

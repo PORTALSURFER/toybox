@@ -44,6 +44,7 @@ include!("validation/node_tree.rs");
 include!("validation/rules.rs");
 include!("measurement/root_frame.rs");
 include!("measurement/containers.rs");
+include!("measurement/axis_constraints.rs");
 include!("measurement/grid.rs");
 include!("measurement/widgets.rs");
 include!("measurement/cached.rs");

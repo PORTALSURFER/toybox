@@ -3,7 +3,16 @@ fn render_align_box(align_box: &AlignBoxSpec, rect: Rect, ui: &mut Ui<'_>, ctx: 
     let child = align_box.content();
     let measured = measure_node(child, ctx.tokens);
     let layout = node_layout(child);
-    let resolved = clamp_size_to_available(resolve_size(layout, measured, rect.size), rect.size);
+    let resolved = clamp_size_to_available(
+        resolve_size_with_diagnostics(
+            layout,
+            measured,
+            rect.size,
+            ContainerKind::AlignBox,
+            ctx.layout_diagnostics,
+        ),
+        rect.size,
+    );
     let child_rect = align_box_child_rect(rect, resolved, align_box.align_x, align_box.align_y);
     let requested_rect = child_rect;
     let Some(child_rect) = overflow_rect_with_policy(

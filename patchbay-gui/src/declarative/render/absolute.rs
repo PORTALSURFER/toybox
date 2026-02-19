@@ -4,7 +4,13 @@ fn render_absolute(absolute: &AbsoluteSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &m
     for child in &absolute.children {
         let measured = measure_node(&child.node, ctx.tokens);
         let layout = node_layout(&child.node);
-        let resolved = resolve_size(layout, measured, measured);
+        let resolved = resolve_size_with_diagnostics(
+            layout,
+            measured,
+            measured,
+            ContainerKind::Absolute,
+            ctx.layout_diagnostics,
+        );
         let child_rect = Rect {
             origin: Point {
                 x: rect.origin.x + child.origin.x,

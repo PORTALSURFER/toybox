@@ -36,7 +36,14 @@ fn render_flex_children(
     let mut cursor_main =
         render_ctx.axis.origin_main(render_ctx.inner.origin) + solved.main_spacing.leading_offset;
     for (index, child) in flex.children.iter().enumerate() {
-        let child_rect = resolve_flex_child_rect(child, index, cursor_main, render_ctx, solved);
+        let child_rect = resolve_flex_child_rect(
+            child,
+            index,
+            cursor_main,
+            render_ctx,
+            solved,
+            ctx.layout_diagnostics,
+        );
         let requested_rect = child_rect;
         let Some(child_rect) = overflow_rect_with_policy(
             child_rect,
@@ -71,6 +78,7 @@ fn resolve_flex_child_rect(
     cursor_main: i32,
     render_ctx: &FlexRenderContext,
     solved: &FlexSolvedLengths<'_>,
+    layout_diagnostics: &mut Vec<LayoutDiagnostic>,
 ) -> Rect {
     let intrinsic = solved.intrinsic[index];
     let resolved_main = solved.resolved_main[index];
@@ -92,8 +100,16 @@ fn resolve_flex_child_rect(
     let slot_rect = render_ctx
         .axis
         .compose_rect(cursor_main, cross_origin, resolved_main, cross_size);
-    let resolved_child =
-        clamp_size_to_available(resolve_size(layout, intrinsic, slot_rect.size), slot_rect.size);
+    let resolved_child = clamp_size_to_available(
+        resolve_size_with_diagnostics(
+            layout,
+            intrinsic,
+            slot_rect.size,
+            ContainerKind::Flex,
+            layout_diagnostics,
+        ),
+        slot_rect.size,
+    );
     Rect {
         origin: slot_rect.origin,
         size: resolved_child,
