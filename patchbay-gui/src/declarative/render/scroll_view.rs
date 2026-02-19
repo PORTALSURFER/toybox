@@ -37,6 +37,7 @@ fn render_scroll_view(
                 record_layout_diagnostic(
                     ctx.layout_diagnostics,
                     ContainerKind::ScrollView,
+                    LayoutDiagnosticCode::ScrollViewContentCompressed,
                     "scroll-view content compressed to viewport",
                     Rect {
                         origin: inner.origin,

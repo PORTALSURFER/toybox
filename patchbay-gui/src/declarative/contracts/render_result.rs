@@ -11,8 +11,46 @@ pub struct RenderResult {
     pub content_rect: Rect,
     /// Runtime layout diagnostics produced while resolving this frame.
     pub layout_diagnostics: Vec<LayoutDiagnostic>,
+    /// Structured overflow summary derived from runtime diagnostics.
+    pub overflow: LayoutOverflowSummary,
     /// Per-node geometry diagnostics when enabled in root diagnostics mode.
     pub node_layout_diagnostics: Vec<LayoutNodeDiagnostic>,
+}
+
+/// Aggregate overflow counters for one render pass.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LayoutOverflowSummary {
+    /// Number of clip-policy overflow events.
+    pub clipped: usize,
+    /// Number of compress-policy overflow events.
+    pub compressed: usize,
+    /// Number of skipped child placements caused by overflow handling.
+    pub skipped: usize,
+    /// Total overflow diagnostic events.
+    pub total: usize,
+}
+
+impl LayoutOverflowSummary {
+    /// Build a summary from runtime layout diagnostics.
+    pub fn from_diagnostics(diagnostics: &[LayoutDiagnostic]) -> Self {
+        let mut summary = Self::default();
+        for diagnostic in diagnostics {
+            summary.record(diagnostic.code);
+        }
+        summary
+    }
+
+    /// Accumulate one diagnostic code into the summary.
+    fn record(&mut self, code: LayoutDiagnosticCode) {
+        self.total += 1;
+        match code {
+            LayoutDiagnosticCode::OverflowClipped => self.clipped += 1,
+            LayoutDiagnosticCode::OverflowSkippedDisjoint
+            | LayoutDiagnosticCode::OverflowSkippedCollapsedBounds => self.skipped += 1,
+            LayoutDiagnosticCode::OverflowCompressed
+            | LayoutDiagnosticCode::ScrollViewContentCompressed => self.compressed += 1,
+        }
+    }
 }
 
 impl Default for RenderResult {
@@ -32,6 +70,7 @@ impl Default for RenderResult {
                 },
             },
             layout_diagnostics: Vec::new(),
+            overflow: LayoutOverflowSummary::default(),
             node_layout_diagnostics: Vec::new(),
         }
     }

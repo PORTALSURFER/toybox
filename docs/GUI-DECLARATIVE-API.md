@@ -56,7 +56,9 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 - non-root containers must use host-derived `Auto`/`Fill` sizing only (no pixel/min/max constraints)
 - widget semantic checks (ranges, selected index, control size, key uniqueness)
 
-`RenderResult` now includes `layout_diagnostics` so callers can inspect clipped/compressed placement events at runtime.
+`RenderResult` includes:
+- `layout_diagnostics` with stable messages and typed `LayoutDiagnosticCode` values
+- `overflow` (`LayoutOverflowSummary`) with deterministic `clipped` / `compressed` / `skipped` / `total` counters
 For detailed per-node geometry diagnostics, set `RootFrameSpec::layout_diagnostics_mode(LayoutDiagnosticsMode::PerNode)` and read `RenderResult.node_layout_diagnostics`.
 
 `LayoutEngineState` no longer exposes mutable root dirty flags. Use explicit invalidation:

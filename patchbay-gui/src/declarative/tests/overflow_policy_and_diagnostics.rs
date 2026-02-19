@@ -50,8 +50,18 @@ fn absolute_clip_policy_drops_disjoint_child_and_emits_diagnostic() {
     );
     assert!(result.layout_diagnostics.iter().any(|diagnostic| {
         diagnostic.container == LayoutContainerKind::Absolute
+            && diagnostic.code == LayoutDiagnosticCode::OverflowSkippedDisjoint
             && diagnostic.message == "layout rect does not intersect container bounds"
     }));
+    assert_eq!(
+        result.overflow,
+        LayoutOverflowSummary {
+            clipped: 0,
+            compressed: 0,
+            skipped: 1,
+            total: 1,
+        }
+    );
 }
 
 #[test]
@@ -94,6 +104,57 @@ fn absolute_compress_policy_keeps_disjoint_child_visible_and_emits_diagnostic() 
     }));
     assert!(result.layout_diagnostics.iter().any(|diagnostic| {
         diagnostic.container == LayoutContainerKind::Absolute
+            && diagnostic.code == LayoutDiagnosticCode::OverflowCompressed
             && diagnostic.message == "layout rect compressed to fit container bounds"
     }));
+    assert_eq!(
+        result.overflow,
+        LayoutOverflowSummary {
+            clipped: 0,
+            compressed: 1,
+            skipped: 0,
+            total: 1,
+        }
+    );
+}
+
+#[test]
+fn scroll_view_compress_policy_reports_structured_overflow_summary() {
+    let size = Size {
+        width: 120,
+        height: 40,
+    };
+    let content = scroll_view(spacer(Size {
+        width: 80,
+        height: 120,
+    }))
+    .container_overflow(OverflowPolicy::Compress);
+    let spec = UiSpec::new(
+        RootFrameSpec::new("root", content)
+            .layout(LayoutBox::fixed(120, 40).max(120, 40))
+            .padding(0),
+    );
+
+    let result = render_with_input(
+        &spec,
+        InputState {
+            window_size: size,
+            ..InputState::default()
+        },
+    );
+
+    assert!(result.layout_diagnostics.iter().any(|diagnostic| {
+        diagnostic.container == LayoutContainerKind::ScrollView
+            && diagnostic.code == LayoutDiagnosticCode::ScrollViewContentCompressed
+            && diagnostic.message == "scroll-view content compressed to viewport"
+    }));
+    assert_eq!(
+        result.overflow,
+        LayoutOverflowSummary {
+            clipped: 0,
+            compressed: 1,
+            skipped: 0,
+            total: 1,
+        }
+    );
 }

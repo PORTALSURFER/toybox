@@ -45,6 +45,8 @@ pub enum LayoutDiagnosticsMode {
 pub struct LayoutDiagnostic {
     /// Severity for this diagnostic.
     pub level: LayoutDiagnosticLevel,
+    /// Structured code for this diagnostic event.
+    pub code: LayoutDiagnosticCode,
     /// Container category where the condition was observed.
     pub container: LayoutContainerKind,
     /// Stable diagnostic message.
@@ -53,6 +55,21 @@ pub struct LayoutDiagnostic {
     pub requested_rect: crate::canvas::Rect,
     /// Effective container bounds.
     pub bounds: crate::canvas::Rect,
+}
+
+/// Structured code for one runtime layout diagnostic event.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LayoutDiagnosticCode {
+    /// Child rectangle was clipped to container bounds.
+    OverflowClipped,
+    /// Child rectangle did not intersect the bounds and was skipped.
+    OverflowSkippedDisjoint,
+    /// Child rectangle was compressed to fit bounds.
+    OverflowCompressed,
+    /// Child was skipped because container bounds collapsed to zero area.
+    OverflowSkippedCollapsedBounds,
+    /// Scroll-view content was compressed to the viewport size.
+    ScrollViewContentCompressed,
 }
 
 /// Declarative node category associated with a per-node layout diagnostic.

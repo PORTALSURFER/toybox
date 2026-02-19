@@ -181,12 +181,14 @@ fn build_render_result(
     layout_diagnostics: Vec<LayoutDiagnostic>,
     node_layout_diagnostics: Vec<LayoutNodeDiagnostic>,
 ) -> RenderResult {
+    let overflow = LayoutOverflowSummary::from_diagnostics(&layout_diagnostics);
     RenderResult {
         measured_size: plan.layout_size,
         actions,
         resolved_scale: plan.resolved_scale,
         content_rect: response.content_rect,
         layout_diagnostics,
+        overflow,
         node_layout_diagnostics,
     }
 }

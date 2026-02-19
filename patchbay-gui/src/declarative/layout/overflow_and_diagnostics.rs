@@ -14,6 +14,7 @@ fn overflow_rect_with_policy(
                     record_layout_diagnostic(
                         layout_diagnostics,
                         container_kind,
+                        LayoutDiagnosticCode::OverflowClipped,
                         "layout rect clipped to container bounds",
                         rect,
                         bounds,
@@ -23,6 +24,7 @@ fn overflow_rect_with_policy(
                 record_layout_diagnostic(
                     layout_diagnostics,
                     container_kind,
+                    LayoutDiagnosticCode::OverflowSkippedDisjoint,
                     "layout rect does not intersect container bounds",
                     rect,
                     bounds,
@@ -37,6 +39,7 @@ fn overflow_rect_with_policy(
                     record_layout_diagnostic(
                         layout_diagnostics,
                         container_kind,
+                        LayoutDiagnosticCode::OverflowCompressed,
                         "layout rect compressed to fit container bounds",
                         rect,
                         bounds,
@@ -46,6 +49,7 @@ fn overflow_rect_with_policy(
                 record_layout_diagnostic(
                     layout_diagnostics,
                     container_kind,
+                    LayoutDiagnosticCode::OverflowSkippedCollapsedBounds,
                     "container bounds collapsed; child skipped",
                     rect,
                     bounds,
@@ -91,12 +95,14 @@ fn compress_rect_to_bounds(rect: Rect, bounds: Rect) -> Option<Rect> {
 fn record_layout_diagnostic(
     diagnostics: &mut Vec<LayoutDiagnostic>,
     container_kind: ContainerKind,
+    code: LayoutDiagnosticCode,
     message: &'static str,
     requested_rect: Rect,
     bounds: Rect,
 ) {
     diagnostics.push(LayoutDiagnostic {
         level: LayoutDiagnosticLevel::Warning,
+        code,
         container: layout_container_kind(container_kind),
         message,
         requested_rect,
