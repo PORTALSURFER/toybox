@@ -209,6 +209,90 @@ fn runtime_style_targeted_invalidation_is_narrower_than_full_invalidation() {
 }
 
 #[test]
+fn layout_subtree_invalidation_reuses_measure_cache() {
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        row_slots(vec![
+            weighted_slot(
+                panel(
+                    "left-panel",
+                    button("left-btn", "Left").control_size(Size {
+                        width: 80,
+                        height: 24,
+                    }),
+                )
+                .pad_all(0),
+                1,
+            ),
+            weighted_slot(
+                panel(
+                    "right-panel",
+                    button("right-btn", "Right").control_size(Size {
+                        width: 80,
+                        height: 24,
+                    }),
+                )
+                .pad_all(0),
+                1,
+            ),
+        ])
+        .pad_all(0),
+    ));
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let idle_input = InputState {
+        window_size: Size {
+            width: 240,
+            height: 120,
+        },
+        ..InputState::default()
+    };
+    let mut engine = LayoutEngineState::default();
+    let mut canvas = Canvas::new(240, 120);
+    let mut layout = Layout::default();
+    let mut ui = Ui::new(&mut canvas, &idle_input, &mut ui_state, &mut layout, &theme);
+    render_checked_with_engine(&spec, &mut ui, Point { x: 0, y: 0 }, &mut engine)
+        .expect("initial render should succeed");
+    let baseline = engine.measure_cache_stats();
+
+    let left_id = engine
+        .node_id_for_key("left-btn")
+        .expect("left button id should resolve");
+
+    let mut layout_only_engine = engine.clone();
+    layout_only_engine.invalidate_layout_subtree(left_id);
+    let mut canvas = Canvas::new(240, 120);
+    let mut layout = Layout::default();
+    let mut ui = Ui::new(&mut canvas, &idle_input, &mut ui_state, &mut layout, &theme);
+    render_checked_with_engine(
+        &spec,
+        &mut ui,
+        Point { x: 0, y: 0 },
+        &mut layout_only_engine,
+    )
+    .expect("layout-only re-render should succeed");
+    let layout_only_stats = layout_only_engine.measure_cache_stats();
+    assert_eq!(
+        layout_only_stats.misses, baseline.misses,
+        "layout-only invalidation should not force measure cache misses"
+    );
+    assert!(layout_only_stats.hits > baseline.hits);
+
+    let mut measure_engine = engine.clone();
+    measure_engine.invalidate_measure_subtree(left_id);
+    let mut canvas = Canvas::new(240, 120);
+    let mut layout = Layout::default();
+    let mut ui = Ui::new(&mut canvas, &idle_input, &mut ui_state, &mut layout, &theme);
+    render_checked_with_engine(&spec, &mut ui, Point { x: 0, y: 0 }, &mut measure_engine)
+        .expect("measure re-render should succeed");
+    let measure_stats = measure_engine.measure_cache_stats();
+    assert!(
+        measure_stats.misses > baseline.misses,
+        "measure invalidation should force at least one recompute"
+    );
+}
+
+#[test]
 fn layout_engine_resolves_node_ids_and_supports_subtree_measure_invalidation() {
     let spec = UiSpec::new(RootFrameSpec::new(
         "root",
