@@ -26,7 +26,7 @@ Widget node kinds:
 - `Indicator`
 
 ## Slot Track Policy
-For canonical section-style layouts (`row_slots`, `column_slots`):
+For canonical slot-style layouts (`row_slots`, `column_slots`):
 - allowed tracks: `Fraction`, `Fill`
 - disallowed tracks: `Px`
 

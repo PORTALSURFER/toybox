@@ -7,7 +7,7 @@ fn expect_slot_child<'a>(node: &'a Node, label: &str) -> &'a Node {
     }
 }
 
-fn expect_section_wrapped_panel<'a>(node: &'a Node, label: &str) -> &'a PanelSpec {
+fn expect_slot_wrapped_panel<'a>(node: &'a Node, label: &str) -> &'a PanelSpec {
     match expect_slot_child(node, label) {
         Node::Row(row) => match row.children.as_slice() {
             [child] => match expect_slot_child(child, label) {
@@ -22,7 +22,7 @@ fn expect_section_wrapped_panel<'a>(node: &'a Node, label: &str) -> &'a PanelSpe
 }
 
 #[test]
-fn root_vertical_sections_tile_parent_without_gaps() {
+fn root_vertical_slots_tile_parent_without_gaps() {
     let root_size = Size {
         width: 421,
         height: 259,
@@ -44,7 +44,7 @@ fn root_vertical_sections_tile_parent_without_gaps() {
     let measured = measure_checked(&spec).expect("measurement should succeed");
     assert_eq!(measured, root_size);
     let Node::Grid(root_grid) = expect_slot_child(spec.root.content.as_ref(), "root") else {
-        panic!("expected grid-backed root sections");
+        panic!("expected grid-backed root slots");
     };
     let row_heights = resolve_grid_axis(GridAxisResolveRequest {
         tracks: &root_grid.template.rows,
@@ -61,7 +61,7 @@ fn root_vertical_sections_tile_parent_without_gaps() {
             root_grid.children.len()
         ],
     });
-    super::section_tiling_layout_helpers::assert_tracks_tile_parent_exactly(
+    super::slot_tiling_layout_helpers::assert_tracks_tile_parent_exactly(
         measured.height,
         root_grid.template.row_gap,
         &row_heights,
@@ -69,7 +69,7 @@ fn root_vertical_sections_tile_parent_without_gaps() {
 }
 
 #[test]
-fn root_horizontal_sections_tile_parent_without_gaps() {
+fn root_horizontal_slots_tile_parent_without_gaps() {
     let root_size = Size {
         width: 799,
         height: 301,
@@ -91,7 +91,7 @@ fn root_horizontal_sections_tile_parent_without_gaps() {
     let measured = measure_checked(&spec).expect("measurement should succeed");
     assert_eq!(measured, root_size);
     let Node::Grid(root_grid) = expect_slot_child(spec.root.content.as_ref(), "root") else {
-        panic!("expected grid-backed root sections");
+        panic!("expected grid-backed root slots");
     };
     let column_widths = resolve_grid_axis(GridAxisResolveRequest {
         tracks: &root_grid.template.columns,
@@ -108,7 +108,7 @@ fn root_horizontal_sections_tile_parent_without_gaps() {
             root_grid.children.len()
         ],
     });
-    super::section_tiling_layout_helpers::assert_tracks_tile_parent_exactly(
+    super::slot_tiling_layout_helpers::assert_tracks_tile_parent_exactly(
         measured.width,
         root_grid.template.column_gap,
         &column_widths,
@@ -116,7 +116,7 @@ fn root_horizontal_sections_tile_parent_without_gaps() {
 }
 
 #[test]
-fn nested_section_layouts_tile_each_parent_without_gaps() {
+fn nested_slot_layouts_tile_each_parent_without_gaps() {
     let right_nested = column_slots(vec![
         weighted_slot(panel("right-top", label("R1")).pad_all(0), 40),
         weighted_slot(panel("right-bottom", label("R2")).pad_all(0), 60),
@@ -139,7 +139,7 @@ fn nested_section_layouts_tile_each_parent_without_gaps() {
     assert_eq!(measured, root_size);
 
     let Node::Grid(root_grid) = expect_slot_child(spec.root.content.as_ref(), "root") else {
-        panic!("expected grid-backed root sections");
+        panic!("expected grid-backed root slots");
     };
     let root_row_heights = resolve_grid_axis(GridAxisResolveRequest {
         tracks: &root_grid.template.rows,
@@ -156,15 +156,15 @@ fn nested_section_layouts_tile_each_parent_without_gaps() {
             root_grid.children.len()
         ],
     });
-    super::section_tiling_layout_helpers::assert_tracks_tile_parent_exactly(
+    super::slot_tiling_layout_helpers::assert_tracks_tile_parent_exactly(
         measured.height,
         root_grid.template.row_gap,
         &root_row_heights,
     );
 
-    let controls_panel = expect_section_wrapped_panel(&root_grid.children[2], "controls");
+    let controls_panel = expect_slot_wrapped_panel(&root_grid.children[2], "controls");
     let Node::Grid(controls_grid) = expect_slot_child(controls_panel.content.as_ref(), "controls") else {
-        panic!("expected row section grid in controls panel");
+        panic!("expected row slot grid in controls panel");
     };
     let controls_column_widths = resolve_grid_axis(GridAxisResolveRequest {
         tracks: &controls_grid.template.columns,
@@ -181,15 +181,15 @@ fn nested_section_layouts_tile_each_parent_without_gaps() {
             controls_grid.children.len()
         ],
     });
-    super::section_tiling_layout_helpers::assert_tracks_tile_parent_exactly(
+    super::slot_tiling_layout_helpers::assert_tracks_tile_parent_exactly(
         measured.width,
         controls_grid.template.column_gap,
         &controls_column_widths,
     );
 
-    let right_panel = expect_section_wrapped_panel(&controls_grid.children[1], "right");
+    let right_panel = expect_slot_wrapped_panel(&controls_grid.children[1], "right");
     let Node::Grid(right_grid) = expect_slot_child(right_panel.content.as_ref(), "right") else {
-        panic!("expected nested column section grid in right panel");
+        panic!("expected nested column slot grid in right panel");
     };
     let nested_row_heights = resolve_grid_axis(GridAxisResolveRequest {
         tracks: &right_grid.template.rows,
@@ -206,7 +206,7 @@ fn nested_section_layouts_tile_each_parent_without_gaps() {
             right_grid.children.len()
         ],
     });
-    super::section_tiling_layout_helpers::assert_tracks_tile_parent_exactly(
+    super::slot_tiling_layout_helpers::assert_tracks_tile_parent_exactly(
         root_row_heights[2],
         right_grid.template.row_gap,
         &nested_row_heights,

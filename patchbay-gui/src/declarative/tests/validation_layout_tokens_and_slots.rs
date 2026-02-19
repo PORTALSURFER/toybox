@@ -6,6 +6,6 @@ mod validation_layout_rules_tests {
     include!("validation_layout_rules_tests.rs");
 }
 
-mod section_helper_tests {
-    include!("section_helper_tests.rs");
+mod slot_helper_tests {
+    include!("slot_helper_tests.rs");
 }

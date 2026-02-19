@@ -1,7 +1,7 @@
 use super::super::*;
 
 #[test]
-fn section_tracks_allocate_percentages_before_fill_remainder() {
+fn slot_tracks_allocate_percentages_before_fill_remainder() {
     let widths = resolve_grid_axis(GridAxisResolveRequest {
         tracks: &[
             TrackSize::Percent(25),
@@ -23,7 +23,7 @@ fn section_tracks_allocate_percentages_before_fill_remainder() {
 }
 
 #[test]
-fn section_grid_requires_exact_hundred_percent_without_fill() {
+fn slot_grid_requires_exact_hundred_percent_without_fill() {
     let spec = UiSpec::new(root_frame_sized(
         "root",
         column_slots(vec![
@@ -50,7 +50,7 @@ fn section_grid_requires_exact_hundred_percent_without_fill() {
 }
 
 #[test]
-fn section_grid_allows_sub_hundred_percent_when_fill_present() {
+fn slot_grid_allows_sub_hundred_percent_when_fill_present() {
     let spec = UiSpec::new(root_frame_sized(
         "root",
         column_slots(vec![
@@ -66,7 +66,7 @@ fn section_grid_allows_sub_hundred_percent_when_fill_present() {
             height: 180,
         },
     ));
-    let measured = measure_checked(&spec).expect("fill should absorb remaining section space");
+    let measured = measure_checked(&spec).expect("fill should absorb remaining slot space");
     assert_eq!(
         measured,
         Size {

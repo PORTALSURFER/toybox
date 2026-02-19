@@ -72,7 +72,7 @@ pub enum DeclarativeError {
         /// Upper range bound.
         max: f32,
     },
-    /// Root content must be a container node.
+    /// Root content must be a slot node.
     #[error("root content must be a slot node (got `{node_kind}`)")]
     InvalidRootContent {
         /// Concrete node variant at root content position.
@@ -98,7 +98,7 @@ pub enum DeclarativeError {
         /// Concrete slot-child node kind.
         node_kind: &'static str,
     },
-    /// Section tracks must use fraction/fill sizing only.
+    /// Slot tracks must use fraction/fill sizing only.
     #[error("slot tracks must use Fraction or Fill definitions")]
     InvalidSlotTrack,
     /// Slot percentage definitions are malformed.

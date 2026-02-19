@@ -37,7 +37,7 @@ fn weighted_child_clamps_zero_weight_to_one() {
 fn column_slots_apply_weighted_height_fill() {
     let node = column_slots(vec![weighted_slot(label("A"), 7), weighted_slot(label("B"), 30)]);
     let Node::Grid(grid) = node else {
-        panic!("expected grid-backed column section container");
+        panic!("expected grid-backed column slot container");
     };
     assert_eq!(grid.layout, LayoutBox::fill());
     assert_eq!(grid.template.columns, vec![TrackSize::Fr(1)]);
@@ -64,7 +64,7 @@ fn column_slots_apply_weighted_height_fill() {
 fn row_slots_apply_weighted_width_fill() {
     let node = row_slots(vec![weighted_slot(label("L"), 70), weighted_slot(label("R"), 30)]);
     let Node::Grid(grid) = node else {
-        panic!("expected grid-backed row section container");
+        panic!("expected grid-backed row slot container");
     };
     assert_eq!(grid.layout, LayoutBox::fill());
     assert_eq!(

@@ -55,6 +55,6 @@ let controls = grid(
 
 ## Notes
 - Prefer `root_frame_sized` with `column_slots`/`row_slots` for top-level composition.
-- Use slot helpers (`weighted_slot`, `fraction_slot`, `fill_slot`) for section-like splits.
+- Use slot helpers (`weighted_slot`, `fraction_slot`, `fill_slot`) for slot-based splits.
 - Slot tracks are fraction/fill only.
-- Keep keys stable and descriptive (`section/control` style).
+- Keep keys stable and descriptive (`slot/control` style).

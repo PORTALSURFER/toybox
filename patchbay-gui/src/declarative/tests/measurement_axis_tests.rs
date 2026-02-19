@@ -216,7 +216,7 @@ fn root_frame_sized_uses_expanded_host_size() {
 }
 
 #[test]
-fn nested_section_helpers_measure_successfully() {
+fn nested_slot_helpers_measure_successfully() {
     let controls = row_slots(vec![
         weighted_slot(panel("left", label("Knobs")).pad_all(0), 70),
         weighted_slot(panel("right", label("Dropdowns")).pad_all(0), 30),
@@ -242,7 +242,7 @@ fn nested_section_helpers_measure_successfully() {
         .padding(0),
     );
 
-    let measured = measure_checked(&spec).expect("nested section helpers should validate");
+    let measured = measure_checked(&spec).expect("nested slot helpers should validate");
     assert!(measured.width >= 420);
     assert!(measured.height >= 258);
 }

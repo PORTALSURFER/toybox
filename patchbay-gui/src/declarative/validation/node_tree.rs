@@ -104,7 +104,7 @@ fn validate_grid_node(
     if grid.template.columns.is_empty() {
         return Err(DeclarativeError::EmptyGridColumns);
     }
-    if matches!(grid.kind, GridKind::SectionColumn | GridKind::SectionRow) {
+    if matches!(grid.kind, GridKind::SlotColumn | GridKind::SlotRow) {
         validate_slot_tracks(grid)?;
     }
     validate_container_children("Grid", &grid.children, seen_keys)

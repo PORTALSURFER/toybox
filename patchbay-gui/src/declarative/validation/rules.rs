@@ -1,8 +1,8 @@
 /// Validate strict slot-track definitions for canonical slot grids.
 fn validate_slot_tracks(grid: &GridSpec) -> Result<(), DeclarativeError> {
     let tracks = match grid.kind {
-        GridKind::SectionColumn => &grid.template.rows,
-        GridKind::SectionRow => &grid.template.columns,
+        GridKind::SlotColumn => &grid.template.rows,
+        GridKind::SlotRow => &grid.template.columns,
         GridKind::Standard => return Ok(()),
     };
     if tracks.is_empty() {

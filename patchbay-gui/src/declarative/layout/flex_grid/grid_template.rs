@@ -20,8 +20,8 @@ pub struct GridTemplate {
 pub enum GridKind {
     /// General-purpose grid with legacy track behavior.
     Standard,
-    /// Canonical vertical section container.
-    SectionColumn,
-    /// Canonical horizontal section container.
-    SectionRow,
+    /// Canonical vertical slot container.
+    SlotColumn,
+    /// Canonical horizontal slot container.
+    SlotRow,
 }

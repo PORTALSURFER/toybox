@@ -34,7 +34,7 @@ pub fn column_slots(children: Vec<Slot>) -> Node {
             .justify_start(),
         nodes,
     );
-    spec.kind = GridKind::SectionColumn;
+    spec.kind = GridKind::SlotColumn;
     Node::Grid(spec).layout(LayoutBox::fill())
 }
 
@@ -55,7 +55,7 @@ pub fn row_slots(children: Vec<Slot>) -> Node {
             .justify_start(),
         nodes,
     );
-    spec.kind = GridKind::SectionRow;
+    spec.kind = GridKind::SlotRow;
     Node::Grid(spec).layout(LayoutBox::fill())
 }
 

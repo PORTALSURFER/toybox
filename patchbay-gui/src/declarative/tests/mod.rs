@@ -1,7 +1,7 @@
 include!("debug_borders_tests.rs");
 include!("grid_basics_tests.rs");
-include!("validation_layout_tokens_and_sections.rs");
-include!("section_fraction_tiling.rs");
+include!("validation_layout_tokens_and_slots.rs");
+include!("slot_fraction_tiling.rs");
 include!("helpers_and_measurement.rs");
 include!("root_transform_and_interaction.rs");
 include!("region_and_panel_behavior.rs");

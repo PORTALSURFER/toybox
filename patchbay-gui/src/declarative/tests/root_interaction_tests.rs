@@ -44,7 +44,7 @@ fn render_knob_uses_token_diameter_for_hit_region() {
 }
 
 #[test]
-fn knob_interaction_is_clamped_to_section_bounds() {
+fn knob_interaction_is_clamped_to_slot_bounds() {
     let root_size = Size {
         width: 140,
         height: 100,
@@ -64,7 +64,7 @@ fn knob_interaction_is_clamped_to_section_bounds() {
     let mut ui_state = UiState::default();
     let input = InputState {
         // Falls inside the knob's historical expanded hit-ring but below
-        // the top section bounds.
+        // the top slot bounds.
         pointer_pos: Point { x: 16, y: 25 },
         wheel_delta: 1.0,
         ..InputState::default()
@@ -76,12 +76,12 @@ fn knob_interaction_is_clamped_to_section_bounds() {
             .actions
             .iter()
             .any(|action| matches!(action, UiAction::KnobChanged { key, .. } if key == "k")),
-        "knob outside section clip should not receive wheel interaction"
+        "knob outside slot clip should not receive wheel interaction"
     );
 }
 
 #[test]
-fn dropdown_overlay_interaction_can_escape_section_bounds() {
+fn dropdown_overlay_interaction_can_escape_slot_bounds() {
     let root_size = Size {
         width: 160,
         height: 96,
@@ -121,7 +121,7 @@ fn dropdown_overlay_interaction_can_escape_section_bounds() {
             .expect("open frame should render");
     }
 
-    // Frame 2: click on the second option below the section bounds.
+    // Frame 2: click on the second option below the slot bounds.
     let mut canvas = Canvas::new(root_size.width, root_size.height);
     let mut layout = Layout::default();
     let input_select = InputState {
@@ -146,7 +146,7 @@ fn dropdown_overlay_interaction_can_escape_section_bounds() {
                 UiAction::DropdownSelected { key, index } if key == "mode" && *index == 1
             )
         ),
-        "dropdown option outside section clip should remain selectable via popup overlay"
+        "dropdown option outside slot clip should remain selectable via popup overlay"
     );
 }
 

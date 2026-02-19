@@ -6,14 +6,14 @@
 - Container/slot/widget grammar enforced by validation.
 
 ## Breaking Changes
-- Section naming replaced by slot naming:
+- Legacy section naming replaced by slot naming:
   - `row_sections` -> `row_slots`
   - `column_sections` -> `column_slots`
   - `weighted` -> `weighted_slot`
   - `fraction` -> `fraction_slot`
   - `fill_section` -> `fill_slot`
   - `weighted_section_lengths` -> `weighted_slot_lengths`
-- Section `Px` slot tracks are removed from slot helpers.
+- Slot `Px` tracks are removed from slot helpers.
 - Root content is now a required slot wrapper (applied automatically by constructors).
 - Containers now require slot children (applied automatically by constructors).
 
@@ -32,7 +32,7 @@
 - `InvalidSlotTrack` / `InvalidSlotFractions`: invalid slot track definitions.
 
 ## Recommended Rollout Order
-1. Migrate root composition + top-level sections.
-2. Migrate nested section helpers.
+1. Migrate root composition + top-level slots.
+2. Migrate nested slot helpers.
 3. Migrate test tree matchers to account for slot wrappers.
 4. Rebaseline screenshots/layout assertions if tree shape changed.
