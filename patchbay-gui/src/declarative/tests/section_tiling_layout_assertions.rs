@@ -1,5 +1,17 @@
 use super::super::super::*;
 
+fn expect_section_wrapped_panel<'a>(node: &'a Node, label: &str) -> &'a PanelSpec {
+    match node {
+        Node::Row(row) => match row.children.as_slice() {
+            [Node::Panel(panel)] => panel,
+            [other] => panic!("expected {label} row to contain panel, got {other:?}"),
+            _ => panic!("expected {label} row to contain exactly one child"),
+        },
+        Node::Panel(panel) => panel,
+        other => panic!("expected {label} panel (or row wrapper), got {other:?}"),
+    }
+}
+
 #[test]
 fn root_vertical_sections_tile_parent_without_gaps() {
     let root_size = Size {
@@ -141,10 +153,7 @@ fn nested_section_layouts_tile_each_parent_without_gaps() {
         &root_row_heights,
     );
 
-    let controls_panel = match &root_grid.children[2] {
-        Node::Panel(panel) => panel,
-        other => panic!("expected controls panel, got {other:?}"),
-    };
+    let controls_panel = expect_section_wrapped_panel(&root_grid.children[2], "controls");
     let Node::Grid(controls_grid) = controls_panel.content.as_ref() else {
         panic!("expected row section grid in controls panel");
     };
@@ -169,10 +178,7 @@ fn nested_section_layouts_tile_each_parent_without_gaps() {
         &controls_column_widths,
     );
 
-    let right_panel = match &controls_grid.children[1] {
-        Node::Panel(panel) => panel,
-        other => panic!("expected right panel, got {other:?}"),
-    };
+    let right_panel = expect_section_wrapped_panel(&controls_grid.children[1], "right");
     let Node::Grid(right_grid) = right_panel.content.as_ref() else {
         panic!("expected nested column section grid in right panel");
     };

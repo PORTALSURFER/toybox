@@ -35,8 +35,9 @@ pub use crate::declarative::{
     RootScaleMode, SectionAlign, SectionChild, SectionSize, SectionTrack, SliderSpec,
     SpacingTokens, SurfaceCommand, ThemeTokens, ToggleSpec, TrackSize, TypographyTokens, UiAction,
     UiSpec, WeightedChild, button, column, column_sections, dropdown, fill_section, fraction, grid,
-    indicator, knob, label, measure_checked, panel, px_section, render_checked, root_frame_sized,
-    row, row_sections, slider, spacer, surface, toggle, weighted, weighted_section_lengths,
+    indicator, knob, label, measure_checked, panel, px_section, region, render_checked,
+    root_frame_sized, row, row_sections, slider, spacer, surface, toggle, weighted,
+    weighted_section_lengths,
 };
 #[cfg(not(target_os = "windows"))]
 pub use crate::host::WindowHandle;

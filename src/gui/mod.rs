@@ -11,15 +11,14 @@ pub use patchbay_gui::{
 /// Strict declarative GUI types and rendering helpers.
 pub mod declarative {
     pub use patchbay_gui::{
-        AbsoluteChild, AbsoluteSpec, Align, ButtonSpec, ColorTokens, ControlTokens,
-        DeclarativeError, DrawCommand, DropdownSpec, EdgeInsets, FlexSpec, GridKind, GridSpec,
-        GridTemplate, IndicatorSpec, Justify, KnobSpec, LabelSpec, LayoutBox, Length, MainPalette,
-        Node, PanelSpec, RegionInteractionKind, RegionSpec, RenderResult, RootFrameSpec,
-        RootScaleMode, SectionChild, SectionSize, SliderSpec, SpacingTokens, ThemeTokens,
-        ToggleSpec, TrackSize, TypographyTokens, UiAction, UiSpec, WeightedChild, button, column,
-        column_sections, dropdown, fill_section, fraction, grid, indicator, knob, label,
-        measure_checked, panel, region, render_checked, root_frame_sized, row, row_sections,
-        slider, spacer, toggle, weighted, weighted_section_lengths,
+        Align, ButtonSpec, ColorTokens, ControlTokens, DeclarativeError, DropdownSpec, EdgeInsets,
+        FlexSpec, GridKind, GridSpec, GridTemplate, IndicatorSpec, Justify, KnobSpec, LabelSpec,
+        LayoutBox, Length, MainPalette, Node, PanelSpec, RegionInteractionKind, RenderResult,
+        RootFrameSpec, RootScaleMode, SectionChild, SectionSize, SliderSpec, SpacingTokens,
+        ThemeTokens, ToggleSpec, TrackSize, TypographyTokens, UiAction, UiSpec, WeightedChild,
+        button, column, column_sections, dropdown, fill_section, fraction, grid, indicator, knob,
+        label, measure_checked, panel, render_checked, root_frame_sized, row, row_sections, slider,
+        spacer, toggle, weighted, weighted_section_lengths,
     };
 }
 
