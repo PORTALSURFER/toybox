@@ -14,11 +14,12 @@ pub mod declarative {
         Align, ButtonSpec, ColorTokens, ControlTokens, DeclarativeError, DropdownSpec, EdgeInsets,
         FlexSpec, GridKind, GridSpec, GridTemplate, IndicatorSpec, Justify, KnobSpec, LabelSpec,
         LayoutBox, Length, MainPalette, Node, PanelSpec, RegionInteractionKind, RenderResult,
-        RootFrameSpec, RootScaleMode, SectionChild, SectionSize, SliderSpec, SpacingTokens,
-        ThemeTokens, ToggleSpec, TrackSize, TypographyTokens, UiAction, UiSpec, WeightedChild,
-        button, column, column_sections, dropdown, fill_section, fraction, grid, indicator, knob,
-        label, measure_checked, panel, render_checked, root_frame_sized, row, row_sections, slider,
-        spacer, toggle, weighted, weighted_section_lengths,
+        RootFrameSpec, RootScaleMode, SectionAlign, SectionChild, SectionSize, SectionTrack,
+        SliderSpec, SpacingTokens, SurfaceCommand, ThemeTokens, ToggleSpec, TrackSize,
+        TypographyTokens, UiAction, UiSpec, WeightedChild, button, column, column_sections,
+        dropdown, fill_section, fraction, grid, indicator, knob, label, measure_checked, panel,
+        px_section, region, render_checked, root_frame_sized, row, row_sections, slider, spacer,
+        surface, toggle, weighted, weighted_section_lengths,
     };
 }
 
