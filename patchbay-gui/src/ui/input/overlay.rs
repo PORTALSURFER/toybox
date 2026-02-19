@@ -1,6 +1,7 @@
 impl<'a> Ui<'a> {
 
     /// Queue a dropdown overlay for deferred draw order.
+    #[cfg_attr(target_os = "windows", allow(dead_code))]
     fn push_dropdown_overlay(
         &mut self,
         base_rect: Rect,

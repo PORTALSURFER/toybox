@@ -62,6 +62,7 @@ impl<'a> Ui<'a> {
     }
 
     /// Resolve one option row rectangle for a given index.
+    #[cfg_attr(target_os = "windows", allow(dead_code))]
     pub(crate) fn dropdown_option_rect(
         &self,
         geometry: DropdownMenuGeometry,

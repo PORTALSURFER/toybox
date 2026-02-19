@@ -122,6 +122,8 @@ where
         last_mouse_secondary_down: false,
         debug_input,
         frame_counter: 0,
+        dropdown_popup_request: None,
+        dropdown_popup_dispatch_queued: false,
     }
 }
 

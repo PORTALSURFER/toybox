@@ -24,6 +24,7 @@ impl<'a> Ui<'a> {
     }
 
     /// Evaluate option hover/selection while the dropdown menu is open.
+    #[cfg_attr(target_os = "windows", allow(dead_code))]
     pub(crate) fn evaluate_open_dropdown_menu(
         &mut self,
         layout: DropdownLayout,
@@ -53,6 +54,7 @@ impl<'a> Ui<'a> {
     }
 
     /// Find hovered option index for the current pointer position.
+    #[cfg_attr(target_os = "windows", allow(dead_code))]
     pub(crate) fn find_hovered_dropdown_option(
         &self,
         geometry: DropdownMenuGeometry,
@@ -71,6 +73,7 @@ impl<'a> Ui<'a> {
     }
 
     /// Apply hovered-option selection on press and return whether value changed.
+    #[cfg_attr(target_os = "windows", allow(dead_code))]
     pub(crate) fn apply_dropdown_selection(
         &mut self,
         pressed: bool,
@@ -89,6 +92,7 @@ impl<'a> Ui<'a> {
     }
 
     /// Resolve menu-open state after handling pointer press rules.
+    #[cfg_attr(target_os = "windows", allow(dead_code))]
     pub(crate) fn resolve_dropdown_open_after_press(
         &mut self,
         pressed: bool,

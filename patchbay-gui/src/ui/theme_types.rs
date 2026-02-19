@@ -53,6 +53,16 @@ impl WidgetId {
         }
         Self(hash)
     }
+
+    /// Return the raw numeric value used for host/window interop.
+    pub const fn as_u64(self) -> u64 {
+        self.0
+    }
+
+    /// Build a widget id from a raw numeric value.
+    pub const fn from_u64(value: u64) -> Self {
+        Self(value)
+    }
 }
 
 /// Semantic color palette shared across Patchbay-based GUIs.

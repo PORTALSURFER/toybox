@@ -73,6 +73,12 @@ where
         } else {
             plan.transform.surface_to_design_clamped(self.input.pointer_pos)
         };
+        self.ui_state.set_surface_transform(
+            plan.transform.scale_x,
+            plan.transform.scale_y,
+            plan.transform.offset_x,
+            plan.transform.offset_y,
+        );
         if self.canvas.size() != plan.layout_size {
             self.canvas
                 .resize(plan.layout_size.width, plan.layout_size.height);
@@ -108,7 +114,10 @@ where
             }
         }
         ui.draw_overlays();
-        self.renderer.set_vector_commands(ui.take_vector_commands());
+        let vector_commands = ui.take_vector_commands();
+        drop(ui);
+        self.sync_dropdown_popup_request();
+        self.renderer.set_vector_commands(vector_commands);
         let _ = self.ui_state.take_root_frame_size();
     }
 
@@ -162,5 +171,19 @@ where
         self.input.wheel_delta = 0.0;
         self.input.key_pressed = None;
         self.input.dropped_files.clear();
+    }
+
+    fn sync_dropdown_popup_request(&mut self) {
+        if let Some(request) = self.ui_state.take_dropdown_popup_request() {
+            self.dropdown_popup_request = Some(request);
+            if !self.dropdown_popup_dispatch_queued {
+                self.dropdown_popup_dispatch_queued = true;
+                unsafe {
+                    let _ = PostMessageW(self.hwnd, WM_PATCHBAY_OPEN_DROPDOWN_POPUP, WPARAM(0), LPARAM(0));
+                }
+            }
+        } else if self.dropdown_popup_request.is_none() {
+            self.dropdown_popup_dispatch_queued = false;
+        }
     }
 }

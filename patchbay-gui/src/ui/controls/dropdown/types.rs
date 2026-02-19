@@ -10,6 +10,7 @@ pub(crate) struct DropdownLayout {
 }
 
 /// Persistent interaction result for an open dropdown menu pass.
+#[cfg_attr(target_os = "windows", allow(dead_code))]
 #[derive(Clone, Copy)]
 pub(crate) struct DropdownMenuInteraction {
     /// Whether the dropdown remains open after processing input.
@@ -25,6 +26,7 @@ pub(crate) struct DropdownMenuInteraction {
 }
 
 /// Geometry required to evaluate option hit-testing.
+#[cfg_attr(target_os = "windows", allow(dead_code))]
 #[derive(Clone, Copy)]
 pub(crate) struct DropdownMenuGeometry {
     /// Dropdown control rectangle.
