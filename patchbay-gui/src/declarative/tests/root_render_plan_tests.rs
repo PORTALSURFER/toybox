@@ -379,6 +379,14 @@ fn plan_root_render_stable_across_jittering_host_sizes() {
 
     for host_size in host_sizes {
         let plan = plan_root_render(&spec, host_size);
+        assert_eq!(
+            plan.layout_size,
+            Size {
+                width: 420,
+                height: 258,
+            },
+            "host resize must not change root layout size in design-space mode"
+        );
 
         let expected_scale =
             (host_size.width as f32 / 420.0).min(host_size.height as f32 / 258.0);

@@ -1,0 +1,10 @@
+error[E0624]: associated function `new` is private
+ --> tests/ui/root_frame_spec_new_is_private.rs:4:28
+  |
+4 |     let _ = RootFrameSpec::new("root", label("x"));
+  |                            ^^^ private associated function
+  |
+ ::: src/declarative/root/spec.rs
+  |
+  |     pub(crate) fn new(key: impl Into<String>, content: Node) -> Self {
+  |     ---------------------------------------------------------------- private associated function defined here

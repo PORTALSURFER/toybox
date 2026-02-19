@@ -51,7 +51,7 @@ pub struct RootFrameSpec {
     /// Optional design-token overrides for this frame.
     pub tokens: Option<ThemeTokens>,
     /// Optional baseline design size used for uniform fit scaling.
-    pub design_size: Option<Size>,
+    pub(crate) design_size: Option<Size>,
     /// Root-level scaling behavior.
     pub scale_mode: RootScaleMode,
     /// Optional zoom multiplier applied after scale mode resolution.
@@ -70,7 +70,10 @@ impl RootFrameSpec {
     ///
     /// The provided content is wrapped in a single slot so root obeys the
     /// container-slot grammar.
-    pub fn new(key: impl Into<String>, content: Node) -> Self {
+    ///
+    /// This constructor is crate-internal. External callers must use
+    /// [`root_frame_sized`] to ensure explicit design-space authoring.
+    pub(crate) fn new(key: impl Into<String>, content: Node) -> Self {
         Self {
             key: key.into(),
             title: None,
@@ -113,6 +116,11 @@ impl RootFrameSpec {
     pub fn design_size(mut self, size: Size) -> Self {
         self.design_size = Some(size);
         self
+    }
+
+    /// Return the configured design-space size used for root scaling.
+    pub fn design_size_value(&self) -> Option<Size> {
+        self.design_size
     }
 
     /// Set root scaling behavior.
