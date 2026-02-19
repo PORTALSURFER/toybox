@@ -40,6 +40,8 @@ pub enum Node {
     ScrollView(ScrollViewSpec),
     /// Flow/wrap container.
     Wrap(WrapSpec),
+    /// Width-based responsive switch container.
+    SwitchLayout(SwitchLayoutSpec),
     /// Label node.
     Label(LabelSpec),
     /// Spacer node.

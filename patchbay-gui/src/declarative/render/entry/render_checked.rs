@@ -100,10 +100,12 @@ fn render_root_frame_and_collect(
         actions: state.actions,
         debug_border_candidates: state.debug_border_candidates,
         layout_diagnostics: state.layout_diagnostics,
+        root_content_width: state.resolved.width,
         depth: 1,
     };
     let response =
         ui.root_frame_with_key_at(&spec.root.key, style, Some(state.resolved), state.origin, |ui, rect| {
+            ctx.root_content_width = rect.size.width;
             render_node(&spec.root.content, rect, ui, &mut ctx);
         });
     collect_container_debug_border_candidate(

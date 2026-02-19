@@ -8,6 +8,8 @@ struct RenderCtx<'a> {
     debug_border_candidates: &'a mut Vec<DebugBorderCandidate>,
     /// Runtime layout diagnostics collected during this render pass.
     layout_diagnostics: &'a mut Vec<LayoutDiagnostic>,
+    /// Root content width used by responsive containers.
+    root_content_width: u32,
     /// Current container depth in the render tree.
     depth: usize,
 }
@@ -24,6 +26,7 @@ fn render_node(node: &Node, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx<'_>
         Node::Stack(stack) => render_stack(stack, rect, ui, ctx),
         Node::ScrollView(scroll_view) => render_scroll_view(scroll_view, rect, ui, ctx),
         Node::Wrap(wrap) => render_wrap(wrap, rect, ui, ctx),
+        Node::SwitchLayout(switch_layout) => render_switch_layout(switch_layout, rect, ui, ctx),
         Node::Label(label) => render_label(label, rect, ui, ctx.tokens),
         Node::Spacer(_) => {}
         Node::Knob(knob) => render_knob(knob, rect, ui, ctx.tokens, ctx.actions),

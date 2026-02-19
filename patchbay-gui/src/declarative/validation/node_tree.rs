@@ -58,6 +58,7 @@ fn validate_node(
             validate_container_layout("Wrap", wrap.layout.to_layout_box())?;
             validate_container_children("Wrap", &wrap.children, seen_keys)
         }
+        Node::SwitchLayout(switch_layout) => validate_switch_layout_node(switch_layout, seen_keys),
         Node::Label(_) | Node::Spacer(_) | Node::Indicator(_) => Ok(()),
         Node::Knob(knob) => validate_knob_node(knob, seen_keys),
         Node::Slider(slider) => validate_slider_node(slider, seen_keys),
@@ -148,6 +149,31 @@ fn validate_absolute_node(
     Ok(())
 }
 
+/// Validate switch-layout cases, fallback, and child slot structure.
+fn validate_switch_layout_node(
+    switch_layout: &SwitchLayoutSpec,
+    seen_keys: &mut std::collections::HashSet<String>,
+) -> Result<(), DeclarativeError> {
+    validate_container_layout("SwitchLayout", switch_layout.layout.to_layout_box())?;
+    validate_switch_case_ranges(switch_layout.cases())?;
+    for case_entry in switch_layout.cases() {
+        if !matches!(case_entry.child(), Node::Slot(_)) {
+            return Err(DeclarativeError::InvalidContainerChild {
+                container_kind: "SwitchLayout",
+                node_kind: node_kind_name(case_entry.child()),
+            });
+        }
+        validate_node(case_entry.child(), seen_keys)?;
+    }
+    if !matches!(switch_layout.fallback(), Node::Slot(_)) {
+        return Err(DeclarativeError::InvalidContainerChild {
+            container_kind: "SwitchLayout",
+            node_kind: node_kind_name(switch_layout.fallback()),
+        });
+    }
+    validate_node(switch_layout.fallback(), seen_keys)
+}
+
 /// Validate knob constraints.
 fn validate_knob_node(
     knob: &KnobSpec,
@@ -235,6 +261,7 @@ fn is_container_node(node: &Node) -> bool {
             | Node::Stack(_)
             | Node::ScrollView(_)
             | Node::Wrap(_)
+            | Node::SwitchLayout(_)
     )
 }
 
@@ -266,6 +293,7 @@ fn node_kind_name(node: &Node) -> &'static str {
         Node::Stack(_) => "Stack",
         Node::ScrollView(_) => "ScrollView",
         Node::Wrap(_) => "Wrap",
+        Node::SwitchLayout(_) => "SwitchLayout",
         Node::Label(_) => "Label",
         Node::Spacer(_) => "Spacer",
         Node::Knob(_) => "Knob",

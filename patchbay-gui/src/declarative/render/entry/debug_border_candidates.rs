@@ -17,6 +17,8 @@ enum ContainerKind {
     ScrollView,
     /// Wrap container.
     Wrap,
+    /// Responsive switch-layout container.
+    SwitchLayout,
 }
 
 /// Candidate border outline emitted while traversing container nodes.
@@ -43,7 +45,8 @@ fn container_debug_border_color(kind: ContainerKind, depth: usize) -> Option<Col
             | ContainerKind::Absolute
             | ContainerKind::Stack
             | ContainerKind::ScrollView
-            | ContainerKind::Wrap => Some(Color::rgb(245, 98, 98)),
+            | ContainerKind::Wrap
+            | ContainerKind::SwitchLayout => Some(Color::rgb(245, 98, 98)),
         }
     }
     #[cfg(not(feature = "layout-debug-borders"))]

@@ -136,6 +136,13 @@ fn helper_node_constructors_build_valid_spec() {
                 ),
             ],
         ),
+        switch_layout(
+            vec![
+                when_width_lt(480, panel("compact-mode", label("Compact"))),
+                when_width_ge(480, panel("wide-mode", label("Wide"))),
+            ],
+            panel("fallback-mode", label("Fallback")),
+        ),
         region(
             "plot",
             Size {

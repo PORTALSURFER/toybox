@@ -23,6 +23,11 @@ impl Node {
     pub fn wrap(children: Vec<Node>) -> Self {
         Self::Wrap(WrapSpec::new(children))
     }
+
+    /// Create a responsive width-switch container.
+    pub fn switch_layout(cases: Vec<SwitchCase>, fallback: Node) -> Self {
+        Self::SwitchLayout(SwitchLayoutSpec::new(cases, fallback))
+    }
 }
 
 /// Create a row container node.
@@ -48,6 +53,11 @@ pub fn scroll_view(content: Node) -> Node {
 /// Create a wrap container node.
 pub fn wrap(children: Vec<Node>) -> Node {
     Node::wrap(children)
+}
+
+/// Create a responsive width-switch container node.
+pub fn switch_layout(cases: Vec<SwitchCase>, fallback: Node) -> Node {
+    Node::switch_layout(cases, fallback)
 }
 
 /// Create a slot container node.

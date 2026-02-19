@@ -17,6 +17,8 @@ pub enum LayoutContainerKind {
     ScrollView,
     /// Wrap container.
     Wrap,
+    /// Responsive switch-layout container.
+    SwitchLayout,
 }
 
 /// Severity level for a runtime layout diagnostic.

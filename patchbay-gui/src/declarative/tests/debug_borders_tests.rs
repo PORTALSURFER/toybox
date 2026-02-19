@@ -16,6 +16,10 @@ use crate::ui::{Layout, Theme, UiState};
             ContainerKind::Flex,
             ContainerKind::Grid,
             ContainerKind::Absolute,
+            ContainerKind::Stack,
+            ContainerKind::ScrollView,
+            ContainerKind::Wrap,
+            ContainerKind::SwitchLayout,
         ] {
             assert_eq!(container_debug_border_color(kind, 0), expected);
             assert_eq!(container_debug_border_color(kind, 1), expected);

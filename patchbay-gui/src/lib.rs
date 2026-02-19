@@ -35,11 +35,12 @@ pub use crate::declarative::{
     LayoutDiagnosticLevel, LayoutEngineState, Length, MeasureCacheKey, Node, OverflowPolicy,
     PanelSpec, RegionInteractionKind, RenderResult, RootFrameSpec, RootScaleMode, ScrollViewSpec,
     SliderSpec, Slot, SlotAlign, SlotCrossSize, SlotMainSize, SlotParams, SlotSpec, SpacingTokens,
-    StackSpec, SurfaceCommand, ThemeTokens, ToggleSpec, TrackSize, TypographyTokens, UiAction,
-    UiSpec, WeightedSlot, WrapSpec, button, column, column_slots, dropdown, fill_slot,
-    fraction_slot, grid, indicator, knob, label, measure_checked, panel, region, render_checked,
-    render_checked_with_engine, root_frame_sized, row, row_slots, scroll_view, slider, slot,
-    spacer, stack, surface, toggle, weighted_slot, weighted_slot_lengths, wrap,
+    StackSpec, SurfaceCommand, SwitchCase, SwitchLayoutSpec, SwitchWidthRange, ThemeTokens,
+    ToggleSpec, TrackSize, TypographyTokens, UiAction, UiSpec, WeightedSlot, WrapSpec, button,
+    column, column_slots, dropdown, fill_slot, fraction_slot, grid, indicator, knob, label,
+    measure_checked, panel, region, render_checked, render_checked_with_engine, root_frame_sized,
+    row, row_slots, scroll_view, slider, slot, spacer, stack, surface, switch_layout, toggle,
+    weighted_slot, weighted_slot_lengths, when_width_between, when_width_ge, when_width_lt, wrap,
 };
 #[cfg(not(target_os = "windows"))]
 pub use crate::host::WindowHandle;

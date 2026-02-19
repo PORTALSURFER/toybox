@@ -134,3 +134,42 @@ fn validate_control_value(
     }
     Ok(())
 }
+
+/// Validate deterministic ordering for switch-layout width cases.
+fn validate_switch_case_ranges(cases: &[SwitchCase]) -> Result<(), DeclarativeError> {
+    for (case_index, case_entry) in cases.iter().enumerate() {
+        let range = case_entry.range();
+        if let (Some(min), Some(max)) = (range.min_inclusive, range.max_exclusive)
+            && min >= max
+        {
+            return Err(DeclarativeError::InvalidSwitchCaseRange {
+                case_index,
+                min_inclusive: range.min_inclusive,
+                max_exclusive: range.max_exclusive,
+            });
+        }
+    }
+
+    for (case_index, case_entry) in cases.iter().enumerate().skip(1) {
+        let previous = cases[case_index - 1].range();
+        let current = case_entry.range();
+        let current_min = current.min_inclusive.unwrap_or(0);
+        let Some(previous_max) = previous.max_exclusive else {
+            return Err(DeclarativeError::InvalidSwitchCaseOrder {
+                previous_case_index: case_index - 1,
+                case_index,
+                previous_max_exclusive: u32::MAX,
+                case_min_inclusive: current_min,
+            });
+        };
+        if current_min < previous_max {
+            return Err(DeclarativeError::InvalidSwitchCaseOrder {
+                previous_case_index: case_index - 1,
+                case_index,
+                previous_max_exclusive: previous_max,
+                case_min_inclusive: current_min,
+            });
+        }
+    }
+    Ok(())
+}

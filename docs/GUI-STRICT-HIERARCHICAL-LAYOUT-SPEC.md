@@ -270,20 +270,17 @@ The major structural targets are now implemented in code:
 - strict root/slot/container/widget tree validation
 - parent-owned `SlotParams` (`size_main`, `size_cross`, margin, bounds, alignment overrides)
 - explicit container overflow policy handling and runtime diagnostics
-- first-class `Stack`, `ScrollView`, and `Wrap` container primitives
+- first-class `Stack`, `ScrollView`, `Wrap`, and `SwitchLayout` container primitives
 - first-class layout engine state (`LayoutEngineState`) with deterministic measure caching
 - stress coverage for deep nesting and large slot lists
 
 Remaining gaps to close for full spec parity:
 
-1. **Switch/breakpoint container is not implemented yet.**
-   The optional `SwitchLayout` primitive in section 7 is still conceptual.
-
-2. **Diagnostics are event-level, not full per-node deltas.**
+1. **Diagnostics are event-level, not full per-node deltas.**
    `RenderResult.layout_diagnostics` reports overflow/compression/clamp events,
    but not full measured-vs-final rect diffs for every node.
 
-3. **Dirty tracking is root-level cache orchestration, not subtree invalidation.**
+2. **Dirty tracking is root-level cache orchestration, not subtree invalidation.**
    `LayoutEngineState` currently exposes deterministic root measurement caching
    and dirty flags; fine-grained subtree dependency/invalidations are not yet
    modeled as a public contract.

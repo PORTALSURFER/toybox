@@ -16,6 +16,7 @@ Container node kinds:
 - `Stack`
 - `ScrollView`
 - `Wrap`
+- `SwitchLayout`
 
 Widget node kinds:
 - `Label`

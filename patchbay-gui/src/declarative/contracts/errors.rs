@@ -119,4 +119,30 @@ pub enum DeclarativeError {
         /// Concrete container node kind.
         container_kind: &'static str,
     },
+    /// A switch-layout case has invalid min/max bounds.
+    #[error(
+        "switch-layout case {case_index} has invalid bounds min={min_inclusive:?}, max={max_exclusive:?} (require min < max when both are present)"
+    )]
+    InvalidSwitchCaseRange {
+        /// Zero-based case index.
+        case_index: usize,
+        /// Inclusive lower bound.
+        min_inclusive: Option<u32>,
+        /// Exclusive upper bound.
+        max_exclusive: Option<u32>,
+    },
+    /// Ordered switch-layout cases overlap or are not sorted by ascending min.
+    #[error(
+        "switch-layout case {case_index} overlaps previous case {previous_case_index} (previous max={previous_max_exclusive}, case min={case_min_inclusive})"
+    )]
+    InvalidSwitchCaseOrder {
+        /// Zero-based previous case index.
+        previous_case_index: usize,
+        /// Zero-based current case index.
+        case_index: usize,
+        /// Previous-case exclusive max bound.
+        previous_max_exclusive: u32,
+        /// Current-case inclusive min bound.
+        case_min_inclusive: u32,
+    },
 }

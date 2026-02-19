@@ -10,6 +10,7 @@ fn measure_node(node: &Node, tokens: &ThemeTokens) -> Size {
         Node::Stack(stack) => measure_stack(stack, tokens),
         Node::ScrollView(scroll_view) => measure_scroll_view(scroll_view, tokens),
         Node::Wrap(wrap) => measure_wrap(wrap, tokens),
+        Node::SwitchLayout(switch_layout) => measure_switch_layout(switch_layout, tokens),
         Node::Label(label) => measure_label(label, tokens),
         Node::Spacer(spacer) => spacer.size,
         Node::Knob(knob) => measure_knob(knob, tokens),
@@ -173,6 +174,24 @@ fn measure_wrap(wrap: &WrapSpec, tokens: &ThemeTokens) -> Size {
             .min(u64::from(u32::MAX)) as u32,
     };
     resolve_size(wrap.layout.to_layout_box(), measured, measured)
+}
+
+/// Measure a switch-layout container intrinsically.
+///
+/// Measurement uses the maximal case extent so initial host sizing can
+/// accommodate any breakpoint variant deterministically.
+fn measure_switch_layout(switch_layout: &SwitchLayoutSpec, tokens: &ThemeTokens) -> Size {
+    let mut measured = measure_node(switch_layout.fallback(), tokens);
+    for case in switch_layout.cases() {
+        let case_measured = measure_node(case.child(), tokens);
+        measured.width = measured.width.max(case_measured.width);
+        measured.height = measured.height.max(case_measured.height);
+    }
+    resolve_size(
+        switch_layout.layout.to_layout_box(),
+        measured,
+        measured,
+    )
 }
 
 /// Convert a signed axis delta to a non-negative `u64` width contribution.

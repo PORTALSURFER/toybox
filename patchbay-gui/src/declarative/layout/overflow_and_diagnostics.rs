@@ -115,6 +115,6 @@ fn layout_container_kind(kind: ContainerKind) -> LayoutContainerKind {
         ContainerKind::Stack => LayoutContainerKind::Stack,
         ContainerKind::ScrollView => LayoutContainerKind::ScrollView,
         ContainerKind::Wrap => LayoutContainerKind::Wrap,
+        ContainerKind::SwitchLayout => LayoutContainerKind::SwitchLayout,
     }
 }
-

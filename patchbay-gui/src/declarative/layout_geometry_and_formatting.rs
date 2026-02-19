@@ -10,6 +10,7 @@ fn node_layout(node: &Node) -> LayoutBox {
         Node::Stack(stack) => stack.layout.to_layout_box(),
         Node::ScrollView(scroll_view) => scroll_view.layout.to_layout_box(),
         Node::Wrap(wrap) => wrap.layout.to_layout_box(),
+        Node::SwitchLayout(switch_layout) => switch_layout.layout.to_layout_box(),
         Node::Label(label) => label.layout,
         Node::Spacer(spacer) => LayoutBox::fixed(spacer.size.width, spacer.size.height),
         Node::Knob(knob) => knob.layout,

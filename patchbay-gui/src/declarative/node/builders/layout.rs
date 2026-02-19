@@ -15,7 +15,8 @@ impl Node {
             | Self::Absolute(_)
             | Self::Stack(_)
             | Self::ScrollView(_)
-            | Self::Wrap(_) => {}
+            | Self::Wrap(_)
+            | Self::SwitchLayout(_) => {}
             Self::Label(label) => label.layout = layout,
             Self::Knob(knob) => knob.layout = layout,
             Self::Slider(slider) => slider.layout = layout,
@@ -40,6 +41,7 @@ impl Node {
             Self::Stack(stack) => stack.layout = layout,
             Self::ScrollView(scroll_view) => scroll_view.layout = layout,
             Self::Wrap(wrap) => wrap.layout = layout,
+            Self::SwitchLayout(switch_layout) => switch_layout.layout = layout,
             _ => {}
         }
         self
@@ -61,6 +63,9 @@ impl Node {
                 scroll_view.layout = scroll_view.layout.fill_width().fill_height()
             }
             Self::Wrap(wrap) => wrap.layout = wrap.layout.fill_width().fill_height(),
+            Self::SwitchLayout(switch_layout) => {
+                switch_layout.layout = switch_layout.layout.fill_width().fill_height()
+            }
             Self::Label(label) => label.layout = LayoutBox::fill(),
             Self::Knob(knob) => knob.layout = LayoutBox::fill(),
             Self::Slider(slider) => slider.layout = LayoutBox::fill(),
@@ -82,6 +87,9 @@ impl Node {
             Self::Stack(stack) => stack.layout = stack.layout.fill_width(),
             Self::ScrollView(scroll_view) => scroll_view.layout = scroll_view.layout.fill_width(),
             Self::Wrap(wrap) => wrap.layout = wrap.layout.fill_width(),
+            Self::SwitchLayout(switch_layout) => {
+                switch_layout.layout = switch_layout.layout.fill_width()
+            }
             Self::Label(label) => label.layout = LayoutBox::auto().fill_width(),
             Self::Knob(knob) => knob.layout = LayoutBox::auto().fill_width(),
             Self::Slider(slider) => slider.layout = LayoutBox::auto().fill_width(),
@@ -105,6 +113,9 @@ impl Node {
                 scroll_view.layout = scroll_view.layout.fill_height()
             }
             Self::Wrap(wrap) => wrap.layout = wrap.layout.fill_height(),
+            Self::SwitchLayout(switch_layout) => {
+                switch_layout.layout = switch_layout.layout.fill_height()
+            }
             Self::Label(label) => label.layout = LayoutBox::auto().fill_height(),
             Self::Knob(knob) => knob.layout = LayoutBox::auto().fill_height(),
             Self::Slider(slider) => slider.layout = LayoutBox::auto().fill_height(),
@@ -134,6 +145,9 @@ impl Node {
                 scroll_view.layout = scroll_view.layout.overflow(overflow_policy)
             }
             Self::Wrap(wrap) => wrap.layout = wrap.layout.overflow(overflow_policy),
+            Self::SwitchLayout(switch_layout) => {
+                switch_layout.layout = switch_layout.layout.overflow(overflow_policy)
+            }
             _ => {}
         }
         self
