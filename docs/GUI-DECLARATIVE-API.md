@@ -84,6 +84,7 @@ uses keyed subtree invalidation after reducer-applied UI actions:
 Container and widget layout APIs are now explicitly separated:
 - Use `ContainerLayout` for `Panel` / `PaddingBox` / `AlignBox` / `AspectBox` / `Row` / `Column` / `Grid` / `Absolute` / `Stack` / `ScrollView` / `Wrap` / `SwitchLayout`.
 - Use `LayoutBox` only for widget sizing and root frame sizing.
+- `LayoutBox` is builder-driven externally (`auto`, `fill`, `fixed`, `with_*`, `min`, `max`); direct struct-literal field construction is intentionally unsupported.
 
 Before:
 ```rust

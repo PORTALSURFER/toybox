@@ -283,6 +283,7 @@ The major structural targets are now implemented in code:
 - key-scoped `NodeId` identities for keyed nodes (stable through sibling reindexing)
 - hard-fail validation for invalid root/widget/slot-derived layout bounds (`min > max`)
 - removed runtime constraint-normalization diagnostics in favor of checked validation failures
+- external `LayoutBox` struct-literal construction removed; builder-only layout authoring enforced
 - shared Win32 host runtime adoption of persistent `LayoutEngineState` rendering
 - stress coverage for deep nesting and large slot lists
 

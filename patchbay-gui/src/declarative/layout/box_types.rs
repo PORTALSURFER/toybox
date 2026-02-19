@@ -136,17 +136,17 @@ impl ContainerLayout {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LayoutBox {
     /// Width sizing mode.
-    pub width: Length,
+    pub(crate) width: Length,
     /// Height sizing mode.
-    pub height: Length,
+    pub(crate) height: Length,
     /// Optional minimum width.
-    pub min_width: Option<u32>,
+    pub(crate) min_width: Option<u32>,
     /// Optional minimum height.
-    pub min_height: Option<u32>,
+    pub(crate) min_height: Option<u32>,
     /// Optional maximum width.
-    pub max_width: Option<u32>,
+    pub(crate) max_width: Option<u32>,
     /// Optional maximum height.
-    pub max_height: Option<u32>,
+    pub(crate) max_height: Option<u32>,
 }
 
 impl LayoutBox {
@@ -258,6 +258,36 @@ impl LayoutBox {
     /// Set maximum size constraints.
     pub const fn max(self, max_width: u32, max_height: u32) -> Self {
         self.with_max(max_width, max_height)
+    }
+
+    /// Return width sizing behavior.
+    pub const fn width(self) -> Length {
+        self.width
+    }
+
+    /// Return height sizing behavior.
+    pub const fn height(self) -> Length {
+        self.height
+    }
+
+    /// Return optional minimum width bound.
+    pub const fn min_width(self) -> Option<u32> {
+        self.min_width
+    }
+
+    /// Return optional minimum height bound.
+    pub const fn min_height(self) -> Option<u32> {
+        self.min_height
+    }
+
+    /// Return optional maximum width bound.
+    pub const fn max_width(self) -> Option<u32> {
+        self.max_width
+    }
+
+    /// Return optional maximum height bound.
+    pub const fn max_height(self) -> Option<u32> {
+        self.max_height
     }
 }
 
