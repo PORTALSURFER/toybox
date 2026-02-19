@@ -139,7 +139,7 @@ fn validate_node(
             validate_container_children("Wrap", &wrap.children, seen_keys)
         }
         Node::SwitchLayout(switch_layout) => validate_switch_layout_node(switch_layout, seen_keys),
-        Node::TextBox(text_box) => validate_layout_bounds("TextBox", text_box.layout),
+        Node::TextBox(text_box) => validate_text_box_node(text_box, seen_keys),
         Node::Spacer(_) | Node::Indicator(_) => Ok(()),
         Node::Knob(knob) => validate_knob_node(knob, seen_keys),
         Node::Slider(slider) => validate_slider_node(slider, seen_keys),
@@ -148,6 +148,19 @@ fn validate_node(
         Node::Dropdown(dropdown) => validate_dropdown_node(dropdown, seen_keys),
         Node::Region(region) => validate_region_node(region, seen_keys),
     }
+}
+
+/// Validate text-box constraints and optional editable contract.
+fn validate_text_box_node(
+    text_box: &TextBoxSpec,
+    seen_keys: &mut std::collections::HashSet<String>,
+) -> Result<(), DeclarativeError> {
+    validate_layout_bounds("TextBox", text_box.layout)?;
+    if let Some(edit) = text_box.edit.as_ref() {
+        validate_non_empty_key(&edit.key, "TextBox")?;
+        validate_unique_key(&edit.key, seen_keys)?;
+    }
+    Ok(())
 }
 
 /// Validate panel key constraints and recurse into panel slot content.

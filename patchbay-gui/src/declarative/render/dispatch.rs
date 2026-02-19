@@ -213,7 +213,7 @@ fn render_node(node: &Node, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx<'_>
         Node::ScrollView(scroll_view) => render_scroll_view(scroll_view, rect, ui, ctx),
         Node::Wrap(wrap) => render_wrap(wrap, rect, ui, ctx),
         Node::SwitchLayout(switch_layout) => render_switch_layout(switch_layout, rect, ui, ctx),
-        Node::TextBox(text_box) => render_text_box(text_box, rect, ui, ctx.tokens),
+        Node::TextBox(text_box) => render_text_box(text_box, rect, ui, ctx.tokens, ctx.actions),
         Node::Spacer(_) => {}
         Node::Knob(knob) => render_knob(knob, rect, ui, ctx.tokens, ctx.actions),
         Node::Slider(slider) => render_slider(slider, rect, ui, ctx.tokens, ctx.actions),

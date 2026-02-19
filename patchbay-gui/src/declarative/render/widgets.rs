@@ -128,6 +128,11 @@ fn render_dropdown(
             index: selected,
         });
     }
+    if response.hovered && ui.input().mouse_double_clicked {
+        actions.push(UiAction::DropdownDoubleClicked {
+            key: dropdown.key.clone(),
+        });
+    }
 }
 
 /// Resolve the rendered option labels for a dropdown.

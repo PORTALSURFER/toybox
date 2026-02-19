@@ -56,6 +56,19 @@ fn node_fluent_helpers_apply_container_and_style_fields() {
         _ => panic!("expected text box node"),
     }
 
+    let editable_text_box = textbox("Init")
+        .text_editable("preset-title", true)
+        .text_edit_max_chars(24);
+    match editable_text_box {
+        Node::TextBox(text_box) => {
+            let edit = text_box.edit.expect("editable contract should exist");
+            assert_eq!(edit.key, "preset-title");
+            assert!(edit.editing);
+            assert_eq!(edit.max_chars, 24);
+        }
+        _ => panic!("expected text box node"),
+    }
+
     let knob_node = knob("k", 0.5, (0.0, 1.0));
     match knob_node {
         Node::Knob(knob) => {

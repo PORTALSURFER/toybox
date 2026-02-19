@@ -38,4 +38,30 @@ impl Node {
         }
         self
     }
+
+    /// Enable editable text behavior on text box nodes.
+    ///
+    /// Non-text-box node kinds are returned unchanged.
+    pub fn text_editable(mut self, key: impl Into<String>, editing: bool) -> Self {
+        if let Self::TextBox(text_box) = &mut self {
+            text_box.edit = Some(TextBoxEditSpec {
+                key: key.into(),
+                editing,
+                max_chars: 64,
+            });
+        }
+        self
+    }
+
+    /// Set editable text maximum characters for text box nodes.
+    ///
+    /// Non-text-box node kinds are returned unchanged.
+    pub fn text_edit_max_chars(mut self, max_chars: usize) -> Self {
+        if let Self::TextBox(text_box) = &mut self
+            && let Some(edit) = text_box.edit.as_mut()
+        {
+            edit.max_chars = max_chars.max(1);
+        }
+        self
+    }
 }

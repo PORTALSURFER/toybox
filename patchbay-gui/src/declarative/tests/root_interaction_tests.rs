@@ -179,3 +179,92 @@ fn render_emits_button_action() {
             .any(|action| matches!(action, UiAction::ButtonPressed { key } if key == "ok"))
     );
 }
+
+#[test]
+fn dropdown_emits_double_click_action() {
+    let mut canvas = Canvas::new(200, 120);
+    let mut layout = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let input = InputState {
+        pointer_pos: Point { x: 24, y: 18 },
+        mouse_double_clicked: true,
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        panel("panel", dropdown("mode", 3, 0)).pad_all(0),
+    ));
+    let result = render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    assert!(
+        result
+            .actions
+            .iter()
+            .any(|action| matches!(action, UiAction::DropdownDoubleClicked { key } if key == "mode"))
+    );
+}
+
+#[test]
+fn editable_text_box_emits_edit_and_commit_actions() {
+    let mut canvas = Canvas::new(200, 80);
+    let mut layout = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let input = InputState {
+        key_pressed: Some('A'),
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        panel(
+            "panel",
+            textbox("Init")
+                .text_editable("preset-title", true)
+                .text_edit_max_chars(24),
+        )
+        .pad_all(0),
+    ));
+    let result = render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    assert!(result.actions.iter().any(
+        |action| matches!(
+            action,
+            UiAction::TextBoxEdited { key, text } if key == "preset-title" && text == "InitA"
+        )
+    ));
+
+    let mut canvas = Canvas::new(200, 80);
+    let mut layout = Layout::default();
+    let input_commit = InputState {
+        key_pressed: Some('\r'),
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(
+        &mut canvas,
+        &input_commit,
+        &mut ui_state,
+        &mut layout,
+        &theme,
+    );
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        panel(
+            "panel",
+            textbox("InitA")
+                .text_editable("preset-title", true)
+                .text_edit_max_chars(24),
+        )
+        .pad_all(0),
+    ));
+    let result = render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    assert!(result.actions.iter().any(
+        |action| matches!(
+            action,
+            UiAction::TextBoxEditCommitted { key, text }
+                if key == "preset-title" && text == "InitA"
+        )
+    ));
+}

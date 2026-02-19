@@ -34,6 +34,35 @@ pub enum UiAction {
         /// Selected option index.
         index: usize,
     },
+    /// Dropdown double-click event.
+    DropdownDoubleClicked {
+        /// Stable widget key.
+        key: String,
+    },
+    /// Text-box edit-mode entry request.
+    TextBoxEditRequested {
+        /// Stable widget key.
+        key: String,
+    },
+    /// Text-box draft edit update.
+    TextBoxEdited {
+        /// Stable widget key.
+        key: String,
+        /// Updated text content.
+        text: String,
+    },
+    /// Text-box edit-mode commit request.
+    TextBoxEditCommitted {
+        /// Stable widget key.
+        key: String,
+        /// Final text content.
+        text: String,
+    },
+    /// Text-box edit-mode cancel request.
+    TextBoxEditCanceled {
+        /// Stable widget key.
+        key: String,
+    },
     /// Region hover state update.
     RegionHover {
         /// Stable widget key.
@@ -75,7 +104,12 @@ impl UiAction {
             | UiAction::SliderChanged { .. }
             | UiAction::ToggleChanged { .. }
             | UiAction::ButtonPressed { .. }
-            | UiAction::DropdownSelected { .. } => UiInvalidationScope::MeasureSubtree,
+            | UiAction::DropdownSelected { .. }
+            | UiAction::DropdownDoubleClicked { .. }
+            | UiAction::TextBoxEditRequested { .. }
+            | UiAction::TextBoxEdited { .. }
+            | UiAction::TextBoxEditCommitted { .. }
+            | UiAction::TextBoxEditCanceled { .. } => UiInvalidationScope::MeasureSubtree,
             UiAction::RegionHover { .. } | UiAction::RegionInteracted { .. } => {
                 UiInvalidationScope::LayoutSubtree
             }

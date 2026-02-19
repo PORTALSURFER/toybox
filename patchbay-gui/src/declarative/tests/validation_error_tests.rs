@@ -168,6 +168,19 @@ fn rejects_inverted_slot_widget_layout_bounds() {
 }
 
 #[test]
+fn rejects_editable_text_box_with_empty_key() {
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        panel("panel", textbox("Init").text_editable("", true)),
+    ));
+    let error = measure_checked(&spec).expect_err("expected invalid editable text-box key");
+    assert!(matches!(
+        error,
+        DeclarativeError::EmptyNodeKey { node_kind } if node_kind == "TextBox"
+    ));
+}
+
+#[test]
 fn rejects_non_slot_root_content() {
     let spec = UiSpec::new(RootFrameSpec {
         key: "root".to_string(),

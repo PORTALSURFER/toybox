@@ -8,7 +8,7 @@ pub fn panel(key: impl Into<String>, content: Node) -> Node {
     Node::Panel(PanelSpec::new(key, content))
 }
 
-/// Create a display-only text box node.
+/// Create a text box node.
 pub fn textbox(text: impl Into<String>) -> Node {
     Node::TextBox(TextBoxSpec::new(text))
 }
