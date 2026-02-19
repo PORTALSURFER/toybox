@@ -67,9 +67,10 @@ For detailed per-node geometry diagnostics, set `RootFrameSpec::layout_diagnosti
 - `measure_cache_stats()` and `last_registry_version()` for read-only diagnostics.
 
 Win32 host runtime keeps one persistent `LayoutEngineState` per window and
-uses keyed subtree invalidation after reducer-applied UI actions
-(`node_id_for_key` + `invalidate_layout_subtree`), with full-tree measure
-fallback only when a key cannot be resolved.
+uses keyed subtree invalidation after reducer-applied UI actions:
+- measure-subtree invalidation for control/value actions
+- layout-subtree invalidation for interaction-only region actions
+- full-tree measure fallback only when a key cannot be resolved
 
 ## Layout Migration Notes
 Container and widget layout APIs are now explicitly separated:

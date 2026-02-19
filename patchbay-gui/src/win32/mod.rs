@@ -2,7 +2,8 @@
 
 use crate::canvas::{Canvas, Color, Point, Size};
 use crate::declarative::{
-    LayoutEngineState, UiAction, UiSpec, plan_root_render, render_checked_with_engine,
+    LayoutEngineState, UiAction, UiInvalidationScope, UiSpec, plan_root_render,
+    render_checked_with_engine,
 };
 use crate::host::{GuiError, InputState};
 use crate::logging::log_line_safe;

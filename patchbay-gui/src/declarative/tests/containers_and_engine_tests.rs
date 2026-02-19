@@ -99,6 +99,35 @@ fn render_checked_with_engine_reuses_measure_cache_for_stable_inputs() {
 }
 
 #[test]
+fn ui_action_invalidation_scope_matches_variant_contract() {
+    assert_eq!(
+        UiAction::KnobChanged {
+            key: "k".to_string(),
+            value: 0.5,
+        }
+        .invalidation_scope(),
+        UiInvalidationScope::MeasureSubtree
+    );
+    assert_eq!(
+        UiAction::DropdownSelected {
+            key: "d".to_string(),
+            index: 1,
+        }
+        .invalidation_scope(),
+        UiInvalidationScope::MeasureSubtree
+    );
+    assert_eq!(
+        UiAction::RegionHover {
+            key: "r".to_string(),
+            hovered: true,
+            local_pointer: Point { x: 1, y: 2 },
+        }
+        .invalidation_scope(),
+        UiInvalidationScope::LayoutSubtree
+    );
+}
+
+#[test]
 fn runtime_style_targeted_invalidation_is_narrower_than_full_invalidation() {
     let spec = UiSpec::new(RootFrameSpec::new(
         "root",

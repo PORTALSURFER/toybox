@@ -58,6 +58,31 @@ pub enum UiAction {
     },
 }
 
+/// Cache invalidation scope associated with a declarative action.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UiInvalidationScope {
+    /// Action may change intrinsic measurement and should invalidate measure.
+    MeasureSubtree,
+    /// Action changes only interactive/layout state and can skip measure.
+    LayoutSubtree,
+}
+
+impl UiAction {
+    /// Return the engine invalidation scope for this action variant.
+    pub fn invalidation_scope(&self) -> UiInvalidationScope {
+        match self {
+            UiAction::KnobChanged { .. }
+            | UiAction::SliderChanged { .. }
+            | UiAction::ToggleChanged { .. }
+            | UiAction::ButtonPressed { .. }
+            | UiAction::DropdownSelected { .. } => UiInvalidationScope::MeasureSubtree,
+            UiAction::RegionHover { .. } | UiAction::RegionInteracted { .. } => {
+                UiInvalidationScope::LayoutSubtree
+            }
+        }
+    }
+}
+
 /// Declarative drawing command for region rendering.
 #[derive(Clone, Debug, PartialEq)]
 pub enum DrawCommand {

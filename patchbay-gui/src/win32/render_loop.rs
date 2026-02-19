@@ -207,14 +207,9 @@ where
 fn invalidate_engine_for_action(engine: &mut LayoutEngineState, action: &UiAction) {
     let key = action_source_key(action);
     if let Some(node_id) = engine.node_id_for_key(key) {
-        match action {
-            UiAction::KnobChanged { .. }
-            | UiAction::SliderChanged { .. }
-            | UiAction::ToggleChanged { .. }
-            | UiAction::ButtonPressed { .. }
-            | UiAction::DropdownSelected { .. }
-            | UiAction::RegionHover { .. }
-            | UiAction::RegionInteracted { .. } => engine.invalidate_layout_subtree(node_id),
+        match action.invalidation_scope() {
+            UiInvalidationScope::MeasureSubtree => engine.invalidate_measure_subtree(node_id),
+            UiInvalidationScope::LayoutSubtree => engine.invalidate_layout_subtree(node_id),
         }
     } else {
         engine.invalidate_all_measure();
