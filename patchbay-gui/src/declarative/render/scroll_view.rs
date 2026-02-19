@@ -14,7 +14,7 @@ fn render_scroll_view(
     let measured = measure_node(child, ctx.tokens);
     let layout = node_layout(child);
     let available = Size {
-        width: inner.size.width,
+        width: measured.width.max(inner.size.width),
         height: measured.height.max(inner.size.height),
     };
     let mut resolved = resolve_size(layout, measured, available);
@@ -23,17 +23,20 @@ fn render_scroll_view(
         size: resolved,
     };
     let mut child_origin = inner.origin;
+    let max_offset_x = resolved.width.saturating_sub(inner.size.width) as i32;
     let max_offset = resolved.height.saturating_sub(inner.size.height) as i32;
+    let offset_x = scroll_view.offset_x.clamp(0, max_offset_x);
     let offset_y = scroll_view.offset_y.clamp(0, max_offset);
 
     match scroll_view.overflow_policy() {
         OverflowPolicy::Clip => {
+            child_origin.x = child_origin.x.saturating_sub(offset_x);
             child_origin.y = child_origin.y.saturating_sub(offset_y);
         }
         OverflowPolicy::Compress => {
             resolved = clamp_size_to_available(resolved, inner.size);
             child_origin = inner.origin;
-            if measured.height > inner.size.height {
+            if measured.width > inner.size.width || measured.height > inner.size.height {
                 record_layout_diagnostic(
                     ctx.layout_diagnostics,
                     ContainerKind::ScrollView,

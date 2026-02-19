@@ -101,19 +101,20 @@ fn golden_stack_alignment_spec(size: Size) -> UiSpec {
     )
 }
 
-fn golden_scroll_view_spec(size: Size, offset_y: i32) -> UiSpec {
+fn golden_scroll_view_spec(size: Size, offset_x: i32, offset_y: i32) -> UiSpec {
     let content = Node::ScrollView(
         ScrollViewSpec::new(
             panel(
                 "scroll-content",
                 spacer(Size {
-                    width: 80,
+                    width: 180,
                     height: 140,
                 }),
             )
             .pad_all(0),
         )
         .layout(ContainerLayout::fill())
+        .offset_x(offset_x)
         .offset_y(offset_y),
     );
     UiSpec::new(
@@ -379,11 +380,12 @@ fn golden_scroll_view_rects_match_offset_and_clamp() {
                 width: 120,
                 height: 60,
             },
+            10,
             25,
             Rect {
-                origin: Point { x: 0, y: -25 },
+                origin: Point { x: -10, y: -25 },
                 size: Size {
-                    width: 80,
+                    width: 180,
                     height: 140,
                 },
             },
@@ -394,17 +396,18 @@ fn golden_scroll_view_rects_match_offset_and_clamp() {
                 height: 60,
             },
             999,
+            999,
             Rect {
-                origin: Point { x: 0, y: -80 },
+                origin: Point { x: -60, y: -80 },
                 size: Size {
-                    width: 80,
+                    width: 180,
                     height: 140,
                 },
             },
         ),
     ];
-    for (size, offset_y, expected) in cases {
-        let spec = golden_scroll_view_spec(size, offset_y);
+    for (size, offset_x, offset_y, expected) in cases {
+        let spec = golden_scroll_view_spec(size, offset_x, offset_y);
         let result = golden_render_spec_for_size(&spec, size);
         assert_eq!(golden_panel_rect_by_key(&result, "scroll-content"), expected);
         assert!(result.layout_diagnostics.is_empty());

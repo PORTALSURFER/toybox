@@ -7,6 +7,8 @@ pub struct ScrollViewSpec {
     pub(crate) layout: ContainerLayout,
     /// Viewport padding applied before clipping.
     pub padding: EdgeInsets,
+    /// Horizontal scroll offset in pixels.
+    pub offset_x: i32,
     /// Vertical scroll offset in pixels.
     pub offset_y: i32,
     /// Slotted content node.
@@ -19,6 +21,7 @@ impl ScrollViewSpec {
         Self {
             layout: ContainerLayout::auto(),
             padding: EdgeInsets::default(),
+            offset_x: 0,
             offset_y: 0,
             content: Box::new(Node::slot(content)),
         }
@@ -54,6 +57,12 @@ impl ScrollViewSpec {
         self
     }
 
+    /// Set horizontal scroll offset.
+    pub fn offset_x(mut self, offset_x: i32) -> Self {
+        self.offset_x = offset_x;
+        self
+    }
+
     /// Set vertical scroll offset.
     pub fn offset_y(mut self, offset_y: i32) -> Self {
         self.offset_y = offset_y;
@@ -75,4 +84,3 @@ impl ScrollViewSpec {
         self.layout.overflow_policy()
     }
 }
-
