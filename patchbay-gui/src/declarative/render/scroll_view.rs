@@ -18,6 +18,10 @@ fn render_scroll_view(
         height: measured.height.max(inner.size.height),
     };
     let mut resolved = resolve_size(layout, measured, available);
+    let requested_rect = Rect {
+        origin: inner.origin,
+        size: resolved,
+    };
     let mut child_origin = inner.origin;
     let max_offset = resolved.height.saturating_sub(inner.size.height) as i32;
     let offset_y = scroll_view.offset_y.clamp(0, max_offset);
@@ -48,6 +52,11 @@ fn render_scroll_view(
         origin: child_origin,
         size: resolved,
     };
+    if scroll_view.overflow_policy() == OverflowPolicy::Compress
+        && let Some(reason) = overflow_reason(requested_rect, child_rect, scroll_view.overflow_policy())
+    {
+        queue_next_node_reason(ctx, reason);
+    }
     ui.with_clip(inner, |ui| {
         ctx.depth += 1;
         render_node(child, child_rect, ui, ctx);
@@ -62,4 +71,3 @@ fn render_scroll_view(
         ctx.depth,
     );
 }
-

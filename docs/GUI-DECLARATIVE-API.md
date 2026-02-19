@@ -56,6 +56,7 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 - widget semantic checks (ranges, selected index, control size, key uniqueness)
 
 `RenderResult` now includes `layout_diagnostics` so callers can inspect clipped/compressed placement events at runtime.
+For detailed per-node geometry diagnostics, set `RootFrameSpec::layout_diagnostics_mode(LayoutDiagnosticsMode::PerNode)` and read `RenderResult.node_layout_diagnostics`.
 
 ## Layout Migration Notes
 Container and widget layout APIs are now explicitly separated:

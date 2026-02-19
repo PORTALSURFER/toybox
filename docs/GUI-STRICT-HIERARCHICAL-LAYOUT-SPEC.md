@@ -276,11 +276,7 @@ The major structural targets are now implemented in code:
 
 Remaining gaps to close for full spec parity:
 
-1. **Diagnostics are event-level, not full per-node deltas.**
-   `RenderResult.layout_diagnostics` reports overflow/compression/clamp events,
-   but not full measured-vs-final rect diffs for every node.
-
-2. **Dirty tracking is root-level cache orchestration, not subtree invalidation.**
+1. **Dirty tracking is root-level cache orchestration, not subtree invalidation.**
    `LayoutEngineState` currently exposes deterministic root measurement caching
    and dirty flags; fine-grained subtree dependency/invalidations are not yet
    modeled as a public contract.

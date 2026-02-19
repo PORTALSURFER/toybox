@@ -12,6 +12,7 @@ fn render_absolute(absolute: &AbsoluteSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &m
             },
             size: resolved,
         };
+        let requested_rect = child_rect;
         let Some(child_rect) = overflow_rect_with_policy(
             child_rect,
             rect,
@@ -21,6 +22,9 @@ fn render_absolute(absolute: &AbsoluteSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &m
         ) else {
             continue;
         };
+        if let Some(reason) = overflow_reason(requested_rect, child_rect, overflow_policy) {
+            queue_next_node_reason(ctx, reason);
+        }
         ctx.depth += 1;
         render_node(&child.node, child_rect, ui, ctx);
         ctx.depth = ctx.depth.saturating_sub(1);

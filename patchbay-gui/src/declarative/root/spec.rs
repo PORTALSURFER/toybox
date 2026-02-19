@@ -58,6 +58,8 @@ pub struct RootFrameSpec {
     pub scale_mode: RootScaleMode,
     /// Optional zoom multiplier applied after scale mode resolution.
     pub zoom_override: Option<f32>,
+    /// Runtime layout diagnostics detail mode.
+    pub layout_diagnostics_mode: LayoutDiagnosticsMode,
     /// Root content slot.
     ///
     /// Root is treated as a special container and always stores exactly one
@@ -80,6 +82,7 @@ impl RootFrameSpec {
             design_size: None,
             scale_mode: RootScaleMode::None,
             zoom_override: None,
+            layout_diagnostics_mode: LayoutDiagnosticsMode::EventsOnly,
             content: Box::new(Node::slot(content)),
         }
     }
@@ -123,6 +126,12 @@ impl RootFrameSpec {
     /// Set an optional zoom multiplier applied after base scaling.
     pub fn zoom_override(mut self, zoom: f32) -> Self {
         self.zoom_override = Some(zoom);
+        self
+    }
+
+    /// Set runtime layout diagnostics mode.
+    pub fn layout_diagnostics_mode(mut self, mode: LayoutDiagnosticsMode) -> Self {
+        self.layout_diagnostics_mode = mode;
         self
     }
 

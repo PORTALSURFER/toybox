@@ -11,6 +11,8 @@ pub struct RenderResult {
     pub content_rect: Rect,
     /// Runtime layout diagnostics produced while resolving this frame.
     pub layout_diagnostics: Vec<LayoutDiagnostic>,
+    /// Per-node geometry diagnostics when enabled in root diagnostics mode.
+    pub node_layout_diagnostics: Vec<LayoutNodeDiagnostic>,
 }
 
 impl Default for RenderResult {
@@ -30,6 +32,7 @@ impl Default for RenderResult {
                 },
             },
             layout_diagnostics: Vec::new(),
+            node_layout_diagnostics: Vec::new(),
         }
     }
 }

@@ -105,6 +105,7 @@ fn render_grid_child(
         origin: cell_rect.origin,
         size: resolved,
     };
+    let requested_rect = child_rect;
     let Some(clipped_rect) = overflow_rect_with_policy(
         child_rect,
         container_bounds,
@@ -114,6 +115,9 @@ fn render_grid_child(
     ) else {
         return;
     };
+    if let Some(reason) = overflow_reason(requested_rect, clipped_rect, overflow_policy) {
+        queue_next_node_reason(ctx, reason);
+    }
     ctx.depth += 1;
     render_node(child, clipped_rect, ui, ctx);
     ctx.depth = ctx.depth.saturating_sub(1);

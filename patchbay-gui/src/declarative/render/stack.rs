@@ -6,6 +6,7 @@ fn render_stack(stack: &StackSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &mut Render
         let layout = node_layout(child);
         let resolved = clamp_size_to_available(resolve_size(layout, measured, inner.size), inner.size);
         let child_rect = align_stack_child_rect(inner, resolved, stack.align_x, stack.align_y);
+        let requested_rect = child_rect;
         let Some(child_rect) = overflow_rect_with_policy(
             child_rect,
             inner,
@@ -15,6 +16,11 @@ fn render_stack(stack: &StackSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &mut Render
         ) else {
             continue;
         };
+        if let Some(reason) =
+            overflow_reason(requested_rect, child_rect, stack.overflow_policy())
+        {
+            queue_next_node_reason(ctx, reason);
+        }
         ctx.depth += 1;
         render_node(child, child_rect, ui, ctx);
         ctx.depth = ctx.depth.saturating_sub(1);
@@ -53,4 +59,3 @@ fn align_stack_child_rect(inner: Rect, resolved: Size, align_x: SlotAlign, align
         size: Size { width, height },
     }
 }
-

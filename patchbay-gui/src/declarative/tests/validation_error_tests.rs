@@ -106,6 +106,7 @@ fn rejects_non_slot_root_content() {
         design_size: None,
         scale_mode: RootScaleMode::None,
         zoom_override: None,
+        layout_diagnostics_mode: LayoutDiagnosticsMode::EventsOnly,
         content: Box::new(label("not slotted")),
     });
     let error = measure_checked(&spec).expect_err("expected invalid root slot error");
@@ -126,6 +127,7 @@ fn rejects_root_slot_child_when_not_container() {
         design_size: None,
         scale_mode: RootScaleMode::None,
         zoom_override: None,
+        layout_diagnostics_mode: LayoutDiagnosticsMode::EventsOnly,
         content: Box::new(slot(label("bad"))),
     });
     let error = measure_checked(&spec).expect_err("expected invalid root slot child error");
@@ -167,6 +169,7 @@ fn rejects_slot_child_when_nested_slot() {
         design_size: None,
         scale_mode: RootScaleMode::None,
         zoom_override: None,
+        layout_diagnostics_mode: LayoutDiagnosticsMode::EventsOnly,
         content: Box::new(slot(panel(
             "p",
             Node::Slot(SlotSpec::new(Node::Slot(SlotSpec::new(label("bad"))))),

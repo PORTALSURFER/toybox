@@ -37,6 +37,7 @@ fn render_wrap(wrap: &WrapSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx
                 origin: Point { x, y },
                 size: measured[item_index],
             };
+            let requested_rect = child_rect;
             let Some(child_rect) = overflow_rect_with_policy(
                 child_rect,
                 inner,
@@ -48,6 +49,11 @@ fn render_wrap(wrap: &WrapSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx
                 x = x.saturating_add(gaps.get(item_offset).copied().unwrap_or(0));
                 continue;
             };
+            if let Some(reason) =
+                overflow_reason(requested_rect, child_rect, wrap.overflow_policy())
+            {
+                queue_next_node_reason(ctx, reason);
+            }
             ctx.depth += 1;
             render_node(&wrap.children[item_index], child_rect, ui, ctx);
             ctx.depth = ctx.depth.saturating_sub(1);
@@ -109,4 +115,3 @@ fn build_wrap_rows(measured: &[Size], max_width: i32, column_gap: i32) -> Vec<Wr
     }
     rows
 }
-

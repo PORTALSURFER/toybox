@@ -37,6 +37,7 @@ fn render_flex_children(
         render_ctx.axis.origin_main(render_ctx.inner.origin) + solved.main_spacing.leading_offset;
     for (index, child) in flex.children.iter().enumerate() {
         let child_rect = resolve_flex_child_rect(child, index, cursor_main, render_ctx, solved);
+        let requested_rect = child_rect;
         let Some(child_rect) = overflow_rect_with_policy(
             child_rect,
             render_ctx.inner,
@@ -47,6 +48,9 @@ fn render_flex_children(
             cursor_main = advance_flex_cursor(cursor_main, index, solved);
             continue;
         };
+        if let Some(reason) = overflow_reason(requested_rect, child_rect, flex.overflow_policy()) {
+            queue_next_node_reason(ctx, reason);
+        }
         ctx.depth += 1;
         render_node(child, child_rect, ui, ctx);
         ctx.depth = ctx.depth.saturating_sub(1);
