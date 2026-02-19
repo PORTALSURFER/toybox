@@ -1,0 +1,10 @@
+error[E0451]: fields `layout` and `content` of struct `PanelSpec` are private
+  --> tests/ui/panel_spec_struct_literal_private.rs:11:9
+   |
+ 4 |     let _ = PanelSpec {
+   |             --------- in this type
+...
+11 |         layout: ContainerLayout::fill(),
+   |         ^^^^^^ private field
+12 |         content: Box::new(label("x")),
+   |         ^^^^^^^ private field
