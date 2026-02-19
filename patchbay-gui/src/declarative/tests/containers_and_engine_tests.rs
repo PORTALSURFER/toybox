@@ -99,6 +99,56 @@ fn render_checked_with_engine_reuses_measure_cache_for_stable_inputs() {
 }
 
 #[test]
+fn runtime_style_conservative_invalidation_remeasures_after_actions() {
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        Node::Panel(PanelSpec::new(
+            "panel",
+            Node::Button(ButtonSpec::new("ok", "OK").control_size(Size {
+                width: 80,
+                height: 24,
+            })),
+        )),
+    ));
+    let mut engine = LayoutEngineState::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+
+    let mut canvas = Canvas::new(200, 120);
+    let mut layout = Layout::default();
+    let input_press = InputState {
+        pointer_pos: Point { x: 24, y: 24 },
+        mouse_pressed: true,
+        window_size: Size {
+            width: 200,
+            height: 120,
+        },
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &input_press, &mut ui_state, &mut layout, &theme);
+    let first = render_checked_with_engine(&spec, &mut ui, Point { x: 0, y: 0 }, &mut engine)
+        .expect("first render should succeed");
+    assert!(!first.actions.is_empty(), "button press should emit action");
+    let baseline = engine.measure_cache_stats();
+    engine.invalidate_all_measure();
+
+    let mut canvas = Canvas::new(200, 120);
+    let mut layout = Layout::default();
+    let input_idle = InputState {
+        window_size: Size {
+            width: 200,
+            height: 120,
+        },
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &input_idle, &mut ui_state, &mut layout, &theme);
+    let _ = render_checked_with_engine(&spec, &mut ui, Point { x: 0, y: 0 }, &mut engine)
+        .expect("second render should succeed");
+    let after = engine.measure_cache_stats();
+    assert!(after.misses > baseline.misses);
+}
+
+#[test]
 fn layout_engine_resolves_node_ids_and_supports_subtree_measure_invalidation() {
     let spec = UiSpec::new(RootFrameSpec::new(
         "root",

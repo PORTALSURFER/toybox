@@ -101,10 +101,20 @@ where
         ui.set_vector_text_enabled(self.renderer.vector_text_available());
         ui.reset_input_consumption();
         ui.clear_overlays();
-        match render_checked(&spec, &mut ui, Point { x: 0, y: 0 }) {
+        match render_checked_with_engine(
+            &spec,
+            &mut ui,
+            Point { x: 0, y: 0 },
+            &mut self.layout_engine,
+        ) {
             Ok(result) => {
+                let mut applied_actions = false;
                 for action in result.actions {
                     (self.reduce_action)(&mut self.state, action);
+                    applied_actions = true;
+                }
+                if applied_actions {
+                    self.layout_engine.invalidate_all_measure();
                 }
             }
             Err(err) => {

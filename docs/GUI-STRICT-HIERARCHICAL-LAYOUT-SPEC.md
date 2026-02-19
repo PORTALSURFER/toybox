@@ -272,6 +272,7 @@ The major structural targets are now implemented in code:
 - explicit container overflow policy handling and runtime diagnostics
 - first-class `Stack`, `ScrollView`, `Wrap`, and `SwitchLayout` container primitives
 - first-class layout engine state (`LayoutEngineState`) with deterministic measure caching
+- shared Win32 host runtime adoption of persistent `LayoutEngineState` rendering
 - stress coverage for deep nesting and large slot lists
 
 Remaining gaps to close for full spec parity:

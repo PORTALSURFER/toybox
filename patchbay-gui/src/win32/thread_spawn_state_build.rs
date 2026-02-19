@@ -105,6 +105,7 @@ where
         ui_state: parts.ui_state,
         layout: parts.layout,
         layout_origin: parts.layout.cursor,
+        layout_engine: LayoutEngineState::default(),
         theme: parts.theme,
         background_brush,
         state: parts.state,

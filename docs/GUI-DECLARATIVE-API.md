@@ -9,7 +9,7 @@ System-level layout target and gap tracking:
 
 The API is strict and data-only:
 - Build a pure `UiSpec` tree each frame.
-- Render through host integration (`render_checked` internally).
+- Render through host integration (`render_checked_with_engine` internally on Win32 runtime path).
 - Handle emitted `UiAction` values in a reducer.
 
 ## Core Tree Model
@@ -65,6 +65,9 @@ For detailed per-node geometry diagnostics, set `RootFrameSpec::layout_diagnosti
 - `invalidate_measure_subtree(node_id)` for intrinsic/content changes (also marks layout dirty).
 - `invalidate_all_layout()` / `invalidate_all_measure()` for full-tree invalidation.
 - `measure_cache_stats()` and `last_registry_version()` for read-only diagnostics.
+
+Win32 host runtime keeps one persistent `LayoutEngineState` per window and currently uses
+conservative invalidation after reducer-applied UI actions (`invalidate_all_measure()`).
 
 ## Layout Migration Notes
 Container and widget layout APIs are now explicitly separated:
