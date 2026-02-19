@@ -3,6 +3,10 @@
 ## Summary
 `toybox::gui::declarative` is the only supported UI authoring surface.
 
+System-level layout target and gap tracking:
+
+- `GUI-STRICT-HIERARCHICAL-LAYOUT-SPEC.md`
+
 The API is strict and data-only:
 - Build a pure `UiSpec` tree each frame.
 - Render through host integration (`render_checked` internally).

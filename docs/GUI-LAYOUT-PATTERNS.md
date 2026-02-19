@@ -3,6 +3,10 @@
 ## Purpose
 Repeatable recipes for strict container/slot/widget layouts.
 
+For system-level rules and target-gap tracking, see:
+
+- `GUI-STRICT-HIERARCHICAL-LAYOUT-SPEC.md`
+
 ## Canonical Root + Fractional Slots
 ```rust
 let controls = row_slots(vec![
