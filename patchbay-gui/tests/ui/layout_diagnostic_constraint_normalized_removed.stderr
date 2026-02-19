@@ -1,0 +1,5 @@
+error[E0599]: no variant or associated item named `ConstraintNormalized` found for enum `LayoutDiagnosticCode` in the current scope
+ --> tests/ui/layout_diagnostic_constraint_normalized_removed.rs:4:35
+  |
+4 |     let _ = LayoutDiagnosticCode::ConstraintNormalized;
+  |                                   ^^^^^^^^^^^^^^^^^^^^ variant or associated item not found in `LayoutDiagnosticCode`
