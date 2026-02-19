@@ -50,6 +50,7 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 - root key is required and unique
 - root content must be a slot
 - root slot child must be a container
+- declarative tree depth must stay within the fail-fast validation limit
 - containers may only contain slots
 - slots must contain a non-slot child
 - slot percentages must satisfy deterministic total/fill constraints

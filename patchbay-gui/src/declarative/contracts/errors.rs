@@ -145,4 +145,16 @@ pub enum DeclarativeError {
         /// Current-case inclusive min bound.
         case_min_inclusive: u32,
     },
+    /// Declarative tree depth exceeds the fail-fast validation limit.
+    #[error(
+        "declarative tree depth {actual_depth} exceeds max supported depth {max_depth} at node `{node_kind}`"
+    )]
+    TreeDepthExceeded {
+        /// Maximum supported node depth.
+        max_depth: usize,
+        /// Observed node depth for the failing path.
+        actual_depth: usize,
+        /// Concrete node kind at the failing depth.
+        node_kind: &'static str,
+    },
 }

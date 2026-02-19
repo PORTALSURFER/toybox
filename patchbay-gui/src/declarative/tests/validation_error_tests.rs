@@ -243,3 +243,30 @@ fn accepts_canonical_root_slot_tree() {
         }
     );
 }
+
+#[test]
+fn rejects_excessive_tree_depth_before_measurement() {
+    let mut node = label("leaf");
+    for index in 0..500 {
+        node = panel(format!("layer-{index}"), node).pad_all(0);
+    }
+    let spec = UiSpec::new(root_frame_sized(
+        "root",
+        node,
+        Size {
+            width: 480,
+            height: 270,
+        },
+        Size {
+            width: 480,
+            height: 270,
+        },
+    ));
+
+    let error = measure_checked(&spec).expect_err("expected depth guard error");
+    assert!(matches!(
+        error,
+        DeclarativeError::TreeDepthExceeded { max_depth, actual_depth, .. }
+            if actual_depth > max_depth
+    ));
+}

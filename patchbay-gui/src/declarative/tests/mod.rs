@@ -11,3 +11,4 @@ include!("switch_layout_tests.rs");
 include!("per_node_layout_diagnostics_tests.rs");
 include!("layout_property_sweep_tests.rs");
 include!("golden_layout_rect_tests.rs");
+include!("stress_extreme_layout_tests.rs");
