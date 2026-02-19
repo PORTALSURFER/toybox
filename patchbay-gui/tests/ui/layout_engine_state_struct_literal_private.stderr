@@ -1,4 +1,4 @@
-error[E0451]: fields `registry_version`, `registry_signature`, `root_node_id`, `key_to_node_id`, `registry`, `layout_dirty_nodes`, `measure_dirty_nodes`, `invalidate_all_layout_flag`, `invalidate_all_measure_flag`, `measure_cache`, `measure_cache_hits` and `measure_cache_misses` of struct `LayoutEngineState` are private
+error[E0451]: fields `registry_version`, `registry_signature`, `root_node_id`, `key_to_node_id`, `registry`, `layout_dirty_nodes`, `measure_dirty_nodes`, `invalidate_all_layout_flag`, `invalidate_all_measure_flag`, `measure_cache`, `measure_cache_hits`, `measure_cache_misses` and `structural_gaps` of struct `LayoutEngineState` are private
  --> tests/ui/layout_engine_state_struct_literal_private.rs:5:9
   |
 4 |     let _ = LayoutEngineState {
@@ -6,4 +6,4 @@ error[E0451]: fields `registry_version`, `registry_signature`, `root_node_id`, `
 5 |         measure_cache_hits: 0,
   |         ^^^^^^^^^^^^^^^^^^^^^ private field
 6 |         ..LayoutEngineState::default()
-  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ fields `registry_version`, `registry_signature`, `root_node_id`, `key_to_node_id`, `registry`, `layout_dirty_nodes`, `measure_dirty_nodes`, `invalidate_all_layout_flag`, `invalidate_all_measure_flag`, `measure_cache` and `measure_cache_misses` are private
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ fields `registry_version`, `registry_signature`, `root_node_id`, `key_to_node_id`, `registry`, `layout_dirty_nodes`, `measure_dirty_nodes`, `invalidate_all_layout_flag`, `invalidate_all_measure_flag`, `measure_cache`, `measure_cache_misses` and `structural_gaps` are private

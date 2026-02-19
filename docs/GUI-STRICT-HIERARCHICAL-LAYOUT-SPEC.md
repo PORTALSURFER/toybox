@@ -285,6 +285,8 @@ The major structural targets are now implemented in code:
 
 Remaining gaps to close for full spec parity:
 
-- No structural gaps are currently tracked. Subtree invalidation now uses
-  explicit `NodeId` APIs in `LayoutEngineState`, and direct dirty-flag mutation
-  is no longer part of the public contract.
+- Structural gaps are tracked as bounded engine events when subtree
+  invalidation targets an absent registry `NodeId`. Checked renders now emit
+  `LayoutDiagnosticCode::StructuralGapDetected` events with stable reason
+  messages, while overflow summary counters continue to reflect overflow-only
+  diagnostics.

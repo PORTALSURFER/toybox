@@ -48,6 +48,7 @@ pub fn render_checked_with_engine(
             diagnostics_mode: spec.root.layout_diagnostics_mode,
         },
     );
+    append_structural_gap_diagnostics(&mut layout_diagnostics, engine.take_structural_gaps());
     draw_layout_debug_borders(ui, &debug_border_candidates);
     engine.consume_layout_dirty();
     Ok(build_render_result(
@@ -62,6 +63,38 @@ pub fn render_checked_with_engine(
 /// Resolve root-level theme tokens for a checked render pass.
 fn root_theme_tokens(spec: &UiSpec) -> ThemeTokens {
     spec.root.tokens.unwrap_or_default()
+}
+
+/// Append layout diagnostics derived from structural gap entries.
+fn append_structural_gap_diagnostics(
+    diagnostics: &mut Vec<LayoutDiagnostic>,
+    gaps: Vec<StructuralGapEntry>,
+) {
+    if gaps.is_empty() {
+        return;
+    }
+    for gap in gaps {
+        diagnostics.push(structural_gap_diagnostic(gap.reason));
+    }
+}
+
+/// Build one structured runtime diagnostic for a missing-node gap event.
+fn structural_gap_diagnostic(reason: StructuralGapReason) -> LayoutDiagnostic {
+    let empty = Rect {
+        origin: Point { x: 0, y: 0 },
+        size: Size {
+            width: 0,
+            height: 0,
+        },
+    };
+    LayoutDiagnostic {
+        level: LayoutDiagnosticLevel::Warning,
+        code: LayoutDiagnosticCode::StructuralGapDetected,
+        container: LayoutContainerKind::RootFrame,
+        message: reason.diagnostic_message(),
+        requested_rect: empty,
+        bounds: empty,
+    }
 }
 
 /// Build the root render plan using the current UI window size.

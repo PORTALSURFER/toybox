@@ -31,6 +31,41 @@ struct NodeRegistryEntry {
     node_hash: u64,
 }
 
+/// Bounded capacity for retained structural gap entries.
+const MAX_STRUCTURAL_GAP_ENTRIES: usize = 64;
+
+/// Structured reason for one detected strict-tree structural gap.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StructuralGapReason {
+    /// A layout-subtree invalidation target was not present in the node registry.
+    MissingLayoutSubtreeInvalidationTarget,
+    /// A measure-subtree invalidation target was not present in the node registry.
+    MissingMeasureSubtreeInvalidationTarget,
+}
+
+impl StructuralGapReason {
+    /// Return the stable diagnostic message associated with this gap reason.
+    pub fn diagnostic_message(self) -> &'static str {
+        match self {
+            Self::MissingLayoutSubtreeInvalidationTarget => {
+                "layout subtree invalidation targeted a missing registry node"
+            }
+            Self::MissingMeasureSubtreeInvalidationTarget => {
+                "measure subtree invalidation targeted a missing registry node"
+            }
+        }
+    }
+}
+
+/// One structural gap event recorded by [`LayoutEngineState`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StructuralGapEntry {
+    /// Missing registry node identifier.
+    pub node_id: NodeId,
+    /// Structured reason associated with the missing node.
+    pub reason: StructuralGapReason,
+}
+
 /// Runtime layout engine state for deterministic dirty/cached rendering.
 ///
 /// The engine owns a deterministic node registry and explicit subtree
@@ -62,6 +97,8 @@ pub struct LayoutEngineState {
     measure_cache_hits: u64,
     /// Cumulative measure-cache miss counter.
     measure_cache_misses: u64,
+    /// Bounded structural gap events recorded between render passes.
+    structural_gaps: Vec<StructuralGapEntry>,
 }
 
 impl LayoutEngineState {
@@ -79,6 +116,11 @@ impl LayoutEngineState {
         }
     }
 
+    /// Return currently retained structural gap entries.
+    pub fn structural_gaps(&self) -> &[StructuralGapEntry] {
+        &self.structural_gaps
+    }
+
     /// Resolve a `NodeId` for a unique declarative node key.
     pub fn node_id_for_key(&self, key: &str) -> Option<NodeId> {
         self.key_to_node_id.get(key).copied()
@@ -92,6 +134,10 @@ impl LayoutEngineState {
     /// Mark a node subtree as layout-dirty.
     pub fn invalidate_layout_subtree(&mut self, node_id: NodeId) {
         if !self.contains_node(node_id) {
+            self.record_structural_gap(
+                node_id,
+                StructuralGapReason::MissingLayoutSubtreeInvalidationTarget,
+            );
             return;
         }
         self.mark_subtree_layout_dirty(node_id);
@@ -104,6 +150,10 @@ impl LayoutEngineState {
     /// ancestors.
     pub fn invalidate_measure_subtree(&mut self, node_id: NodeId) {
         if !self.contains_node(node_id) {
+            self.record_structural_gap(
+                node_id,
+                StructuralGapReason::MissingMeasureSubtreeInvalidationTarget,
+            );
             return;
         }
         self.mark_subtree_measure_dirty(node_id);
@@ -177,6 +227,11 @@ impl LayoutEngineState {
         self.drop_stale_dirty_nodes();
         self.layout_dirty_nodes.clear();
         self.invalidate_all_layout_flag = false;
+    }
+
+    /// Drain and return structural gap events captured since the previous drain.
+    pub(crate) fn take_structural_gaps(&mut self) -> Vec<StructuralGapEntry> {
+        std::mem::take(&mut self.structural_gaps)
     }
 
     /// Resolve one cached subtree measurement by deterministic cache key.
@@ -372,6 +427,21 @@ impl LayoutEngineState {
             .retain(|node_id| self.registry.contains_key(node_id));
         self.measure_dirty_nodes
             .retain(|node_id| self.registry.contains_key(node_id));
+    }
+
+    /// Record one structural gap event with bounded capacity and deduplication.
+    fn record_structural_gap(&mut self, node_id: NodeId, reason: StructuralGapReason) {
+        if self
+            .structural_gaps
+            .iter()
+            .any(|entry| entry.node_id == node_id && entry.reason == reason)
+        {
+            return;
+        }
+        if self.structural_gaps.len() >= MAX_STRUCTURAL_GAP_ENTRIES {
+            return;
+        }
+        self.structural_gaps.push(StructuralGapEntry { node_id, reason });
     }
 }
 

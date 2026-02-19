@@ -70,13 +70,22 @@ fn property_sweep_spec(size: Size) -> UiSpec {
 fn summary_from_codes(diagnostics: &[LayoutDiagnostic]) -> LayoutOverflowSummary {
     let mut summary = LayoutOverflowSummary::default();
     for diagnostic in diagnostics {
-        summary.total += 1;
         match diagnostic.code {
-            LayoutDiagnosticCode::OverflowClipped => summary.clipped += 1,
+            LayoutDiagnosticCode::OverflowClipped => {
+                summary.clipped += 1;
+                summary.total += 1;
+            }
             LayoutDiagnosticCode::OverflowSkippedDisjoint
-            | LayoutDiagnosticCode::OverflowSkippedCollapsedBounds => summary.skipped += 1,
+            | LayoutDiagnosticCode::OverflowSkippedCollapsedBounds => {
+                summary.skipped += 1;
+                summary.total += 1;
+            }
             LayoutDiagnosticCode::OverflowCompressed
-            | LayoutDiagnosticCode::ScrollViewContentCompressed => summary.compressed += 1,
+            | LayoutDiagnosticCode::ScrollViewContentCompressed => {
+                summary.compressed += 1;
+                summary.total += 1;
+            }
+            LayoutDiagnosticCode::StructuralGapDetected => {}
         }
     }
     summary

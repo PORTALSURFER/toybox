@@ -62,6 +62,7 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 `RenderResult` includes:
 - `layout_diagnostics` with stable messages and typed `LayoutDiagnosticCode` values
 - `overflow` (`LayoutOverflowSummary`) with deterministic `clipped` / `compressed` / `skipped` / `total` counters
+- structural-gap diagnostics (`LayoutDiagnosticCode::StructuralGapDetected`) when invalidation APIs target missing `NodeId`s
 For detailed per-node geometry diagnostics, set `RootFrameSpec::layout_diagnostics_mode(LayoutDiagnosticsMode::PerNode)` and read `RenderResult.node_layout_diagnostics`.
 
 `LayoutEngineState` no longer exposes mutable root dirty flags. Use explicit invalidation:

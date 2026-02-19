@@ -42,13 +42,22 @@ impl LayoutOverflowSummary {
 
     /// Accumulate one diagnostic code into the summary.
     fn record(&mut self, code: LayoutDiagnosticCode) {
-        self.total += 1;
         match code {
-            LayoutDiagnosticCode::OverflowClipped => self.clipped += 1,
+            LayoutDiagnosticCode::OverflowClipped => {
+                self.clipped += 1;
+                self.total += 1;
+            }
             LayoutDiagnosticCode::OverflowSkippedDisjoint
-            | LayoutDiagnosticCode::OverflowSkippedCollapsedBounds => self.skipped += 1,
+            | LayoutDiagnosticCode::OverflowSkippedCollapsedBounds => {
+                self.skipped += 1;
+                self.total += 1;
+            }
             LayoutDiagnosticCode::OverflowCompressed
-            | LayoutDiagnosticCode::ScrollViewContentCompressed => self.compressed += 1,
+            | LayoutDiagnosticCode::ScrollViewContentCompressed => {
+                self.compressed += 1;
+                self.total += 1;
+            }
+            LayoutDiagnosticCode::StructuralGapDetected => {}
         }
     }
 }

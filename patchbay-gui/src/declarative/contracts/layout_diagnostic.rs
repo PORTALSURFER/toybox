@@ -76,6 +76,8 @@ pub enum LayoutDiagnosticCode {
     OverflowSkippedCollapsedBounds,
     /// Scroll-view content was compressed to the viewport size.
     ScrollViewContentCompressed,
+    /// Layout engine observed an invalidation request that targeted no registry node.
+    StructuralGapDetected,
 }
 
 /// Declarative node category associated with a per-node layout diagnostic.
