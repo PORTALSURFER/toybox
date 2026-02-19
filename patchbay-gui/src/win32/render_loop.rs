@@ -226,6 +226,11 @@ fn action_source_key(action: &UiAction) -> &str {
         UiAction::ToggleChanged { key, .. } => key,
         UiAction::ButtonPressed { key } => key,
         UiAction::DropdownSelected { key, .. } => key,
+        UiAction::DropdownDoubleClicked { key } => key,
+        UiAction::TextBoxEditRequested { key } => key,
+        UiAction::TextBoxEdited { key, .. } => key,
+        UiAction::TextBoxEditCommitted { key, .. } => key,
+        UiAction::TextBoxEditCanceled { key } => key,
         UiAction::RegionHover { key, .. } => key,
         UiAction::RegionInteracted { key, .. } => key,
     }
