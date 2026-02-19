@@ -76,6 +76,11 @@ pub struct DropdownSpec {
     pub key: String,
     /// Number of available options.
     pub option_count: usize,
+    /// Optional per-option labels shown in the dropdown menu and closed state.
+    ///
+    /// When present, labels are mapped by index. Any missing trailing labels
+    /// fall back to 1-based numeric labels.
+    pub option_labels: Option<Vec<String>>,
     /// Selected index.
     pub selected: usize,
     /// Optional explicit control size.
@@ -94,10 +99,17 @@ impl DropdownSpec {
         Self {
             key: key.into(),
             option_count,
+            option_labels: None,
             selected,
             control_size: None,
             layout: LayoutBox::auto(),
         }
+    }
+
+    /// Override dropdown option labels.
+    pub fn option_labels(mut self, labels: Vec<String>) -> Self {
+        self.option_labels = Some(labels);
+        self
     }
 
     /// Override control size.

@@ -22,4 +22,14 @@ impl Node {
         }
         self
     }
+
+    /// Set option labels for dropdown nodes.
+    ///
+    /// Non-dropdown node kinds are returned unchanged.
+    pub fn dropdown_option_labels(mut self, labels: Vec<String>) -> Self {
+        if let Self::Dropdown(dropdown) = &mut self {
+            dropdown.option_labels = Some(labels);
+        }
+        self
+    }
 }

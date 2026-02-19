@@ -116,9 +116,7 @@ fn render_dropdown(
         height: tokens.controls.dropdown_height,
     });
     let mut selected = dropdown.selected;
-    let option_labels: Vec<String> = (0..dropdown.option_count)
-        .map(|index| (index + 1).to_string())
-        .collect();
+    let option_labels = resolve_dropdown_option_labels(dropdown);
     let option_refs: Vec<&str> = option_labels.iter().map(String::as_str).collect();
     let dropdown_request =
         DropdownRectRenderRequest::new(id, "", &option_refs, control_size, rect)
@@ -132,6 +130,18 @@ fn render_dropdown(
     }
 }
 
+/// Resolve the rendered option labels for a dropdown.
+fn resolve_dropdown_option_labels(dropdown: &DropdownSpec) -> Vec<String> {
+    let numeric_fallback = || (0..dropdown.option_count).map(|index| (index + 1).to_string());
+    match dropdown.option_labels.as_ref() {
+        None => numeric_fallback().collect(),
+        Some(labels) => numeric_fallback()
+            .enumerate()
+            .map(|(index, fallback)| labels.get(index).cloned().unwrap_or(fallback))
+            .collect(),
+    }
+}
+
 /// Render an indicator node.
 fn render_indicator(indicator: &IndicatorSpec, rect: Rect, ui: &mut Ui<'_>) {
     ui.indicator(
@@ -141,4 +151,34 @@ fn render_indicator(indicator: &IndicatorSpec, rect: Rect, ui: &mut Ui<'_>) {
         },
         indicator.active,
     );
+}
+
+#[cfg(test)]
+mod dropdown_label_tests {
+    use super::resolve_dropdown_option_labels;
+    use crate::declarative::DropdownSpec;
+
+    #[test]
+    fn dropdown_labels_default_to_numeric_indices() {
+        let dropdown = DropdownSpec::new("division", 3, 0);
+        assert_eq!(
+            resolve_dropdown_option_labels(&dropdown),
+            vec!["1".to_string(), "2".to_string(), "3".to_string()]
+        );
+    }
+
+    #[test]
+    fn dropdown_labels_use_custom_entries_with_numeric_fallback() {
+        let dropdown = DropdownSpec::new("division", 4, 0)
+            .option_labels(vec!["1/16".into(), "1/8T".into()]);
+        assert_eq!(
+            resolve_dropdown_option_labels(&dropdown),
+            vec![
+                "1/16".to_string(),
+                "1/8T".to_string(),
+                "3".to_string(),
+                "4".to_string()
+            ]
+        );
+    }
 }
