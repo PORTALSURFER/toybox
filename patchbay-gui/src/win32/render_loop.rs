@@ -108,13 +108,9 @@ where
             &mut self.layout_engine,
         ) {
             Ok(result) => {
-                let mut applied_actions = false;
                 for action in result.actions {
+                    invalidate_engine_for_action(&mut self.layout_engine, &action);
                     (self.reduce_action)(&mut self.state, action);
-                    applied_actions = true;
-                }
-                if applied_actions {
-                    self.layout_engine.invalidate_all_measure();
                 }
             }
             Err(err) => {
@@ -200,5 +196,32 @@ where
         } else if self.dropdown_popup_request.is_none() {
             self.dropdown_popup_dispatch_queued = false;
         }
+    }
+}
+
+/// Invalidate declarative engine cache state for one emitted action.
+///
+/// Runtime invalidation is keyed by action source node when available. If an
+/// action key cannot be resolved in the current registry, the engine falls back
+/// to full-tree measure invalidation for safety.
+fn invalidate_engine_for_action(engine: &mut LayoutEngineState, action: &UiAction) {
+    let key = action_source_key(action);
+    if let Some(node_id) = engine.node_id_for_key(key) {
+        engine.invalidate_measure_subtree(node_id);
+    } else {
+        engine.invalidate_all_measure();
+    }
+}
+
+/// Return the source widget key for an emitted UI action.
+fn action_source_key(action: &UiAction) -> &str {
+    match action {
+        UiAction::KnobChanged { key, .. } => key,
+        UiAction::SliderChanged { key, .. } => key,
+        UiAction::ToggleChanged { key, .. } => key,
+        UiAction::ButtonPressed { key } => key,
+        UiAction::DropdownSelected { key, .. } => key,
+        UiAction::RegionHover { key, .. } => key,
+        UiAction::RegionInteracted { key, .. } => key,
     }
 }

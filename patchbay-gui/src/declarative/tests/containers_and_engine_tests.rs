@@ -99,16 +99,34 @@ fn render_checked_with_engine_reuses_measure_cache_for_stable_inputs() {
 }
 
 #[test]
-fn runtime_style_conservative_invalidation_remeasures_after_actions() {
+fn runtime_style_targeted_invalidation_is_narrower_than_full_invalidation() {
     let spec = UiSpec::new(RootFrameSpec::new(
         "root",
-        Node::Panel(PanelSpec::new(
-            "panel",
-            Node::Button(ButtonSpec::new("ok", "OK").control_size(Size {
-                width: 80,
-                height: 24,
-            })),
-        )),
+        row_slots(vec![
+            weighted_slot(
+                panel(
+                    "left-panel",
+                    button("left-btn", "Left").control_size(Size {
+                        width: 80,
+                        height: 24,
+                    }),
+                )
+                .pad_all(0),
+                1,
+            ),
+            weighted_slot(
+                panel(
+                    "right-panel",
+                    button("right-btn", "Right").control_size(Size {
+                        width: 80,
+                        height: 24,
+                    }),
+                )
+                .pad_all(0),
+                1,
+            ),
+        ])
+        .pad_all(0),
     ));
     let mut engine = LayoutEngineState::default();
     let theme = Theme::default();
@@ -117,10 +135,10 @@ fn runtime_style_conservative_invalidation_remeasures_after_actions() {
     let mut canvas = Canvas::new(200, 120);
     let mut layout = Layout::default();
     let input_press = InputState {
-        pointer_pos: Point { x: 24, y: 24 },
+        pointer_pos: Point { x: 20, y: 20 },
         mouse_pressed: true,
         window_size: Size {
-            width: 200,
+            width: 240,
             height: 120,
         },
         ..InputState::default()
@@ -128,24 +146,66 @@ fn runtime_style_conservative_invalidation_remeasures_after_actions() {
     let mut ui = Ui::new(&mut canvas, &input_press, &mut ui_state, &mut layout, &theme);
     let first = render_checked_with_engine(&spec, &mut ui, Point { x: 0, y: 0 }, &mut engine)
         .expect("first render should succeed");
-    assert!(!first.actions.is_empty(), "button press should emit action");
+    assert!(
+        first
+            .actions
+            .iter()
+            .any(|action| matches!(action, UiAction::ButtonPressed { key } if key == "left-btn")),
+        "left button press should emit keyed action"
+    );
     let baseline = engine.measure_cache_stats();
-    engine.invalidate_all_measure();
+    let mut targeted_engine = engine.clone();
+    for action in &first.actions {
+        let key = match action {
+            UiAction::ButtonPressed { key } => key,
+            _ => continue,
+        };
+        let node_id = targeted_engine
+            .node_id_for_key(key)
+            .expect("action key should resolve to node id");
+        targeted_engine.invalidate_measure_subtree(node_id);
+    }
+    let mut full_engine = engine.clone();
+    full_engine.invalidate_all_measure();
 
-    let mut canvas = Canvas::new(200, 120);
+    let mut canvas = Canvas::new(240, 120);
     let mut layout = Layout::default();
     let input_idle = InputState {
         window_size: Size {
-            width: 200,
+            width: 240,
             height: 120,
         },
         ..InputState::default()
     };
+
     let mut ui = Ui::new(&mut canvas, &input_idle, &mut ui_state, &mut layout, &theme);
-    let _ = render_checked_with_engine(&spec, &mut ui, Point { x: 0, y: 0 }, &mut engine)
-        .expect("second render should succeed");
-    let after = engine.measure_cache_stats();
-    assert!(after.misses > baseline.misses);
+    let _ = render_checked_with_engine(
+        &spec,
+        &mut ui,
+        Point { x: 0, y: 0 },
+        &mut targeted_engine,
+    )
+    .expect("targeted re-render should succeed");
+    let targeted_after = targeted_engine.measure_cache_stats();
+
+    let mut canvas = Canvas::new(240, 120);
+    let mut layout = Layout::default();
+    let mut ui = Ui::new(&mut canvas, &input_idle, &mut ui_state, &mut layout, &theme);
+    let _ = render_checked_with_engine(
+        &spec,
+        &mut ui,
+        Point { x: 0, y: 0 },
+        &mut full_engine,
+    )
+    .expect("full re-render should succeed");
+    let full_after = full_engine.measure_cache_stats();
+
+    let targeted_miss_delta = targeted_after.misses.saturating_sub(baseline.misses);
+    let full_miss_delta = full_after.misses.saturating_sub(baseline.misses);
+    assert!(
+        targeted_miss_delta < full_miss_delta,
+        "targeted subtree invalidation should cause fewer misses than full invalidation"
+    );
 }
 
 #[test]
