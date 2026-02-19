@@ -76,8 +76,6 @@ pub enum LayoutDiagnosticCode {
     OverflowSkippedCollapsedBounds,
     /// Scroll-view content was compressed to the viewport size.
     ScrollViewContentCompressed,
-    /// Invalid min/max axis bounds were normalized to preserve deterministic sizing.
-    ConstraintNormalized,
     /// Layout engine observed an invalidation request that targeted no registry node.
     StructuralGapDetected,
 }

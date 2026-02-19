@@ -59,6 +59,7 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 - non-root containers must use host-derived `Auto`/`Fill` sizing only (no pixel/min/max constraints)
 - root and widget layout bounds (including slot-derived widget bounds) must satisfy `min <= max` on both axes
 - widget semantic checks (ranges, selected index, control size, key uniqueness)
+- runtime layout diagnostics no longer normalize invalid bounds; checked APIs reject those specs before render
 
 `RenderResult` includes:
 - `layout_diagnostics` with stable messages and typed `LayoutDiagnosticCode` values

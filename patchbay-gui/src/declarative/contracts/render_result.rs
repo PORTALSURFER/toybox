@@ -57,7 +57,6 @@ impl LayoutOverflowSummary {
                 self.compressed += 1;
                 self.total += 1;
             }
-            LayoutDiagnosticCode::ConstraintNormalized => {}
             LayoutDiagnosticCode::StructuralGapDetected => {}
         }
     }
