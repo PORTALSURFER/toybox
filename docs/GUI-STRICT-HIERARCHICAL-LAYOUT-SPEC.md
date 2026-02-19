@@ -280,13 +280,14 @@ The major structural targets are now implemented in code:
 - first-class single-slot `PaddingBox` and `AlignBox` container primitives
 - first-class single-slot `AspectBox` container primitive
 - first-class layout engine state (`LayoutEngineState`) with deterministic measure caching
+- key-scoped `NodeId` identities for keyed nodes (stable through sibling reindexing)
 - shared Win32 host runtime adoption of persistent `LayoutEngineState` rendering
 - stress coverage for deep nesting and large slot lists
 
 Remaining gaps to close for full spec parity:
 
-- Structural gaps are tracked as bounded engine events when subtree
-  invalidation targets an absent registry `NodeId`. Checked renders now emit
-  `LayoutDiagnosticCode::StructuralGapDetected` events with stable reason
-  messages, while overflow summary counters continue to reflect overflow-only
+- Structural invalidation gaps are now tracked as bounded engine events when
+  subtree invalidation targets an absent registry `NodeId`. Checked renders
+  emit `LayoutDiagnosticCode::StructuralGapDetected` with stable reason
+  messages, and overflow summary counters continue to reflect overflow-only
   diagnostics.

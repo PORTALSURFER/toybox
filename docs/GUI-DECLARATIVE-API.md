@@ -66,7 +66,7 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 For detailed per-node geometry diagnostics, set `RootFrameSpec::layout_diagnostics_mode(LayoutDiagnosticsMode::PerNode)` and read `RenderResult.node_layout_diagnostics`.
 
 `LayoutEngineState` no longer exposes mutable root dirty flags. Use explicit invalidation:
-- `node_id_for_key("widget-key")` to resolve deterministic node identity.
+- `node_id_for_key("widget-key")` to resolve deterministic key-scoped node identity (stable across sibling reindexing).
 - `invalidate_layout_subtree(node_id)` for geometry-only subtree changes.
 - `invalidate_measure_subtree(node_id)` for intrinsic/content changes (also marks layout dirty).
 - `invalidate_all_layout()` / `invalidate_all_measure()` for full-tree invalidation.

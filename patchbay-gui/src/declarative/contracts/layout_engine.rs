@@ -321,7 +321,7 @@ impl LayoutEngineState {
 
     /// Walk one node subtree and register deterministic parent/child topology.
     fn walk_node(&mut self, node: &Node, parent_id: NodeId, path: String) -> NodeId {
-        let node_id = node_id_from_path(&path);
+        let node_id = node_id_for_node(&path, node);
         self.registry.insert(
             node_id,
             NodeRegistryEntry {
@@ -462,6 +462,22 @@ fn node_key(node: &Node) -> Option<&str> {
 /// Build a deterministic node id from a structural path string.
 fn node_id_from_path(path: &str) -> NodeId {
     NodeId::from_hash(stable_debug_hash(&path))
+}
+
+/// Build a deterministic node id from a stable declarative key string.
+fn node_id_from_key(key: &str) -> NodeId {
+    NodeId::from_hash(stable_debug_hash(&("node-key", key)))
+}
+
+/// Build a deterministic node id for one declarative node.
+///
+/// Keyed nodes use key-scoped identifiers to avoid sibling-order aliasing
+/// across structural edits. Anonymous nodes fall back to path-scoped ids.
+fn node_id_for_node(path: &str, node: &Node) -> NodeId {
+    if let Some(key) = node_key(node) {
+        return node_id_from_key(key);
+    }
+    node_id_from_path(path)
 }
 
 /// Compute a stable hash from the debug representation of a value.
