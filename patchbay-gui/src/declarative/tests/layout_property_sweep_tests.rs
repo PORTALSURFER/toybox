@@ -34,8 +34,8 @@ fn property_sweep_sizes() -> [Size; 4] {
 
 fn property_sweep_spec(size: Size) -> UiSpec {
     let top = row_slots(vec![
-        weighted_slot(panel("left", label("L")).pad_all(2).fill(), 1),
-        weighted_slot(panel("right", label("R")).pad_all(2).fill(), 1),
+        weighted_slot(panel("left", textbox("L")).pad_all(2).fill(), 1),
+        weighted_slot(panel("right", textbox("R")).pad_all(2).fill(), 1),
     ])
     .gap(6)
     .container_overflow(OverflowPolicy::Compress)
@@ -47,7 +47,7 @@ fn property_sweep_spec(size: Size) -> UiSpec {
                 x: size.width as i32 - 24,
                 y: 8,
             },
-            label("edge").widget_layout(LayoutBox::fixed(60, 20).max(60, 20)),
+            textbox("edge").widget_layout(LayoutBox::fixed(60, 20).max(60, 20)),
         )])
         .layout(ContainerLayout::fill())
         .overflow(OverflowPolicy::Compress),
@@ -151,7 +151,7 @@ fn property_sweep_rejects_inverted_slot_widget_bounds() {
         let spec = UiSpec::new(
             RootFrameSpec::new(
                 "root",
-                row_slots(vec![weighted_slot(label("x"), 1).width_bounds(Some(80), Some(16))]),
+                row_slots(vec![weighted_slot(textbox("x"), 1).width_bounds(Some(80), Some(16))]),
             )
             .layout(LayoutBox::fixed(size.width, size.height)),
         );
@@ -173,7 +173,7 @@ fn property_sweep_rejects_inverted_slot_widget_bounds() {
                 axis,
                 min,
                 max
-            } if node_kind == "Label" && axis == "width" && min == 80 && max == 16
+            } if node_kind == "TextBox" && axis == "width" && min == 80 && max == 16
         ));
     }
 }

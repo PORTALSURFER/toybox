@@ -173,7 +173,7 @@ fn resolve_grid_axis_percent_tracks_normalize_and_fit_when_over_subscribed() {
 fn root_frame_sized_anchors_root_to_design_resolution() {
     let root = root_frame_sized(
         "root",
-        label("x"),
+        textbox("x"),
         Size {
             width: 420,
             height: 258,
@@ -198,7 +198,7 @@ fn root_frame_sized_anchors_root_to_design_resolution() {
 fn root_frame_sized_keeps_uniform_fit_scaling_mode() {
     let root = root_frame_sized(
         "root",
-        label("x"),
+        textbox("x"),
         Size {
             width: 420,
             height: 258,
@@ -222,12 +222,12 @@ fn root_frame_sized_keeps_uniform_fit_scaling_mode() {
 #[test]
 fn nested_slot_helpers_measure_successfully() {
     let controls = row_slots(vec![
-        weighted_slot(panel("left", label("Knobs")).pad_all(0), 70),
-        weighted_slot(panel("right", label("Dropdowns")).pad_all(0), 30),
+        weighted_slot(panel("left", textbox("Knobs")).pad_all(0), 70),
+        weighted_slot(panel("right", textbox("Dropdowns")).pad_all(0), 30),
     ]);
     let content = column_slots(vec![
-        weighted_slot(panel("header", label("Header")).pad_all(0), 7),
-        weighted_slot(panel("curve", label("Curve")).pad_all(0), 63),
+        weighted_slot(panel("header", textbox("Header")).pad_all(0), 7),
+        weighted_slot(panel("curve", textbox("Curve")).pad_all(0), 63),
         weighted_slot(panel("controls", controls).pad_all(0), 30),
     ]);
     let spec = UiSpec::new(
@@ -271,9 +271,9 @@ fn justify_weighting_and_distribution_cover_new_modes() {
 #[test]
 fn resolve_flex_fill_remainder_keeps_total_exact_for_uneven_weights() {
     let flex = FlexSpec::row(vec![
-        label("").widget_layout(LayoutBox::auto().with_width(Length::Fill(1))),
-        label("").widget_layout(LayoutBox::auto().with_width(Length::Fill(1))),
-        label("").widget_layout(LayoutBox::auto().with_width(Length::Fill(1))),
+        textbox("").widget_layout(LayoutBox::auto().with_width(Length::Fill(1))),
+        textbox("").widget_layout(LayoutBox::auto().with_width(Length::Fill(1))),
+        textbox("").widget_layout(LayoutBox::auto().with_width(Length::Fill(1))),
     ]);
     let intrinsic = vec![
         Size {
@@ -320,7 +320,7 @@ fn grid_compression_reduces_fill_then_auto_then_px_tracks() {
 
 #[test]
 fn node_layout_helpers_apply_constraints_when_supported() {
-    let node = panel("main", label("x")).fill_width();
+    let node = panel("main", textbox("x")).fill_width();
     match node {
         Node::Panel(panel) => {
             assert_eq!(panel.layout.width, ContainerLength::Fill(1));

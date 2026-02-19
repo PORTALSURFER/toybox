@@ -62,7 +62,7 @@ mod aspect_box_tests {
             RootFrameSpec::new(
                 "root",
                 aspect_box(
-                    panel("aspect-panel", label("A")).pad_all(0).fill(),
+                    panel("aspect-panel", textbox("A")).pad_all(0).fill(),
                     AspectRatio::new(16, 9),
                 )
                 .slot_align(SlotAlign::End, SlotAlign::Start)

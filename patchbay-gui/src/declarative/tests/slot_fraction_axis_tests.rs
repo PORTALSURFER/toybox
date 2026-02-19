@@ -27,8 +27,8 @@ fn slot_grid_allows_weighted_fill_tracks_without_exact_percent_total() {
     let spec = UiSpec::new(root_frame_sized(
         "root",
         column_slots(vec![
-            weighted_slot(panel("top", label("Top")).pad_all(0), 10),
-            weighted_slot(panel("bottom", label("Bottom")).pad_all(0), 20),
+            weighted_slot(panel("top", textbox("Top")).pad_all(0), 10),
+            weighted_slot(panel("bottom", textbox("Bottom")).pad_all(0), 20),
         ]),
         Size {
             width: 300,
@@ -50,8 +50,8 @@ fn slot_grid_allows_sub_hundred_percent_when_fill_present() {
     let spec = UiSpec::new(root_frame_sized(
         "root",
         column_slots(vec![
-            fraction_slot(panel("fixed", label("Fixed")).pad_all(0), 30),
-            fill_slot(panel("fill", label("Fill")).pad_all(0)),
+            fraction_slot(panel("fixed", textbox("Fixed")).pad_all(0), 30),
+            fill_slot(panel("fill", textbox("Fill")).pad_all(0)),
         ]),
         Size {
             width: 300,

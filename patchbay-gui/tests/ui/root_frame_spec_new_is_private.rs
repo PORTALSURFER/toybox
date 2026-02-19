@@ -1,5 +1,5 @@
-use patchbay_gui::{label, RootFrameSpec};
+use patchbay_gui::{textbox, RootFrameSpec};
 
 fn main() {
-    let _ = RootFrameSpec::new("root", label("x"));
+    let _ = RootFrameSpec::new("root", textbox("x"));
 }

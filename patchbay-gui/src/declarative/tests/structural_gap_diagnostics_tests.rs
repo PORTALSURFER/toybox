@@ -16,8 +16,8 @@ fn two_panel_spec() -> UiSpec {
     UiSpec::new(RootFrameSpec::new(
         "root",
         row_slots(vec![
-            weighted_slot(panel("left", label("left")).pad_all(0), 1),
-            weighted_slot(panel("right", label("right")).pad_all(0), 1),
+            weighted_slot(panel("left", textbox("left")).pad_all(0), 1),
+            weighted_slot(panel("right", textbox("right")).pad_all(0), 1),
         ])
         .pad_all(0),
     ))
@@ -26,14 +26,14 @@ fn two_panel_spec() -> UiSpec {
 fn left_only_spec() -> UiSpec {
     UiSpec::new(RootFrameSpec::new(
         "root",
-        row_slots(vec![weighted_slot(panel("left", label("left")).pad_all(0), 1)]).pad_all(0),
+        row_slots(vec![weighted_slot(panel("left", textbox("left")).pad_all(0), 1)]).pad_all(0),
     ))
 }
 
 fn right_only_spec() -> UiSpec {
     UiSpec::new(RootFrameSpec::new(
         "root",
-        row_slots(vec![weighted_slot(panel("right", label("right")).pad_all(0), 1)]).pad_all(0),
+        row_slots(vec![weighted_slot(panel("right", textbox("right")).pad_all(0), 1)]).pad_all(0),
     ))
 }
 

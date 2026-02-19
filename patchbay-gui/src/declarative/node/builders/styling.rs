@@ -29,12 +29,12 @@ impl Node {
         self
     }
 
-    /// Set text color for label nodes.
+    /// Set text color for text box nodes.
     ///
-    /// Non-label node kinds are returned unchanged.
+    /// Non-text-box node kinds are returned unchanged.
     pub fn text_color(mut self, color: Color) -> Self {
-        if let Self::Label(label) = &mut self {
-            label.color = Some(color);
+        if let Self::TextBox(text_box) = &mut self {
+            text_box.color = Some(color);
         }
         self
     }

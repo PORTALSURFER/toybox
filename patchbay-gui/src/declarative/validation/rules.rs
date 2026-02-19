@@ -146,11 +146,11 @@ fn validate_control_size(
 
 /// Validate that dropdown selection references an existing option.
 fn validate_dropdown_selection(dropdown: &DropdownSpec) -> Result<(), DeclarativeError> {
-    if dropdown.selected >= dropdown.options.len() {
+    if dropdown.selected >= dropdown.option_count {
         return Err(DeclarativeError::InvalidDropdownSelection {
             key: dropdown.key.clone(),
             selected: dropdown.selected,
-            options_len: dropdown.options.len(),
+            options_len: dropdown.option_count,
         });
     }
     Ok(())

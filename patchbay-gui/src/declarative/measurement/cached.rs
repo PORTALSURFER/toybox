@@ -203,7 +203,7 @@ fn measure_node_cached(
             }
             resolve_size(switch_layout.layout.to_layout_box(), measured, measured)
         }
-        Node::Label(label) => measure_label(label, tokens),
+        Node::TextBox(text_box) => measure_text_box(text_box, tokens),
         Node::Spacer(spacer) => spacer.size,
         Node::Knob(knob) => measure_knob(knob, tokens),
         Node::Slider(slider) => measure_slider(slider, tokens),

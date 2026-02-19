@@ -1,4 +1,4 @@
-use patchbay_gui::{label, Color, ContainerLayout, PanelSpec};
+use patchbay_gui::{textbox, Color, ContainerLayout, PanelSpec};
 
 fn main() {
     let _ = PanelSpec {
@@ -9,6 +9,6 @@ fn main() {
         outline: None,
         header_height: None,
         layout: ContainerLayout::fill(),
-        content: Box::new(label("x")),
+        content: Box::new(textbox("x")),
     };
 }

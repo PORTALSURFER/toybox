@@ -41,7 +41,7 @@ fn assert_render_is_deterministic(spec: &UiSpec, size: Size) -> RenderResult {
 
 #[test]
 fn stress_depth_500_panel_nesting_fails_fast_with_depth_guard() {
-    let mut node = label("leaf");
+    let mut node = textbox("leaf");
     for index in 0..500 {
         node = panel(format!("layer-{index}"), node).pad_all(0);
     }

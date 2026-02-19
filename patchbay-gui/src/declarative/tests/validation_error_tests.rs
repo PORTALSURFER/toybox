@@ -6,7 +6,7 @@ fn rejects_invalid_knob_range() {
         "root",
         panel(
             "panel",
-            Node::Knob(KnobSpec::new("k", "Drive", 0.5, (1.0, 1.0))),
+            Node::Knob(KnobSpec::new("k", 0.5, (1.0, 1.0))),
         ),
     ));
     let error = measure_checked(&spec).expect_err("expected invalid range error");
@@ -22,7 +22,7 @@ fn rejects_invalid_slider_range() {
         "root",
         panel(
             "panel",
-            Node::Slider(SliderSpec::new("s", "Shape", 0.5, (0.8, 0.2))),
+            Node::Slider(SliderSpec::new("s", 0.5, (0.8, 0.2))),
         ),
     ));
     let error = measure_checked(&spec).expect_err("expected invalid range error");
@@ -37,7 +37,7 @@ fn rejects_zero_aspect_ratio_components() {
     let spec = UiSpec::new(RootFrameSpec::new(
         "root",
         aspect_box(
-            panel("panel", label("x")),
+            panel("panel", textbox("x")),
             AspectRatio::new(0, 1),
         ),
     ));
@@ -54,7 +54,7 @@ fn rejects_out_of_range_control_value() {
         "root",
         panel(
             "panel",
-            Node::Slider(SliderSpec::new("s", "Shape", 1.5, (0.0, 1.0))),
+            Node::Slider(SliderSpec::new("s", 1.5, (0.0, 1.0))),
         ),
     ));
     let error = measure_checked(&spec).expect_err("expected invalid control value");
@@ -73,8 +73,7 @@ fn rejects_dropdown_selection_out_of_bounds() {
             "panel",
             Node::Dropdown(DropdownSpec::new(
                 "mode",
-                "Mode",
-                vec!["A".to_string(), "B".to_string()],
+                2,
                 2,
             )),
         ),
@@ -97,7 +96,7 @@ fn rejects_zero_control_size() {
         panel(
             "panel",
             Node::Slider(
-                SliderSpec::new("s", "Shape", 0.5, (0.0, 1.0)).control_size(Size {
+                SliderSpec::new("s", 0.5, (0.0, 1.0)).control_size(Size {
                     width: 0,
                     height: 24,
                 }),
@@ -117,10 +116,10 @@ fn rejects_inverted_label_layout_bounds() {
         "root",
         panel(
             "panel",
-            label("bad-layout").widget_layout(LayoutBox::auto().min(100, 8).max(20, 40)),
+            textbox("bad-layout").widget_layout(LayoutBox::auto().min(100, 8).max(20, 40)),
         ),
     ));
-    let error = measure_checked(&spec).expect_err("expected invalid label layout bounds");
+    let error = measure_checked(&spec).expect_err("expected invalid text box layout bounds");
     assert!(matches!(
         error,
         DeclarativeError::InvalidLayoutBounds {
@@ -128,14 +127,14 @@ fn rejects_inverted_label_layout_bounds() {
             axis,
             min,
             max
-        } if node_kind == "Label" && axis == "width" && min == 100 && max == 20
+        } if node_kind == "TextBox" && axis == "width" && min == 100 && max == 20
     ));
 }
 
 #[test]
 fn rejects_inverted_root_layout_bounds() {
     let spec = UiSpec::new(
-        RootFrameSpec::new("root", panel("panel", label("x")))
+        RootFrameSpec::new("root", panel("panel", textbox("x")))
             .layout(LayoutBox::auto().min(320, 120).max(200, 160)),
     );
     let error = measure_checked(&spec).expect_err("expected invalid root layout bounds");
@@ -154,7 +153,7 @@ fn rejects_inverted_root_layout_bounds() {
 fn rejects_inverted_slot_widget_layout_bounds() {
     let spec = UiSpec::new(RootFrameSpec::new(
         "root",
-        row_slots(vec![weighted_slot(label("x"), 1).width_bounds(Some(72), Some(24))]),
+        row_slots(vec![weighted_slot(textbox("x"), 1).width_bounds(Some(72), Some(24))]),
     ));
     let error = measure_checked(&spec).expect_err("expected invalid slot-derived layout bounds");
     assert!(matches!(
@@ -164,7 +163,7 @@ fn rejects_inverted_slot_widget_layout_bounds() {
             axis,
             min,
             max
-        } if node_kind == "Label" && axis == "width" && min == 72 && max == 24
+        } if node_kind == "TextBox" && axis == "width" && min == 72 && max == 24
     ));
 }
 
@@ -180,12 +179,12 @@ fn rejects_non_slot_root_content() {
         scale_mode: RootScaleMode::UniformFit,
         zoom_override: None,
         layout_diagnostics_mode: LayoutDiagnosticsMode::EventsOnly,
-        content: Box::new(label("not slotted")),
+        content: Box::new(textbox("not slotted")),
     });
     let error = measure_checked(&spec).expect_err("expected invalid root slot error");
     assert!(matches!(
         error,
-        DeclarativeError::InvalidRootContent { node_kind } if node_kind == "Label"
+        DeclarativeError::InvalidRootContent { node_kind } if node_kind == "TextBox"
     ));
 }
 
@@ -201,12 +200,12 @@ fn rejects_root_slot_child_when_not_container() {
         scale_mode: RootScaleMode::UniformFit,
         zoom_override: None,
         layout_diagnostics_mode: LayoutDiagnosticsMode::EventsOnly,
-        content: Box::new(slot(label("bad"))),
+        content: Box::new(slot(textbox("bad"))),
     });
     let error = measure_checked(&spec).expect_err("expected invalid root slot child error");
     assert!(matches!(
         error,
-        DeclarativeError::InvalidRootSlotChild { node_kind } if node_kind == "Label"
+        DeclarativeError::InvalidRootSlotChild { node_kind } if node_kind == "TextBox"
     ));
 }
 
@@ -218,7 +217,7 @@ fn rejects_container_children_when_not_slot_wrapped() {
         padding: EdgeInsets::default(),
         align: Align::Start,
         justify: Justify::Start,
-        children: vec![label("direct child")],
+        children: vec![textbox("direct child")],
     });
     let spec = UiSpec::new(RootFrameSpec::new("root", invalid_row));
     let error = measure_checked(&spec).expect_err("expected invalid container child error");
@@ -227,7 +226,7 @@ fn rejects_container_children_when_not_slot_wrapped() {
         DeclarativeError::InvalidContainerChild {
             container_kind,
             node_kind
-        } if container_kind == "Row" && node_kind == "Label"
+        } if container_kind == "Row" && node_kind == "TextBox"
     ));
 }
 
@@ -245,7 +244,7 @@ fn rejects_slot_child_when_nested_slot() {
         layout_diagnostics_mode: LayoutDiagnosticsMode::EventsOnly,
         content: Box::new(slot(panel(
             "p",
-            Node::Slot(SlotSpec::new(Node::Slot(SlotSpec::new(label("bad"))))),
+            Node::Slot(SlotSpec::new(Node::Slot(SlotSpec::new(textbox("bad"))))),
         ))),
     });
     let error = measure_checked(&spec).expect_err("expected invalid nested-slot child error");
@@ -261,7 +260,7 @@ fn rejects_slot_grid_with_invalid_percent_total() {
         layout: ContainerLayout::fill(),
         template: GridTemplate::new(vec![TrackSize::Percent(70), TrackSize::Percent(60)])
             .rows(vec![TrackSize::Fr(1)]),
-        children: vec![slot(label("left")), slot(label("right"))],
+        children: vec![slot(textbox("left")), slot(textbox("right"))],
         kind: GridKind::SlotRow,
     });
     let spec = UiSpec::new(RootFrameSpec::new("root", invalid_grid).layout(LayoutBox::fixed(100, 40)));
@@ -278,17 +277,16 @@ fn rejects_slot_grid_with_invalid_percent_total() {
 #[test]
 fn accepts_canonical_root_slot_tree() {
     let content = column_slots(vec![
-        weighted_slot(panel("header", label("Header")), 20),
+        weighted_slot(panel("header", textbox("Header")), 20),
         fill_slot(panel(
             "controls",
             row_slots(vec![
-                fraction_slot(panel("left", knob("mix", "Mix", 0.5, (0.0, 1.0))), 50),
+                fraction_slot(panel("left", knob("mix", 0.5, (0.0, 1.0))), 50),
                 fill_slot(panel(
                     "right",
                     dropdown(
                         "mode",
-                        "Mode",
-                        vec!["A".to_string(), "B".to_string()],
+                        2,
                         0,
                     ),
                 )),
@@ -315,7 +313,7 @@ fn accepts_canonical_root_slot_tree() {
 
 #[test]
 fn rejects_excessive_tree_depth_before_measurement() {
-    let mut node = label("leaf");
+    let mut node = textbox("leaf");
     for index in 0..500 {
         node = panel(format!("layer-{index}"), node).pad_all(0);
     }

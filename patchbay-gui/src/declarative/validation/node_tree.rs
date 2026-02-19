@@ -82,7 +82,7 @@ fn validate_tree_depth_limit(root: &Node, max_depth: usize) -> Result<(), Declar
                 }
                 stack.push((switch_layout.fallback(), next_depth));
             }
-            Node::Label(_)
+            Node::TextBox(_)
             | Node::Spacer(_)
             | Node::Knob(_)
             | Node::Slider(_)
@@ -139,7 +139,7 @@ fn validate_node(
             validate_container_children("Wrap", &wrap.children, seen_keys)
         }
         Node::SwitchLayout(switch_layout) => validate_switch_layout_node(switch_layout, seen_keys),
-        Node::Label(label) => validate_layout_bounds("Label", label.layout),
+        Node::TextBox(text_box) => validate_layout_bounds("TextBox", text_box.layout),
         Node::Spacer(_) | Node::Indicator(_) => Ok(()),
         Node::Knob(knob) => validate_knob_node(knob, seen_keys),
         Node::Slider(slider) => validate_slider_node(slider, seen_keys),
@@ -358,7 +358,7 @@ fn is_container_node(node: &Node) -> bool {
 fn is_widget_node(node: &Node) -> bool {
     matches!(
         node,
-        Node::Label(_)
+        Node::TextBox(_)
             | Node::Spacer(_)
             | Node::Knob(_)
             | Node::Slider(_)
@@ -386,7 +386,7 @@ fn node_kind_name(node: &Node) -> &'static str {
         Node::ScrollView(_) => "ScrollView",
         Node::Wrap(_) => "Wrap",
         Node::SwitchLayout(_) => "SwitchLayout",
-        Node::Label(_) => "Label",
+        Node::TextBox(_) => "TextBox",
         Node::Spacer(_) => "Spacer",
         Node::Knob(_) => "Knob",
         Node::Slider(_) => "Slider",

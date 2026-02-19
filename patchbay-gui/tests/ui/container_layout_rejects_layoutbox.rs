@@ -1,5 +1,5 @@
-use patchbay_gui::{label, LayoutBox, PanelSpec};
+use patchbay_gui::{textbox, LayoutBox, PanelSpec};
 
 fn main() {
-    let _ = PanelSpec::new("panel", label("x")).layout(LayoutBox::fixed(200, 100));
+    let _ = PanelSpec::new("panel", textbox("x")).layout(LayoutBox::fixed(200, 100));
 }

@@ -1,7 +1,7 @@
-/// Label specification.
+/// Text box widget specification.
 #[derive(Clone, Debug)]
-pub struct LabelSpec {
-    /// Label text.
+pub struct TextBoxSpec {
+    /// Display text.
     pub text: String,
     /// Optional text color override.
     pub color: Option<Color>,
@@ -9,8 +9,8 @@ pub struct LabelSpec {
     pub layout: LayoutBox,
 }
 
-impl LabelSpec {
-    /// Create a text label.
+impl TextBoxSpec {
+    /// Create a display-only text box.
     pub fn new(text: impl Into<String>) -> Self {
         Self {
             text: text.into(),

@@ -3,8 +3,6 @@
 pub struct ToggleSpec {
     /// Stable widget key.
     pub key: String,
-    /// Label displayed above the toggle.
-    pub label: String,
     /// Current value.
     pub value: bool,
     /// Optional explicit control size.
@@ -15,10 +13,9 @@ pub struct ToggleSpec {
 
 impl ToggleSpec {
     /// Create a toggle.
-    pub fn new(key: impl Into<String>, label: impl Into<String>, value: bool) -> Self {
+    pub fn new(key: impl Into<String>, value: bool) -> Self {
         Self {
             key: key.into(),
-            label: label.into(),
             value,
             control_size: None,
             layout: LayoutBox::auto(),
@@ -43,8 +40,6 @@ impl ToggleSpec {
 pub struct ButtonSpec {
     /// Stable widget key.
     pub key: String,
-    /// Button label.
-    pub label: String,
     /// Optional explicit control size.
     pub control_size: Option<Size>,
     /// Layout constraints.
@@ -53,10 +48,9 @@ pub struct ButtonSpec {
 
 impl ButtonSpec {
     /// Create a button.
-    pub fn new(key: impl Into<String>, label: impl Into<String>) -> Self {
+    pub fn new(key: impl Into<String>) -> Self {
         Self {
             key: key.into(),
-            label: label.into(),
             control_size: None,
             layout: LayoutBox::auto(),
         }
@@ -80,10 +74,8 @@ impl ButtonSpec {
 pub struct DropdownSpec {
     /// Stable widget key.
     pub key: String,
-    /// Label displayed above the dropdown.
-    pub label: String,
-    /// Options list.
-    pub options: Vec<String>,
+    /// Number of available options.
+    pub option_count: usize,
     /// Selected index.
     pub selected: usize,
     /// Optional explicit control size.
@@ -96,14 +88,12 @@ impl DropdownSpec {
     /// Create a dropdown.
     pub fn new(
         key: impl Into<String>,
-        label: impl Into<String>,
-        options: Vec<String>,
+        option_count: usize,
         selected: usize,
     ) -> Self {
         Self {
             key: key.into(),
-            label: label.into(),
-            options,
+            option_count,
             selected,
             control_size: None,
             layout: LayoutBox::auto(),

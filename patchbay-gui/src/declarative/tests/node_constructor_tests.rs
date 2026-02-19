@@ -2,7 +2,7 @@ use super::super::*;
 
 #[test]
 fn node_fluent_helpers_apply_container_and_style_fields() {
-    let panel_node = panel("main", label("x"))
+    let panel_node = panel("main", textbox("x"))
         .title("Main")
         .pad_all(14)
         .background(Color::rgb(12, 16, 22))
@@ -17,7 +17,7 @@ fn node_fluent_helpers_apply_container_and_style_fields() {
         _ => panic!("expected panel node"),
     }
 
-    let row_node = row(vec![label("a"), label("b")])
+    let row_node = row(vec![textbox("a"), textbox("b")])
         .gap(6)
         .pad_xy(10, 8)
         .align_center()
@@ -50,24 +50,23 @@ fn node_fluent_helpers_apply_container_and_style_fields() {
         _ => panic!("expected grid node"),
     }
 
-    let label_node = label("name").text_color(Color::rgb(200, 180, 90));
-    match label_node {
-        Node::Label(label) => assert_eq!(label.color, Some(Color::rgb(200, 180, 90))),
-        _ => panic!("expected label node"),
+    let text_box_node = textbox("name").text_color(Color::rgb(200, 180, 90));
+    match text_box_node {
+        Node::TextBox(text_box) => assert_eq!(text_box.color, Some(Color::rgb(200, 180, 90))),
+        _ => panic!("expected text box node"),
     }
 
-    let knob_node = knob("k", "Drive", 0.5, (0.0, 1.0))
-        .value_label("50%")
-        .text_scale(2);
+    let knob_node = knob("k", 0.5, (0.0, 1.0));
     match knob_node {
         Node::Knob(knob) => {
-            assert_eq!(knob.value_label.as_deref(), Some("50%"));
-            assert_eq!(knob.text_scale, Some(2));
+            assert_eq!(knob.key, "k");
+            assert_eq!(knob.value, 0.5);
+            assert_eq!(knob.range, (0.0, 1.0));
         }
         _ => panic!("expected knob node"),
     }
 
-    let slider_node = slider("mix", "Mix", 0.3, (0.0, 1.0)).control_size(Size {
+    let slider_node = slider("mix", 0.3, (0.0, 1.0)).control_size(Size {
         width: 140,
         height: 24,
     });
@@ -84,8 +83,7 @@ fn node_fluent_helpers_apply_container_and_style_fields() {
 
     let dropdown_node = dropdown(
         "mode",
-        "Mode",
-        vec!["A".to_string(), "B".to_string(), "C".to_string()],
+        3,
         0,
     )
     .selected(2)
@@ -111,14 +109,14 @@ fn node_fluent_helpers_apply_container_and_style_fields() {
 #[test]
 fn helper_node_constructors_build_valid_spec() {
     let controls = row(vec![
-        knob("drive", "Drive", 0.5, (0.0, 1.0)),
-        slider("mix", "Mix", 0.25, (0.0, 1.0)),
-        toggle("sync", "Sync", false),
-        button("ping", "Ping"),
-        dropdown("mode", "Mode", vec!["A".to_string(), "B".to_string()], 1),
+        knob("drive", 0.5, (0.0, 1.0)),
+        slider("mix", 0.25, (0.0, 1.0)),
+        toggle("sync", false),
+        button("ping"),
+        dropdown("mode", 2, 1),
     ]);
     let content = column(vec![
-        label("Header"),
+        textbox("Header"),
         controls,
         grid(
             GridTemplate::columns_fr(2).rows_fr(1).pad_all(4).gap(8),
@@ -138,10 +136,10 @@ fn helper_node_constructors_build_valid_spec() {
         ),
         switch_layout(
             vec![
-                when_width_lt(480, panel("compact-mode", label("Compact"))),
-                when_width_ge(480, panel("wide-mode", label("Wide"))),
+                when_width_lt(480, panel("compact-mode", textbox("Compact"))),
+                when_width_ge(480, panel("wide-mode", textbox("Wide"))),
             ],
-            panel("fallback-mode", label("Fallback")),
+            panel("fallback-mode", textbox("Fallback")),
         ),
         region(
             "plot",
@@ -166,7 +164,7 @@ fn measure_knob_matches_shared_block_metrics() {
     tokens.controls.knob_diameter = 90;
     tokens.typography.text_scale = 3;
 
-    let knob = KnobSpec::new("k", "Drive", 0.5, (0.0, 1.0));
+    let knob = KnobSpec::new("k", 0.5, (0.0, 1.0));
     let measured = measure_knob(&knob, &tokens);
     let expected = knob_block_size_for_diameter(90, 3);
 
@@ -174,12 +172,12 @@ fn measure_knob_matches_shared_block_metrics() {
 }
 
 #[test]
-fn measure_knob_uses_text_scale_override_when_present() {
+fn measure_knob_uses_theme_text_scale() {
     let mut tokens = ThemeTokens::default();
     tokens.controls.knob_diameter = 90;
-    tokens.typography.text_scale = 3;
+    tokens.typography.text_scale = 1;
 
-    let knob = KnobSpec::new("k", "Drive", 0.5, (0.0, 1.0)).text_scale(1);
+    let knob = KnobSpec::new("k", 0.5, (0.0, 1.0));
     let measured = measure_knob(&knob, &tokens);
     let expected = knob_block_size_for_diameter(90, 1);
 
@@ -192,7 +190,7 @@ fn measure_knob_width_tracks_dial_hit_width_for_tight_tiling() {
     tokens.controls.knob_diameter = 48;
     tokens.typography.text_scale = 3;
 
-    let knob = KnobSpec::new("k", "Drive", 0.5, (0.0, 1.0));
+    let knob = KnobSpec::new("k", 0.5, (0.0, 1.0));
     let measured = measure_knob(&knob, &tokens);
     let expected = knob_block_size_for_diameter(48, 3);
 
@@ -201,7 +199,7 @@ fn measure_knob_width_tracks_dial_hit_width_for_tight_tiling() {
 
 #[test]
 fn knob_constructor_defaults_to_auto_width_layout() {
-    let knob = KnobSpec::new("k", "Drive", 0.5, (0.0, 1.0));
+    let knob = KnobSpec::new("k", 0.5, (0.0, 1.0));
 
     assert_eq!(knob.layout.width, Length::Auto);
 }

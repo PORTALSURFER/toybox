@@ -17,25 +17,25 @@ fn helper_layout_box_methods_apply_expected_constraints() {
 
 #[test]
 fn helper_justify_methods_apply_expected_distribution_modes() {
-    let flex = FlexSpec::row(vec![label("A"), label("B")]).justify_space_between();
+    let flex = FlexSpec::row(vec![textbox("A"), textbox("B")]).justify_space_between();
     assert_eq!(flex.justify, Justify::SpaceBetween);
 
-    let flex = FlexSpec::row(vec![label("A"), label("B")]).justify_space_around();
+    let flex = FlexSpec::row(vec![textbox("A"), textbox("B")]).justify_space_around();
     assert_eq!(flex.justify, Justify::SpaceAround);
 
-    let flex = FlexSpec::row(vec![label("A"), label("B")]).justify_space_evenly();
+    let flex = FlexSpec::row(vec![textbox("A"), textbox("B")]).justify_space_evenly();
     assert_eq!(flex.justify, Justify::SpaceEvenly);
 }
 
 #[test]
 fn weighted_child_clamps_zero_weight_to_one() {
-    let child = weighted_slot(label("x"), 0);
+    let child = weighted_slot(textbox("x"), 0);
     assert_eq!(child.params.size_main, SlotMainSize::Fill(1));
 }
 
 #[test]
 fn column_slots_apply_weighted_height_fill() {
-    let node = column_slots(vec![weighted_slot(label("A"), 7), weighted_slot(label("B"), 30)]);
+    let node = column_slots(vec![weighted_slot(textbox("A"), 7), weighted_slot(textbox("B"), 30)]);
     let Node::Grid(grid) = node else {
         panic!("expected grid-backed column slot container");
     };
@@ -62,7 +62,7 @@ fn column_slots_apply_weighted_height_fill() {
 
 #[test]
 fn row_slots_apply_weighted_width_fill() {
-    let node = row_slots(vec![weighted_slot(label("L"), 70), weighted_slot(label("R"), 30)]);
+    let node = row_slots(vec![weighted_slot(textbox("L"), 70), weighted_slot(textbox("R"), 30)]);
     let Node::Grid(grid) = node else {
         panic!("expected grid-backed row slot container");
     };
@@ -89,7 +89,7 @@ fn row_slots_apply_weighted_width_fill() {
 
 #[test]
 fn container_overflow_builder_sets_policy_without_resetting_fill_axes() {
-    let node = row_slots(vec![weighted_slot(label("A"), 50), weighted_slot(label("B"), 50)])
+    let node = row_slots(vec![weighted_slot(textbox("A"), 50), weighted_slot(textbox("B"), 50)])
         .container_overflow(OverflowPolicy::Compress)
         .fill();
     let Node::Grid(grid) = node else {

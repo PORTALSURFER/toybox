@@ -19,8 +19,8 @@ fn rejects_duplicate_widget_keys() {
     let spec = UiSpec::new(RootFrameSpec::new(
         "root",
         Node::column(vec![
-            Node::Knob(KnobSpec::new("k", "A", 0.5, (0.0, 1.0))),
-            Node::Knob(KnobSpec::new("k", "B", 0.5, (0.0, 1.0))),
+            Node::Knob(KnobSpec::new("k", 0.5, (0.0, 1.0))),
+            Node::Knob(KnobSpec::new("k", 0.5, (0.0, 1.0))),
         ]),
     ));
     let error = measure_checked(&spec).expect_err("expected duplicate key error");
@@ -31,7 +31,7 @@ fn rejects_duplicate_widget_keys() {
 fn rejects_root_key_collision_with_child() {
     let spec = UiSpec::new(RootFrameSpec::new(
         "dup",
-        Node::Panel(PanelSpec::new("dup", label("content"))),
+        Node::Panel(PanelSpec::new("dup", textbox("content"))),
     ));
     let error = measure_checked(&spec).expect_err("expected duplicate key error");
     assert!(matches!(error, DeclarativeError::DuplicateNodeKey { key } if key == "dup"));

@@ -31,9 +31,9 @@ fn root_vertical_slots_tile_parent_without_gaps() {
         root_frame_sized(
             "root",
             column_slots(vec![
-                weighted_slot(panel("header", label("Header")).pad_all(0), 7),
-                weighted_slot(panel("curve", label("Curve")).pad_all(0), 63),
-                weighted_slot(panel("controls", label("Controls")).pad_all(0), 30),
+                weighted_slot(panel("header", textbox("Header")).pad_all(0), 7),
+                weighted_slot(panel("curve", textbox("Curve")).pad_all(0), 63),
+                weighted_slot(panel("controls", textbox("Controls")).pad_all(0), 30),
             ]),
             root_size,
         )
@@ -77,9 +77,9 @@ fn root_horizontal_slots_tile_parent_without_gaps() {
         root_frame_sized(
             "root",
             row_slots(vec![
-                weighted_slot(panel("left", label("Left")).pad_all(0), 17),
-                weighted_slot(panel("center", label("Center")).pad_all(0), 55),
-                weighted_slot(panel("right", label("Right")).pad_all(0), 28),
+                weighted_slot(panel("left", textbox("Left")).pad_all(0), 17),
+                weighted_slot(panel("center", textbox("Center")).pad_all(0), 55),
+                weighted_slot(panel("right", textbox("Right")).pad_all(0), 28),
             ]),
             root_size,
         )
@@ -116,16 +116,16 @@ fn root_horizontal_slots_tile_parent_without_gaps() {
 #[test]
 fn nested_slot_layouts_tile_each_parent_without_gaps() {
     let right_nested = column_slots(vec![
-        weighted_slot(panel("right-top", label("R1")).pad_all(0), 40),
-        weighted_slot(panel("right-bottom", label("R2")).pad_all(0), 60),
+        weighted_slot(panel("right-top", textbox("R1")).pad_all(0), 40),
+        weighted_slot(panel("right-bottom", textbox("R2")).pad_all(0), 60),
     ]);
     let controls = row_slots(vec![
-        weighted_slot(panel("knobs", label("Knobs")).pad_all(0), 70),
+        weighted_slot(panel("knobs", textbox("Knobs")).pad_all(0), 70),
         weighted_slot(panel("dropdowns", right_nested).pad_all(0), 30),
     ]);
     let content = column_slots(vec![
-        weighted_slot(panel("header", label("Header")).pad_all(0), 9),
-        weighted_slot(panel("curve", label("Curve")).pad_all(0), 61),
+        weighted_slot(panel("header", textbox("Header")).pad_all(0), 9),
+        weighted_slot(panel("curve", textbox("Curve")).pad_all(0), 61),
         weighted_slot(panel("controls", controls).pad_all(0), 30),
     ]);
     let root_size = Size {

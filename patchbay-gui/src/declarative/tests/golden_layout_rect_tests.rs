@@ -27,15 +27,15 @@ fn golden_panel_rect_by_key_optional(result: &RenderResult, key: &str) -> Option
 
 fn golden_nested_flex_spec(size: Size) -> UiSpec {
     let top_row = row_slots(vec![
-        weighted_slot(panel("left", label("L")).pad_all(0).fill(), 1),
-        weighted_slot(panel("right", label("R")).pad_all(0).fill(), 2),
+        weighted_slot(panel("left", textbox("L")).pad_all(0).fill(), 1),
+        weighted_slot(panel("right", textbox("R")).pad_all(0).fill(), 2),
     ])
     .gap(10)
     .fill();
 
     let content = column_slots(vec![
         weighted_slot(top_row, 2),
-        weighted_slot(panel("bottom", label("B")).pad_all(0).fill(), 1),
+        weighted_slot(panel("bottom", textbox("B")).pad_all(0).fill(), 1),
     ])
     .gap(6)
     .fill();
@@ -55,10 +55,10 @@ fn golden_fixed_grid_spec(size: Size) -> UiSpec {
     let content = grid(
         template,
         vec![
-            panel("g1", label("1")).pad_all(0).fill(),
-            panel("g2", label("2")).pad_all(0).fill(),
-            panel("g3", label("3")).pad_all(0).fill(),
-            panel("g4", label("4")).pad_all(0).fill(),
+            panel("g1", textbox("1")).pad_all(0).fill(),
+            panel("g2", textbox("2")).pad_all(0).fill(),
+            panel("g3", textbox("3")).pad_all(0).fill(),
+            panel("g4", textbox("4")).pad_all(0).fill(),
         ],
     )
     .fill();

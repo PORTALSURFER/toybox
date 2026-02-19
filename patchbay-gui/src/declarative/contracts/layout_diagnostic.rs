@@ -109,8 +109,8 @@ pub enum LayoutNodeKind {
     Wrap,
     /// Switch-layout container.
     SwitchLayout,
-    /// Label widget.
-    Label,
+    /// Text-box widget.
+    TextBox,
     /// Spacer widget.
     Spacer,
     /// Knob widget.

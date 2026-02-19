@@ -24,7 +24,7 @@ fn render_knob_uses_token_diameter_for_hit_region() {
             Node::Absolute(
                 AbsoluteSpec::new(vec![AbsoluteChild::new(
                     Point { x: 0, y: 0 },
-                    Node::Knob(KnobSpec::new("k", "Drive", 0.5, (0.0, 1.0))),
+                    Node::Knob(KnobSpec::new("k", 0.5, (0.0, 1.0))),
                 )])
                 .layout(ContainerLayout::fill()),
             ),
@@ -51,10 +51,10 @@ fn knob_interaction_is_clamped_to_slot_bounds() {
     };
     let content = column_slots(vec![
         weighted_slot(
-            panel("tight", knob("k", "K", 0.5, (0.0, 1.0))).pad_all(0),
+            panel("tight", knob("k", 0.5, (0.0, 1.0))).pad_all(0),
             20,
         ),
-        weighted_slot(panel("rest", label("x")).pad_all(0), 80),
+        weighted_slot(panel("rest", textbox("x")).pad_all(0), 80),
     ]);
     let spec = UiSpec::new(root_frame_sized("root", content, root_size).padding(0));
 
@@ -92,15 +92,14 @@ fn dropdown_overlay_interaction_can_escape_slot_bounds() {
                 "tight",
                 dropdown(
                     "mode",
-                    "",
-                    vec!["A".to_string(), "B".to_string(), "C".to_string()],
+                    3,
                     0,
                 ),
             )
             .pad_all(0),
             25,
         ),
-        weighted_slot(panel("rest", label("x")).pad_all(0), 75),
+        weighted_slot(panel("rest", textbox("x")).pad_all(0), 75),
     ]);
     let spec = UiSpec::new(root_frame_sized("root", content, root_size).padding(0));
 
@@ -163,7 +162,7 @@ fn render_emits_button_action() {
     };
     let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
 
-    let button = ButtonSpec::new("ok", "OK").control_size(Size {
+    let button = ButtonSpec::new("ok").control_size(Size {
         width: 80,
         height: 24,
     });

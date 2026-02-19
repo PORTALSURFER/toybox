@@ -3,7 +3,7 @@ use super::super::*;
 #[test]
 fn fixed_root_layout_expands_to_intrinsic_content() {
     let spec = UiSpec::new(
-        RootFrameSpec::new("root", panel("panel", label("VeryWideLabel")).pad_all(0))
+        RootFrameSpec::new("root", panel("panel", textbox("VeryWideLabel")).pad_all(0))
             .padding(0)
             .layout(LayoutBox::fixed(1, 1)),
     );
@@ -20,7 +20,7 @@ fn auto_panel_layout_expands_to_intrinsic_content() {
     let spec = UiSpec::new(
         RootFrameSpec::new(
             "root",
-            panel("panel", label("WidePanelText")).pad_all(0),
+            panel("panel", textbox("WidePanelText")).pad_all(0),
         )
         .padding(0),
     );
@@ -35,7 +35,7 @@ fn auto_panel_layout_expands_to_intrinsic_content() {
 #[test]
 fn explicit_max_still_caps_fixed_pixel_layout() {
     let spec = UiSpec::new(
-        RootFrameSpec::new("root", panel("panel", label("VeryWideLabel")).pad_all(0))
+        RootFrameSpec::new("root", panel("panel", textbox("VeryWideLabel")).pad_all(0))
             .padding(0)
             .layout(LayoutBox::fixed(1, 1).max(12, 12)),
     );
@@ -105,7 +105,7 @@ fn label_with_explicit_box_does_not_expand_root_width() {
             "root",
             panel(
                 "panel",
-                label("VERY LONG LABEL THAT MUST NOT WIDEN THE WINDOW")
+                textbox("VERY LONG LABEL THAT MUST NOT WIDEN THE WINDOW")
                     .widget_layout(LayoutBox::fixed(64, 16).max(64, 16)),
             )
             .pad_all(0),

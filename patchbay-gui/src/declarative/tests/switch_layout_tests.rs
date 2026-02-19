@@ -12,10 +12,10 @@ fn selected_panel_key(node: &Node) -> &str {
 fn switch_layout_selects_first_matching_case_and_respects_boundaries() {
     let spec = SwitchLayoutSpec::new(
         vec![
-            when_width_lt(500, panel("compact", label("compact"))),
-            when_width_ge(500, panel("wide", label("wide"))),
+            when_width_lt(500, panel("compact", textbox("compact"))),
+            when_width_ge(500, panel("wide", textbox("wide"))),
         ],
-        panel("fallback", label("fallback")),
+        panel("fallback", textbox("fallback")),
     );
 
     assert_eq!(selected_panel_key(spec.selected_child(320)), "compact");
@@ -28,10 +28,10 @@ fn switch_layout_selects_first_matching_case_and_respects_boundaries() {
 fn switch_layout_uses_fallback_when_no_case_matches() {
     let spec = SwitchLayoutSpec::new(
         vec![
-            when_width_lt(300, panel("small", label("small"))),
-            when_width_ge(700, panel("large", label("large"))),
+            when_width_lt(300, panel("small", textbox("small"))),
+            when_width_ge(700, panel("large", textbox("large"))),
         ],
-        panel("fallback", label("fallback")),
+        panel("fallback", textbox("fallback")),
     );
 
     assert_eq!(selected_panel_key(spec.selected_child(450)), "fallback");
@@ -40,8 +40,8 @@ fn switch_layout_uses_fallback_when_no_case_matches() {
 #[test]
 fn rejects_switch_case_with_invalid_bounds() {
     let invalid = switch_layout(
-        vec![when_width_between(500, 500, panel("bad", label("bad")))],
-        panel("fallback", label("fallback")),
+        vec![when_width_between(500, 500, panel("bad", textbox("bad")))],
+        panel("fallback", textbox("fallback")),
     );
     let spec = UiSpec::new(root_frame_sized(
         "root",
@@ -63,10 +63,10 @@ fn rejects_switch_case_with_invalid_bounds() {
 fn rejects_switch_cases_that_overlap_or_are_unsorted() {
     let overlapping = switch_layout(
         vec![
-            when_width_between(0, 500, panel("a", label("a"))),
-            when_width_between(400, 800, panel("b", label("b"))),
+            when_width_between(0, 500, panel("a", textbox("a"))),
+            when_width_between(400, 800, panel("b", textbox("b"))),
         ],
-        panel("fallback", label("fallback")),
+        panel("fallback", textbox("fallback")),
     );
     let spec = UiSpec::new(root_frame_sized(
         "root",

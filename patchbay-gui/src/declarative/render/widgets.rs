@@ -8,20 +8,8 @@ fn render_knob(
 ) {
     let id = WidgetId::from_label(&knob.key);
     let mut value = knob.value;
-    let value_label = knob
-        .value_label
-        .clone()
-        .unwrap_or_else(|| format_value(knob.value));
-    let text_scale = knob.text_scale.unwrap_or(tokens.typography.text_scale);
-    let knob_request = KnobRectRenderRequest::new(
-        id,
-        &knob.label,
-        &value_label,
-        knob.range,
-        tokens.controls.knob_diameter,
-        rect,
-    )
-    .with_text_scale(text_scale);
+    let knob_request = KnobRectRenderRequest::new(id, "", "", knob.range, tokens.controls.knob_diameter, rect)
+        .with_text_scale(tokens.typography.text_scale);
     let response = ui.knob_with_labels_in_rect_scaled(&mut value, knob_request);
     if response.changed {
         actions.push(UiAction::KnobChanged {
@@ -46,7 +34,7 @@ fn render_slider(
         height: tokens.controls.slider_height,
     });
     let slider_request =
-        SliderRectRenderRequest::new(id, &slider.label, slider.range, control_size, rect)
+        SliderRectRenderRequest::new(id, "", slider.range, control_size, rect)
             .with_text_scale(tokens.typography.text_scale);
     let response = ui.slider_in_rect_scaled(&mut value, slider_request);
     if response.changed {
@@ -73,7 +61,7 @@ fn render_toggle(
     });
     let response = ui.toggle_in_rect_scaled(
         id,
-        &toggle.label,
+        "",
         &mut value,
         control_size,
         rect,
@@ -102,7 +90,7 @@ fn render_button(
     });
     let response = ui.button_in_rect_scaled(
         id,
-        &button.label,
+        "",
         control_size,
         rect,
         tokens.typography.text_scale,
@@ -128,9 +116,12 @@ fn render_dropdown(
         height: tokens.controls.dropdown_height,
     });
     let mut selected = dropdown.selected;
-    let option_refs: Vec<&str> = dropdown.options.iter().map(String::as_str).collect();
+    let option_labels: Vec<String> = (0..dropdown.option_count)
+        .map(|index| (index + 1).to_string())
+        .collect();
+    let option_refs: Vec<&str> = option_labels.iter().map(String::as_str).collect();
     let dropdown_request =
-        DropdownRectRenderRequest::new(id, &dropdown.label, &option_refs, control_size, rect)
+        DropdownRectRenderRequest::new(id, "", &option_refs, control_size, rect)
             .with_text_scale(tokens.typography.text_scale);
     let response = ui.dropdown_in_rect_scaled(&mut selected, dropdown_request);
     if response.changed {

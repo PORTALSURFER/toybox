@@ -14,7 +14,7 @@ fn node_layout(node: &Node) -> LayoutBox {
         Node::ScrollView(scroll_view) => scroll_view.layout.to_layout_box(),
         Node::Wrap(wrap) => wrap.layout.to_layout_box(),
         Node::SwitchLayout(switch_layout) => switch_layout.layout.to_layout_box(),
-        Node::Label(label) => label.layout,
+        Node::TextBox(text_box) => text_box.layout,
         Node::Spacer(spacer) => LayoutBox::fixed(spacer.size.width, spacer.size.height),
         Node::Knob(knob) => knob.layout,
         Node::Slider(slider) => slider.layout,
@@ -156,26 +156,6 @@ fn emit_layout_overflow_warning(_rect: Rect, _bounds: Rect, _message: &str) {
         _bounds.size.width,
         _bounds.size.height,
     );
-}
-
-/// Format control values for generated labels.
-fn format_value(value: f32) -> String {
-    let mut text = if value.abs() >= 1.0 {
-        format!("{value:.2}")
-    } else if value.abs() >= 0.1 {
-        format!("{value:.3}")
-    } else {
-        format!("{value:.4}")
-    };
-    if let Some(dot) = text.find('.') {
-        while text.ends_with('0') && text.len() > dot + 2 {
-            text.pop();
-        }
-        if text.ends_with('.') {
-            text.pop();
-        }
-    }
-    if text == "-0" { "0".to_string() } else { text }
 }
 
 /// Measure monospaced bitmap text bounds at a given scale.

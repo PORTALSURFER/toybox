@@ -14,7 +14,7 @@ fn measure_node(node: &Node, tokens: &ThemeTokens) -> Size {
         Node::ScrollView(scroll_view) => measure_scroll_view(scroll_view, tokens),
         Node::Wrap(wrap) => measure_wrap(wrap, tokens),
         Node::SwitchLayout(switch_layout) => measure_switch_layout(switch_layout, tokens),
-        Node::Label(label) => measure_label(label, tokens),
+        Node::TextBox(text_box) => measure_text_box(text_box, tokens),
         Node::Spacer(spacer) => spacer.size,
         Node::Knob(knob) => measure_knob(knob, tokens),
         Node::Slider(slider) => measure_slider(slider, tokens),

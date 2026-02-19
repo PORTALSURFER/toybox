@@ -408,7 +408,7 @@ impl LayoutEngineState {
                     format!("{path}/switch-fallback[0]"),
                 );
             }
-            Node::Label(_)
+            Node::TextBox(_)
             | Node::Spacer(_)
             | Node::Knob(_)
             | Node::Slider(_)

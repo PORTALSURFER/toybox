@@ -2,33 +2,15 @@ impl KnobSpec {
     /// Create a knob.
     pub fn new(
         key: impl Into<String>,
-        label: impl Into<String>,
         value: f32,
         range: (f32, f32),
     ) -> Self {
         Self {
             key: key.into(),
-            label: label.into(),
-            value_label: None,
-            text_scale: None,
             value,
             range,
             layout: LayoutBox::auto(),
         }
-    }
-
-    /// Override value label.
-    pub fn value_label(mut self, value_label: impl Into<String>) -> Self {
-        self.value_label = Some(value_label.into());
-        self
-    }
-
-    /// Override knob label text scale.
-    ///
-    /// A value of `0` is clamped to `1`.
-    pub fn text_scale(mut self, text_scale: u32) -> Self {
-        self.text_scale = Some(text_scale.max(1));
-        self
     }
 
     /// Override layout constraints.
@@ -43,8 +25,6 @@ impl KnobSpec {
 pub struct SliderSpec {
     /// Stable widget key.
     pub key: String,
-    /// Label displayed above the slider.
-    pub label: String,
     /// Current value.
     pub value: f32,
     /// Value range.
@@ -59,13 +39,11 @@ impl SliderSpec {
     /// Create a slider.
     pub fn new(
         key: impl Into<String>,
-        label: impl Into<String>,
         value: f32,
         range: (f32, f32),
     ) -> Self {
         Self {
             key: key.into(),
-            label: label.into(),
             value,
             range,
             control_size: None,

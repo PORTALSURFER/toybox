@@ -1,8 +1,8 @@
 #[test]
 fn stack_measure_uses_largest_child_extent_plus_padding() {
     let content = stack(vec![
-        label("small").widget_layout(LayoutBox::fixed(20, 10).max(20, 10)),
-        label("large").widget_layout(LayoutBox::fixed(80, 40).max(80, 40)),
+        textbox("small").widget_layout(LayoutBox::fixed(20, 10).max(20, 10)),
+        textbox("large").widget_layout(LayoutBox::fixed(80, 40).max(80, 40)),
     ])
     .pad_xy(3, 5);
     let spec = UiSpec::new(RootFrameSpec::new("root", content).padding(0));
@@ -20,9 +20,9 @@ fn stack_measure_uses_largest_child_extent_plus_padding() {
 fn scroll_view_measure_tracks_content_size() {
     let content = scroll_view(
         column(vec![
-            label("line-1").widget_layout(LayoutBox::fixed(30, 12).max(30, 12)),
-            label("line-2").widget_layout(LayoutBox::fixed(30, 12).max(30, 12)),
-            label("line-3").widget_layout(LayoutBox::fixed(30, 12).max(30, 12)),
+            textbox("line-1").widget_layout(LayoutBox::fixed(30, 12).max(30, 12)),
+            textbox("line-2").widget_layout(LayoutBox::fixed(30, 12).max(30, 12)),
+            textbox("line-3").widget_layout(LayoutBox::fixed(30, 12).max(30, 12)),
         ])
         .gap(2),
     )
@@ -41,9 +41,9 @@ fn scroll_view_measure_tracks_content_size() {
 #[test]
 fn wrap_measure_accumulates_children_and_gaps() {
     let content = wrap(vec![
-        label("a").widget_layout(LayoutBox::fixed(10, 10).max(10, 10)),
-        label("b").widget_layout(LayoutBox::fixed(20, 15).max(20, 15)),
-        label("c").widget_layout(LayoutBox::fixed(30, 5).max(30, 5)),
+        textbox("a").widget_layout(LayoutBox::fixed(10, 10).max(10, 10)),
+        textbox("b").widget_layout(LayoutBox::fixed(20, 15).max(20, 15)),
+        textbox("c").widget_layout(LayoutBox::fixed(30, 5).max(30, 5)),
     ])
     .gap(3)
     .pad_xy(1, 2);
@@ -62,7 +62,7 @@ fn wrap_measure_accumulates_children_and_gaps() {
 fn render_checked_with_engine_reuses_measure_cache_for_stable_inputs() {
     let spec = UiSpec::new(RootFrameSpec::new(
         "root",
-        panel("p", label("cached").widget_layout(LayoutBox::fixed(40, 16).max(40, 16))).pad_all(0),
+        panel("p", textbox("cached").widget_layout(LayoutBox::fixed(40, 16).max(40, 16))).pad_all(0),
     ));
 
     let mut engine = LayoutEngineState::default();
@@ -135,7 +135,7 @@ fn runtime_style_targeted_invalidation_is_narrower_than_full_invalidation() {
             weighted_slot(
                 panel(
                     "left-panel",
-                    button("left-btn", "Left").control_size(Size {
+                    button("left-btn").control_size(Size {
                         width: 80,
                         height: 24,
                     }),
@@ -146,7 +146,7 @@ fn runtime_style_targeted_invalidation_is_narrower_than_full_invalidation() {
             weighted_slot(
                 panel(
                     "right-panel",
-                    button("right-btn", "Right").control_size(Size {
+                    button("right-btn").control_size(Size {
                         width: 80,
                         height: 24,
                     }),
@@ -245,7 +245,7 @@ fn layout_subtree_invalidation_reuses_measure_cache() {
             weighted_slot(
                 panel(
                     "left-panel",
-                    button("left-btn", "Left").control_size(Size {
+                    button("left-btn").control_size(Size {
                         width: 80,
                         height: 24,
                     }),
@@ -256,7 +256,7 @@ fn layout_subtree_invalidation_reuses_measure_cache() {
             weighted_slot(
                 panel(
                     "right-panel",
-                    button("right-btn", "Right").control_size(Size {
+                    button("right-btn").control_size(Size {
                         width: 80,
                         height: 24,
                     }),
@@ -326,8 +326,8 @@ fn layout_engine_resolves_node_ids_and_supports_subtree_measure_invalidation() {
     let spec = UiSpec::new(RootFrameSpec::new(
         "root",
         row_slots(vec![
-            weighted_slot(panel("left", label("left")).pad_all(0), 1),
-            weighted_slot(panel("right", label("right")).pad_all(0), 1),
+            weighted_slot(panel("left", textbox("left")).pad_all(0), 1),
+            weighted_slot(panel("right", textbox("right")).pad_all(0), 1),
         ])
         .pad_all(0),
     ));
@@ -372,7 +372,7 @@ fn layout_engine_resolves_node_ids_and_supports_subtree_measure_invalidation() {
 
 #[test]
 fn stress_deeply_nested_panel_tree_measures_without_failure() {
-    let mut node = label("leaf");
+    let mut node = textbox("leaf");
     for index in 0..300 {
         node = panel(format!("layer-{index}"), node).pad_all(0);
     }
@@ -393,7 +393,7 @@ fn stress_large_slot_list_measures_without_gaps_or_panics() {
     let mut slots = Vec::new();
     for index in 0..1200 {
         slots.push(weighted_slot(
-            panel(format!("item-{index}"), label("x")).pad_all(0),
+            panel(format!("item-{index}"), textbox("x")).pad_all(0),
             1,
         ));
     }
@@ -416,9 +416,9 @@ fn layout_is_deterministic_across_repeated_renders_for_multiple_root_sizes() {
     let spec = UiSpec::new(root_frame_sized(
         "root",
         wrap(vec![
-            panel("a", label("A")).pad_all(0),
-            panel("b", label("B")).pad_all(0),
-            panel("c", label("C")).pad_all(0),
+            panel("a", textbox("A")).pad_all(0),
+            panel("b", textbox("B")).pad_all(0),
+            panel("c", textbox("C")).pad_all(0),
         ])
         .gap(6)
         .pad_all(4),

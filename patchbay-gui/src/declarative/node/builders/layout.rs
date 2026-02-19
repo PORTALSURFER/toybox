@@ -20,7 +20,7 @@ impl Node {
             | Self::ScrollView(_)
             | Self::Wrap(_)
             | Self::SwitchLayout(_) => {}
-            Self::Label(label) => label.layout = layout,
+            Self::TextBox(text_box) => text_box.layout = layout,
             Self::Knob(knob) => knob.layout = layout,
             Self::Slider(slider) => slider.layout = layout,
             Self::Toggle(toggle) => toggle.layout = layout,
@@ -81,7 +81,7 @@ impl Node {
             Self::SwitchLayout(switch_layout) => {
                 switch_layout.layout = switch_layout.layout.fill_width().fill_height()
             }
-            Self::Label(label) => label.layout = LayoutBox::fill(),
+            Self::TextBox(text_box) => text_box.layout = LayoutBox::fill(),
             Self::Knob(knob) => knob.layout = LayoutBox::fill(),
             Self::Slider(slider) => slider.layout = LayoutBox::fill(),
             Self::Toggle(toggle) => toggle.layout = LayoutBox::fill(),
@@ -108,7 +108,7 @@ impl Node {
             Self::SwitchLayout(switch_layout) => {
                 switch_layout.layout = switch_layout.layout.fill_width()
             }
-            Self::Label(label) => label.layout = LayoutBox::auto().fill_width(),
+            Self::TextBox(text_box) => text_box.layout = LayoutBox::auto().fill_width(),
             Self::Knob(knob) => knob.layout = LayoutBox::auto().fill_width(),
             Self::Slider(slider) => slider.layout = LayoutBox::auto().fill_width(),
             Self::Toggle(toggle) => toggle.layout = LayoutBox::auto().fill_width(),
@@ -139,7 +139,7 @@ impl Node {
             Self::SwitchLayout(switch_layout) => {
                 switch_layout.layout = switch_layout.layout.fill_height()
             }
-            Self::Label(label) => label.layout = LayoutBox::auto().fill_height(),
+            Self::TextBox(text_box) => text_box.layout = LayoutBox::auto().fill_height(),
             Self::Knob(knob) => knob.layout = LayoutBox::auto().fill_height(),
             Self::Slider(slider) => slider.layout = LayoutBox::auto().fill_height(),
             Self::Toggle(toggle) => toggle.layout = LayoutBox::auto().fill_height(),

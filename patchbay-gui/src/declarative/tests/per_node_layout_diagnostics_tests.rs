@@ -14,7 +14,7 @@ fn render_for_size(spec: &UiSpec, size: Size) -> RenderResult {
 #[test]
 fn events_only_mode_keeps_per_node_diagnostics_empty() {
     let spec = UiSpec::new(
-        RootFrameSpec::new("root", panel("main", label("x")))
+        RootFrameSpec::new("root", panel("main", textbox("x")))
             .layout(LayoutBox::fixed(200, 100).max(200, 100))
             .padding(0),
     );
@@ -34,7 +34,7 @@ fn per_node_mode_emits_deterministic_geometry_entries() {
         RootFrameSpec::new(
             "root",
             column(vec![
-                panel("header", label("Header")).pad_all(0),
+                panel("header", textbox("Header")).pad_all(0),
                 region(
                     "plot",
                     Size {
@@ -78,8 +78,8 @@ fn per_node_mode_emits_deterministic_geometry_entries() {
 #[test]
 fn switch_layout_records_case_and_fallback_reasons() {
     let content = switch_layout(
-        vec![when_width_ge(500, panel("wide", label("Wide")).fill())],
-        panel("compact", label("Compact")).fill(),
+        vec![when_width_ge(500, panel("wide", textbox("Wide")).fill())],
+        panel("compact", textbox("Compact")).fill(),
     )
     .fill();
 

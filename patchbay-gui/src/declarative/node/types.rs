@@ -48,8 +48,8 @@ pub enum Node {
     Wrap(WrapSpec),
     /// Width-based responsive switch container.
     SwitchLayout(SwitchLayoutSpec),
-    /// Label node.
-    Label(LabelSpec),
+    /// Display-only text box widget.
+    TextBox(TextBoxSpec),
     /// Spacer node.
     Spacer(SpacerSpec),
     /// Knob control.
