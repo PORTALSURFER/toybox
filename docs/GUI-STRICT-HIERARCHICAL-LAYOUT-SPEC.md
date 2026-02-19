@@ -275,6 +275,7 @@ The major structural targets are now implemented in code:
   and resolved-rect bounds across multiple root sizes
 - golden layout-rect assertions for representative flex/grid container trees
 - fail-fast maximum-tree-depth validation to prevent recursive stack-overflow aborts
+- extreme stress coverage for large slot lists, including 10k-row and 10k-scroll-content paths
 - first-class `Stack`, `ScrollView`, `Wrap`, and `SwitchLayout` container primitives
 - first-class layout engine state (`LayoutEngineState`) with deterministic measure caching
 - shared Win32 host runtime adoption of persistent `LayoutEngineState` rendering
