@@ -8,6 +8,7 @@ include!("region_and_panel_behavior.rs");
 include!("overflow_policy_and_diagnostics.rs");
 include!("containers_and_engine_tests.rs");
 include!("switch_layout_tests.rs");
+include!("single_slot_container_tests.rs");
 include!("per_node_layout_diagnostics_tests.rs");
 include!("layout_property_sweep_tests.rs");
 include!("golden_layout_rect_tests.rs");

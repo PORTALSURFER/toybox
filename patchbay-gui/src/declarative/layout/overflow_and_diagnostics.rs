@@ -115,6 +115,8 @@ fn layout_container_kind(kind: ContainerKind) -> LayoutContainerKind {
     match kind {
         ContainerKind::RootFrame => LayoutContainerKind::RootFrame,
         ContainerKind::Panel => LayoutContainerKind::Panel,
+        ContainerKind::PaddingBox => LayoutContainerKind::PaddingBox,
+        ContainerKind::AlignBox => LayoutContainerKind::AlignBox,
         ContainerKind::Flex => LayoutContainerKind::Flex,
         ContainerKind::Grid => LayoutContainerKind::Grid,
         ContainerKind::Absolute => LayoutContainerKind::Absolute,

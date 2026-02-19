@@ -48,6 +48,8 @@ fn validate_tree_depth_limit(root: &Node, max_depth: usize) -> Result<(), Declar
         match node {
             Node::Slot(slot) => stack.push((&slot.child, next_depth)),
             Node::Panel(panel) => stack.push((&panel.content, next_depth)),
+            Node::PaddingBox(padding_box) => stack.push((padding_box.content(), next_depth)),
+            Node::AlignBox(align_box) => stack.push((align_box.content(), next_depth)),
             Node::Row(flex) | Node::Column(flex) => {
                 for child in &flex.children {
                     stack.push((child, next_depth));
@@ -102,6 +104,14 @@ fn validate_node(
     match node {
         Node::Slot(slot) => validate_slot_node(slot, seen_keys),
         Node::Panel(panel) => validate_panel_node(panel, seen_keys),
+        Node::PaddingBox(padding_box) => {
+            validate_container_layout("PaddingBox", padding_box.layout.to_layout_box())?;
+            validate_node(padding_box.content(), seen_keys)
+        }
+        Node::AlignBox(align_box) => {
+            validate_container_layout("AlignBox", align_box.layout.to_layout_box())?;
+            validate_node(align_box.content(), seen_keys)
+        }
         Node::Row(flex) => {
             validate_container_layout("Row", flex.layout.to_layout_box())?;
             validate_container_children("Row", &flex.children, seen_keys)
@@ -320,6 +330,8 @@ fn is_container_node(node: &Node) -> bool {
     matches!(
         node,
         Node::Panel(_)
+            | Node::PaddingBox(_)
+            | Node::AlignBox(_)
             | Node::Row(_)
             | Node::Column(_)
             | Node::Grid(_)
@@ -352,6 +364,8 @@ fn node_kind_name(node: &Node) -> &'static str {
     match node {
         Node::Slot(_) => "Slot",
         Node::Panel(_) => "Panel",
+        Node::PaddingBox(_) => "PaddingBox",
+        Node::AlignBox(_) => "AlignBox",
         Node::Row(_) => "Row",
         Node::Column(_) => "Column",
         Node::Grid(_) => "Grid",

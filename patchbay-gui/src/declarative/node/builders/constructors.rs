@@ -9,6 +9,16 @@ impl Node {
         Self::Column(FlexSpec::column(children))
     }
 
+    /// Create a single-slot padding container.
+    pub fn padding_box(content: Node) -> Self {
+        Self::PaddingBox(PaddingBoxSpec::new(content))
+    }
+
+    /// Create a single-slot alignment container.
+    pub fn align_box(content: Node) -> Self {
+        Self::AlignBox(AlignBoxSpec::new(content))
+    }
+
     /// Create a stack container.
     pub fn stack(children: Vec<Node>) -> Self {
         Self::Stack(StackSpec::new(children))
@@ -38,6 +48,16 @@ pub fn row(children: Vec<Node>) -> Node {
 /// Create a column container node.
 pub fn column(children: Vec<Node>) -> Node {
     Node::column(children)
+}
+
+/// Create a single-slot padding container node.
+pub fn padding_box(content: Node) -> Node {
+    Node::padding_box(content)
+}
+
+/// Create a single-slot alignment container node.
+pub fn align_box(content: Node) -> Node {
+    Node::align_box(content)
 }
 
 /// Create a stack container node.

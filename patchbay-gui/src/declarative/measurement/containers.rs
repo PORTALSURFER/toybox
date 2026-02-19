@@ -3,6 +3,8 @@ fn measure_node(node: &Node, tokens: &ThemeTokens) -> Size {
     match node {
         Node::Slot(slot) => measure_node(&slot.child, tokens),
         Node::Panel(panel) => measure_panel(panel, tokens),
+        Node::PaddingBox(padding_box) => measure_padding_box(padding_box, tokens),
+        Node::AlignBox(align_box) => measure_align_box(align_box, tokens),
         Node::Row(flex) => measure_flex(flex, tokens, Axis::Horizontal),
         Node::Column(flex) => measure_flex(flex, tokens, Axis::Vertical),
         Node::Grid(grid) => measure_grid(grid, tokens),
@@ -40,6 +42,28 @@ fn measure_panel(panel: &PanelSpec, tokens: &ThemeTokens) -> Size {
             .saturating_add(header),
     };
     resolve_size(panel.layout.to_layout_box(), measured, measured)
+}
+
+/// Measure a padding-box container intrinsically.
+fn measure_padding_box(padding_box: &PaddingBoxSpec, tokens: &ThemeTokens) -> Size {
+    let content = measure_node(padding_box.content(), tokens);
+    let measured = Size {
+        width: content
+            .width
+            .saturating_add(padding_box.padding.left.max(0) as u32)
+            .saturating_add(padding_box.padding.right.max(0) as u32),
+        height: content
+            .height
+            .saturating_add(padding_box.padding.top.max(0) as u32)
+            .saturating_add(padding_box.padding.bottom.max(0) as u32),
+    };
+    resolve_size(padding_box.layout.to_layout_box(), measured, measured)
+}
+
+/// Measure an align-box container intrinsically.
+fn measure_align_box(align_box: &AlignBoxSpec, tokens: &ThemeTokens) -> Size {
+    let measured = measure_node(align_box.content(), tokens);
+    resolve_size(align_box.layout.to_layout_box(), measured, measured)
 }
 
 /// Measure a flex container intrinsically.

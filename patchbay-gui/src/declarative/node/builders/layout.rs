@@ -9,6 +9,8 @@ impl Node {
         match &mut self {
             Self::Slot(_)
             | Self::Panel(_)
+            | Self::PaddingBox(_)
+            | Self::AlignBox(_)
             | Self::Row(_)
             | Self::Column(_)
             | Self::Grid(_)
@@ -35,6 +37,8 @@ impl Node {
     pub fn container_layout(mut self, layout: ContainerLayout) -> Self {
         match &mut self {
             Self::Panel(panel) => panel.layout = layout,
+            Self::PaddingBox(padding_box) => padding_box.layout = layout,
+            Self::AlignBox(align_box) => align_box.layout = layout,
             Self::Row(flex) | Self::Column(flex) => flex.layout = layout,
             Self::Grid(grid) => grid.layout = layout,
             Self::Absolute(absolute) => absolute.layout = layout,
@@ -51,6 +55,12 @@ impl Node {
     pub fn fill(mut self) -> Self {
         match &mut self {
             Self::Panel(panel) => panel.layout = panel.layout.fill_width().fill_height(),
+            Self::PaddingBox(padding_box) => {
+                padding_box.layout = padding_box.layout.fill_width().fill_height()
+            }
+            Self::AlignBox(align_box) => {
+                align_box.layout = align_box.layout.fill_width().fill_height()
+            }
             Self::Row(flex) | Self::Column(flex) => {
                 flex.layout = flex.layout.fill_width().fill_height()
             }
@@ -81,6 +91,8 @@ impl Node {
     pub fn fill_width(mut self) -> Self {
         match &mut self {
             Self::Panel(panel) => panel.layout = panel.layout.fill_width(),
+            Self::PaddingBox(padding_box) => padding_box.layout = padding_box.layout.fill_width(),
+            Self::AlignBox(align_box) => align_box.layout = align_box.layout.fill_width(),
             Self::Row(flex) | Self::Column(flex) => flex.layout = flex.layout.fill_width(),
             Self::Grid(grid) => grid.layout = grid.layout.fill_width(),
             Self::Absolute(absolute) => absolute.layout = absolute.layout.fill_width(),
@@ -105,6 +117,10 @@ impl Node {
     pub fn fill_height(mut self) -> Self {
         match &mut self {
             Self::Panel(panel) => panel.layout = panel.layout.fill_height(),
+            Self::PaddingBox(padding_box) => {
+                padding_box.layout = padding_box.layout.fill_height()
+            }
+            Self::AlignBox(align_box) => align_box.layout = align_box.layout.fill_height(),
             Self::Row(flex) | Self::Column(flex) => flex.layout = flex.layout.fill_height(),
             Self::Grid(grid) => grid.layout = grid.layout.fill_height(),
             Self::Absolute(absolute) => absolute.layout = absolute.layout.fill_height(),
@@ -133,6 +149,10 @@ impl Node {
     pub fn container_overflow(mut self, overflow_policy: OverflowPolicy) -> Self {
         match &mut self {
             Self::Panel(panel) => panel.layout = panel.layout.overflow(overflow_policy),
+            Self::PaddingBox(padding_box) => {
+                padding_box.layout = padding_box.layout.overflow(overflow_policy)
+            }
+            Self::AlignBox(align_box) => align_box.layout = align_box.layout.overflow(overflow_policy),
             Self::Row(flex) | Self::Column(flex) => {
                 flex.layout = flex.layout.overflow(overflow_policy)
             }
@@ -189,12 +209,13 @@ impl Node {
         self
     }
 
-    /// Set uniform padding for panel/flex/grid nodes.
+    /// Set uniform padding for padding-capable container nodes.
     ///
     /// Non-container node kinds are returned unchanged.
     pub fn pad_all(mut self, value: i32) -> Self {
         match &mut self {
             Self::Panel(panel) => panel.padding = value,
+            Self::PaddingBox(padding_box) => padding_box.padding = EdgeInsets::all(value),
             Self::Row(flex) | Self::Column(flex) => flex.padding = EdgeInsets::all(value),
             Self::Grid(grid) => grid.template.padding = EdgeInsets::all(value),
             Self::Stack(stack) => stack.padding = EdgeInsets::all(value),
@@ -205,11 +226,14 @@ impl Node {
         self
     }
 
-    /// Set horizontal/vertical padding for flex/grid nodes.
+    /// Set horizontal/vertical padding for padding-capable container nodes.
     ///
     /// Panel and non-container node kinds are returned unchanged.
     pub fn pad_xy(mut self, horizontal: i32, vertical: i32) -> Self {
         match &mut self {
+            Self::PaddingBox(padding_box) => {
+                padding_box.padding = EdgeInsets::symmetric(horizontal, vertical)
+            }
             Self::Row(flex) | Self::Column(flex) => {
                 flex.padding = EdgeInsets::symmetric(horizontal, vertical)
             }
@@ -219,6 +243,24 @@ impl Node {
                 scroll_view.padding = EdgeInsets::symmetric(horizontal, vertical)
             }
             Self::Wrap(wrap) => wrap.padding = EdgeInsets::symmetric(horizontal, vertical),
+            _ => {}
+        }
+        self
+    }
+
+    /// Set slot-alignment for single-slot overlay/alignment containers.
+    ///
+    /// Applies to `AlignBox` and `Stack`; other node kinds are unchanged.
+    pub fn slot_align(mut self, align_x: SlotAlign, align_y: SlotAlign) -> Self {
+        match &mut self {
+            Self::AlignBox(align_box) => {
+                align_box.align_x = align_x;
+                align_box.align_y = align_y;
+            }
+            Self::Stack(stack) => {
+                stack.align_x = align_x;
+                stack.align_y = align_y;
+            }
             _ => {}
         }
         self

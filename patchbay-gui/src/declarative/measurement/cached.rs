@@ -68,6 +68,27 @@ fn measure_node_cached(
             };
             resolve_size(panel.layout.to_layout_box(), measured, measured)
         }
+        Node::PaddingBox(padding_box) => {
+            let child_id = engine.child_node_id(node_id, 0).unwrap_or(node_id);
+            let content =
+                measure_node_cached(padding_box.content(), child_id, tokens, token_hash, engine);
+            let measured = Size {
+                width: content
+                    .width
+                    .saturating_add(padding_box.padding.left.max(0) as u32)
+                    .saturating_add(padding_box.padding.right.max(0) as u32),
+                height: content
+                    .height
+                    .saturating_add(padding_box.padding.top.max(0) as u32)
+                    .saturating_add(padding_box.padding.bottom.max(0) as u32),
+            };
+            resolve_size(padding_box.layout.to_layout_box(), measured, measured)
+        }
+        Node::AlignBox(align_box) => {
+            let child_id = engine.child_node_id(node_id, 0).unwrap_or(node_id);
+            let measured = measure_node_cached(align_box.content(), child_id, tokens, token_hash, engine);
+            resolve_size(align_box.layout.to_layout_box(), measured, measured)
+        }
         Node::Row(flex) => measure_flex_cached(flex, node_id, tokens, token_hash, Axis::Horizontal, engine),
         Node::Column(flex) => {
             measure_flex_cached(flex, node_id, tokens, token_hash, Axis::Vertical, engine)

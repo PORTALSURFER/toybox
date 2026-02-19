@@ -5,6 +5,10 @@ enum ContainerKind {
     RootFrame,
     /// Panel container.
     Panel,
+    /// Single-slot padding container.
+    PaddingBox,
+    /// Single-slot alignment container.
+    AlignBox,
     /// Flex layout container.
     Flex,
     /// Grid layout container.
@@ -40,6 +44,8 @@ fn container_debug_border_color(kind: ContainerKind, depth: usize) -> Option<Col
         match kind {
             ContainerKind::RootFrame => None,
             ContainerKind::Panel
+            | ContainerKind::PaddingBox
+            | ContainerKind::AlignBox
             | ContainerKind::Flex
             | ContainerKind::Grid
             | ContainerKind::Absolute

@@ -9,6 +9,8 @@
 
 Container node kinds:
 - `Panel`
+- `PaddingBox`
+- `AlignBox`
 - `Row`
 - `Column`
 - `Grid`

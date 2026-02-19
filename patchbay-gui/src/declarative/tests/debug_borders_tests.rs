@@ -13,6 +13,8 @@ use crate::ui::{Layout, Theme, UiState};
         let expected = Some(Color::rgb(245, 98, 98));
         for kind in [
             ContainerKind::Panel,
+            ContainerKind::PaddingBox,
+            ContainerKind::AlignBox,
             ContainerKind::Flex,
             ContainerKind::Grid,
             ContainerKind::Absolute,

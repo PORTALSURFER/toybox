@@ -16,7 +16,7 @@ The API is strict and data-only:
 - `UiSpec` / `RootFrameSpec`: root window definition.
 - `Node`: typed tree node.
 - `SlotSpec`: single-child slot node used as the required direct child type for containers.
-- Container nodes: `Panel`, `Row`, `Column`, `Grid`, `Absolute`, `Stack`, `ScrollView`, `Wrap`, `SwitchLayout`.
+- Container nodes: `Panel`, `PaddingBox`, `AlignBox`, `Row`, `Column`, `Grid`, `Absolute`, `Stack`, `ScrollView`, `Wrap`, `SwitchLayout`.
 - Widget nodes: `Label`, `Spacer`, `Knob`, `Slider`, `Toggle`, `Button`, `Dropdown`, `Region`, `Indicator`.
 
 Canonical grammar:
@@ -28,7 +28,7 @@ Canonical grammar:
 See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 
 ## Constructors
-- Containers: `row(children)`, `column(children)`, `grid(template, children)`, `panel(key, content)`, `stack(children)`, `scroll_view(content)`, `wrap(children)`, `switch_layout(cases, fallback)`, `root_frame_sized(...)`
+- Containers: `row(children)`, `column(children)`, `grid(template, children)`, `panel(key, content)`, `padding_box(content)`, `align_box(content)`, `stack(children)`, `scroll_view(content)`, `wrap(children)`, `switch_layout(cases, fallback)`, `root_frame_sized(...)`
 - Switch cases: `when_width_lt(max, child)`, `when_width_between(min, max, child)`, `when_width_ge(min, child)`
 - Slots/helpers: `slot(child)`, `weighted_slot(node, weight)`, `fraction_slot(node, percent)`, `fill_slot(node)`, `column_slots(...)`, `row_slots(...)`, `SlotParams`, `SlotMainSize`, `SlotCrossSize`
 - Widgets: `label`, `knob`, `slider`, `toggle`, `button`, `dropdown`, `region`, `indicator`, `spacer`, `surface`
@@ -41,6 +41,7 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
   - containers: `.layout(ContainerLayout::...)`, `.overflow(OverflowPolicy::...)`, `.container_layout(...)`, `.container_overflow(...)`, `.fill()`, `.fill_width()`, `.fill_height()`
   - widgets: `.widget_layout(LayoutBox::...)`, `.fill()`, `.fill_width()`, `.fill_height()`
 - Spacing: `.gap(...)`, `.gap_xy(...)`, `.pad_all(...)`, `.pad_xy(...)`
+- Slot alignment for single-slot containers: `.slot_align(SlotAlign::..., SlotAlign::...)`
 - Flex alignment: `.align_*()`, `.justify_*()`
 - Panel styling: `.title(...)`, `.background(...)`, `.outline(...)`
 - Widget tuning: `.control_size(...)`, `.value_label(...)`, `.selected(...)`
@@ -77,7 +78,7 @@ uses keyed subtree invalidation after reducer-applied UI actions:
 
 ## Layout Migration Notes
 Container and widget layout APIs are now explicitly separated:
-- Use `ContainerLayout` for `Panel` / `Row` / `Column` / `Grid` / `Absolute`.
+- Use `ContainerLayout` for `Panel` / `PaddingBox` / `AlignBox` / `Row` / `Column` / `Grid` / `Absolute` / `Stack` / `ScrollView` / `Wrap` / `SwitchLayout`.
 - Use `LayoutBox` only for widget sizing and root frame sizing.
 
 Before:

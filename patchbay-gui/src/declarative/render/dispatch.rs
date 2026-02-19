@@ -111,6 +111,8 @@ fn node_layout_kind(node: &Node) -> LayoutNodeKind {
     match node {
         Node::Slot(_) => LayoutNodeKind::Slot,
         Node::Panel(_) => LayoutNodeKind::Panel,
+        Node::PaddingBox(_) => LayoutNodeKind::PaddingBox,
+        Node::AlignBox(_) => LayoutNodeKind::AlignBox,
         Node::Row(_) => LayoutNodeKind::Row,
         Node::Column(_) => LayoutNodeKind::Column,
         Node::Grid(_) => LayoutNodeKind::Grid,
@@ -135,6 +137,8 @@ fn node_layout_kind(node: &Node) -> LayoutNodeKind {
 fn node_container_kind(node: &Node) -> Option<LayoutContainerKind> {
     Some(match node {
         Node::Panel(_) => LayoutContainerKind::Panel,
+        Node::PaddingBox(_) => LayoutContainerKind::PaddingBox,
+        Node::AlignBox(_) => LayoutContainerKind::AlignBox,
         Node::Row(_) | Node::Column(_) => LayoutContainerKind::Flex,
         Node::Grid(_) => LayoutContainerKind::Grid,
         Node::Absolute(_) => LayoutContainerKind::Absolute,
@@ -151,6 +155,8 @@ fn node_path_segment(node: &Node, sequence: usize) -> String {
     let base = match node {
         Node::Slot(_) => "slot".to_string(),
         Node::Panel(panel) => format!("panel:{}", sanitize_path_segment(&panel.key)),
+        Node::PaddingBox(_) => "padding-box".to_string(),
+        Node::AlignBox(_) => "align-box".to_string(),
         Node::Row(_) => "row".to_string(),
         Node::Column(_) => "column".to_string(),
         Node::Grid(_) => "grid".to_string(),
@@ -193,6 +199,8 @@ fn render_node(node: &Node, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx<'_>
     ui.with_clip(rect, |ui| match node {
         Node::Slot(slot) => render_node(&slot.child, rect, ui, ctx),
         Node::Panel(panel) => render_panel(panel, rect, ui, ctx),
+        Node::PaddingBox(padding_box) => render_padding_box(padding_box, rect, ui, ctx),
+        Node::AlignBox(align_box) => render_align_box(align_box, rect, ui, ctx),
         Node::Row(flex) => render_flex(flex, rect, ui, Axis::Horizontal, ctx),
         Node::Column(flex) => render_flex(flex, rect, ui, Axis::Vertical, ctx),
         Node::Grid(grid) => render_grid(grid, rect, ui, ctx),

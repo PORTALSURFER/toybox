@@ -26,6 +26,10 @@ pub enum Node {
     Slot(SlotSpec),
     /// Panel container.
     Panel(PanelSpec),
+    /// Single-slot padding container.
+    PaddingBox(PaddingBoxSpec),
+    /// Single-slot alignment container.
+    AlignBox(AlignBoxSpec),
     /// Horizontal flex container.
     Row(FlexSpec),
     /// Vertical flex container.

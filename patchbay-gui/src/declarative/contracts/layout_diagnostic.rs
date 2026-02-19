@@ -5,6 +5,10 @@ pub enum LayoutContainerKind {
     RootFrame,
     /// Panel container.
     Panel,
+    /// Single-slot padding container.
+    PaddingBox,
+    /// Single-slot alignment container.
+    AlignBox,
     /// Flex container (`Row`/`Column`).
     Flex,
     /// Grid container.
@@ -79,6 +83,10 @@ pub enum LayoutNodeKind {
     Slot,
     /// Panel container.
     Panel,
+    /// Single-slot padding container.
+    PaddingBox,
+    /// Single-slot alignment container.
+    AlignBox,
     /// Row container.
     Row,
     /// Column container.

@@ -290,6 +290,16 @@ impl LayoutEngineState {
             Node::Panel(panel) => {
                 self.walk_node(&panel.content, node_id, format!("{path}/panel-content[0]"));
             }
+            Node::PaddingBox(padding_box) => {
+                self.walk_node(
+                    padding_box.content(),
+                    node_id,
+                    format!("{path}/padding-content[0]"),
+                );
+            }
+            Node::AlignBox(align_box) => {
+                self.walk_node(align_box.content(), node_id, format!("{path}/align-content[0]"));
+            }
             Node::Row(flex) | Node::Column(flex) => {
                 for (index, child) in flex.children.iter().enumerate() {
                     self.walk_node(child, node_id, format!("{path}/flex-child[{index}]"));
