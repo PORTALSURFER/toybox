@@ -112,6 +112,45 @@ fn rejects_zero_control_size() {
 }
 
 #[test]
+fn rejects_inverted_label_layout_bounds() {
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        panel(
+            "panel",
+            label("bad-layout").widget_layout(LayoutBox::auto().min(100, 8).max(20, 40)),
+        ),
+    ));
+    let error = measure_checked(&spec).expect_err("expected invalid label layout bounds");
+    assert!(matches!(
+        error,
+        DeclarativeError::InvalidLayoutBounds {
+            node_kind,
+            axis,
+            min,
+            max
+        } if node_kind == "Label" && axis == "width" && min == 100 && max == 20
+    ));
+}
+
+#[test]
+fn rejects_inverted_root_layout_bounds() {
+    let spec = UiSpec::new(
+        RootFrameSpec::new("root", panel("panel", label("x")))
+            .layout(LayoutBox::auto().min(320, 120).max(200, 160)),
+    );
+    let error = measure_checked(&spec).expect_err("expected invalid root layout bounds");
+    assert!(matches!(
+        error,
+        DeclarativeError::InvalidLayoutBounds {
+            node_kind,
+            axis,
+            min,
+            max
+        } if node_kind == "RootFrame" && axis == "width" && min == 320 && max == 200
+    ));
+}
+
+#[test]
 fn rejects_non_slot_root_content() {
     let spec = UiSpec::new(RootFrameSpec {
         key: "root".to_string(),

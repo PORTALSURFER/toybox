@@ -281,7 +281,7 @@ The major structural targets are now implemented in code:
 - first-class single-slot `AspectBox` container primitive
 - first-class layout engine state (`LayoutEngineState`) with deterministic measure caching
 - key-scoped `NodeId` identities for keyed nodes (stable through sibling reindexing)
-- runtime diagnostics for invalid min/max normalization (`LayoutDiagnosticCode::ConstraintNormalized`)
+- hard-fail validation for invalid root/widget layout bounds (`min > max`)
 - shared Win32 host runtime adoption of persistent `LayoutEngineState` rendering
 - stress coverage for deep nesting and large slot lists
 

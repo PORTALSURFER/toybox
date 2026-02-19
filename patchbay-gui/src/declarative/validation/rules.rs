@@ -49,6 +49,35 @@ fn validate_container_layout(
     Ok(())
 }
 
+/// Validate min/max ordering for widget/root layout boxes.
+fn validate_layout_bounds(
+    node_kind: &'static str,
+    layout: LayoutBox,
+) -> Result<(), DeclarativeError> {
+    validate_axis_bounds(node_kind, "width", layout.min_width, layout.max_width)?;
+    validate_axis_bounds(node_kind, "height", layout.min_height, layout.max_height)
+}
+
+/// Validate one axis min/max ordering.
+fn validate_axis_bounds(
+    node_kind: &'static str,
+    axis: &'static str,
+    min: Option<u32>,
+    max: Option<u32>,
+) -> Result<(), DeclarativeError> {
+    if let (Some(min), Some(max)) = (min, max)
+        && min > max
+    {
+        return Err(DeclarativeError::InvalidLayoutBounds {
+            node_kind,
+            axis,
+            min,
+            max,
+        });
+    }
+    Ok(())
+}
+
 /// Validate aspect-box ratio components.
 fn validate_aspect_ratio(aspect_ratio: AspectRatio) -> Result<(), DeclarativeError> {
     if aspect_ratio.width == 0 || aspect_ratio.height == 0 {

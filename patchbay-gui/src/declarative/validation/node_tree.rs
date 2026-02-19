@@ -1,6 +1,5 @@
 /// Hard depth cap used to fail fast before recursive measure/render traversal.
 const MAX_DECLARATIVE_TREE_DEPTH: usize = 700;
-
 /// Validate the top-level UI specification.
 fn validate_spec(spec: &UiSpec) -> Result<(), DeclarativeError> {
     if spec.root.key.trim().is_empty() {
@@ -8,6 +7,7 @@ fn validate_spec(spec: &UiSpec) -> Result<(), DeclarativeError> {
             node_kind: "RootFrame",
         });
     }
+    validate_layout_bounds("RootFrame", spec.root.layout)?;
     let mut seen = std::collections::HashSet::new();
     validate_unique_key(&spec.root.key, &mut seen)?;
     validate_root_slot(&spec.root.content, &mut seen)
@@ -43,7 +43,6 @@ fn validate_tree_depth_limit(root: &Node, max_depth: usize) -> Result<(), Declar
                 node_kind: node_kind_name(node),
             });
         }
-
         let next_depth = depth.saturating_add(1);
         match node {
             Node::Slot(slot) => stack.push((&slot.child, next_depth)),
@@ -96,7 +95,6 @@ fn validate_tree_depth_limit(root: &Node, max_depth: usize) -> Result<(), Declar
     }
     Ok(())
 }
-
 /// Validate a node subtree.
 fn validate_node(
     node: &Node,
@@ -141,7 +139,8 @@ fn validate_node(
             validate_container_children("Wrap", &wrap.children, seen_keys)
         }
         Node::SwitchLayout(switch_layout) => validate_switch_layout_node(switch_layout, seen_keys),
-        Node::Label(_) | Node::Spacer(_) | Node::Indicator(_) => Ok(()),
+        Node::Label(label) => validate_layout_bounds("Label", label.layout),
+        Node::Spacer(_) | Node::Indicator(_) => Ok(()),
         Node::Knob(knob) => validate_knob_node(knob, seen_keys),
         Node::Slider(slider) => validate_slider_node(slider, seen_keys),
         Node::Toggle(toggle) => validate_toggle_node(toggle, seen_keys),
@@ -264,6 +263,7 @@ fn validate_knob_node(
     validate_non_empty_key(&knob.key, "Knob")?;
     validate_unique_key(&knob.key, seen_keys)?;
     validate_value_range("Knob", &knob.key, knob.range)?;
+    validate_layout_bounds("Knob", knob.layout)?;
     validate_control_value("Knob", &knob.key, knob.value, knob.range)
 }
 
@@ -275,6 +275,7 @@ fn validate_slider_node(
     validate_non_empty_key(&slider.key, "Slider")?;
     validate_unique_key(&slider.key, seen_keys)?;
     validate_value_range("Slider", &slider.key, slider.range)?;
+    validate_layout_bounds("Slider", slider.layout)?;
     validate_control_value("Slider", &slider.key, slider.value, slider.range)?;
     validate_optional_control_size("Slider", &slider.key, slider.control_size)
 }
@@ -286,6 +287,7 @@ fn validate_toggle_node(
 ) -> Result<(), DeclarativeError> {
     validate_non_empty_key(&toggle.key, "Toggle")?;
     validate_unique_key(&toggle.key, seen_keys)?;
+    validate_layout_bounds("Toggle", toggle.layout)?;
     validate_optional_control_size("Toggle", &toggle.key, toggle.control_size)
 }
 
@@ -296,6 +298,7 @@ fn validate_button_node(
 ) -> Result<(), DeclarativeError> {
     validate_non_empty_key(&button.key, "Button")?;
     validate_unique_key(&button.key, seen_keys)?;
+    validate_layout_bounds("Button", button.layout)?;
     validate_optional_control_size("Button", &button.key, button.control_size)
 }
 
@@ -306,6 +309,7 @@ fn validate_dropdown_node(
 ) -> Result<(), DeclarativeError> {
     validate_non_empty_key(&dropdown.key, "Dropdown")?;
     validate_unique_key(&dropdown.key, seen_keys)?;
+    validate_layout_bounds("Dropdown", dropdown.layout)?;
     validate_dropdown_selection(dropdown)?;
     validate_optional_control_size("Dropdown", &dropdown.key, dropdown.control_size)
 }

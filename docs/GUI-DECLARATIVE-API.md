@@ -57,12 +57,12 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 - slots must contain a non-slot child
 - slot percentages must satisfy deterministic total/fill constraints
 - non-root containers must use host-derived `Auto`/`Fill` sizing only (no pixel/min/max constraints)
+- root and widget layout bounds must satisfy `min <= max` on both axes
 - widget semantic checks (ranges, selected index, control size, key uniqueness)
 
 `RenderResult` includes:
 - `layout_diagnostics` with stable messages and typed `LayoutDiagnosticCode` values
 - `overflow` (`LayoutOverflowSummary`) with deterministic `clipped` / `compressed` / `skipped` / `total` counters
-- constraint-normalization diagnostics (`LayoutDiagnosticCode::ConstraintNormalized`) when invalid min/max bounds are normalized
 - structural-gap diagnostics (`LayoutDiagnosticCode::StructuralGapDetected`) when invalidation APIs target missing `NodeId`s
 For detailed per-node geometry diagnostics, set `RootFrameSpec::layout_diagnostics_mode(LayoutDiagnosticsMode::PerNode)` and read `RenderResult.node_layout_diagnostics`.
 

@@ -119,6 +119,20 @@ pub enum DeclarativeError {
         /// Concrete container node kind.
         container_kind: &'static str,
     },
+    /// A layout box uses inverted axis bounds (`min > max`).
+    #[error(
+        "declarative node `{node_kind}` has invalid {axis} bounds: min {min} exceeds max {max}"
+    )]
+    InvalidLayoutBounds {
+        /// Concrete node variant that failed validation.
+        node_kind: &'static str,
+        /// Axis with invalid bounds.
+        axis: &'static str,
+        /// Invalid minimum bound.
+        min: u32,
+        /// Invalid maximum bound.
+        max: u32,
+    },
     /// Aspect-box ratio has invalid zero-valued components.
     #[error(
         "aspect-box ratio must use non-zero components (got width={width}, height={height})"
