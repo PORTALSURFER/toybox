@@ -119,6 +119,16 @@ pub enum DeclarativeError {
         /// Concrete container node kind.
         container_kind: &'static str,
     },
+    /// Aspect-box ratio has invalid zero-valued components.
+    #[error(
+        "aspect-box ratio must use non-zero components (got width={width}, height={height})"
+    )]
+    InvalidAspectRatio {
+        /// Invalid horizontal ratio component.
+        width: u32,
+        /// Invalid vertical ratio component.
+        height: u32,
+    },
     /// A switch-layout case has invalid min/max bounds.
     #[error(
         "switch-layout case {case_index} has invalid bounds min={min_inclusive:?}, max={max_exclusive:?} (require min < max when both are present)"

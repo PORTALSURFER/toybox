@@ -33,6 +33,22 @@ fn rejects_invalid_slider_range() {
 }
 
 #[test]
+fn rejects_zero_aspect_ratio_components() {
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        aspect_box(
+            panel("panel", label("x")),
+            AspectRatio::new(0, 1),
+        ),
+    ));
+    let error = measure_checked(&spec).expect_err("expected invalid aspect ratio");
+    assert!(matches!(
+        error,
+        DeclarativeError::InvalidAspectRatio { width, height } if width == 0 && height == 1
+    ));
+}
+
+#[test]
 fn rejects_out_of_range_control_value() {
     let spec = UiSpec::new(RootFrameSpec::new(
         "root",

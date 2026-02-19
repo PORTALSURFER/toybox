@@ -9,6 +9,8 @@ enum ContainerKind {
     PaddingBox,
     /// Single-slot alignment container.
     AlignBox,
+    /// Single-slot aspect-ratio container.
+    AspectBox,
     /// Flex layout container.
     Flex,
     /// Grid layout container.
@@ -46,6 +48,7 @@ fn container_debug_border_color(kind: ContainerKind, depth: usize) -> Option<Col
             ContainerKind::Panel
             | ContainerKind::PaddingBox
             | ContainerKind::AlignBox
+            | ContainerKind::AspectBox
             | ContainerKind::Flex
             | ContainerKind::Grid
             | ContainerKind::Absolute

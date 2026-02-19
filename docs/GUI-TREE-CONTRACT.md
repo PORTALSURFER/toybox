@@ -11,6 +11,7 @@ Container node kinds:
 - `Panel`
 - `PaddingBox`
 - `AlignBox`
+- `AspectBox`
 - `Row`
 - `Column`
 - `Grid`

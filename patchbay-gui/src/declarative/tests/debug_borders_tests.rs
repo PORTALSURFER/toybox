@@ -15,6 +15,7 @@ use crate::ui::{Layout, Theme, UiState};
             ContainerKind::Panel,
             ContainerKind::PaddingBox,
             ContainerKind::AlignBox,
+            ContainerKind::AspectBox,
             ContainerKind::Flex,
             ContainerKind::Grid,
             ContainerKind::Absolute,

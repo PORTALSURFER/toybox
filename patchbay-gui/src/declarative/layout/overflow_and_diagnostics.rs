@@ -117,6 +117,7 @@ fn layout_container_kind(kind: ContainerKind) -> LayoutContainerKind {
         ContainerKind::Panel => LayoutContainerKind::Panel,
         ContainerKind::PaddingBox => LayoutContainerKind::PaddingBox,
         ContainerKind::AlignBox => LayoutContainerKind::AlignBox,
+        ContainerKind::AspectBox => LayoutContainerKind::AspectBox,
         ContainerKind::Flex => LayoutContainerKind::Flex,
         ContainerKind::Grid => LayoutContainerKind::Grid,
         ContainerKind::Absolute => LayoutContainerKind::Absolute,

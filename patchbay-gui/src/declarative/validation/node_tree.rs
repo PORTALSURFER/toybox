@@ -50,6 +50,7 @@ fn validate_tree_depth_limit(root: &Node, max_depth: usize) -> Result<(), Declar
             Node::Panel(panel) => stack.push((&panel.content, next_depth)),
             Node::PaddingBox(padding_box) => stack.push((padding_box.content(), next_depth)),
             Node::AlignBox(align_box) => stack.push((align_box.content(), next_depth)),
+            Node::AspectBox(aspect_box) => stack.push((aspect_box.content(), next_depth)),
             Node::Row(flex) | Node::Column(flex) => {
                 for child in &flex.children {
                     stack.push((child, next_depth));
@@ -111,6 +112,11 @@ fn validate_node(
         Node::AlignBox(align_box) => {
             validate_container_layout("AlignBox", align_box.layout.to_layout_box())?;
             validate_node(align_box.content(), seen_keys)
+        }
+        Node::AspectBox(aspect_box) => {
+            validate_container_layout("AspectBox", aspect_box.layout.to_layout_box())?;
+            validate_aspect_ratio(aspect_box.aspect_ratio)?;
+            validate_node(aspect_box.content(), seen_keys)
         }
         Node::Row(flex) => {
             validate_container_layout("Row", flex.layout.to_layout_box())?;
@@ -332,6 +338,7 @@ fn is_container_node(node: &Node) -> bool {
         Node::Panel(_)
             | Node::PaddingBox(_)
             | Node::AlignBox(_)
+            | Node::AspectBox(_)
             | Node::Row(_)
             | Node::Column(_)
             | Node::Grid(_)
@@ -366,6 +373,7 @@ fn node_kind_name(node: &Node) -> &'static str {
         Node::Panel(_) => "Panel",
         Node::PaddingBox(_) => "PaddingBox",
         Node::AlignBox(_) => "AlignBox",
+        Node::AspectBox(_) => "AspectBox",
         Node::Row(_) => "Row",
         Node::Column(_) => "Column",
         Node::Grid(_) => "Grid",

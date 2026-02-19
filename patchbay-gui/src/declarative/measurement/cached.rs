@@ -89,6 +89,13 @@ fn measure_node_cached(
             let measured = measure_node_cached(align_box.content(), child_id, tokens, token_hash, engine);
             resolve_size(align_box.layout.to_layout_box(), measured, measured)
         }
+        Node::AspectBox(aspect_box) => {
+            let child_id = engine.child_node_id(node_id, 0).unwrap_or(node_id);
+            let content =
+                measure_node_cached(aspect_box.content(), child_id, tokens, token_hash, engine);
+            let measured = expand_size_to_aspect_containing_cached(content, aspect_box.aspect_ratio);
+            resolve_size(aspect_box.layout.to_layout_box(), measured, measured)
+        }
         Node::Row(flex) => measure_flex_cached(flex, node_id, tokens, token_hash, Axis::Horizontal, engine),
         Node::Column(flex) => {
             measure_flex_cached(flex, node_id, tokens, token_hash, Axis::Vertical, engine)
@@ -285,4 +292,44 @@ fn measure_grid_cached(
         Size { width, height },
         Size { width, height },
     )
+}
+
+/// Expand one size to satisfy an aspect ratio while containing original bounds.
+fn expand_size_to_aspect_containing_cached(size: Size, aspect_ratio: AspectRatio) -> Size {
+    if aspect_ratio.width == 0 || aspect_ratio.height == 0 {
+        return size;
+    }
+    let lhs = u64::from(size.width).saturating_mul(u64::from(aspect_ratio.height));
+    let rhs = u64::from(size.height).saturating_mul(u64::from(aspect_ratio.width));
+    if lhs >= rhs {
+        let height = ceil_div_u64_cached(
+            u64::from(size.width).saturating_mul(u64::from(aspect_ratio.height)),
+            u64::from(aspect_ratio.width),
+        )
+        .min(u64::from(u32::MAX)) as u32;
+        Size {
+            width: size.width,
+            height,
+        }
+    } else {
+        let width = ceil_div_u64_cached(
+            u64::from(size.height).saturating_mul(u64::from(aspect_ratio.width)),
+            u64::from(aspect_ratio.height),
+        )
+        .min(u64::from(u32::MAX)) as u32;
+        Size {
+            width,
+            height: size.height,
+        }
+    }
+}
+
+/// Divide integers with rounding up.
+fn ceil_div_u64_cached(value: u64, divisor: u64) -> u64 {
+    if divisor == 0 {
+        return value;
+    }
+    value
+        .saturating_add(divisor.saturating_sub(1))
+        .saturating_div(divisor)
 }

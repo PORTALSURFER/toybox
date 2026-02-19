@@ -29,21 +29,22 @@ mod win32;
 
 pub use crate::canvas::{Canvas, Color, Point, Rect, Size};
 pub use crate::declarative::{
-    Align, AlignBoxSpec, ButtonSpec, ColorTokens, ContainerLayout, ContainerLength, ControlTokens,
-    DeclarativeError, DropdownSpec, EdgeInsets, FlexSpec, GridKind, GridSpec, GridTemplate,
-    IndicatorSpec, Justify, KnobSpec, LabelSpec, LayoutBox, LayoutContainerKind, LayoutDiagnostic,
-    LayoutDiagnosticCode, LayoutDiagnosticLevel, LayoutDiagnosticsMode, LayoutEngineState,
-    LayoutNodeDiagnostic, LayoutNodeDiagnosticReason, LayoutNodeKind, LayoutOverflowSummary,
-    Length, MeasureCacheKey, MeasureCacheStats, Node, NodeId, OverflowPolicy, PaddingBoxSpec,
-    PanelSpec, RegionInteractionKind, RenderResult, RootFrameSpec, RootScaleMode, ScrollViewSpec,
-    SliderSpec, Slot, SlotAlign, SlotCrossSize, SlotMainSize, SlotParams, SlotSpec, SpacingTokens,
-    StackSpec, SurfaceCommand, SwitchCase, SwitchLayoutSpec, SwitchWidthRange, ThemeTokens,
-    ToggleSpec, TrackSize, TypographyTokens, UiAction, UiInvalidationScope, UiSpec, WeightedSlot,
-    WrapSpec, align_box, button, column, column_slots, dropdown, fill_slot, fraction_slot, grid,
-    indicator, knob, label, measure_checked, padding_box, panel, region, render_checked,
-    render_checked_with_engine, root_frame_sized, row, row_slots, scroll_view, slider, slot,
-    spacer, stack, surface, switch_layout, toggle, weighted_slot, weighted_slot_lengths,
-    when_width_between, when_width_ge, when_width_lt, wrap,
+    Align, AlignBoxSpec, AspectBoxSpec, AspectRatio, ButtonSpec, ColorTokens, ContainerLayout,
+    ContainerLength, ControlTokens, DeclarativeError, DropdownSpec, EdgeInsets, FlexSpec, GridKind,
+    GridSpec, GridTemplate, IndicatorSpec, Justify, KnobSpec, LabelSpec, LayoutBox,
+    LayoutContainerKind, LayoutDiagnostic, LayoutDiagnosticCode, LayoutDiagnosticLevel,
+    LayoutDiagnosticsMode, LayoutEngineState, LayoutNodeDiagnostic, LayoutNodeDiagnosticReason,
+    LayoutNodeKind, LayoutOverflowSummary, Length, MeasureCacheKey, MeasureCacheStats, Node,
+    NodeId, OverflowPolicy, PaddingBoxSpec, PanelSpec, RegionInteractionKind, RenderResult,
+    RootFrameSpec, RootScaleMode, ScrollViewSpec, SliderSpec, Slot, SlotAlign, SlotCrossSize,
+    SlotMainSize, SlotParams, SlotSpec, SpacingTokens, StackSpec, SurfaceCommand, SwitchCase,
+    SwitchLayoutSpec, SwitchWidthRange, ThemeTokens, ToggleSpec, TrackSize, TypographyTokens,
+    UiAction, UiInvalidationScope, UiSpec, WeightedSlot, WrapSpec, align_box, aspect_box, button,
+    column, column_slots, dropdown, fill_slot, fraction_slot, grid, indicator, knob, label,
+    measure_checked, padding_box, panel, region, render_checked, render_checked_with_engine,
+    root_frame_sized, row, row_slots, scroll_view, slider, slot, spacer, stack, surface,
+    switch_layout, toggle, weighted_slot, weighted_slot_lengths, when_width_between, when_width_ge,
+    when_width_lt, wrap,
 };
 #[cfg(not(target_os = "windows"))]
 pub use crate::host::WindowHandle;

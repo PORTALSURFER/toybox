@@ -49,6 +49,17 @@ fn validate_container_layout(
     Ok(())
 }
 
+/// Validate aspect-box ratio components.
+fn validate_aspect_ratio(aspect_ratio: AspectRatio) -> Result<(), DeclarativeError> {
+    if aspect_ratio.width == 0 || aspect_ratio.height == 0 {
+        return Err(DeclarativeError::InvalidAspectRatio {
+            width: aspect_ratio.width,
+            height: aspect_ratio.height,
+        });
+    }
+    Ok(())
+}
+
 /// Validate that a key is non-empty.
 fn validate_non_empty_key(key: &str, node_kind: &'static str) -> Result<(), DeclarativeError> {
     if key.trim().is_empty() {

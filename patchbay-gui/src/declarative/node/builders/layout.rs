@@ -11,6 +11,7 @@ impl Node {
             | Self::Panel(_)
             | Self::PaddingBox(_)
             | Self::AlignBox(_)
+            | Self::AspectBox(_)
             | Self::Row(_)
             | Self::Column(_)
             | Self::Grid(_)
@@ -39,6 +40,7 @@ impl Node {
             Self::Panel(panel) => panel.layout = layout,
             Self::PaddingBox(padding_box) => padding_box.layout = layout,
             Self::AlignBox(align_box) => align_box.layout = layout,
+            Self::AspectBox(aspect_box) => aspect_box.layout = layout,
             Self::Row(flex) | Self::Column(flex) => flex.layout = layout,
             Self::Grid(grid) => grid.layout = layout,
             Self::Absolute(absolute) => absolute.layout = layout,
@@ -60,6 +62,9 @@ impl Node {
             }
             Self::AlignBox(align_box) => {
                 align_box.layout = align_box.layout.fill_width().fill_height()
+            }
+            Self::AspectBox(aspect_box) => {
+                aspect_box.layout = aspect_box.layout.fill_width().fill_height()
             }
             Self::Row(flex) | Self::Column(flex) => {
                 flex.layout = flex.layout.fill_width().fill_height()
@@ -93,6 +98,7 @@ impl Node {
             Self::Panel(panel) => panel.layout = panel.layout.fill_width(),
             Self::PaddingBox(padding_box) => padding_box.layout = padding_box.layout.fill_width(),
             Self::AlignBox(align_box) => align_box.layout = align_box.layout.fill_width(),
+            Self::AspectBox(aspect_box) => aspect_box.layout = aspect_box.layout.fill_width(),
             Self::Row(flex) | Self::Column(flex) => flex.layout = flex.layout.fill_width(),
             Self::Grid(grid) => grid.layout = grid.layout.fill_width(),
             Self::Absolute(absolute) => absolute.layout = absolute.layout.fill_width(),
@@ -121,6 +127,7 @@ impl Node {
                 padding_box.layout = padding_box.layout.fill_height()
             }
             Self::AlignBox(align_box) => align_box.layout = align_box.layout.fill_height(),
+            Self::AspectBox(aspect_box) => aspect_box.layout = aspect_box.layout.fill_height(),
             Self::Row(flex) | Self::Column(flex) => flex.layout = flex.layout.fill_height(),
             Self::Grid(grid) => grid.layout = grid.layout.fill_height(),
             Self::Absolute(absolute) => absolute.layout = absolute.layout.fill_height(),
@@ -153,6 +160,9 @@ impl Node {
                 padding_box.layout = padding_box.layout.overflow(overflow_policy)
             }
             Self::AlignBox(align_box) => align_box.layout = align_box.layout.overflow(overflow_policy),
+            Self::AspectBox(aspect_box) => {
+                aspect_box.layout = aspect_box.layout.overflow(overflow_policy)
+            }
             Self::Row(flex) | Self::Column(flex) => {
                 flex.layout = flex.layout.overflow(overflow_policy)
             }
@@ -250,18 +260,32 @@ impl Node {
 
     /// Set slot-alignment for single-slot overlay/alignment containers.
     ///
-    /// Applies to `AlignBox` and `Stack`; other node kinds are unchanged.
+    /// Applies to `AlignBox`, `AspectBox`, and `Stack`; other node kinds are unchanged.
     pub fn slot_align(mut self, align_x: SlotAlign, align_y: SlotAlign) -> Self {
         match &mut self {
             Self::AlignBox(align_box) => {
                 align_box.align_x = align_x;
                 align_box.align_y = align_y;
             }
+            Self::AspectBox(aspect_box) => {
+                aspect_box.align_x = align_x;
+                aspect_box.align_y = align_y;
+            }
             Self::Stack(stack) => {
                 stack.align_x = align_x;
                 stack.align_y = align_y;
             }
             _ => {}
+        }
+        self
+    }
+
+    /// Set aspect-ratio components for `AspectBox` nodes.
+    ///
+    /// Non-`AspectBox` node kinds are returned unchanged.
+    pub fn aspect_ratio(mut self, width: u32, height: u32) -> Self {
+        if let Self::AspectBox(aspect_box) = &mut self {
+            aspect_box.aspect_ratio = AspectRatio::new(width, height);
         }
         self
     }

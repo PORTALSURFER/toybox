@@ -30,6 +30,8 @@ pub enum Node {
     PaddingBox(PaddingBoxSpec),
     /// Single-slot alignment container.
     AlignBox(AlignBoxSpec),
+    /// Single-slot aspect-ratio container.
+    AspectBox(AspectBoxSpec),
     /// Horizontal flex container.
     Row(FlexSpec),
     /// Vertical flex container.

@@ -19,6 +19,11 @@ impl Node {
         Self::AlignBox(AlignBoxSpec::new(content))
     }
 
+    /// Create a single-slot aspect-ratio container.
+    pub fn aspect_box(content: Node, aspect_ratio: AspectRatio) -> Self {
+        Self::AspectBox(AspectBoxSpec::new(content, aspect_ratio))
+    }
+
     /// Create a stack container.
     pub fn stack(children: Vec<Node>) -> Self {
         Self::Stack(StackSpec::new(children))
@@ -58,6 +63,11 @@ pub fn padding_box(content: Node) -> Node {
 /// Create a single-slot alignment container node.
 pub fn align_box(content: Node) -> Node {
     Node::align_box(content)
+}
+
+/// Create a single-slot aspect-ratio container node.
+pub fn aspect_box(content: Node, aspect_ratio: AspectRatio) -> Node {
+    Node::aspect_box(content, aspect_ratio)
 }
 
 /// Create a stack container node.

@@ -9,6 +9,8 @@ pub enum LayoutContainerKind {
     PaddingBox,
     /// Single-slot alignment container.
     AlignBox,
+    /// Single-slot aspect-ratio container.
+    AspectBox,
     /// Flex container (`Row`/`Column`).
     Flex,
     /// Grid container.
@@ -87,6 +89,8 @@ pub enum LayoutNodeKind {
     PaddingBox,
     /// Single-slot alignment container.
     AlignBox,
+    /// Single-slot aspect-ratio container.
+    AspectBox,
     /// Row container.
     Row,
     /// Column container.

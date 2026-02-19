@@ -300,6 +300,13 @@ impl LayoutEngineState {
             Node::AlignBox(align_box) => {
                 self.walk_node(align_box.content(), node_id, format!("{path}/align-content[0]"));
             }
+            Node::AspectBox(aspect_box) => {
+                self.walk_node(
+                    aspect_box.content(),
+                    node_id,
+                    format!("{path}/aspect-content[0]"),
+                );
+            }
             Node::Row(flex) | Node::Column(flex) => {
                 for (index, child) in flex.children.iter().enumerate() {
                     self.walk_node(child, node_id, format!("{path}/flex-child[{index}]"));

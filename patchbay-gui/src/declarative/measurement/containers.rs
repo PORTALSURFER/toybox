@@ -5,6 +5,7 @@ fn measure_node(node: &Node, tokens: &ThemeTokens) -> Size {
         Node::Panel(panel) => measure_panel(panel, tokens),
         Node::PaddingBox(padding_box) => measure_padding_box(padding_box, tokens),
         Node::AlignBox(align_box) => measure_align_box(align_box, tokens),
+        Node::AspectBox(aspect_box) => measure_aspect_box(aspect_box, tokens),
         Node::Row(flex) => measure_flex(flex, tokens, Axis::Horizontal),
         Node::Column(flex) => measure_flex(flex, tokens, Axis::Vertical),
         Node::Grid(grid) => measure_grid(grid, tokens),
@@ -64,6 +65,13 @@ fn measure_padding_box(padding_box: &PaddingBoxSpec, tokens: &ThemeTokens) -> Si
 fn measure_align_box(align_box: &AlignBoxSpec, tokens: &ThemeTokens) -> Size {
     let measured = measure_node(align_box.content(), tokens);
     resolve_size(align_box.layout.to_layout_box(), measured, measured)
+}
+
+/// Measure an aspect-box container intrinsically.
+fn measure_aspect_box(aspect_box: &AspectBoxSpec, tokens: &ThemeTokens) -> Size {
+    let content = measure_node(aspect_box.content(), tokens);
+    let measured = expand_size_to_aspect_containing(content, aspect_box.aspect_ratio);
+    resolve_size(aspect_box.layout.to_layout_box(), measured, measured)
 }
 
 /// Measure a flex container intrinsically.
@@ -221,6 +229,46 @@ fn measure_switch_layout(switch_layout: &SwitchLayoutSpec, tokens: &ThemeTokens)
 /// Convert a signed axis delta to a non-negative `u64` width contribution.
 fn i32_to_nonnegative_u64(value: i32) -> u64 {
     value.max(0) as u64
+}
+
+/// Expand one size to satisfy an aspect ratio while containing original bounds.
+fn expand_size_to_aspect_containing(size: Size, aspect_ratio: AspectRatio) -> Size {
+    if aspect_ratio.width == 0 || aspect_ratio.height == 0 {
+        return size;
+    }
+    let lhs = u64::from(size.width).saturating_mul(u64::from(aspect_ratio.height));
+    let rhs = u64::from(size.height).saturating_mul(u64::from(aspect_ratio.width));
+    if lhs >= rhs {
+        let height = ceil_div_u64(
+            u64::from(size.width).saturating_mul(u64::from(aspect_ratio.height)),
+            u64::from(aspect_ratio.width),
+        )
+        .min(u64::from(u32::MAX)) as u32;
+        Size {
+            width: size.width,
+            height,
+        }
+    } else {
+        let width = ceil_div_u64(
+            u64::from(size.height).saturating_mul(u64::from(aspect_ratio.width)),
+            u64::from(aspect_ratio.height),
+        )
+        .min(u64::from(u32::MAX)) as u32;
+        Size {
+            width,
+            height: size.height,
+        }
+    }
+}
+
+/// Divide integers with rounding up.
+fn ceil_div_u64(value: u64, divisor: u64) -> u64 {
+    if divisor == 0 {
+        return value;
+    }
+    value
+        .saturating_add(divisor.saturating_sub(1))
+        .saturating_div(divisor)
 }
 
 /// Resolve a measured size against box constraints.

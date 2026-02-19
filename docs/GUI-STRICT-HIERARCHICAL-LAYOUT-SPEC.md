@@ -278,6 +278,7 @@ The major structural targets are now implemented in code:
 - extreme stress coverage for large slot lists, including 10k-row and 10k-scroll-content paths
 - first-class `Stack`, `ScrollView`, `Wrap`, and `SwitchLayout` container primitives
 - first-class single-slot `PaddingBox` and `AlignBox` container primitives
+- first-class single-slot `AspectBox` container primitive
 - first-class layout engine state (`LayoutEngineState`) with deterministic measure caching
 - shared Win32 host runtime adoption of persistent `LayoutEngineState` rendering
 - stress coverage for deep nesting and large slot lists
