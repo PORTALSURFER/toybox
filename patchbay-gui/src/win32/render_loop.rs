@@ -179,7 +179,12 @@ where
             if !self.dropdown_popup_dispatch_queued {
                 self.dropdown_popup_dispatch_queued = true;
                 unsafe {
-                    let _ = PostMessageW(self.hwnd, WM_PATCHBAY_OPEN_DROPDOWN_POPUP, WPARAM(0), LPARAM(0));
+                    let _ = PostMessageW(
+                        Some(self.hwnd),
+                        WM_PATCHBAY_OPEN_DROPDOWN_POPUP,
+                        WPARAM(0),
+                        LPARAM(0),
+                    );
                 }
             }
         } else if self.dropdown_popup_request.is_none() {
