@@ -54,6 +54,12 @@ impl FlexSpec {
         self
     }
 
+    /// Set flex overflow behavior.
+    pub fn overflow(mut self, overflow_policy: OverflowPolicy) -> Self {
+        self.layout = self.layout.overflow(overflow_policy);
+        self
+    }
+
     /// Override gap.
     pub fn gap(mut self, gap: i32) -> Self {
         self.gap = gap;
@@ -158,5 +164,10 @@ impl FlexSpec {
     /// Borrow container layout constraints.
     pub fn container_layout(&self) -> ContainerLayout {
         self.layout
+    }
+
+    /// Return configured overflow behavior.
+    pub fn overflow_policy(&self) -> OverflowPolicy {
+        self.layout.overflow_policy()
     }
 }

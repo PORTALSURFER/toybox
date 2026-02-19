@@ -86,3 +86,18 @@ fn row_slots_apply_weighted_width_fill() {
     assert_eq!(right.width, Length::Fill(1));
     assert_eq!(right.height, Length::Fill(1));
 }
+
+#[test]
+fn container_overflow_builder_sets_policy_without_resetting_fill_axes() {
+    let node = row_slots(vec![weighted_slot(label("A"), 50), weighted_slot(label("B"), 50)])
+        .container_overflow(OverflowPolicy::Compress)
+        .fill();
+    let Node::Grid(grid) = node else {
+        panic!("expected grid-backed row slot container");
+    };
+    assert_eq!(grid.overflow_policy(), OverflowPolicy::Compress);
+    assert_eq!(
+        grid.container_layout(),
+        ContainerLayout::fill().overflow(OverflowPolicy::Compress)
+    );
+}

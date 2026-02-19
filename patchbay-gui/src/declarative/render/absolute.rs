@@ -1,5 +1,6 @@
 /// Render an absolute-positioned container.
 fn render_absolute(absolute: &AbsoluteSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx<'_>) {
+    let overflow_policy = absolute.overflow_policy();
     for child in &absolute.children {
         let measured = measure_node(&child.node, ctx.tokens);
         let layout = node_layout(&child.node);
@@ -11,7 +12,13 @@ fn render_absolute(absolute: &AbsoluteSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &m
             },
             size: resolved,
         };
-        let Some(child_rect) = clip_rect_to_bounds(child_rect, rect) else {
+        let Some(child_rect) = overflow_rect_with_policy(
+            child_rect,
+            rect,
+            overflow_policy,
+            ContainerKind::Absolute,
+            ctx.layout_diagnostics,
+        ) else {
             continue;
         };
         ctx.depth += 1;

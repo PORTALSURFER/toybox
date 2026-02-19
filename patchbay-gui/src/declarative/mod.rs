@@ -5,6 +5,7 @@
 //! via an explicit reducer step.
 
 include!("contracts/errors.rs");
+include!("contracts/layout_diagnostic.rs");
 include!("contracts/ui_actions.rs");
 include!("contracts/render_result.rs");
 include!("contracts/root_transform.rs");

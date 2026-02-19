@@ -267,9 +267,10 @@ Per container:
 
 As of this revision, the most important gaps are:
 
-1. **Explicit per-container overflow policy is missing in public container specs.**  
-   Current behavior is mostly implicit clipping with optional warnings; there is
-   no first-class `OverflowPolicy` field on all containers.
+1. **Overflow policy surface exists, but policy coverage is still expanding.**  
+   `OverflowPolicy` is first-class on container layouts (`Clip` / `Compress`)
+   and is enforced in flex/grid/absolute placement. Additional container
+   primitives still need explicit policy wiring as they are added.
 
 2. **Slot parameters are narrower than target.**  
    Current strict slots primarily expose main-axis fraction/fill and alignment.
@@ -284,9 +285,10 @@ As of this revision, the most important gaps are:
    and fallback behavior should be explicitly modeled and tested as API-level
    policy.
 
-5. **Diagnostics output is limited.**  
-   Validation failures are strong, but runtime layout diagnostics are not yet
-   emitted as structured per-node results in release flows.
+5. **Diagnostics depth can be expanded.**  
+   Runtime layout diagnostics are now emitted via `RenderResult.layout_diagnostics`
+   for overflow/clamp events, but broader per-node measure/layout deltas are not
+   yet surfaced.
 
 6. **Dirty-propagation and measure caching are not first-class in declarative
    layout.**  

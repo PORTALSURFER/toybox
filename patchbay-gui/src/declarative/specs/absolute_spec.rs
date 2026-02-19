@@ -22,6 +22,12 @@ impl AbsoluteSpec {
         self
     }
 
+    /// Set absolute-container overflow behavior.
+    pub fn overflow(mut self, overflow_policy: OverflowPolicy) -> Self {
+        self.layout = self.layout.overflow(overflow_policy);
+        self
+    }
+
     /// Borrow the ordered positioned children.
     pub fn children(&self) -> &[AbsoluteChild] {
         &self.children
@@ -30,6 +36,11 @@ impl AbsoluteSpec {
     /// Borrow container layout constraints.
     pub fn container_layout(&self) -> ContainerLayout {
         self.layout
+    }
+
+    /// Return configured overflow behavior.
+    pub fn overflow_policy(&self) -> OverflowPolicy {
+        self.layout.overflow_policy()
     }
 }
 

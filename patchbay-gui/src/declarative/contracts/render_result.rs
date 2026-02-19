@@ -9,6 +9,8 @@ pub struct RenderResult {
     pub resolved_scale: f32,
     /// Resolved content rectangle used for rendering root content.
     pub content_rect: Rect,
+    /// Runtime layout diagnostics produced while resolving this frame.
+    pub layout_diagnostics: Vec<LayoutDiagnostic>,
 }
 
 impl Default for RenderResult {
@@ -27,6 +29,7 @@ impl Default for RenderResult {
                     height: 0,
                 },
             },
+            layout_diagnostics: Vec::new(),
         }
     }
 }

@@ -12,6 +12,7 @@ pub fn render_checked(
     let plan = root_render_plan(spec, ui);
     let mut actions = Vec::new();
     let mut debug_border_candidates = Vec::new();
+    let mut layout_diagnostics = Vec::new();
     let response = render_root_frame_and_collect(
         spec,
         ui,
@@ -21,10 +22,11 @@ pub fn render_checked(
             resolved: plan.layout_size,
             actions: &mut actions,
             debug_border_candidates: &mut debug_border_candidates,
+            layout_diagnostics: &mut layout_diagnostics,
         },
     );
     draw_layout_debug_borders(ui, &debug_border_candidates);
-    Ok(build_render_result(plan, response, actions))
+    Ok(build_render_result(plan, response, actions, layout_diagnostics))
 }
 
 /// Resolve root-level theme tokens for a checked render pass.
@@ -48,6 +50,7 @@ fn render_root_frame_and_collect(
         tokens: state.tokens,
         actions: state.actions,
         debug_border_candidates: state.debug_border_candidates,
+        layout_diagnostics: state.layout_diagnostics,
         depth: 1,
     };
     let response =
@@ -76,6 +79,8 @@ struct RootRenderPassState<'a> {
     actions: &'a mut Vec<UiAction>,
     /// Candidate debug border targets discovered during render.
     debug_border_candidates: &'a mut Vec<DebugBorderCandidate>,
+    /// Runtime layout diagnostics discovered during render.
+    layout_diagnostics: &'a mut Vec<LayoutDiagnostic>,
 }
 
 /// Build the root frame style from root spec and resolved tokens.
@@ -131,11 +136,13 @@ fn build_render_result(
     plan: RootRenderPlan,
     response: crate::ui::RootFrameResponse,
     actions: Vec<UiAction>,
+    layout_diagnostics: Vec<LayoutDiagnostic>,
 ) -> RenderResult {
     RenderResult {
         measured_size: plan.layout_size,
         actions,
         resolved_scale: plan.resolved_scale,
         content_rect: response.content_rect,
+        layout_diagnostics,
     }
 }

@@ -13,7 +13,8 @@ pub mod declarative {
     pub use patchbay_gui::{
         Align, ButtonSpec, ColorTokens, ContainerLayout, ContainerLength, ControlTokens,
         DeclarativeError, DropdownSpec, EdgeInsets, FlexSpec, GridKind, GridSpec, GridTemplate,
-        IndicatorSpec, Justify, KnobSpec, LabelSpec, LayoutBox, Length, MainPalette, Node,
+        IndicatorSpec, Justify, KnobSpec, LabelSpec, LayoutBox, LayoutContainerKind,
+        LayoutDiagnostic, LayoutDiagnosticLevel, Length, MainPalette, Node, OverflowPolicy,
         PanelSpec, RegionInteractionKind, RenderResult, RootFrameSpec, RootScaleMode, SliderSpec,
         Slot, SlotAlign, SlotSpec, SlotTrack, SpacingTokens, SurfaceCommand, ThemeTokens,
         ToggleSpec, TrackSize, TypographyTokens, UiAction, UiSpec, WeightedSlot, button, column,

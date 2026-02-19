@@ -32,6 +32,12 @@ impl GridSpec {
         self
     }
 
+    /// Set grid overflow behavior.
+    pub fn overflow(mut self, overflow_policy: OverflowPolicy) -> Self {
+        self.layout = self.layout.overflow(overflow_policy);
+        self
+    }
+
     /// Borrow the ordered slot children.
     pub fn children(&self) -> &[Node] {
         &self.children
@@ -40,6 +46,11 @@ impl GridSpec {
     /// Borrow container layout constraints.
     pub fn container_layout(&self) -> ContainerLayout {
         self.layout
+    }
+
+    /// Return configured overflow behavior.
+    pub fn overflow_policy(&self) -> OverflowPolicy {
+        self.layout.overflow_policy()
     }
 
     /// Borrow the semantic role for this grid.

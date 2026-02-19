@@ -41,6 +41,16 @@ impl ContainerLength {
     }
 }
 
+/// Overflow behavior used by strict containers when children exceed bounds.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum OverflowPolicy {
+    /// Clip children to container bounds.
+    #[default]
+    Clip,
+    /// Compress child placement to fit inside container bounds.
+    Compress,
+}
+
 /// Box constraints for non-root containers.
 ///
 /// Containers can only use host-derived fill/auto sizing. Absolute sizing and
@@ -51,6 +61,8 @@ pub struct ContainerLayout {
     pub width: ContainerLength,
     /// Height sizing mode.
     pub height: ContainerLength,
+    /// Overflow behavior for children hosted by this container.
+    pub overflow_policy: OverflowPolicy,
 }
 
 impl ContainerLayout {
@@ -59,6 +71,7 @@ impl ContainerLayout {
         Self {
             width: ContainerLength::Auto,
             height: ContainerLength::Auto,
+            overflow_policy: OverflowPolicy::Clip,
         }
     }
 
@@ -67,6 +80,7 @@ impl ContainerLayout {
         Self {
             width: ContainerLength::Fill(1),
             height: ContainerLength::Fill(1),
+            overflow_policy: OverflowPolicy::Clip,
         }
     }
 
@@ -92,6 +106,17 @@ impl ContainerLayout {
     pub const fn fill_height(mut self) -> Self {
         self.height = ContainerLength::Fill(1);
         self
+    }
+
+    /// Set overflow behavior for this container.
+    pub const fn overflow(mut self, overflow_policy: OverflowPolicy) -> Self {
+        self.overflow_policy = overflow_policy;
+        self
+    }
+
+    /// Return configured overflow behavior.
+    pub const fn overflow_policy(self) -> OverflowPolicy {
+        self.overflow_policy
     }
 
     /// Convert container constraints into generic layout constraints.

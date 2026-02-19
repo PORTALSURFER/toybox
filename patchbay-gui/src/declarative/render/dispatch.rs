@@ -6,6 +6,8 @@ struct RenderCtx<'a> {
     actions: &'a mut Vec<UiAction>,
     /// Candidate container rectangles for debug-border selection.
     debug_border_candidates: &'a mut Vec<DebugBorderCandidate>,
+    /// Runtime layout diagnostics collected during this render pass.
+    layout_diagnostics: &'a mut Vec<LayoutDiagnostic>,
     /// Current container depth in the render tree.
     depth: usize,
 }

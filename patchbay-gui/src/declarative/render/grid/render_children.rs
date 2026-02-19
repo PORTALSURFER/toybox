@@ -80,6 +80,7 @@ fn render_grid_row(
                 row_ctx.layout.inner,
                 cell_rect,
                 row_ctx.layout.intrinsic[index],
+                row_ctx.grid.overflow_policy(),
                 ui,
                 ctx,
             );
@@ -94,6 +95,7 @@ fn render_grid_child(
     container_bounds: Rect,
     cell_rect: Rect,
     measured: Size,
+    overflow_policy: OverflowPolicy,
     ui: &mut Ui<'_>,
     ctx: &mut RenderCtx<'_>,
 ) {
@@ -103,7 +105,13 @@ fn render_grid_child(
         origin: cell_rect.origin,
         size: resolved,
     };
-    let Some(clipped_rect) = clip_rect_to_bounds(child_rect, container_bounds) else {
+    let Some(clipped_rect) = overflow_rect_with_policy(
+        child_rect,
+        container_bounds,
+        overflow_policy,
+        ContainerKind::Grid,
+        ctx.layout_diagnostics,
+    ) else {
         return;
     };
     ctx.depth += 1;

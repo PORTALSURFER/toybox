@@ -9,7 +9,14 @@ fn render_flex(flex: &FlexSpec, rect: Rect, ui: &mut Ui<'_>, axis: Axis, ctx: &m
     let inner = inset_rect(rect, flex.padding);
     let available_main = to_i32_saturating(axis.main(inner.size));
     let intrinsic = measure_flex_intrinsic_children(flex, ctx.tokens);
-    let resolved_main = resolve_flex_main_lengths(flex, axis, &intrinsic, gap, available_main);
+    let resolved_main = resolve_flex_main_lengths(
+        flex,
+        axis,
+        &intrinsic,
+        gap,
+        available_main,
+        flex.overflow_policy(),
+    );
     let main_spacing =
         resolve_flex_main_spacing(flex, &resolved_main, child_count, gap, available_main);
     let render_ctx = FlexRenderContext::new(axis, inner, flex.align);
@@ -30,7 +37,13 @@ fn render_flex_children(
         render_ctx.axis.origin_main(render_ctx.inner.origin) + solved.main_spacing.leading_offset;
     for (index, child) in flex.children.iter().enumerate() {
         let child_rect = resolve_flex_child_rect(child, index, cursor_main, render_ctx, solved);
-        let Some(child_rect) = clip_rect_to_bounds(child_rect, render_ctx.inner) else {
+        let Some(child_rect) = overflow_rect_with_policy(
+            child_rect,
+            render_ctx.inner,
+            flex.overflow_policy(),
+            ContainerKind::Flex,
+            ctx.layout_diagnostics,
+        ) else {
             cursor_main = advance_flex_cursor(cursor_main, index, solved);
             continue;
         };

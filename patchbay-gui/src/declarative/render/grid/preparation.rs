@@ -60,7 +60,7 @@ fn prepare_grid_layout(grid: &GridSpec, rect: Rect, tokens: &ThemeTokens) -> Opt
     let inner = inset_rect(rect, grid.template.padding);
     let intrinsic = measure_grid_intrinsic_sizes(grid, tokens);
     let row_tracks = expanded_row_tracks(grid, rows);
-    let (column_widths, row_heights) = resolve_grid_tracks(ResolveGridTracksRequest {
+    let (mut column_widths, mut row_heights) = resolve_grid_tracks(ResolveGridTracksRequest {
         grid,
         columns,
         rows,
@@ -68,6 +68,20 @@ fn prepare_grid_layout(grid: &GridSpec, rect: Rect, tokens: &ThemeTokens) -> Opt
         row_tracks: &row_tracks,
         intrinsic: &intrinsic,
     });
+    if grid.overflow_policy() == OverflowPolicy::Compress {
+        compress_tracks_for_overflow_policy(
+            &mut column_widths,
+            &grid.template.columns,
+            inner.size.width,
+            grid.template.column_gap,
+        );
+        compress_tracks_for_overflow_policy(
+            &mut row_heights,
+            &row_tracks,
+            inner.size.height,
+            grid.template.row_gap,
+        );
+    }
     Some(PreparedGridLayout {
         columns,
         rows,
@@ -77,6 +91,84 @@ fn prepare_grid_layout(grid: &GridSpec, rect: Rect, tokens: &ThemeTokens) -> Opt
         row_heights,
         row_gap: grid.template.row_gap.max(0),
     })
+}
+
+/// Compress resolved grid tracks to fit the available axis space.
+fn compress_tracks_for_overflow_policy(
+    resolved_tracks: &mut [u32],
+    source_tracks: &[TrackSize],
+    available: u32,
+    gap: i32,
+) {
+    let gap_total = gap.max(0) as u32 * resolved_tracks.len().saturating_sub(1) as u32;
+    let used = resolved_tracks.iter().copied().sum::<u32>() + gap_total;
+    if used <= available {
+        return;
+    }
+    let mut overflow = used.saturating_sub(available);
+
+    let compress_fill_like: Vec<usize> = source_tracks
+        .iter()
+        .copied()
+        .enumerate()
+        .filter_map(|(index, track)| match track {
+            TrackSize::Fill | TrackSize::Fr(_) => Some(index),
+            _ => None,
+        })
+        .collect();
+    reduce_track_overflow(resolved_tracks, &compress_fill_like, &mut overflow);
+    if overflow == 0 {
+        return;
+    }
+
+    let compress_auto_like: Vec<usize> = source_tracks
+        .iter()
+        .copied()
+        .enumerate()
+        .filter_map(|(index, track)| match track {
+            TrackSize::Auto | TrackSize::Percent(_) => Some(index),
+            _ => None,
+        })
+        .collect();
+    reduce_track_overflow(resolved_tracks, &compress_auto_like, &mut overflow);
+    if overflow == 0 {
+        return;
+    }
+
+    let compress_px: Vec<usize> = source_tracks
+        .iter()
+        .copied()
+        .enumerate()
+        .filter_map(|(index, track)| matches!(track, TrackSize::Px(_)).then_some(index))
+        .collect();
+    reduce_track_overflow(resolved_tracks, &compress_px, &mut overflow);
+}
+
+/// Reduce resolved tracks by one pixel in deterministic order while overflow remains.
+fn reduce_track_overflow(resolved_tracks: &mut [u32], indices: &[usize], overflow: &mut u32) {
+    if *overflow == 0 || indices.is_empty() {
+        return;
+    }
+
+    while *overflow > 0 {
+        let mut reduced_this_round = false;
+        for index in indices.iter().copied() {
+            if *overflow == 0 {
+                break;
+            }
+            let Some(track) = resolved_tracks.get_mut(index) else {
+                continue;
+            };
+            if *track > 0 {
+                *track -= 1;
+                *overflow -= 1;
+                reduced_this_round = true;
+            }
+        }
+        if !reduced_this_round {
+            break;
+        }
+    }
 }
 
 /// Resolve column widths and row heights for the current grid bounds.

@@ -37,10 +37,14 @@ impl Node {
     /// Set node layout to fill available width and height where supported.
     pub fn fill(mut self) -> Self {
         match &mut self {
-            Self::Panel(panel) => panel.layout = ContainerLayout::fill(),
-            Self::Row(flex) | Self::Column(flex) => flex.layout = ContainerLayout::fill(),
-            Self::Grid(grid) => grid.layout = ContainerLayout::fill(),
-            Self::Absolute(absolute) => absolute.layout = ContainerLayout::fill(),
+            Self::Panel(panel) => panel.layout = panel.layout.fill_width().fill_height(),
+            Self::Row(flex) | Self::Column(flex) => {
+                flex.layout = flex.layout.fill_width().fill_height()
+            }
+            Self::Grid(grid) => grid.layout = grid.layout.fill_width().fill_height(),
+            Self::Absolute(absolute) => {
+                absolute.layout = absolute.layout.fill_width().fill_height()
+            }
             Self::Label(label) => label.layout = LayoutBox::fill(),
             Self::Knob(knob) => knob.layout = LayoutBox::fill(),
             Self::Slider(slider) => slider.layout = LayoutBox::fill(),
@@ -55,12 +59,10 @@ impl Node {
     /// Set node layout to fill available width where supported.
     pub fn fill_width(mut self) -> Self {
         match &mut self {
-            Self::Panel(panel) => panel.layout = ContainerLayout::auto().fill_width(),
-            Self::Row(flex) | Self::Column(flex) => {
-                flex.layout = ContainerLayout::auto().fill_width()
-            }
-            Self::Grid(grid) => grid.layout = ContainerLayout::auto().fill_width(),
-            Self::Absolute(absolute) => absolute.layout = ContainerLayout::auto().fill_width(),
+            Self::Panel(panel) => panel.layout = panel.layout.fill_width(),
+            Self::Row(flex) | Self::Column(flex) => flex.layout = flex.layout.fill_width(),
+            Self::Grid(grid) => grid.layout = grid.layout.fill_width(),
+            Self::Absolute(absolute) => absolute.layout = absolute.layout.fill_width(),
             Self::Label(label) => label.layout = LayoutBox::auto().fill_width(),
             Self::Knob(knob) => knob.layout = LayoutBox::auto().fill_width(),
             Self::Slider(slider) => slider.layout = LayoutBox::auto().fill_width(),
@@ -75,12 +77,10 @@ impl Node {
     /// Set node layout to fill available height where supported.
     pub fn fill_height(mut self) -> Self {
         match &mut self {
-            Self::Panel(panel) => panel.layout = ContainerLayout::auto().fill_height(),
-            Self::Row(flex) | Self::Column(flex) => {
-                flex.layout = ContainerLayout::auto().fill_height()
-            }
-            Self::Grid(grid) => grid.layout = ContainerLayout::auto().fill_height(),
-            Self::Absolute(absolute) => absolute.layout = ContainerLayout::auto().fill_height(),
+            Self::Panel(panel) => panel.layout = panel.layout.fill_height(),
+            Self::Row(flex) | Self::Column(flex) => flex.layout = flex.layout.fill_height(),
+            Self::Grid(grid) => grid.layout = grid.layout.fill_height(),
+            Self::Absolute(absolute) => absolute.layout = absolute.layout.fill_height(),
             Self::Label(label) => label.layout = LayoutBox::auto().fill_height(),
             Self::Knob(knob) => knob.layout = LayoutBox::auto().fill_height(),
             Self::Slider(slider) => slider.layout = LayoutBox::auto().fill_height(),
@@ -88,6 +88,24 @@ impl Node {
             Self::Button(button) => button.layout = LayoutBox::auto().fill_height(),
             Self::Dropdown(dropdown) => dropdown.layout = LayoutBox::auto().fill_height(),
             Self::Slot(_) | Self::Spacer(_) | Self::Region(_) | Self::Indicator(_) => {}
+        }
+        self
+    }
+
+    /// Set overflow behavior for container nodes.
+    ///
+    /// Widget and slot node kinds are returned unchanged.
+    pub fn container_overflow(mut self, overflow_policy: OverflowPolicy) -> Self {
+        match &mut self {
+            Self::Panel(panel) => panel.layout = panel.layout.overflow(overflow_policy),
+            Self::Row(flex) | Self::Column(flex) => {
+                flex.layout = flex.layout.overflow(overflow_policy)
+            }
+            Self::Grid(grid) => grid.layout = grid.layout.overflow(overflow_policy),
+            Self::Absolute(absolute) => {
+                absolute.layout = absolute.layout.overflow(overflow_policy)
+            }
+            _ => {}
         }
         self
     }

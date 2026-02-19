@@ -13,6 +13,7 @@ fn resolve_flex_main_lengths(
     intrinsic: &[Size],
     gap: i32,
     available_main: i32,
+    overflow_policy: OverflowPolicy,
 ) -> Vec<i32> {
     let mut base_main = Vec::with_capacity(flex.children.len());
     let mut fill_weight_sum = 0u32;
@@ -31,7 +32,12 @@ fn resolve_flex_main_lengths(
     let main_sum = base_main.iter().copied().sum::<i32>();
     let total_gap = gap * (flex.children.len().saturating_sub(1) as i32);
     let remainder = (available_main - main_sum - total_gap).max(0);
-    distribute_flex_fill_remainder(flex, axis, remainder, fill_weight_sum, base_main)
+    let mut resolved =
+        distribute_flex_fill_remainder(flex, axis, remainder, fill_weight_sum, base_main);
+    if overflow_policy == OverflowPolicy::Compress {
+        compress_flex_main_lengths(flex, axis, available_main, gap, &mut resolved);
+    }
+    resolved
 }
 
 /// Distribute remaining main-axis space across `Length::Fill` children.
@@ -76,6 +82,100 @@ fn distribute_flex_fill_remainder(
     }
 
     resolved_main
+}
+
+/// Compress resolved flex main-axis lengths so total content fits available space.
+fn compress_flex_main_lengths(
+    flex: &FlexSpec,
+    axis: Axis,
+    available_main: i32,
+    gap: i32,
+    resolved_main: &mut [i32],
+) {
+    let total_gap = gap.max(0) * (resolved_main.len().saturating_sub(1) as i32);
+    let mut overflow = resolved_main.iter().copied().sum::<i32>() + total_gap - available_main;
+    if overflow <= 0 {
+        return;
+    }
+
+    let min_main: Vec<i32> = flex
+        .children
+        .iter()
+        .map(|child| {
+            let layout = node_layout(child);
+            let min = match axis {
+                Axis::Horizontal => layout.min_width,
+                Axis::Vertical => layout.min_height,
+            };
+            i32::try_from(min.unwrap_or(0)).unwrap_or(i32::MAX)
+        })
+        .collect();
+
+    let reduce_fill: Vec<usize> = flex
+        .children
+        .iter()
+        .enumerate()
+        .filter_map(|(index, child)| {
+            matches!(axis.main_length(node_layout(child)), Length::Fill(_)).then_some(index)
+        })
+        .collect();
+    reduce_overflow_indices(resolved_main, &min_main, &reduce_fill, &mut overflow);
+    if overflow <= 0 {
+        return;
+    }
+
+    let reduce_auto: Vec<usize> = flex
+        .children
+        .iter()
+        .enumerate()
+        .filter_map(|(index, child)| {
+            matches!(axis.main_length(node_layout(child)), Length::Auto).then_some(index)
+        })
+        .collect();
+    reduce_overflow_indices(resolved_main, &min_main, &reduce_auto, &mut overflow);
+    if overflow <= 0 {
+        return;
+    }
+
+    let reduce_px: Vec<usize> = flex
+        .children
+        .iter()
+        .enumerate()
+        .filter_map(|(index, child)| {
+            matches!(axis.main_length(node_layout(child)), Length::Px(_)).then_some(index)
+        })
+        .collect();
+    reduce_overflow_indices(resolved_main, &min_main, &reduce_px, &mut overflow);
+}
+
+/// Reduce lengths for selected indices until overflow is removed or all hit min.
+fn reduce_overflow_indices(
+    resolved_main: &mut [i32],
+    min_main: &[i32],
+    indices: &[usize],
+    overflow: &mut i32,
+) {
+    if *overflow <= 0 || indices.is_empty() {
+        return;
+    }
+
+    while *overflow > 0 {
+        let mut reduced_this_round = false;
+        for index in indices.iter().copied() {
+            if *overflow <= 0 {
+                break;
+            }
+            let min = min_main.get(index).copied().unwrap_or(0).max(0);
+            if resolved_main[index] > min {
+                resolved_main[index] -= 1;
+                *overflow -= 1;
+                reduced_this_round = true;
+            }
+        }
+        if !reduced_this_round {
+            break;
+        }
+    }
 }
 
 /// Resolve flex main-axis spacing according to `justify`.

@@ -289,7 +289,14 @@ fn resolve_flex_fill_remainder_keeps_total_exact_for_uneven_weights() {
             height: 1,
         },
     ];
-    let resolved = resolve_flex_main_lengths(&flex, Axis::Horizontal, &intrinsic, 0, 100);
+    let resolved = resolve_flex_main_lengths(
+        &flex,
+        Axis::Horizontal,
+        &intrinsic,
+        0,
+        100,
+        OverflowPolicy::Clip,
+    );
     assert_eq!(resolved, vec![34, 33, 33]);
     assert_eq!(resolved.iter().sum::<i32>(), 100);
 }

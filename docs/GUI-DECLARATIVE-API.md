@@ -35,7 +35,7 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 
 ## Fluent Helpers
 - Layout:
-  - containers: `.layout(ContainerLayout::...)`, `.container_layout(...)`, `.fill()`, `.fill_width()`, `.fill_height()`
+  - containers: `.layout(ContainerLayout::...)`, `.overflow(OverflowPolicy::...)`, `.container_layout(...)`, `.container_overflow(...)`, `.fill()`, `.fill_width()`, `.fill_height()`
   - widgets: `.widget_layout(LayoutBox::...)`, `.fill()`, `.fill_width()`, `.fill_height()`
 - Spacing: `.gap(...)`, `.gap_xy(...)`, `.pad_all(...)`, `.pad_xy(...)`
 - Flex alignment: `.align_*()`, `.justify_*()`
@@ -53,6 +53,8 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 - slot fractions must satisfy total/fill constraints
 - non-root containers must use host-derived `Auto`/`Fill` sizing only (no pixel/min/max constraints)
 - widget semantic checks (ranges, selected index, control size, key uniqueness)
+
+`RenderResult` now includes `layout_diagnostics` so callers can inspect clipped/compressed placement events at runtime.
 
 ## Layout Migration Notes
 Container and widget layout APIs are now explicitly separated:
