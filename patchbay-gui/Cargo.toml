@@ -19,6 +19,9 @@ default = []
 layout-debug-borders = []
 layout-overflow-warnings = []
 
+[dev-dependencies]
+trybuild = "1.0"
+
 [lints]
 workspace = true
 

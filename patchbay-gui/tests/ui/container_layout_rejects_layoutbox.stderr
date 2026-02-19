@@ -1,0 +1,13 @@
+error[E0308]: mismatched types
+ --> tests/ui/container_layout_rejects_layoutbox.rs:4:56
+  |
+4 |     let _ = PanelSpec::new("panel", label("x")).layout(LayoutBox::fixed(200, 100));
+  |                                                 ------ ^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `ContainerLayout`, found `LayoutBox`
+  |                                                 |
+  |                                                 arguments to this method are incorrect
+  |
+note: method defined here
+ --> src/declarative/specs/panel_spec.rs
+  |
+  |     pub fn layout(mut self, layout: ContainerLayout) -> Self {
+  |            ^^^^^^

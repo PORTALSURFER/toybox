@@ -50,6 +50,25 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 - non-root containers must use host-derived `Auto`/`Fill` sizing only (no pixel/min/max constraints)
 - widget semantic checks (ranges, selected index, control size, key uniqueness)
 
+## Layout Migration Notes
+Container and widget layout APIs are now explicitly separated:
+- Use `ContainerLayout` for `Panel` / `Row` / `Column` / `Grid` / `Absolute`.
+- Use `LayoutBox` only for widget sizing and root frame sizing.
+
+Before:
+```rust
+let title = label("Pump").layout(LayoutBox::fixed(64, 16).max(64, 16));
+let panel_node = panel("main", title).layout(LayoutBox::fill());
+```
+
+After:
+```rust
+use toybox::gui::declarative::{ContainerLayout, LayoutBox};
+
+let title = label("Pump").widget_layout(LayoutBox::fixed(64, 16).max(64, 16));
+let panel_node = panel("main", title).layout(ContainerLayout::fill());
+```
+
 ## Example
 ```rust
 use toybox::gui::declarative::{

@@ -1,0 +1,5 @@
+error[E0616]: field `kind` of struct `GridSpec` is private
+ --> tests/ui/grid_kind_field_is_private.rs:8:10
+  |
+8 |     grid.kind = GridKind::SlotRow;
+  |          ^^^^ private field
