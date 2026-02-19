@@ -35,7 +35,7 @@ pub fn column_slots(children: Vec<Slot>) -> Node {
         nodes,
     );
     spec.kind = GridKind::SlotColumn;
-    Node::Grid(spec).layout(LayoutBox::fill())
+    Node::Grid(spec).container_layout(ContainerLayout::fill())
 }
 
 /// Create a weighted full-size row slot layout.
@@ -56,7 +56,7 @@ pub fn row_slots(children: Vec<Slot>) -> Node {
         nodes,
     );
     spec.kind = GridKind::SlotRow;
-    Node::Grid(spec).layout(LayoutBox::fill())
+    Node::Grid(spec).container_layout(ContainerLayout::fill())
 }
 
 /// Convert high-level slot tracks into grid tracks.
@@ -72,10 +72,10 @@ fn slot_track_to_grid_track(child: &Slot) -> TrackSize {
 fn wrap_slot_child(child: Slot) -> Node {
     let mut content = child.node;
     if matches!(child.align_x, SlotAlign::Stretch) {
-        content = content.layout(LayoutBox::auto().fill_width());
+        content = content.fill_width();
     }
     if matches!(child.align_y, SlotAlign::Stretch) {
-        content = content.layout(LayoutBox::auto().fill_height());
+        content = content.fill_height();
     }
     let justify = match child.align_x {
         SlotAlign::Start | SlotAlign::Stretch => Justify::Start,
@@ -94,6 +94,6 @@ fn wrap_slot_child(child: Slot) -> Node {
             .pad_all(0)
             .justify(justify)
             .align(align)
-            .layout(LayoutBox::fill()),
+            .layout(ContainerLayout::fill()),
     )
 }

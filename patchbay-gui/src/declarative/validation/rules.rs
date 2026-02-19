@@ -29,6 +29,24 @@ fn validate_slot_tracks(grid: &GridSpec) -> Result<(), DeclarativeError> {
     Ok(())
 }
 
+/// Validate that container layout remains host-derived (no absolute sizing).
+fn validate_container_layout(
+    container_kind: &'static str,
+    layout: LayoutBox,
+) -> Result<(), DeclarativeError> {
+    let has_absolute_length =
+        matches!(layout.width, Length::Px(_)) || matches!(layout.height, Length::Px(_));
+    let has_bounds =
+        layout.min_width.is_some()
+            || layout.min_height.is_some()
+            || layout.max_width.is_some()
+            || layout.max_height.is_some();
+    if has_absolute_length || has_bounds {
+        return Err(DeclarativeError::InvalidContainerLayout { container_kind });
+    }
+    Ok(())
+}
+
 /// Validate that a key is non-empty.
 fn validate_non_empty_key(key: &str, node_kind: &'static str) -> Result<(), DeclarativeError> {
     if key.trim().is_empty() {

@@ -35,7 +35,7 @@ fn measure_panel(panel: &PanelSpec, tokens: &ThemeTokens) -> Size {
             .saturating_add(padding_total)
             .saturating_add(header),
     };
-    resolve_size(panel.layout, measured, measured)
+    resolve_size(panel.layout.to_layout_box(), measured, measured)
 }
 
 /// Measure a flex container intrinsically.
@@ -81,7 +81,7 @@ fn measure_flex(flex: &FlexSpec, tokens: &ThemeTokens, axis: Axis) -> Size {
         },
     };
 
-    resolve_size(flex.layout, measured, measured)
+    resolve_size(flex.layout.to_layout_box(), measured, measured)
 }
 
 /// Measure an absolute container intrinsically.
@@ -98,7 +98,7 @@ fn measure_absolute(absolute: &AbsoluteSpec, tokens: &ThemeTokens) -> Size {
     }
 
     resolve_size(
-        absolute.layout,
+        absolute.layout.to_layout_box(),
         Size {
             width: max_x.max(0) as u32,
             height: max_y.max(0) as u32,

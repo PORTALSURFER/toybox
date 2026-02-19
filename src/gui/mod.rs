@@ -11,15 +11,15 @@ pub use patchbay_gui::{
 /// Strict declarative GUI types and rendering helpers.
 pub mod declarative {
     pub use patchbay_gui::{
-        Align, ButtonSpec, ColorTokens, ControlTokens, DeclarativeError, DropdownSpec, EdgeInsets,
-        FlexSpec, GridKind, GridSpec, GridTemplate, IndicatorSpec, Justify, KnobSpec, LabelSpec,
-        LayoutBox, Length, MainPalette, Node, PanelSpec, RegionInteractionKind, RenderResult,
-        RootFrameSpec, RootScaleMode, SliderSpec, Slot, SlotAlign, SlotSpec, SlotTrack,
-        SpacingTokens, SurfaceCommand, ThemeTokens, ToggleSpec, TrackSize, TypographyTokens,
-        UiAction, UiSpec, WeightedSlot, button, column, column_slots, dropdown, fill_slot,
-        fraction_slot, grid, indicator, knob, label, measure_checked, panel, region,
-        render_checked, root_frame_sized, row, row_slots, slider, slot, spacer, surface, toggle,
-        weighted_slot, weighted_slot_lengths,
+        Align, ButtonSpec, ColorTokens, ContainerLayout, ContainerLength, ControlTokens,
+        DeclarativeError, DropdownSpec, EdgeInsets, FlexSpec, GridKind, GridSpec, GridTemplate,
+        IndicatorSpec, Justify, KnobSpec, LabelSpec, LayoutBox, Length, MainPalette, Node,
+        PanelSpec, RegionInteractionKind, RenderResult, RootFrameSpec, RootScaleMode, SliderSpec,
+        Slot, SlotAlign, SlotSpec, SlotTrack, SpacingTokens, SurfaceCommand, ThemeTokens,
+        ToggleSpec, TrackSize, TypographyTokens, UiAction, UiSpec, WeightedSlot, button, column,
+        column_slots, dropdown, fill_slot, fraction_slot, grid, indicator, knob, label,
+        measure_checked, panel, region, render_checked, root_frame_sized, row, row_slots, slider,
+        slot, spacer, surface, toggle, weighted_slot, weighted_slot_lengths,
     };
 }
 

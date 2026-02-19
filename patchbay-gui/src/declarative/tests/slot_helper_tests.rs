@@ -39,7 +39,7 @@ fn column_slots_apply_weighted_height_fill() {
     let Node::Grid(grid) = node else {
         panic!("expected grid-backed column slot container");
     };
-    assert_eq!(grid.layout, LayoutBox::fill());
+    assert_eq!(grid.layout, ContainerLayout::fill());
     assert_eq!(grid.template.columns, vec![TrackSize::Fr(1)]);
     assert_eq!(
         grid.template.rows,
@@ -66,7 +66,7 @@ fn row_slots_apply_weighted_width_fill() {
     let Node::Grid(grid) = node else {
         panic!("expected grid-backed row slot container");
     };
-    assert_eq!(grid.layout, LayoutBox::fill());
+    assert_eq!(grid.layout, ContainerLayout::fill());
     assert_eq!(
         grid.template.columns,
         vec![TrackSize::Percent(70), TrackSize::Percent(30)]

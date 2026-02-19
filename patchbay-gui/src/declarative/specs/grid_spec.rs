@@ -2,13 +2,13 @@
 #[derive(Clone, Debug)]
 pub struct GridSpec {
     /// Layout constraints for this container.
-    pub layout: LayoutBox,
+    pub(crate) layout: ContainerLayout,
     /// Grid track template.
     pub template: GridTemplate,
     /// Slot children in row-major order.
     pub(crate) children: Vec<Node>,
     /// Grid semantic role.
-    pub kind: GridKind,
+    pub(crate) kind: GridKind,
 }
 
 impl GridSpec {
@@ -19,7 +19,7 @@ impl GridSpec {
             .map(Node::slot)
             .collect();
         Self {
-            layout: LayoutBox::auto(),
+            layout: ContainerLayout::auto(),
             template,
             children,
             kind: GridKind::Standard,
@@ -27,7 +27,7 @@ impl GridSpec {
     }
 
     /// Override layout constraints.
-    pub fn layout(mut self, layout: LayoutBox) -> Self {
+    pub fn layout(mut self, layout: ContainerLayout) -> Self {
         self.layout = layout;
         self
     }
@@ -35,5 +35,15 @@ impl GridSpec {
     /// Borrow the ordered slot children.
     pub fn children(&self) -> &[Node] {
         &self.children
+    }
+
+    /// Borrow container layout constraints.
+    pub fn container_layout(&self) -> ContainerLayout {
+        self.layout
+    }
+
+    /// Borrow the semantic role for this grid.
+    pub fn kind(&self) -> GridKind {
+        self.kind
     }
 }

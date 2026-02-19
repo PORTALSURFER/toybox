@@ -1,15 +1,13 @@
 impl Node {
-    /// Apply layout constraints to nodes that support [`LayoutBox`].
+    /// Apply layout constraints to widget nodes.
     ///
+    /// Container nodes are unchanged. Use [`Node::container_layout`] for
+    /// container sizing.
     /// Nodes with intrinsic fixed size (`Spacer`, `Region`, `Indicator`) ignore
     /// this request and are returned unchanged.
-    pub fn layout(mut self, layout: LayoutBox) -> Self {
+    pub fn widget_layout(mut self, layout: LayoutBox) -> Self {
         match &mut self {
-            Self::Slot(_) => {}
-            Self::Panel(panel) => panel.layout = layout,
-            Self::Row(flex) | Self::Column(flex) => flex.layout = layout,
-            Self::Grid(grid) => grid.layout = layout,
-            Self::Absolute(absolute) => absolute.layout = layout,
+            Self::Slot(_) | Self::Panel(_) | Self::Row(_) | Self::Column(_) | Self::Grid(_) | Self::Absolute(_) => {}
             Self::Label(label) => label.layout = layout,
             Self::Knob(knob) => knob.layout = layout,
             Self::Slider(slider) => slider.layout = layout,
@@ -21,19 +19,77 @@ impl Node {
         self
     }
 
+    /// Apply layout constraints to container nodes.
+    ///
+    /// Widget nodes are unchanged. Use [`Node::widget_layout`] for widget
+    /// sizing.
+    pub fn container_layout(mut self, layout: ContainerLayout) -> Self {
+        match &mut self {
+            Self::Panel(panel) => panel.layout = layout,
+            Self::Row(flex) | Self::Column(flex) => flex.layout = layout,
+            Self::Grid(grid) => grid.layout = layout,
+            Self::Absolute(absolute) => absolute.layout = layout,
+            _ => {}
+        }
+        self
+    }
+
     /// Set node layout to fill available width and height where supported.
-    pub fn fill(self) -> Self {
-        self.layout(LayoutBox::fill())
+    pub fn fill(mut self) -> Self {
+        match &mut self {
+            Self::Panel(panel) => panel.layout = ContainerLayout::fill(),
+            Self::Row(flex) | Self::Column(flex) => flex.layout = ContainerLayout::fill(),
+            Self::Grid(grid) => grid.layout = ContainerLayout::fill(),
+            Self::Absolute(absolute) => absolute.layout = ContainerLayout::fill(),
+            Self::Label(label) => label.layout = LayoutBox::fill(),
+            Self::Knob(knob) => knob.layout = LayoutBox::fill(),
+            Self::Slider(slider) => slider.layout = LayoutBox::fill(),
+            Self::Toggle(toggle) => toggle.layout = LayoutBox::fill(),
+            Self::Button(button) => button.layout = LayoutBox::fill(),
+            Self::Dropdown(dropdown) => dropdown.layout = LayoutBox::fill(),
+            Self::Slot(_) | Self::Spacer(_) | Self::Region(_) | Self::Indicator(_) => {}
+        }
+        self
     }
 
     /// Set node layout to fill available width where supported.
-    pub fn fill_width(self) -> Self {
-        self.layout(LayoutBox::auto().fill_width())
+    pub fn fill_width(mut self) -> Self {
+        match &mut self {
+            Self::Panel(panel) => panel.layout = ContainerLayout::auto().fill_width(),
+            Self::Row(flex) | Self::Column(flex) => {
+                flex.layout = ContainerLayout::auto().fill_width()
+            }
+            Self::Grid(grid) => grid.layout = ContainerLayout::auto().fill_width(),
+            Self::Absolute(absolute) => absolute.layout = ContainerLayout::auto().fill_width(),
+            Self::Label(label) => label.layout = LayoutBox::auto().fill_width(),
+            Self::Knob(knob) => knob.layout = LayoutBox::auto().fill_width(),
+            Self::Slider(slider) => slider.layout = LayoutBox::auto().fill_width(),
+            Self::Toggle(toggle) => toggle.layout = LayoutBox::auto().fill_width(),
+            Self::Button(button) => button.layout = LayoutBox::auto().fill_width(),
+            Self::Dropdown(dropdown) => dropdown.layout = LayoutBox::auto().fill_width(),
+            Self::Slot(_) | Self::Spacer(_) | Self::Region(_) | Self::Indicator(_) => {}
+        }
+        self
     }
 
     /// Set node layout to fill available height where supported.
-    pub fn fill_height(self) -> Self {
-        self.layout(LayoutBox::auto().fill_height())
+    pub fn fill_height(mut self) -> Self {
+        match &mut self {
+            Self::Panel(panel) => panel.layout = ContainerLayout::auto().fill_height(),
+            Self::Row(flex) | Self::Column(flex) => {
+                flex.layout = ContainerLayout::auto().fill_height()
+            }
+            Self::Grid(grid) => grid.layout = ContainerLayout::auto().fill_height(),
+            Self::Absolute(absolute) => absolute.layout = ContainerLayout::auto().fill_height(),
+            Self::Label(label) => label.layout = LayoutBox::auto().fill_height(),
+            Self::Knob(knob) => knob.layout = LayoutBox::auto().fill_height(),
+            Self::Slider(slider) => slider.layout = LayoutBox::auto().fill_height(),
+            Self::Toggle(toggle) => toggle.layout = LayoutBox::auto().fill_height(),
+            Self::Button(button) => button.layout = LayoutBox::auto().fill_height(),
+            Self::Dropdown(dropdown) => dropdown.layout = LayoutBox::auto().fill_height(),
+            Self::Slot(_) | Self::Spacer(_) | Self::Region(_) | Self::Indicator(_) => {}
+        }
+        self
     }
 
     /// Set container gap for row/column/grid nodes.

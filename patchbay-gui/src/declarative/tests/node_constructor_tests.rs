@@ -146,7 +146,7 @@ fn helper_node_constructors_build_valid_spec() {
     ]);
     let spec = UiSpec::new(RootFrameSpec::new(
         "root",
-        panel("main", content).layout(LayoutBox::fill()),
+        panel("main", content).fill(),
     ));
     let measured = measure_checked(&spec).expect("helper-composed tree should validate");
     assert!(measured.width > 0);

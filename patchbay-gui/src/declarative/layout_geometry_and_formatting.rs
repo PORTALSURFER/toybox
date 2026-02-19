@@ -3,10 +3,10 @@
 fn node_layout(node: &Node) -> LayoutBox {
     match node {
         Node::Slot(slot) => node_layout(&slot.child),
-        Node::Panel(panel) => panel.layout,
-        Node::Row(flex) | Node::Column(flex) => flex.layout,
-        Node::Grid(grid) => grid.layout,
-        Node::Absolute(absolute) => absolute.layout,
+        Node::Panel(panel) => panel.layout.to_layout_box(),
+        Node::Row(flex) | Node::Column(flex) => flex.layout.to_layout_box(),
+        Node::Grid(grid) => grid.layout.to_layout_box(),
+        Node::Absolute(absolute) => absolute.layout.to_layout_box(),
         Node::Label(label) => label.layout,
         Node::Spacer(spacer) => LayoutBox::fixed(spacer.size.width, spacer.size.height),
         Node::Knob(knob) => knob.layout,

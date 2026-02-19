@@ -2,7 +2,7 @@
 #[derive(Clone, Debug)]
 pub struct FlexSpec {
     /// Layout constraints for this container.
-    pub layout: LayoutBox,
+    pub(crate) layout: ContainerLayout,
     /// Gap between children.
     pub gap: i32,
     /// Container padding.
@@ -23,7 +23,7 @@ impl FlexSpec {
             .map(Node::slot)
             .collect();
         Self {
-            layout: LayoutBox::auto(),
+            layout: ContainerLayout::auto(),
             gap: 12,
             padding: EdgeInsets::default(),
             align: Align::Start,
@@ -39,7 +39,7 @@ impl FlexSpec {
             .map(Node::slot)
             .collect();
         Self {
-            layout: LayoutBox::auto(),
+            layout: ContainerLayout::auto(),
             gap: 12,
             padding: EdgeInsets::default(),
             align: Align::Start,
@@ -49,7 +49,7 @@ impl FlexSpec {
     }
 
     /// Override layout constraints.
-    pub fn layout(mut self, layout: LayoutBox) -> Self {
+    pub fn layout(mut self, layout: ContainerLayout) -> Self {
         self.layout = layout;
         self
     }
@@ -153,5 +153,10 @@ impl FlexSpec {
     /// Borrow the ordered slot children.
     pub fn children(&self) -> &[Node] {
         &self.children
+    }
+
+    /// Borrow container layout constraints.
+    pub fn container_layout(&self) -> ContainerLayout {
+        self.layout
     }
 }

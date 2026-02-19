@@ -19,6 +19,94 @@ impl Length {
     }
 }
 
+/// Container-axis length value for slot/container layout flows.
+///
+/// This type intentionally excludes absolute pixel sizing so non-root
+/// container composition remains fully host-derived.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContainerLength {
+    /// Use measured content size.
+    Auto,
+    /// Fill available space with optional relative weight.
+    Fill(u16),
+}
+
+impl ContainerLength {
+    /// Convert a container length into a generic layout length.
+    const fn into_length(self) -> Length {
+        match self {
+            Self::Auto => Length::Auto,
+            Self::Fill(weight) => Length::Fill(weight),
+        }
+    }
+}
+
+/// Box constraints for non-root containers.
+///
+/// Containers can only use host-derived fill/auto sizing. Absolute sizing and
+/// explicit min/max constraints are intentionally unavailable.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ContainerLayout {
+    /// Width sizing mode.
+    pub width: ContainerLength,
+    /// Height sizing mode.
+    pub height: ContainerLength,
+}
+
+impl ContainerLayout {
+    /// Create unconstrained auto sizing.
+    pub const fn auto() -> Self {
+        Self {
+            width: ContainerLength::Auto,
+            height: ContainerLength::Auto,
+        }
+    }
+
+    /// Create a box that fills available space.
+    pub const fn fill() -> Self {
+        Self {
+            width: ContainerLength::Fill(1),
+            height: ContainerLength::Fill(1),
+        }
+    }
+
+    /// Set width behavior.
+    pub const fn with_width(mut self, width: ContainerLength) -> Self {
+        self.width = width;
+        self
+    }
+
+    /// Set height behavior.
+    pub const fn with_height(mut self, height: ContainerLength) -> Self {
+        self.height = height;
+        self
+    }
+
+    /// Set width to fill available space.
+    pub const fn fill_width(mut self) -> Self {
+        self.width = ContainerLength::Fill(1);
+        self
+    }
+
+    /// Set height to fill available space.
+    pub const fn fill_height(mut self) -> Self {
+        self.height = ContainerLength::Fill(1);
+        self
+    }
+
+    /// Convert container constraints into generic layout constraints.
+    pub(crate) const fn to_layout_box(self) -> LayoutBox {
+        LayoutBox {
+            width: self.width.into_length(),
+            height: self.height.into_length(),
+            min_width: None,
+            min_height: None,
+            max_width: None,
+            max_height: None,
+        }
+    }
+}
+
 /// Box constraints shared by all node types.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LayoutBox {

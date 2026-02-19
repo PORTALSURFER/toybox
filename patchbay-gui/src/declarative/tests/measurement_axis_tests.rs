@@ -271,9 +271,9 @@ fn justify_weighting_and_distribution_cover_new_modes() {
 #[test]
 fn resolve_flex_fill_remainder_keeps_total_exact_for_uneven_weights() {
     let flex = FlexSpec::row(vec![
-        label("").layout(LayoutBox::auto().with_width(Length::Fill(1))),
-        label("").layout(LayoutBox::auto().with_width(Length::Fill(1))),
-        label("").layout(LayoutBox::auto().with_width(Length::Fill(1))),
+        label("").widget_layout(LayoutBox::auto().with_width(Length::Fill(1))),
+        label("").widget_layout(LayoutBox::auto().with_width(Length::Fill(1))),
+        label("").widget_layout(LayoutBox::auto().with_width(Length::Fill(1))),
     ]);
     let intrinsic = vec![
         Size {
@@ -299,8 +299,8 @@ fn node_layout_helpers_apply_constraints_when_supported() {
     let node = panel("main", label("x")).fill_width();
     match node {
         Node::Panel(panel) => {
-            assert_eq!(panel.layout.width, Length::Fill(1));
-            assert_eq!(panel.layout.height, Length::Auto);
+            assert_eq!(panel.layout.width, ContainerLength::Fill(1));
+            assert_eq!(panel.layout.height, ContainerLength::Auto);
         }
         _ => panic!("expected panel node"),
     }

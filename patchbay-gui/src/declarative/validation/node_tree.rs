@@ -36,8 +36,14 @@ fn validate_node(
     match node {
         Node::Slot(slot) => validate_slot_node(slot, seen_keys),
         Node::Panel(panel) => validate_panel_node(panel, seen_keys),
-        Node::Row(flex) => validate_container_children("Row", &flex.children, seen_keys),
-        Node::Column(flex) => validate_container_children("Column", &flex.children, seen_keys),
+        Node::Row(flex) => {
+            validate_container_layout("Row", flex.layout.to_layout_box())?;
+            validate_container_children("Row", &flex.children, seen_keys)
+        }
+        Node::Column(flex) => {
+            validate_container_layout("Column", flex.layout.to_layout_box())?;
+            validate_container_children("Column", &flex.children, seen_keys)
+        }
         Node::Grid(grid) => validate_grid_node(grid, seen_keys),
         Node::Absolute(absolute) => validate_absolute_node(absolute, seen_keys),
         Node::Label(_) | Node::Spacer(_) | Node::Indicator(_) => Ok(()),
@@ -55,6 +61,7 @@ fn validate_panel_node(
     panel: &PanelSpec,
     seen_keys: &mut std::collections::HashSet<String>,
 ) -> Result<(), DeclarativeError> {
+    validate_container_layout("Panel", panel.layout.to_layout_box())?;
     validate_non_empty_key(&panel.key, "Panel")?;
     validate_unique_key(&panel.key, seen_keys)?;
     validate_node(&panel.content, seen_keys)
@@ -101,6 +108,7 @@ fn validate_grid_node(
     grid: &GridSpec,
     seen_keys: &mut std::collections::HashSet<String>,
 ) -> Result<(), DeclarativeError> {
+    validate_container_layout("Grid", grid.layout.to_layout_box())?;
     if grid.template.columns.is_empty() {
         return Err(DeclarativeError::EmptyGridColumns);
     }
@@ -115,6 +123,7 @@ fn validate_absolute_node(
     absolute: &AbsoluteSpec,
     seen_keys: &mut std::collections::HashSet<String>,
 ) -> Result<(), DeclarativeError> {
+    validate_container_layout("Absolute", absolute.layout.to_layout_box())?;
     for child in &absolute.children {
         if !matches!(child.node, Node::Slot(_)) {
             return Err(DeclarativeError::InvalidContainerChild {

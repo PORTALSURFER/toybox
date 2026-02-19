@@ -30,7 +30,9 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 - Math helper: `weighted_slot_lengths(total, weights)`
 
 ## Fluent Helpers
-- Layout: `.layout(...)`, `.fill()`, `.fill_width()`, `.fill_height()`
+- Layout:
+  - containers: `.layout(ContainerLayout::...)`, `.container_layout(...)`, `.fill()`, `.fill_width()`, `.fill_height()`
+  - widgets: `.widget_layout(LayoutBox::...)`, `.fill()`, `.fill_width()`, `.fill_height()`
 - Spacing: `.gap(...)`, `.gap_xy(...)`, `.pad_all(...)`, `.pad_xy(...)`
 - Flex alignment: `.align_*()`, `.justify_*()`
 - Panel styling: `.title(...)`, `.background(...)`, `.outline(...)`
@@ -45,6 +47,7 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 - slots must contain a non-slot child
 - slot tracks must be `Fraction` or `Fill`
 - slot fractions must satisfy total/fill constraints
+- non-root containers must use host-derived `Auto`/`Fill` sizing only (no pixel/min/max constraints)
 - widget semantic checks (ranges, selected index, control size, key uniqueness)
 
 ## Example

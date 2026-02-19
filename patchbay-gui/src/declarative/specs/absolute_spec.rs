@@ -2,7 +2,7 @@
 #[derive(Clone, Debug)]
 pub struct AbsoluteSpec {
     /// Layout constraints.
-    pub layout: LayoutBox,
+    pub(crate) layout: ContainerLayout,
     /// Positioned children.
     pub(crate) children: Vec<AbsoluteChild>,
 }
@@ -11,13 +11,13 @@ impl AbsoluteSpec {
     /// Create an absolute container.
     pub fn new(children: Vec<AbsoluteChild>) -> Self {
         Self {
-            layout: LayoutBox::auto(),
+            layout: ContainerLayout::auto(),
             children,
         }
     }
 
     /// Override layout constraints.
-    pub fn layout(mut self, layout: LayoutBox) -> Self {
+    pub fn layout(mut self, layout: ContainerLayout) -> Self {
         self.layout = layout;
         self
     }
@@ -25,6 +25,11 @@ impl AbsoluteSpec {
     /// Borrow the ordered positioned children.
     pub fn children(&self) -> &[AbsoluteChild] {
         &self.children
+    }
+
+    /// Borrow container layout constraints.
+    pub fn container_layout(&self) -> ContainerLayout {
+        self.layout
     }
 }
 

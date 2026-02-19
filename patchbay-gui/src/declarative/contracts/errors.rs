@@ -111,4 +111,12 @@ pub enum DeclarativeError {
         /// Number of fill tracks in the slot layout.
         fill_count: usize,
     },
+    /// Container layout uses disallowed absolute constraints.
+    #[error(
+        "container `{container_kind}` must use host-derived fill/auto layout only (no pixel/min/max constraints)"
+    )]
+    InvalidContainerLayout {
+        /// Concrete container node kind.
+        container_kind: &'static str,
+    },
 }

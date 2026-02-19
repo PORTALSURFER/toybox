@@ -16,13 +16,11 @@ fn fixed_root_layout_expands_to_intrinsic_content() {
 }
 
 #[test]
-fn fixed_panel_layout_expands_to_intrinsic_content() {
+fn auto_panel_layout_expands_to_intrinsic_content() {
     let spec = UiSpec::new(
         RootFrameSpec::new(
             "root",
-            panel("panel", label("WidePanelText"))
-                .pad_all(0)
-                .layout(LayoutBox::fixed(2, 2)),
+            panel("panel", label("WidePanelText")).pad_all(0),
         )
         .padding(0),
     );
@@ -47,7 +45,7 @@ fn explicit_max_still_caps_fixed_pixel_layout() {
 }
 
 #[test]
-fn fixed_absolute_layout_expands_to_positioned_child_bounds() {
+fn auto_absolute_layout_expands_to_positioned_child_bounds() {
     let spec = UiSpec::new(
         RootFrameSpec::new(
             "root",
@@ -58,8 +56,7 @@ fn fixed_absolute_layout_expands_to_positioned_child_bounds() {
                         width: 15,
                         height: 11,
                     }),
-                )])
-                .layout(LayoutBox::fixed(10, 10)),
+                )]),
             ),
         )
         .padding(0),
@@ -109,7 +106,7 @@ fn label_with_explicit_box_does_not_expand_root_width() {
             panel(
                 "panel",
                 label("VERY LONG LABEL THAT MUST NOT WIDEN THE WINDOW")
-                    .layout(LayoutBox::fixed(64, 16).max(64, 16)),
+                    .widget_layout(LayoutBox::fixed(64, 16).max(64, 16)),
             )
             .pad_all(0),
         )
@@ -123,6 +120,16 @@ fn label_with_explicit_box_does_not_expand_root_width() {
             height: 16,
         }
     );
+}
+
+#[test]
+fn container_layout_validator_rejects_absolute_constraints() {
+    let error = validate_container_layout("Panel", LayoutBox::fixed(10, 10))
+        .expect_err("container absolute constraints must hard-fail");
+    assert!(matches!(
+        error,
+        DeclarativeError::InvalidContainerLayout { container_kind } if container_kind == "Panel"
+    ));
 }
 
 #[test]

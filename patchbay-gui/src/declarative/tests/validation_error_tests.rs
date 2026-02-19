@@ -138,7 +138,7 @@ fn rejects_root_slot_child_when_not_container() {
 #[test]
 fn rejects_container_children_when_not_slot_wrapped() {
     let invalid_row = Node::Row(FlexSpec {
-        layout: LayoutBox::auto(),
+        layout: ContainerLayout::auto(),
         gap: 0,
         padding: EdgeInsets::default(),
         align: Align::Start,
@@ -182,7 +182,7 @@ fn rejects_slot_child_when_nested_slot() {
 #[test]
 fn rejects_slot_grid_with_px_track() {
     let invalid_grid = Node::Grid(GridSpec {
-        layout: LayoutBox::fill(),
+        layout: ContainerLayout::fill(),
         template: GridTemplate::new(vec![TrackSize::Px(10), TrackSize::Percent(90)])
             .rows(vec![TrackSize::Fr(1)]),
         children: vec![slot(label("left")), slot(label("right"))],

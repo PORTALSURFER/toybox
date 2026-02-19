@@ -26,7 +26,7 @@ fn render_knob_uses_token_diameter_for_hit_region() {
                     Point { x: 0, y: 0 },
                     Node::Knob(KnobSpec::new("k", "Drive", 0.5, (0.0, 1.0))),
                 )])
-                .layout(LayoutBox::fixed(320, 200)),
+                .layout(ContainerLayout::fill()),
             ),
         )
         .tokens(tokens)

@@ -14,7 +14,11 @@ fn measure_grid(grid: &GridSpec, tokens: &ThemeTokens) -> Size {
     apply_px_track_mins(&grid.template.columns, &mut column_widths);
     apply_px_track_mins(&grid.template.rows, &mut row_heights);
     let (width, height) = measured_grid_extent(grid, &column_widths, &row_heights);
-    resolve_size(grid.layout, Size { width, height }, Size { width, height })
+    resolve_size(
+        grid.layout.to_layout_box(),
+        Size { width, height },
+        Size { width, height },
+    )
 }
 
 /// Return the number of grid rows required for all children.

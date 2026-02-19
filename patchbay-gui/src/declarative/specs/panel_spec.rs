@@ -14,7 +14,7 @@ pub struct PanelSpec {
     /// Optional header height override.
     pub header_height: Option<i32>,
     /// Layout constraints.
-    pub layout: LayoutBox,
+    pub(crate) layout: ContainerLayout,
     /// Panel content slot.
     pub(crate) content: Box<Node>,
 }
@@ -31,7 +31,7 @@ impl PanelSpec {
             background: None,
             outline: None,
             header_height: None,
-            layout: LayoutBox::auto(),
+            layout: ContainerLayout::auto(),
             content: Box::new(Node::slot(content)),
         }
     }
@@ -67,9 +67,14 @@ impl PanelSpec {
     }
 
     /// Override panel layout constraints.
-    pub fn layout(mut self, layout: LayoutBox) -> Self {
+    pub fn layout(mut self, layout: ContainerLayout) -> Self {
         self.layout = layout;
         self
+    }
+
+    /// Borrow panel container layout constraints.
+    pub fn container_layout(&self) -> ContainerLayout {
+        self.layout
     }
 
     /// Borrow the panel content slot node.
