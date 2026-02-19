@@ -195,7 +195,7 @@ Text widgets should define:
 Required behavior:
 
 - Negative resolved sizes -> clamp to zero and record diagnostic.
-- `min > max` contradictions -> normalize and record diagnostic.
+- checked validation hard-fails `min > max` contradictions with explicit errors.
 - Overflow without explicit policy -> fallback `Clip` + diagnostic.
 - Construction-time cycle prevention.
 
@@ -281,7 +281,7 @@ The major structural targets are now implemented in code:
 - first-class single-slot `AspectBox` container primitive
 - first-class layout engine state (`LayoutEngineState`) with deterministic measure caching
 - key-scoped `NodeId` identities for keyed nodes (stable through sibling reindexing)
-- hard-fail validation for invalid root/widget layout bounds (`min > max`)
+- hard-fail validation for invalid root/widget/slot-derived layout bounds (`min > max`)
 - shared Win32 host runtime adoption of persistent `LayoutEngineState` rendering
 - stress coverage for deep nesting and large slot lists
 

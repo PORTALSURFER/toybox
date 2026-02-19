@@ -133,6 +133,21 @@ fn container_layout_validator_rejects_absolute_constraints() {
 }
 
 #[test]
+fn container_layout_validator_rejects_inverted_bounds() {
+    let error = validate_container_layout("Panel", LayoutBox::auto().min(20, 10).max(8, 10))
+        .expect_err("container inverted bounds must hard-fail");
+    assert!(matches!(
+        error,
+        DeclarativeError::InvalidLayoutBounds {
+            node_kind,
+            axis,
+            min,
+            max
+        } if node_kind == "Panel" && axis == "width" && min == 20 && max == 8
+    ));
+}
+
+#[test]
 fn text_size_saturates_huge_scale_without_overflow() {
     let measured = text_size("scale", u32::MAX);
     assert_eq!(

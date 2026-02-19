@@ -151,6 +151,24 @@ fn rejects_inverted_root_layout_bounds() {
 }
 
 #[test]
+fn rejects_inverted_slot_widget_layout_bounds() {
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        row_slots(vec![weighted_slot(label("x"), 1).width_bounds(Some(72), Some(24))]),
+    ));
+    let error = measure_checked(&spec).expect_err("expected invalid slot-derived layout bounds");
+    assert!(matches!(
+        error,
+        DeclarativeError::InvalidLayoutBounds {
+            node_kind,
+            axis,
+            min,
+            max
+        } if node_kind == "Label" && axis == "width" && min == 72 && max == 24
+    ));
+}
+
+#[test]
 fn rejects_non_slot_root_content() {
     let spec = UiSpec::new(RootFrameSpec {
         key: "root".to_string(),

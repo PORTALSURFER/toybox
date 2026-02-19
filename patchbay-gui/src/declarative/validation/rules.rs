@@ -36,6 +36,7 @@ fn validate_container_layout(
     container_kind: &'static str,
     layout: LayoutBox,
 ) -> Result<(), DeclarativeError> {
+    validate_layout_bounds(container_kind, layout)?;
     let has_absolute_length =
         matches!(layout.width, Length::Px(_)) || matches!(layout.height, Length::Px(_));
     let has_bounds =

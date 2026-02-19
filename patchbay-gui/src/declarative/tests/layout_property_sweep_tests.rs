@@ -145,3 +145,36 @@ fn property_sweep_resolved_rects_stay_within_root_content_bounds() {
         }
     }
 }
+
+#[test]
+fn property_sweep_rejects_inverted_slot_widget_bounds() {
+    for size in property_sweep_sizes() {
+        let spec = UiSpec::new(
+            RootFrameSpec::new(
+                "root",
+                row_slots(vec![weighted_slot(label("x"), 1).width_bounds(Some(80), Some(16))]),
+            )
+            .layout(LayoutBox::fixed(size.width, size.height)),
+        );
+        let input = InputState {
+            window_size: size,
+            ..InputState::default()
+        };
+        let mut canvas = Canvas::new(size.width, size.height);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let error = render_checked(&spec, &mut ui, Point { x: 0, y: 0 })
+            .expect_err("inverted slot bounds must fail validation");
+        assert!(matches!(
+            error,
+            DeclarativeError::InvalidLayoutBounds {
+                node_kind,
+                axis,
+                min,
+                max
+            } if node_kind == "Label" && axis == "width" && min == 80 && max == 16
+        ));
+    }
+}

@@ -76,9 +76,10 @@ fn slot_track_to_grid_track(child: &Slot) -> TrackSize {
 /// horizontal and vertical alignment.
 fn wrap_slot_child(child: Slot) -> Node {
     let mut content = child.node;
-    let (min_width, max_width) = normalize_slot_bounds(child.params.min_width, child.params.max_width);
-    let (min_height, max_height) =
-        normalize_slot_bounds(child.params.min_height, child.params.max_height);
+    let min_width = child.params.min_width;
+    let max_width = child.params.max_width;
+    let min_height = child.params.min_height;
+    let max_height = child.params.max_height;
     let align_x = child.params.align_x_override.unwrap_or(SlotAlign::Start);
     let align_y = child.params.align_y_override.unwrap_or(SlotAlign::Start);
     if matches!(align_x, SlotAlign::Stretch) || matches!(child.params.size_cross, SlotCrossSize::Fill) {
@@ -114,12 +115,4 @@ fn wrap_slot_child(child: Slot) -> Node {
             .align(align)
             .layout(ContainerLayout::fill()),
     )
-}
-
-/// Normalize optional slot bounds when min is larger than max.
-fn normalize_slot_bounds(min: Option<u32>, max: Option<u32>) -> (Option<u32>, Option<u32>) {
-    match (min, max) {
-        (Some(min), Some(max)) if min > max => (Some(max), Some(max)),
-        _ => (min, max),
-    }
 }

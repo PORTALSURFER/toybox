@@ -57,7 +57,7 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 - slots must contain a non-slot child
 - slot percentages must satisfy deterministic total/fill constraints
 - non-root containers must use host-derived `Auto`/`Fill` sizing only (no pixel/min/max constraints)
-- root and widget layout bounds must satisfy `min <= max` on both axes
+- root and widget layout bounds (including slot-derived widget bounds) must satisfy `min <= max` on both axes
 - widget semantic checks (ranges, selected index, control size, key uniqueness)
 
 `RenderResult` includes:
