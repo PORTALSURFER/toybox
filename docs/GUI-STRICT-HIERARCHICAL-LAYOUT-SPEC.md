@@ -271,6 +271,8 @@ The major structural targets are now implemented in code:
 - parent-owned `SlotParams` (`size_main`, `size_cross`, margin, bounds, alignment overrides)
 - explicit container overflow policy handling and runtime diagnostics
 - structured overflow result reporting (`LayoutDiagnosticCode` + `LayoutOverflowSummary`)
+- property-sweep coverage for deterministic outputs, overflow-summary parity,
+  and resolved-rect bounds across multiple root sizes
 - first-class `Stack`, `ScrollView`, `Wrap`, and `SwitchLayout` container primitives
 - first-class layout engine state (`LayoutEngineState`) with deterministic measure caching
 - shared Win32 host runtime adoption of persistent `LayoutEngineState` rendering
