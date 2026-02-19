@@ -29,15 +29,14 @@ mod win32;
 
 pub use crate::canvas::{Canvas, Color, Point, Rect, Size};
 pub use crate::declarative::{
-    AbsoluteChild, AbsoluteSpec, Align, ButtonSpec, ColorTokens, ControlTokens, DeclarativeError,
-    DrawCommand, DropdownSpec, EdgeInsets, FlexSpec, GridKind, GridSpec, GridTemplate,
-    IndicatorSpec, Justify, KnobSpec, LabelSpec, LayoutBox, Length, Node, PanelSpec,
-    RegionInteractionKind, RegionSpec, RenderResult, RootFrameSpec, RootScaleMode, SectionChild,
-    SectionSize, SliderSpec, SpacingTokens, ThemeTokens, ToggleSpec, TrackSize, TypographyTokens,
-    UiAction, UiSpec, WeightedChild, button, column, column_sections, dropdown, fill_section,
-    fraction, grid, indicator, knob, label, measure_checked, panel, region, render_checked,
-    root_frame_sized, row, row_sections, slider, spacer, toggle, weighted,
-    weighted_section_lengths,
+    Align, ButtonSpec, ColorTokens, ControlTokens, DeclarativeError, DropdownSpec, EdgeInsets,
+    FlexSpec, GridKind, GridSpec, GridTemplate, IndicatorSpec, Justify, KnobSpec, LabelSpec,
+    LayoutBox, Length, Node, PanelSpec, RegionInteractionKind, RenderResult, RootFrameSpec,
+    RootScaleMode, SectionAlign, SectionChild, SectionSize, SectionTrack, SliderSpec,
+    SpacingTokens, SurfaceCommand, ThemeTokens, ToggleSpec, TrackSize, TypographyTokens, UiAction,
+    UiSpec, WeightedChild, button, column, column_sections, dropdown, fill_section, fraction, grid,
+    indicator, knob, label, measure_checked, panel, px_section, render_checked, root_frame_sized,
+    row, row_sections, slider, spacer, surface, toggle, weighted, weighted_section_lengths,
 };
 #[cfg(not(target_os = "windows"))]
 pub use crate::host::WindowHandle;

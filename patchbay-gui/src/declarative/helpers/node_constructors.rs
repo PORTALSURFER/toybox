@@ -63,6 +63,17 @@ pub fn region(key: impl Into<String>, size: Size) -> Node {
     Node::Region(RegionSpec::new(key, size))
 }
 
+/// Create a structured surface node for custom graphics content.
+pub fn surface(
+    key: impl Into<String>,
+    size: Size,
+    commands: Vec<SurfaceCommand>,
+) -> Node {
+    Node::Region(
+        RegionSpec::new(key, size).draw_commands(commands),
+    )
+}
+
 /// Create an indicator node.
 pub fn indicator(size: Size, active: bool) -> Node {
     Node::Indicator(IndicatorSpec::new(size, active))

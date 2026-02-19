@@ -133,3 +133,9 @@ pub enum RegionInteractionKind {
     /// Double click occurred.
     DoubleClicked,
 }
+
+/// Structured surface command type used by public APIs.
+///
+/// This aliases internal region drawing commands while external APIs migrate
+/// away from direct `RegionSpec` construction.
+pub type SurfaceCommand = DrawCommand;
