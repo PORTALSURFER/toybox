@@ -75,6 +75,6 @@ struct DropdownOverlay {
     hovered: Option<usize>,
     /// Whether overlay options render upward instead of downward.
     open_up: bool,
-    /// Clip rectangle inherited from the owning layout section.
+    /// Clip rectangle used for popup visibility (typically full canvas bounds).
     clip_rect: Rect,
 }

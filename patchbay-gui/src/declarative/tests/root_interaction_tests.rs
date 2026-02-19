@@ -81,7 +81,7 @@ fn knob_interaction_is_clamped_to_section_bounds() {
 }
 
 #[test]
-fn dropdown_overlay_interaction_is_clamped_to_section_bounds() {
+fn dropdown_overlay_interaction_can_escape_section_bounds() {
     let root_size = Size {
         width: 160,
         height: 96,
@@ -121,7 +121,7 @@ fn dropdown_overlay_interaction_is_clamped_to_section_bounds() {
             .expect("open frame should render");
     }
 
-    // Frame 2: click where second option would be if overflow were allowed.
+    // Frame 2: click on the second option below the section bounds.
     let mut canvas = Canvas::new(root_size.width, root_size.height);
     let mut layout = Layout::default();
     let input_select = InputState {
@@ -140,10 +140,13 @@ fn dropdown_overlay_interaction_is_clamped_to_section_bounds() {
     let result = render_checked(&spec, &mut ui, Point { x: 0, y: 0 })
         .expect("selection frame should render");
     assert!(
-        !result.actions.iter().any(
-            |action| matches!(action, UiAction::DropdownSelected { key, .. } if key == "mode")
+        result.actions.iter().any(
+            |action| matches!(
+                action,
+                UiAction::DropdownSelected { key, index } if key == "mode" && *index == 1
+            )
         ),
-        "dropdown option outside section clip should not be selectable"
+        "dropdown option outside section clip should remain selectable via popup overlay"
     );
 }
 

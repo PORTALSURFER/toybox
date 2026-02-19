@@ -62,7 +62,7 @@ impl<'a> Ui<'a> {
         let mut any_hovered = false;
         for index in 0..option_count {
             let option_rect = self.dropdown_option_rect(geometry, index);
-            if self.pointer_inside_clipped_rect(option_rect) {
+            if option_rect.contains(self.input.pointer_pos) {
                 any_hovered = true;
                 hovered_index = Some(index);
             }
