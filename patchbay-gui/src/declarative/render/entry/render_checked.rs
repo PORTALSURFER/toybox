@@ -13,9 +13,8 @@ pub fn render_checked(
 
 /// Render a UI specification using persistent layout engine state.
 ///
-/// The engine tracks dirty flags and caches measured root sizes by deterministic
-/// cache keys so repeated renders with unchanged inputs avoid redundant
-/// measurement work.
+/// The engine tracks a deterministic node registry and subtree-aware measure
+/// cache so repeated renders with unchanged subtrees avoid redundant work.
 ///
 /// # Errors
 /// Returns [`DeclarativeError`] when validation fails.
@@ -27,17 +26,9 @@ pub fn render_checked_with_engine(
 ) -> Result<RenderResult, DeclarativeError> {
     validate_spec(spec)?;
     let tokens = root_theme_tokens(spec);
-    let cache_key = resolve_measure_cache_key(spec, &tokens, ui.input().window_size);
-    if engine.measure_dirty {
-        engine.clear_measure_cache();
-    }
-    let (measured_root, cache_hit) = engine.resolve_cached_measure(cache_key, || {
-        measure_root_frame(&spec.root, &tokens)
-    });
-    if !cache_hit {
-        engine.layout_dirty = true;
-    }
-    engine.measure_dirty = false;
+    engine.sync_registry(spec);
+    engine.apply_measure_invalidations();
+    let measured_root = measure_root_frame_with_engine(&spec.root, &tokens, engine);
     let plan = root_render_plan(spec, ui, measured_root);
     let mut actions = Vec::new();
     let mut debug_border_candidates = Vec::new();
@@ -58,7 +49,7 @@ pub fn render_checked_with_engine(
         },
     );
     draw_layout_debug_borders(ui, &debug_border_candidates);
-    engine.layout_dirty = false;
+    engine.consume_layout_dirty();
     Ok(build_render_result(
         plan,
         response,
@@ -76,25 +67,6 @@ fn root_theme_tokens(spec: &UiSpec) -> ThemeTokens {
 /// Build the root render plan using the current UI window size.
 fn root_render_plan(spec: &UiSpec, ui: &Ui<'_>, measured_root: Size) -> RootRenderPlan {
     plan_root_render_with_measured(spec, ui.input().window_size, Some(measured_root))
-}
-
-/// Resolve deterministic measure cache key for a root render pass.
-fn resolve_measure_cache_key(spec: &UiSpec, tokens: &ThemeTokens, surface_size: Size) -> MeasureCacheKey {
-    MeasureCacheKey {
-        spec_hash: debug_hash(spec),
-        token_hash: debug_hash(tokens),
-        surface_width: surface_size.width,
-        surface_height: surface_size.height,
-    }
-}
-
-/// Compute a stable hash from the debug representation of a value.
-fn debug_hash(value: &impl std::fmt::Debug) -> u64 {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    use std::hash::Hash as _;
-    use std::hash::Hasher as _;
-    format!("{value:?}").hash(&mut hasher);
-    hasher.finish()
 }
 
 /// Render the root frame while collecting actions and debug candidates.

@@ -5,6 +5,7 @@
 //! via an explicit reducer step.
 
 include!("contracts/errors.rs");
+include!("contracts/node_id.rs");
 include!("contracts/layout_engine.rs");
 include!("contracts/layout_diagnostic.rs");
 include!("contracts/ui_actions.rs");
@@ -42,6 +43,7 @@ include!("measurement/root_frame.rs");
 include!("measurement/containers.rs");
 include!("measurement/grid.rs");
 include!("measurement/widgets.rs");
+include!("measurement/cached.rs");
 include!("render/panel.rs");
 include!("render/flex/types.rs");
 include!("render/flex/main_axis.rs");

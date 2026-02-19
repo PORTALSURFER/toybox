@@ -34,6 +34,7 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 - Widgets: `label`, `knob`, `slider`, `toggle`, `button`, `dropdown`, `region`, `indicator`, `spacer`, `surface`
 - Math helper: `weighted_slot_lengths(total, weights)`
 - Engine API: `LayoutEngineState`, `render_checked_with_engine(...)`
+- Engine invalidation API: `NodeId`, `node_id_for_key(...)`, `invalidate_layout_subtree(...)`, `invalidate_measure_subtree(...)`, `invalidate_all_layout(...)`, `invalidate_all_measure(...)`, `measure_cache_stats(...)`
 
 ## Fluent Helpers
 - Layout:
@@ -57,6 +58,13 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 
 `RenderResult` now includes `layout_diagnostics` so callers can inspect clipped/compressed placement events at runtime.
 For detailed per-node geometry diagnostics, set `RootFrameSpec::layout_diagnostics_mode(LayoutDiagnosticsMode::PerNode)` and read `RenderResult.node_layout_diagnostics`.
+
+`LayoutEngineState` no longer exposes mutable root dirty flags. Use explicit invalidation:
+- `node_id_for_key("widget-key")` to resolve deterministic node identity.
+- `invalidate_layout_subtree(node_id)` for geometry-only subtree changes.
+- `invalidate_measure_subtree(node_id)` for intrinsic/content changes (also marks layout dirty).
+- `invalidate_all_layout()` / `invalidate_all_measure()` for full-tree invalidation.
+- `measure_cache_stats()` and `last_registry_version()` for read-only diagnostics.
 
 ## Layout Migration Notes
 Container and widget layout APIs are now explicitly separated:

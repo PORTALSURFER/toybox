@@ -66,7 +66,7 @@ fn render_checked_with_engine_reuses_measure_cache_for_stable_inputs() {
     ));
 
     let mut engine = LayoutEngineState::default();
-    engine.mark_measure_dirty();
+    engine.invalidate_all_measure();
 
     let input = InputState {
         window_size: Size {
@@ -83,17 +83,68 @@ fn render_checked_with_engine_reuses_measure_cache_for_stable_inputs() {
     let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
     let first = render_checked_with_engine(&spec, &mut ui, Point { x: 0, y: 0 }, &mut engine)
         .expect("first render should succeed");
-    assert_eq!(engine.measure_cache_hits, 0);
-    assert_eq!(engine.measure_cache_misses, 1);
+    let first_stats = engine.measure_cache_stats();
+    assert_eq!(first_stats.hits, 0);
+    assert!(first_stats.misses > 0);
 
     let mut canvas = Canvas::new(100, 80);
     let mut layout = Layout::default();
     let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
     let second = render_checked_with_engine(&spec, &mut ui, Point { x: 0, y: 0 }, &mut engine)
         .expect("second render should succeed");
-    assert_eq!(engine.measure_cache_hits, 1);
-    assert_eq!(engine.measure_cache_misses, 1);
+    let second_stats = engine.measure_cache_stats();
+    assert!(second_stats.hits > first_stats.hits);
+    assert_eq!(second_stats.misses, first_stats.misses);
     assert_eq!(first.measured_size, second.measured_size);
+}
+
+#[test]
+fn layout_engine_resolves_node_ids_and_supports_subtree_measure_invalidation() {
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        row_slots(vec![
+            weighted_slot(panel("left", label("left")).pad_all(0), 1),
+            weighted_slot(panel("right", label("right")).pad_all(0), 1),
+        ])
+        .pad_all(0),
+    ));
+    let input = InputState {
+        window_size: Size {
+            width: 200,
+            height: 80,
+        },
+        ..InputState::default()
+    };
+    let mut engine = LayoutEngineState::default();
+    let mut ui_state = UiState::default();
+    let theme = Theme::default();
+
+    let mut canvas = Canvas::new(200, 80);
+    let mut layout = Layout::default();
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+    render_checked_with_engine(&spec, &mut ui, Point { x: 0, y: 0 }, &mut engine)
+        .expect("initial render should succeed");
+    let baseline = engine.measure_cache_stats();
+
+    let left_id = engine
+        .node_id_for_key("left")
+        .expect("left panel id should be registered");
+    let right_id = engine
+        .node_id_for_key("right")
+        .expect("right panel id should be registered");
+    assert!(engine.contains_node(left_id));
+    assert!(engine.contains_node(right_id));
+    assert_ne!(left_id, right_id);
+
+    engine.invalidate_measure_subtree(left_id);
+    let mut canvas = Canvas::new(200, 80);
+    let mut layout = Layout::default();
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+    render_checked_with_engine(&spec, &mut ui, Point { x: 0, y: 0 }, &mut engine)
+        .expect("re-render after subtree invalidation should succeed");
+    let after = engine.measure_cache_stats();
+    assert!(after.hits > baseline.hits);
+    assert!(after.misses > baseline.misses);
 }
 
 #[test]

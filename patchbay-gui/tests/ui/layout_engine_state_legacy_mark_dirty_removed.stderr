@@ -1,0 +1,5 @@
+error[E0599]: no method named `mark_measure_dirty` found for struct `LayoutEngineState` in the current scope
+ --> tests/ui/layout_engine_state_legacy_mark_dirty_removed.rs:5:12
+  |
+5 |     engine.mark_measure_dirty();
+  |            ^^^^^^^^^^^^^^^^^^ method not found in `LayoutEngineState`

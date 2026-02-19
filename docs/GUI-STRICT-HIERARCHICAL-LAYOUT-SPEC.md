@@ -276,7 +276,6 @@ The major structural targets are now implemented in code:
 
 Remaining gaps to close for full spec parity:
 
-1. **Dirty tracking is root-level cache orchestration, not subtree invalidation.**
-   `LayoutEngineState` currently exposes deterministic root measurement caching
-   and dirty flags; fine-grained subtree dependency/invalidations are not yet
-   modeled as a public contract.
+- No structural gaps are currently tracked. Subtree invalidation now uses
+  explicit `NodeId` APIs in `LayoutEngineState`, and direct dirty-flag mutation
+  is no longer part of the public contract.
