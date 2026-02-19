@@ -2,7 +2,7 @@
 #[derive(Clone, Debug)]
 pub struct SlotSpec {
     /// The single child hosted by this slot.
-    pub child: Box<Node>,
+    pub(crate) child: Box<Node>,
 }
 
 impl SlotSpec {
@@ -11,6 +11,11 @@ impl SlotSpec {
         Self {
             child: Box::new(child),
         }
+    }
+
+    /// Borrow the slot child node.
+    pub fn child(&self) -> &Node {
+        self.child.as_ref()
     }
 }
 

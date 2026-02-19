@@ -6,7 +6,7 @@ pub struct GridSpec {
     /// Grid track template.
     pub template: GridTemplate,
     /// Slot children in row-major order.
-    pub children: Vec<Node>,
+    pub(crate) children: Vec<Node>,
     /// Grid semantic role.
     pub kind: GridKind,
 }
@@ -30,5 +30,10 @@ impl GridSpec {
     pub fn layout(mut self, layout: LayoutBox) -> Self {
         self.layout = layout;
         self
+    }
+
+    /// Borrow the ordered slot children.
+    pub fn children(&self) -> &[Node] {
+        &self.children
     }
 }

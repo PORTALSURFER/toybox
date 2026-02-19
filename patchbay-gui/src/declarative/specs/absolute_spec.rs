@@ -4,7 +4,7 @@ pub struct AbsoluteSpec {
     /// Layout constraints.
     pub layout: LayoutBox,
     /// Positioned children.
-    pub children: Vec<AbsoluteChild>,
+    pub(crate) children: Vec<AbsoluteChild>,
 }
 
 impl AbsoluteSpec {
@@ -21,6 +21,11 @@ impl AbsoluteSpec {
         self.layout = layout;
         self
     }
+
+    /// Borrow the ordered positioned children.
+    pub fn children(&self) -> &[AbsoluteChild] {
+        &self.children
+    }
 }
 
 /// Positioned child node.
@@ -29,7 +34,7 @@ pub struct AbsoluteChild {
     /// Child origin relative to the container.
     pub origin: Point,
     /// Slotted child node.
-    pub node: Node,
+    pub(crate) node: Node,
 }
 
 impl AbsoluteChild {
@@ -39,5 +44,10 @@ impl AbsoluteChild {
             origin,
             node: Node::slot(node),
         }
+    }
+
+    /// Borrow the positioned child node.
+    pub fn node(&self) -> &Node {
+        &self.node
     }
 }

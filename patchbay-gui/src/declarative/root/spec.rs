@@ -62,7 +62,7 @@ pub struct RootFrameSpec {
     ///
     /// Root is treated as a special container and always stores exactly one
     /// slot child.
-    pub content: Box<Node>,
+    pub(crate) content: Box<Node>,
 }
 
 impl RootFrameSpec {
@@ -124,6 +124,11 @@ impl RootFrameSpec {
     pub fn zoom_override(mut self, zoom: f32) -> Self {
         self.zoom_override = Some(zoom);
         self
+    }
+
+    /// Borrow the root content slot node.
+    pub fn content(&self) -> &Node {
+        self.content.as_ref()
     }
 }
 

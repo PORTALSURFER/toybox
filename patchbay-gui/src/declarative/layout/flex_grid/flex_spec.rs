@@ -12,7 +12,7 @@ pub struct FlexSpec {
     /// Main-axis distribution.
     pub justify: Justify,
     /// Slot children.
-    pub children: Vec<Node>,
+    pub(crate) children: Vec<Node>,
 }
 
 impl FlexSpec {
@@ -148,5 +148,10 @@ impl FlexSpec {
     pub fn justify_space_evenly(mut self) -> Self {
         self.justify = Justify::SpaceEvenly;
         self
+    }
+
+    /// Borrow the ordered slot children.
+    pub fn children(&self) -> &[Node] {
+        &self.children
     }
 }

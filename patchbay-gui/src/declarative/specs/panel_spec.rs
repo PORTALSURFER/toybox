@@ -16,7 +16,7 @@ pub struct PanelSpec {
     /// Layout constraints.
     pub layout: LayoutBox,
     /// Panel content slot.
-    pub content: Box<Node>,
+    pub(crate) content: Box<Node>,
 }
 
 impl PanelSpec {
@@ -70,5 +70,10 @@ impl PanelSpec {
     pub fn layout(mut self, layout: LayoutBox) -> Self {
         self.layout = layout;
         self
+    }
+
+    /// Borrow the panel content slot node.
+    pub fn content(&self) -> &Node {
+        self.content.as_ref()
     }
 }
