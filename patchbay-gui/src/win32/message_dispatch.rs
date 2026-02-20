@@ -70,6 +70,10 @@ where
 
     fn handle_input_messages(&mut self, message: u32, wparam: WPARAM) -> Option<LRESULT> {
         match message {
+            WM_GETDLGCODE => {
+                let flags = DLGC_WANTALLKEYS.0 | DLGC_WANTCHARS.0;
+                Some(LRESULT(flags as isize))
+            }
             WM_DROPFILES => {
                 let hdrop = HDROP(wparam.0 as *mut _);
                 self.input.dropped_files = collect_dropped_files(hdrop);
@@ -77,6 +81,13 @@ where
                     DragFinish(hdrop);
                 }
                 self.render_frame();
+                Some(LRESULT(0))
+            }
+            WM_KEYDOWN => {
+                if let Some(ch) = translate_virtual_key_to_input_char(wparam) {
+                    self.input.key_pressed = Some(ch);
+                    self.render_frame();
+                }
                 Some(LRESULT(0))
             }
             WM_CHAR => {
@@ -114,7 +125,10 @@ where
         self.input.mouse_down = true;
         self.input.mouse_pressed = true;
         self.input.mouse_double_clicked = double_clicked;
-        unsafe { SetCapture(self.hwnd) };
+        unsafe {
+            let _ = SetFocus(Some(self.hwnd));
+            SetCapture(self.hwnd);
+        };
         self.render_frame();
         Some(LRESULT(0))
     }
@@ -132,7 +146,10 @@ where
     fn handle_secondary_button_down(&mut self) -> Option<LRESULT> {
         self.input.mouse_secondary_down = true;
         self.input.mouse_secondary_pressed = true;
-        unsafe { SetCapture(self.hwnd) };
+        unsafe {
+            let _ = SetFocus(Some(self.hwnd));
+            SetCapture(self.hwnd);
+        };
         self.render_frame();
         Some(LRESULT(0))
     }
@@ -176,4 +193,16 @@ where
         }
     }
 
+}
+
+/// Translate Win32 virtual keys into declarative text-edit control characters.
+fn translate_virtual_key_to_input_char(wparam: WPARAM) -> Option<char> {
+    match (wparam.0 & 0xFFFF) as u16 {
+        key if key == VK_BACK.0 as u16 => Some('\u{8}'),
+        key if key == VK_RETURN.0 as u16 => Some('\r'),
+        key if key == VK_ESCAPE.0 as u16 => Some('\u{1b}'),
+        key if key == VK_TAB.0 as u16 => Some('\t'),
+        key if key == VK_SPACE.0 as u16 => Some(' '),
+        _ => None,
+    }
 }

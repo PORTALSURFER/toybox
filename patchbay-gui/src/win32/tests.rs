@@ -1,6 +1,10 @@
 #[cfg(test)]
 mod tests {
-    use super::{client_size_changed, enforce_aspect_min, resolved_layout_size_for_resize_request};
+    use super::{
+        VK_BACK, VK_ESCAPE, VK_RETURN, VK_SPACE, VK_TAB, WPARAM, client_size_changed,
+        enforce_aspect_min, resolved_layout_size_for_resize_request,
+        translate_virtual_key_to_input_char,
+    };
     use crate::canvas::Size;
 
     #[test]
@@ -95,5 +99,30 @@ mod tests {
                 height: 480,
             }
         );
+    }
+
+    #[test]
+    fn translate_virtual_key_maps_text_edit_controls() {
+        assert_eq!(
+            translate_virtual_key_to_input_char(WPARAM(VK_BACK.0 as usize)),
+            Some('\u{8}')
+        );
+        assert_eq!(
+            translate_virtual_key_to_input_char(WPARAM(VK_RETURN.0 as usize)),
+            Some('\r')
+        );
+        assert_eq!(
+            translate_virtual_key_to_input_char(WPARAM(VK_ESCAPE.0 as usize)),
+            Some('\u{1b}')
+        );
+        assert_eq!(
+            translate_virtual_key_to_input_char(WPARAM(VK_TAB.0 as usize)),
+            Some('\t')
+        );
+        assert_eq!(
+            translate_virtual_key_to_input_char(WPARAM(VK_SPACE.0 as usize)),
+            Some(' ')
+        );
+        assert_eq!(translate_virtual_key_to_input_char(WPARAM(0x41)), None);
     }
 }

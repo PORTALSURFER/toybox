@@ -34,7 +34,11 @@ pub struct InputState {
     pub alt_down: bool,
     /// Scroll delta for this frame (positive = up).
     pub wheel_delta: f32,
-    /// Key press captured this frame (ASCII).
+    /// Key press captured this frame.
+    ///
+    /// Printable input arrives as Unicode scalar values. Control keys are
+    /// normalized to control characters such as backspace (`\u{8}`), return
+    /// (`\r`), and escape (`\u{1b}`).
     pub key_pressed: Option<char>,
     /// Files dropped onto the window this frame.
     pub dropped_files: Vec<PathBuf>,
