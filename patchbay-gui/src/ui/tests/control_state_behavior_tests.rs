@@ -54,6 +54,60 @@ fn slider_updates_value_on_drag() {
 }
 
 #[test]
+fn slider_clears_active_state_when_mouse_up_without_release_event() {
+    let mut canvas = Canvas::new(200, 200);
+    let mut layout = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let mut value = 0.0;
+    let mut input = InputState {
+        pointer_pos: Point { x: 20, y: 40 },
+        mouse_pressed: true,
+        mouse_down: true,
+        ..InputState::default()
+    };
+
+    {
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let response = ui.slider(
+            WidgetId::new(23),
+            "GAIN",
+            &mut value,
+            SliderConfig {
+                range: (0.0, 1.0),
+                size: Size {
+                    width: 100,
+                    height: 16,
+                },
+            },
+        );
+        assert!(response.active);
+    }
+
+    input.mouse_pressed = false;
+    input.mouse_down = false;
+    input.mouse_released = false;
+
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+    let response = ui.slider(
+        WidgetId::new(23),
+        "GAIN",
+        &mut value,
+        SliderConfig {
+            range: (0.0, 1.0),
+            size: Size {
+                width: 100,
+                height: 16,
+            },
+        },
+    );
+    assert!(
+        !response.active,
+        "slider should recover from missing release events when mouse is up"
+    );
+}
+
+#[test]
 fn root_frame_measures_text_content() {
     let mut canvas = Canvas::new(200, 200);
     let mut layout = Layout::default();

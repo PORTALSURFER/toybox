@@ -80,6 +80,47 @@ fn dropdown_closes_on_outside_press_when_open() {
 }
 
 #[test]
+fn open_dropdown_blocks_click_through_to_prior_widgets() {
+    let mut canvas = Canvas::new(220, 220);
+    let mut layout = Layout::default();
+    let layout_origin = layout.cursor;
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let options = ["Off", "Mono", "Poly"];
+    let mut selected = 0;
+    let dropdown_id = WidgetId::new(181);
+
+    let open_input = InputState {
+        pointer_pos: Point { x: 20, y: 70 },
+        mouse_pressed: true,
+        ..InputState::default()
+    };
+    {
+        let mut ui = Ui::new(&mut canvas, &open_input, &mut ui_state, &mut layout, &theme);
+        let _ = ui.button(WidgetId::new(4), "Armed", 70, 16);
+        let response = ui.dropdown(dropdown_id, "Mode", &options, &mut selected, 80, 16);
+        assert!(response.open);
+    }
+
+    layout.cursor = layout_origin;
+    let outside_press = InputState {
+        pointer_pos: Point { x: 20, y: 20 },
+        mouse_pressed: true,
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &outside_press, &mut ui_state, &mut layout, &theme);
+    ui.reset_input_consumption();
+    let button = ui.button(WidgetId::new(4), "Armed", 70, 16);
+    let response = ui.dropdown(dropdown_id, "Mode", &options, &mut selected, 80, 16);
+    assert!(
+        !button.clicked,
+        "outside press while menu is open should not click through to prior widgets"
+    );
+    assert!(!response.open, "outside press should close the open dropdown");
+    assert_eq!(ui.state.open_dropdown, None);
+}
+
+#[test]
 fn dropdown_open_up_selection_uses_rows_above_control() {
     let mut canvas = Canvas::new(120, 80);
     let mut layout = Layout {

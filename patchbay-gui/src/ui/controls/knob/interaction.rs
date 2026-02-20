@@ -40,6 +40,12 @@ impl<'a> Ui<'a> {
             self.state.active = None;
             self.state.drag_start = None;
             response.active = false;
+            return;
+        }
+        if self.state.active == Some(id) && !self.input.mouse_down {
+            self.state.active = None;
+            self.state.drag_start = None;
+            response.active = false;
         }
     }
 

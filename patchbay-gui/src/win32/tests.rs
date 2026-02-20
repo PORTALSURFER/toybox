@@ -4,6 +4,7 @@ mod tests {
         ShortcutBinding, ShortcutModifiers, VK_BACK, VK_DELETE, VK_END, VK_ESCAPE, VK_HOME,
         VK_LEFT, VK_RETURN, VK_RIGHT, VK_SPACE, VK_TAB, WPARAM, client_size_changed,
         enforce_aspect_min, resolved_layout_size_for_resize_request,
+        resolved_root_frame_resize_request,
         translate_virtual_key_to_input_char,
     };
     use crate::canvas::Size;
@@ -100,6 +101,45 @@ mod tests {
                 height: 480,
             }
         );
+    }
+
+    #[test]
+    fn root_frame_resize_request_uses_measured_size_for_auto_layout_roots() {
+        let current = Size {
+            width: 420,
+            height: 258,
+        };
+        let measured = Some(Size {
+            width: 512,
+            height: 320,
+        });
+        let request = resolved_root_frame_resize_request(current, measured, None);
+        assert_eq!(
+            request,
+            Some(Size {
+                width: 512,
+                height: 320,
+            })
+        );
+    }
+
+    #[test]
+    fn root_frame_resize_request_skips_fixed_design_roots() {
+        let request = resolved_root_frame_resize_request(
+            Size {
+                width: 420,
+                height: 258,
+            },
+            Some(Size {
+                width: 512,
+                height: 320,
+            }),
+            Some(Size {
+                width: 420,
+                height: 258,
+            }),
+        );
+        assert!(request.is_none());
     }
 
     #[test]

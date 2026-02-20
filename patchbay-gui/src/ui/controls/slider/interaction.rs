@@ -15,7 +15,7 @@ impl<'a> Ui<'a> {
             self.state.active = Some(id);
             response.active = true;
         }
-        if self.state.active == Some(id) && self.input.mouse_released {
+        if self.state.active == Some(id) && (self.input.mouse_released || !self.input.mouse_down) {
             self.state.active = None;
             response.active = false;
         }

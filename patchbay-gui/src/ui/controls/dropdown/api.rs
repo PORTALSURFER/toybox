@@ -33,10 +33,13 @@ impl<'a> Ui<'a> {
         let height = control_size.height.min(i32::MAX as u32) as i32;
         let layout = self.resolve_dropdown_layout(label, width, height);
         let mut response = self.resolve_dropdown_state(id, layout.rect);
+        if response.open {
+            self.state.mark_open_dropdown_seen(id);
+        }
         self.draw_dropdown_control(layout, options, *selected, &response, visual_style);
 
         if response.open {
-            let menu = self.evaluate_open_dropdown_menu(layout, options, selected, response.hovered);
+            let menu = self.evaluate_open_dropdown_menu(id, layout, options, selected, response.hovered);
             response.open = menu.open;
             response.changed = menu.changed;
             if response.open {

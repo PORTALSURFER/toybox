@@ -125,7 +125,22 @@ where
         let vector_commands = ui.take_vector_commands();
         drop(ui);
         self.renderer.set_vector_commands(vector_commands);
-        let _ = self.ui_state.take_root_frame_size();
+        self.apply_measured_root_frame_resize_request(&spec);
+    }
+
+    fn apply_measured_root_frame_resize_request(&mut self, spec: &UiSpec) {
+        let target = resolved_root_frame_resize_request(
+            self.canonical_layout_size,
+            self.ui_state.take_root_frame_size(),
+            spec.root.design_size_value(),
+        );
+        let Some(target) = target else {
+            return;
+        };
+        self.last_size
+            .store(pack_size(target.width, target.height), Ordering::Release);
+        self.resize_request
+            .store(pack_size(target.width, target.height), Ordering::Release);
     }
 
     fn render_debug_overlay_if_enabled(&mut self) {
@@ -178,6 +193,29 @@ where
         self.input.wheel_delta = 0.0;
         self.input.key_pressed = None;
         self.input.dropped_files.clear();
+    }
+}
+
+/// Resolve a pending host resize request from measured root-frame output.
+fn resolved_root_frame_resize_request(
+    current_layout_size: Size,
+    measured_root_size: Option<Size>,
+    design_size: Option<Size>,
+) -> Option<Size> {
+    // Fixed design-size roots intentionally stay host-scaled and must not
+    // request host size changes every frame.
+    if design_size.is_some() {
+        return None;
+    }
+    let measured = measured_root_size?;
+    let target = Size {
+        width: measured.width.max(1),
+        height: measured.height.max(1),
+    };
+    if client_size_changed(current_layout_size, target) {
+        Some(target)
+    } else {
+        None
     }
 }
 

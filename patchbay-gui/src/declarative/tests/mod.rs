@@ -7,6 +7,7 @@ include!("root_transform_and_interaction.rs");
 include!("region_and_panel_behavior.rs");
 include!("overflow_policy_and_diagnostics.rs");
 include!("containers_and_engine_tests.rs");
+include!("cache_and_slot_invariant_tests.rs");
 include!("switch_layout_tests.rs");
 include!("single_slot_container_tests.rs");
 include!("aspect_box_tests.rs");

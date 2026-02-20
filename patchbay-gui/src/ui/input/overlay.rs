@@ -74,6 +74,9 @@ impl<'a> Ui<'a> {
             }
         }
         self.state.overlays = overlays;
+        if self.state.open_dropdown.is_some() && !self.state.open_dropdown_was_seen() {
+            self.state.clear_open_dropdown();
+        }
     }
 
     /// Clear any deferred overlay drawings for the next frame.
@@ -84,10 +87,11 @@ impl<'a> Ui<'a> {
     /// Reset per-frame input consumption flags.
     pub fn reset_input_consumption(&mut self) {
         self.state.consume_mouse_pressed = false;
+        self.state.open_dropdown_seen_this_frame = false;
     }
 
     /// Return true when a primary-button press is still available this frame.
-    fn mouse_pressed(&self) -> bool {
+    fn mouse_pressed_available(&self) -> bool {
         self.input.mouse_pressed && !self.state.consume_mouse_pressed
     }
 
@@ -97,8 +101,31 @@ impl<'a> Ui<'a> {
     }
 
     /// Return true if this call successfully claimed the primary-button press.
+    ///
+    /// When a dropdown menu is open, non-dropdown controls must not claim the
+    /// frame press. This prevents click-through behavior under floating menus.
     fn claim_mouse_pressed(&mut self) -> bool {
-        if !self.mouse_pressed() {
+        if self.state.open_dropdown.is_some() {
+            return false;
+        }
+        self.claim_mouse_pressed_raw()
+    }
+
+    /// Claim primary-button press for a dropdown control.
+    ///
+    /// If another dropdown is currently open, only that dropdown may claim.
+    fn claim_mouse_pressed_for_dropdown(&mut self, id: WidgetId) -> bool {
+        if let Some(open_id) = self.state.open_dropdown
+            && open_id != id
+        {
+            return false;
+        }
+        self.claim_mouse_pressed_raw()
+    }
+
+    /// Claim primary-button press without widget-type gating.
+    fn claim_mouse_pressed_raw(&mut self) -> bool {
+        if !self.mouse_pressed_available() {
             return false;
         }
         self.consume_mouse_pressed();

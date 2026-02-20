@@ -14,6 +14,8 @@ pub struct UiState {
     open_dropdown: Option<WidgetId>,
     /// Scroll offset for the currently open dropdown menu.
     open_dropdown_scroll_px: i32,
+    /// Whether the currently open dropdown was rendered this frame.
+    open_dropdown_seen_this_frame: bool,
     /// Cached layout measurements keyed by container id.
     layout: LayoutState,
     /// Deferred dropdown overlays to render after widgets.
@@ -62,6 +64,7 @@ impl UiState {
     pub(crate) fn begin_frame(&mut self) {
         self.root_frame_used = false;
         self.root_frame_size = None;
+        self.open_dropdown_seen_this_frame = false;
     }
 
     /// Store the latest measured root frame size for host integrations.
@@ -80,6 +83,19 @@ impl UiState {
     pub(crate) fn clear_open_dropdown(&mut self) {
         self.open_dropdown = None;
         self.open_dropdown_scroll_px = 0;
+        self.open_dropdown_seen_this_frame = false;
+    }
+
+    /// Mark the open dropdown as present in the current render traversal.
+    pub(crate) fn mark_open_dropdown_seen(&mut self, id: WidgetId) {
+        if self.open_dropdown == Some(id) {
+            self.open_dropdown_seen_this_frame = true;
+        }
+    }
+
+    /// Return whether the currently open dropdown was rendered this frame.
+    pub(crate) fn open_dropdown_was_seen(&self) -> bool {
+        self.open_dropdown_seen_this_frame
     }
 }
 
