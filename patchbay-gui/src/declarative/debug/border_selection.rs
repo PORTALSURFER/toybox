@@ -60,7 +60,13 @@ fn should_collect_container_debug_border_candidate_with_mode(
     pointer_inside: bool,
     draw_all: bool,
 ) -> bool {
-    kind != ContainerKind::RootFrame && depth > 1 && (draw_all || pointer_inside)
+    if kind == ContainerKind::RootFrame || depth <= 1 {
+        return false;
+    }
+    if draw_all {
+        return kind == ContainerKind::Slot;
+    }
+    pointer_inside
 }
 
 #[cfg(feature = "layout-debug-borders")]
