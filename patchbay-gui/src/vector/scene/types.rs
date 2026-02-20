@@ -1,6 +1,6 @@
 //! Core public types and top-level painter orchestration.
 
-use crate::canvas::{Color, Point};
+use crate::canvas::{Color, Point, Rect};
 use vello::Scene;
 use vello::kurbo::Affine;
 use vello::peniko::FontData;
@@ -15,6 +15,8 @@ pub(crate) enum VectorCommand {
     Text {
         /// Top-left text origin in canvas-space pixels.
         origin: Point,
+        /// Optional clip rectangle in canvas-space pixels.
+        clip_rect: Option<Rect>,
         /// Text content.
         text: String,
         /// Text color.
@@ -122,10 +124,11 @@ impl VectorScenePainter {
             match command {
                 VectorCommand::Text {
                     origin,
+                    clip_rect,
                     text,
                     color,
                     scale,
-                } => self.draw_text(scene, *origin, text, *color, *scale, transform),
+                } => self.draw_text(scene, *origin, *clip_rect, text, *color, *scale, transform),
                 VectorCommand::CenteredText {
                     left_bound,
                     max_width,

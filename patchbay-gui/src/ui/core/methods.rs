@@ -54,6 +54,7 @@ impl<'a> Ui<'a> {
         if self.vector_text_enabled {
             self.vector_commands.push(VectorCommand::Text {
                 origin: position,
+                clip_rect: self.current_clip_rect(),
                 text: text.to_string(),
                 color,
                 scale,

@@ -63,16 +63,13 @@ impl<'a> Ui<'a> {
                     x: visible_rect.origin.x + 4,
                     y: visible_rect.origin.y + (height - (7 * self.theme.text_scale as i32)) / 2,
                 };
-                let fitted = fit_text_single_line_ellipsis(
+                let _ = self.draw_text_single_line_hard_clamped(
+                    option_text,
                     option,
                     visible_rect.size.width.saturating_sub(8),
-                    self.theme.text_scale,
-                );
-                self.draw_text_internal(
-                    option_text,
-                    &fitted,
+                    visible_rect.size.height,
                     overlay.text_color,
-                    self.theme.text_scale,
+                    false,
                 );
             }
         }

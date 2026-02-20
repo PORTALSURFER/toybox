@@ -5,7 +5,7 @@ use vello::kurbo::Affine;
 use vello::peniko::{Fill, FontData};
 use vello::{Glyph, Scene};
 
-use crate::canvas::{Color, Point};
+use crate::canvas::{Color, Point, Rect};
 use crate::logging::log_line_safe;
 
 use super::color_and_angle_helpers::color_to_vello;
@@ -13,10 +13,12 @@ use super::types::{TextLineMetrics, VectorScenePainter};
 
 impl VectorScenePainter {
     /// Draw one vector text run into the scene using the loaded font, if any.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn draw_text(
         &mut self,
         scene: &mut Scene,
         origin: Point,
+        clip_rect: Option<Rect>,
         text: &str,
         color: Color,
         scale: u32,
@@ -50,6 +52,21 @@ impl VectorScenePainter {
         }
 
         let font = self.font.as_ref().expect("font was checked above");
+        if let Some(clip_rect) = clip_rect {
+            if clip_rect.size.width == 0 || clip_rect.size.height == 0 {
+                return;
+            }
+            let clip_shape = vello::kurbo::Rect::new(
+                clip_rect.origin.x as f64,
+                clip_rect.origin.y as f64,
+                (clip_rect.origin.x + clip_rect.size.width as i32) as f64,
+                (clip_rect.origin.y + clip_rect.size.height as i32) as f64,
+            );
+            scene.push_clip_layer(Fill::NonZero, transform, &clip_shape);
+            Self::draw_glyph_run(scene, &font.data, transform, color, font_size, glyphs);
+            scene.pop_layer();
+            return;
+        }
         Self::draw_glyph_run(scene, &font.data, transform, color, font_size, glyphs);
     }
 

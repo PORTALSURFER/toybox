@@ -47,7 +47,16 @@ impl<'a> Ui<'a> {
                 height: 0,
             };
         }
-        self.draw_text_internal(origin, &fitted, color, self.theme.text_scale);
+        let clip_rect = Rect {
+            origin,
+            size: Size {
+                width: max_width,
+                height: text_line_height(self.theme.text_scale.max(1)),
+            },
+        };
+        self.with_clip(clip_rect, |ui| {
+            ui.draw_text_internal(origin, &fitted, color, ui.theme.text_scale);
+        });
         let size = text_size(&fitted, self.theme.text_scale);
         if track_bounds {
             self.track_rect_internal(Rect { origin, size });
@@ -80,7 +89,16 @@ impl<'a> Ui<'a> {
                 height: 0,
             };
         }
-        self.draw_text_internal(origin, &fitted, color, self.theme.text_scale);
+        let clip_rect = Rect {
+            origin,
+            size: Size {
+                width: max_width,
+                height: max_height,
+            },
+        };
+        self.with_clip(clip_rect, |ui| {
+            ui.draw_text_internal(origin, &fitted, color, ui.theme.text_scale);
+        });
         let size = text_size(&fitted, self.theme.text_scale);
         if track_bounds {
             self.track_rect_internal(Rect { origin, size });

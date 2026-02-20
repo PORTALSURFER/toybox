@@ -247,3 +247,32 @@ fn dropdown_visual_style_overrides_apply_to_open_menu_overlay() {
         assert_eq!(overlay.text_color, style.text.expect("text color should exist"));
     }
 }
+
+#[test]
+fn dropdown_selected_text_is_clipped_in_vector_mode() {
+    let mut canvas = Canvas::new(200, 120);
+    let mut layout = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let input = InputState::default();
+    let options = ["A VERY LONG PRESET NAME THAT SHOULD CLIP"];
+    let mut selected = 0usize;
+
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+    ui.set_vector_text_enabled(true);
+    let _ = ui.dropdown(WidgetId::new(23), "", &options, &mut selected, 80, 16);
+
+    let commands = ui.take_vector_commands();
+    let clipped_command = commands.iter().find_map(|command| match command {
+        VectorCommand::Text {
+            clip_rect: Some(rect),
+            ..
+        } => Some(*rect),
+        _ => None,
+    });
+    let clip_rect = clipped_command.expect("dropdown should emit clipped text command");
+    assert_eq!(clip_rect.origin.x, 20);
+    assert_eq!(clip_rect.origin.y, 17);
+    assert_eq!(clip_rect.size.width, 72);
+    assert_eq!(clip_rect.size.height, 16);
+}
