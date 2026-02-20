@@ -99,6 +99,26 @@ fn node_fluent_helpers_apply_container_and_style_fields() {
         _ => panic!("expected slider node"),
     }
 
+    let button_node = button("ping")
+        .button_label("Ping")
+        .control_size(Size {
+            width: 88,
+            height: 24,
+        });
+    match button_node {
+        Node::Button(button) => {
+            assert_eq!(button.label.as_deref(), Some("Ping"));
+            assert_eq!(
+                button.control_size,
+                Some(Size {
+                    width: 88,
+                    height: 24
+                })
+            );
+        }
+        _ => panic!("expected button node"),
+    }
+
     let dropdown_node = dropdown(
         "mode",
         3,

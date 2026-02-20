@@ -38,14 +38,17 @@ impl<'a> Ui<'a> {
         };
         self.fill_rect_clipped(rect, fill);
         self.stroke_rect_clipped(rect, 1, self.theme.knob_outline);
+        let center_x =
+            rect.origin.x.saturating_add(i32::try_from(rect.size.width / 2).unwrap_or(i32::MAX));
         let text_pos = Point {
-            x: rect.origin.x + 4,
+            x: rect.origin.x,
             y: rect.origin.y + (rect.size.height as i32 - (7 * self.theme.text_scale as i32)) / 2,
         };
-        let _ = self.draw_text_single_line_clamped(
+        let _ = self.draw_text_single_line_hard_clamped_centered_on_char_size(
             text_pos,
+            center_x,
             label,
-            rect.size.width.saturating_sub(8),
+            rect.size.width,
             self.theme.text,
             false,
         );

@@ -40,6 +40,11 @@ impl ToggleSpec {
 pub struct ButtonSpec {
     /// Stable widget key.
     pub key: String,
+    /// Optional label rendered by the button widget itself.
+    ///
+    /// When unset, the button renders without text and caller-composed content
+    /// can still be layered above it.
+    pub label: Option<String>,
     /// Optional explicit control size.
     pub control_size: Option<Size>,
     /// Layout constraints.
@@ -51,9 +56,16 @@ impl ButtonSpec {
     pub fn new(key: impl Into<String>) -> Self {
         Self {
             key: key.into(),
+            label: None,
             control_size: None,
             layout: LayoutBox::auto(),
         }
+    }
+
+    /// Override button label text.
+    pub fn label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
     }
 
     /// Override control size.

@@ -15,6 +15,16 @@ impl Node {
         self
     }
 
+    /// Set button label text for button nodes.
+    ///
+    /// Non-button node kinds are returned unchanged.
+    pub fn button_label(mut self, label: impl Into<String>) -> Self {
+        if let Self::Button(button) = &mut self {
+            button.label = Some(label.into());
+        }
+        self
+    }
+
     /// Set selected option index for dropdown nodes.
     ///
     /// Non-dropdown node kinds are returned unchanged.

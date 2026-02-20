@@ -89,13 +89,14 @@ fn render_button(
     actions: &mut Vec<UiAction>,
 ) {
     let id = WidgetId::from_label(&button.key);
+    let label = button.label.as_deref().unwrap_or("");
     let control_size = button.control_size.unwrap_or(Size {
         width: tokens.controls.button_width,
         height: tokens.controls.button_height,
     });
     let response = ui.button_in_rect_scaled(
         id,
-        "",
+        label,
         control_size,
         rect,
         tokens.typography.text_scale,
