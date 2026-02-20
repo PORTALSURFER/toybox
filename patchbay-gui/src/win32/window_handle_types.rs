@@ -44,7 +44,15 @@ impl WindowHandle {
         if encoded.len() != 1 {
             return false;
         }
-        unsafe { PostMessageW(self.hwnd, WM_CHAR, WPARAM(encoded[0] as usize), LPARAM(0)).as_bool() }
+        unsafe {
+            PostMessageW(
+                Some(self.hwnd),
+                WM_CHAR,
+                WPARAM(encoded[0] as usize),
+                LPARAM(0),
+            )
+            .is_ok()
+        }
     }
 }
 
