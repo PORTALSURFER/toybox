@@ -98,6 +98,88 @@ fn knob_in_rect_does_not_expand_beyond_default_diameter() {
 }
 
 #[test]
+fn knob_in_rect_without_labels_expands_dial_and_hit_area_only() {
+    let rect = Rect {
+        origin: Point { x: 10, y: 20 },
+        size: Size {
+            width: 72,
+            height: 54,
+        },
+    };
+    let pointer = Point { x: 46, y: 66 };
+    let mut value_with_labels = 0.5;
+    let mut value_without_labels = 0.5;
+
+    let mut canvas_with_labels = Canvas::new(200, 140);
+    let mut layout_with_labels = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state_with_labels = UiState::default();
+    let input = InputState {
+        pointer_pos: pointer,
+        ..InputState::default()
+    };
+    let mut ui_with_labels = Ui::new(
+        &mut canvas_with_labels,
+        &input,
+        &mut ui_state_with_labels,
+        &mut layout_with_labels,
+        &theme,
+    );
+    let with_labels_request =
+        KnobRectRenderRequest::new(WidgetId::new(901), "MIX", "50%", (0.0, 1.0), 72, rect)
+            .with_text_scale(2);
+    let with_labels_response =
+        ui_with_labels.knob_with_labels_in_rect(&mut value_with_labels, with_labels_request);
+    let with_labels_radius = ui_with_labels
+        .take_vector_commands()
+        .into_iter()
+        .find_map(|command| match command {
+            VectorCommand::Knob(knob) => Some(knob.radius),
+            _ => None,
+        })
+        .expect("knob render should emit a vector knob command");
+
+    let mut canvas_without_labels = Canvas::new(200, 140);
+    let mut layout_without_labels = Layout::default();
+    let mut ui_state_without_labels = UiState::default();
+    let mut ui_without_labels = Ui::new(
+        &mut canvas_without_labels,
+        &input,
+        &mut ui_state_without_labels,
+        &mut layout_without_labels,
+        &theme,
+    );
+    let without_labels_request =
+        KnobRectRenderRequest::new(WidgetId::new(902), "", "", (0.0, 1.0), 72, rect)
+            .with_text_scale(2);
+    let without_labels_response = ui_without_labels
+        .knob_with_labels_in_rect(&mut value_without_labels, without_labels_request);
+    let without_labels_radius = ui_without_labels
+        .take_vector_commands()
+        .into_iter()
+        .find_map(|command| match command {
+            VectorCommand::Knob(knob) => Some(knob.radius),
+            _ => None,
+        })
+        .expect("knob render should emit a vector knob command");
+
+    assert!(
+        without_labels_radius >= with_labels_radius.saturating_mul(3),
+        "dial radius should grow when labels are omitted: with_labels={} without_labels={}",
+        with_labels_radius,
+        without_labels_radius
+    );
+    assert!(
+        !with_labels_response.hovered,
+        "pointer should miss the compact labeled hit-area"
+    );
+    assert!(
+        without_labels_response.hovered,
+        "pointer should hit the expanded unlabeled dial hit-area"
+    );
+}
+
+#[test]
 fn knob_labels_are_clamped_to_knob_width() {
     let mut canvas = Canvas::new(320, 240);
     let mut layout = Layout::default();
@@ -171,8 +253,10 @@ fn centered_text_origin_on_axis_clamps_to_bounds() {
 fn knob_label_ink_centers_match_knob_center_in_canvas_output() {
     let mut canvas = Canvas::new(220, 220);
     let mut layout = Layout::default();
-    let mut theme = Theme::default();
-    theme.text_scale = 1;
+    let theme = Theme {
+        text_scale: 1,
+        ..Theme::default()
+    };
     let text_color = theme.text;
     let mut ui_state = UiState::default();
     let input = InputState::default();

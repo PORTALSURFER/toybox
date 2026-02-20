@@ -22,6 +22,16 @@ impl<'a> KnobLabels<'a> {
     fn normalized_value(self) -> String {
         normalize_knob_value_label(self.value)
     }
+
+    /// Return `true` when the name label has visible text.
+    fn has_name(self) -> bool {
+        !self.name.trim().is_empty()
+    }
+
+    /// Return `true` when the value label has visible text.
+    fn has_value(self) -> bool {
+        !self.value.trim().is_empty()
+    }
 }
 
 /// Inclusive value range used by knob interactions.

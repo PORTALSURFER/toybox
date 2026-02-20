@@ -56,13 +56,21 @@ impl<'a> Ui<'a> {
 
     /// Resolve knob geometry for rect-scoped rendering where the provided rect
     /// is the knob block bounds.
-    fn resolve_knob_geometry_in_rect(&self, rect: Rect, knob_size: i32) -> KnobGeometry {
-        let label_height = knob_label_height(self.theme.text_scale) as i32;
-        let label_gap = knob_label_gap(self.theme.text_scale) as i32;
+    fn resolve_knob_geometry_in_rect(
+        &self,
+        labels: KnobLabels<'_>,
+        rect: Rect,
+        knob_size: i32,
+    ) -> KnobGeometry {
+        let (top_reserved, bottom_reserved, label_gap) =
+            self.resolve_label_reserved_heights(labels);
+        let available_height =
+            (rect.size.height as i32 - top_reserved - bottom_reserved).max(1);
+        let knob_y_offset = ((available_height - knob_size) / 2).max(0);
         let knob_x_offset = ((rect.size.width as i32 - knob_size) / 2).max(0);
         let knob_origin = Point {
             x: rect.origin.x + knob_x_offset,
-            y: rect.origin.y + label_height + label_gap,
+            y: rect.origin.y + top_reserved + knob_y_offset,
         };
         let knob_rect = Rect {
             origin: knob_origin,
@@ -110,15 +118,36 @@ impl<'a> Ui<'a> {
     }
 
     /// Resolve a clamped knob diameter for rectangle-scoped rendering.
-    fn resolve_knob_size_for_rect(&self, rect: Rect, desired_diameter: u32) -> i32 {
-        let label_height = knob_label_height(self.theme.text_scale) as i32;
-        let label_gap = knob_label_gap(self.theme.text_scale) as i32;
+    fn resolve_knob_size_for_rect(
+        &self,
+        labels: KnobLabels<'_>,
+        rect: Rect,
+        desired_diameter: u32,
+    ) -> i32 {
+        let (top_reserved, bottom_reserved, _) = self.resolve_label_reserved_heights(labels);
         let side_padding = KNOB_BLOCK_SIDE_PADDING.max(0);
-        let available_height = (rect.size.height as i32 - label_height * 2 - label_gap * 2).max(1);
+        let available_height = (rect.size.height as i32 - top_reserved - bottom_reserved).max(1);
         let available_width = (rect.size.width as i32 - side_padding * 2).max(1);
         (desired_diameter.max(1) as i32)
             .min(available_width)
             .min(available_height)
             .max(1)
+    }
+
+    /// Resolve top/bottom label reservation for knob-in-rect rendering.
+    fn resolve_label_reserved_heights(&self, labels: KnobLabels<'_>) -> (i32, i32, i32) {
+        let label_height = knob_label_height(self.theme.text_scale) as i32;
+        let label_gap = knob_label_gap(self.theme.text_scale) as i32;
+        let top_reserved = if labels.has_name() {
+            label_height + label_gap
+        } else {
+            0
+        };
+        let bottom_reserved = if labels.has_value() {
+            label_height + label_gap
+        } else {
+            0
+        };
+        (top_reserved, bottom_reserved, label_gap)
     }
 }

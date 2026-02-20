@@ -120,14 +120,13 @@ impl<'a> Ui<'a> {
         rect_spec: KnobRectSpec,
     ) -> KnobResponse {
         let previous_layout = *self.layout;
-        let knob_size = self.resolve_knob_size_for_rect(
-            rect_spec.rect,
-            rect_spec.desired_diameter,
-        );
+        let knob_size =
+            self.resolve_knob_size_for_rect(spec.labels, rect_spec.rect, rect_spec.desired_diameter);
         self.layout.knob_size = knob_size;
         let mut response = KnobResponse::default();
         self.with_clip(rect_spec.rect, |ui| {
-            let geometry = ui.resolve_knob_geometry_in_rect(rect_spec.rect, knob_size.max(1));
+            let geometry =
+                ui.resolve_knob_geometry_in_rect(spec.labels, rect_spec.rect, knob_size.max(1));
             ui.draw_knob_bounds(geometry);
             response = ui.resolve_knob_interaction(spec, geometry, value);
             ui.draw_knob_visuals(spec, geometry, response, *value);
