@@ -21,6 +21,15 @@ use super::{InputState, Size, declarative::UiSpec, render_spec_to_frame};
 
 /// Default screenshot directory used when `TOYBOX_UI_SCREENSHOT_DIR` is not set.
 pub const DEFAULT_SCREENSHOT_ROOT: &str = "target/ui-screenshots";
+/// Optional screenshot output variant subdirectory.
+///
+/// When this env var is set to a valid token (for example: `normal`,
+/// `debug-layout`), screenshots are written under:
+/// `$(TOYBOX_UI_SCREENSHOT_DIR)/<plugin>/<variant>/...`.
+///
+/// Invalid values are ignored and the harness falls back to the legacy path:
+/// `$(TOYBOX_UI_SCREENSHOT_DIR)/<plugin>/...`.
+const SCREENSHOT_VARIANT_ENV: &str = "TOYBOX_UI_SCREENSHOT_VARIANT";
 
 /// Return true when screenshot capture is enabled for the current test run.
 ///
@@ -72,13 +81,53 @@ pub fn screenshot_output_root() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(DEFAULT_SCREENSHOT_ROOT))
 }
 
+/// Resolve the optional screenshot variant from the environment.
+fn screenshot_output_variant() -> Option<String> {
+    env::var(SCREENSHOT_VARIANT_ENV)
+        .ok()
+        .and_then(|raw| normalize_screenshot_variant(&raw))
+}
+
+/// Normalize a variant token used as a subdirectory component.
+///
+/// Accepted characters are ASCII alphanumeric, `-`, and `_`.
+/// Invalid or empty inputs are rejected.
+fn normalize_screenshot_variant(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.len() > 64 {
+        return None;
+    }
+    if !trimmed
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+    {
+        return None;
+    }
+    Some(trimmed.to_ascii_lowercase())
+}
+
+/// Build the output directory from root/plugin and optional variant.
+fn screenshot_output_dir(root: &Path, plugin: &str, variant: Option<&str>) -> PathBuf {
+    let plugin_dir = root.join(plugin);
+    match variant {
+        Some(value) => plugin_dir.join(value),
+        None => plugin_dir,
+    }
+}
+
 /// Resolve the output file path for one screenshot.
 ///
 /// The returned path follows the suite contract:
 /// `$(TOYBOX_UI_SCREENSHOT_DIR)/<plugin>/initial-ui-<width>x<height>.png`.
+/// When `TOYBOX_UI_SCREENSHOT_VARIANT` is set to a valid token, the path is:
+/// `$(TOYBOX_UI_SCREENSHOT_DIR)/<plugin>/<variant>/initial-ui-<width>x<height>.png`.
 pub fn screenshot_output_path(plugin: &str, width: u32, height: u32) -> Result<PathBuf, String> {
     let root = screenshot_output_root();
-    let dir = root.join(plugin);
+    let variant = screenshot_output_variant();
+    let dir = screenshot_output_dir(&root, plugin, variant.as_deref());
     fs::create_dir_all(&dir).map_err(|err| format!("create screenshot directory failed: {err}"))?;
     Ok(dir.join(format!("initial-ui-{width}x{height}.png")))
 }
@@ -134,4 +183,48 @@ where
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::{normalize_screenshot_variant, screenshot_output_dir};
+
+    #[test]
+    fn normalize_screenshot_variant_accepts_expected_tokens() {
+        assert_eq!(
+            normalize_screenshot_variant("normal"),
+            Some("normal".to_string())
+        );
+        assert_eq!(
+            normalize_screenshot_variant("DEBUG-LAYOUT"),
+            Some("debug-layout".to_string())
+        );
+        assert_eq!(
+            normalize_screenshot_variant("baseline_2"),
+            Some("baseline_2".to_string())
+        );
+    }
+
+    #[test]
+    fn normalize_screenshot_variant_rejects_empty_or_invalid_values() {
+        assert_eq!(normalize_screenshot_variant(""), None);
+        assert_eq!(normalize_screenshot_variant("   "), None);
+        assert_eq!(normalize_screenshot_variant("../debug"), None);
+        assert_eq!(normalize_screenshot_variant("debug/layout"), None);
+        assert_eq!(normalize_screenshot_variant("debug layout"), None);
+    }
+
+    #[test]
+    fn screenshot_output_dir_uses_variant_when_present() {
+        let root = Path::new("target/ui-screenshots");
+        let with_variant = screenshot_output_dir(root, "pump", Some("debug-layout"));
+        assert_eq!(
+            with_variant,
+            Path::new("target/ui-screenshots/pump/debug-layout")
+        );
+        let without_variant = screenshot_output_dir(root, "pump", None);
+        assert_eq!(without_variant, Path::new("target/ui-screenshots/pump"));
+    }
 }
