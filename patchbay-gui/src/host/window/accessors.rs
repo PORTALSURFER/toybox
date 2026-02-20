@@ -1,10 +1,18 @@
 //! HostWindow accessors and state mutation helpers.
 
 use std::sync::atomic::Ordering;
+#[cfg(feature = "frame-capture")]
+use std::time::Duration;
 
 use raw_window_handle::RawWindowHandle;
 
 use crate::canvas::Size;
+#[cfg(feature = "frame-capture")]
+use crate::frame_capture::CapturedWindowFrame;
+#[cfg(feature = "frame-capture")]
+use crate::frame_capture::FrameCaptureWaitError;
+#[cfg(feature = "frame-capture")]
+use crate::host::GuiError;
 use crate::host::types::{HostWindow, ShortcutBinding, ShortcutModifiers};
 use crate::host::{pack_size, unpack_size};
 use crate::win32::WindowHandle;
@@ -103,6 +111,34 @@ impl HostWindow {
     /// Access the OS-level window handle if one exists.
     pub fn handle(&self) -> Option<WindowHandle> {
         self.handle.clone()
+    }
+
+    /// Capture the next rendered hosted-window frame.
+    ///
+    /// The call requests a new render tick and blocks until the render loop
+    /// publishes the matching capture result or timeout elapses.
+    #[cfg(feature = "frame-capture")]
+    pub fn capture_next_frame(&self, timeout: Duration) -> Result<CapturedWindowFrame, GuiError> {
+        let Some(handle) = &self.handle else {
+            return Err(GuiError::FrameCaptureUnavailable);
+        };
+        let request_id = self
+            .frame_capture
+            .begin_request()
+            .map_err(|_| GuiError::FrameCaptureStatePoisoned)?;
+        if !handle.request_frame_capture() {
+            return Err(GuiError::FrameCaptureUnavailable);
+        }
+        let result = self
+            .frame_capture
+            .wait_for_request(request_id, timeout)
+            .map_err(|err| match err {
+                FrameCaptureWaitError::Timeout => GuiError::FrameCaptureTimeout(timeout),
+                FrameCaptureWaitError::Poisoned | FrameCaptureWaitError::MissingResult => {
+                    GuiError::FrameCaptureStatePoisoned
+                }
+            })?;
+        result.map_err(GuiError::FrameCaptureReadback)
     }
 
     /// Inject one text character into the hosted native window input queue.

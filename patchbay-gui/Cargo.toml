@@ -16,6 +16,7 @@ toybox-process-log = { path = "../crates/process-log" }
 
 [features]
 default = []
+frame-capture = []
 layout-debug-borders = []
 layout-overflow-warnings = []
 

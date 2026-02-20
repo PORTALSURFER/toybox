@@ -13,6 +13,8 @@
 
 mod canvas;
 mod declarative;
+#[cfg(feature = "frame-capture")]
+mod frame_capture;
 #[cfg(target_os = "windows")]
 mod host;
 #[cfg(not(target_os = "windows"))]
@@ -45,6 +47,8 @@ pub use crate::declarative::{
     row_slots, scroll_view, slider, slot, spacer, stack, surface, switch_layout, textbox, toggle,
     weighted_slot, weighted_slot_lengths, when_width_between, when_width_ge, when_width_lt, wrap,
 };
+#[cfg(feature = "frame-capture")]
+pub use crate::frame_capture::CapturedWindowFrame;
 #[cfg(not(target_os = "windows"))]
 pub use crate::host::WindowHandle;
 pub use crate::host::{

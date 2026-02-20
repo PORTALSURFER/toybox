@@ -1,5 +1,7 @@
 //! Unit tests for renderer upload and surface recovery helpers.
 
+#[cfg(feature = "frame-capture")]
+use super::copy_unpadded_rows;
 use super::{Renderer, should_reconfigure_surface};
 
 #[test]
@@ -71,4 +73,23 @@ fn surface_errors_trigger_reconfigure() {
         &wgpu::SurfaceError::OutOfMemory
     ));
     assert!(!should_reconfigure_surface(&wgpu::SurfaceError::Other));
+}
+
+#[cfg(feature = "frame-capture")]
+#[test]
+fn copy_unpadded_rows_strips_padding() {
+    let width = 2u32;
+    let height = 2u32;
+    let unpadded = width * 4;
+    let padded = 256u32;
+    let mut mapped = vec![0u8; (padded * height) as usize];
+    mapped[0..8].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8]);
+    let second_row = padded as usize;
+    mapped[second_row..second_row + 8].copy_from_slice(&[9, 10, 11, 12, 13, 14, 15, 16]);
+
+    let got = copy_unpadded_rows(&mapped, width, height, padded, unpadded).expect("readback");
+    assert_eq!(
+        got,
+        vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    );
 }

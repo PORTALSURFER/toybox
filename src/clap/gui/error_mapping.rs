@@ -18,5 +18,9 @@ pub(super) fn map_gui_error(err: GuiError) -> PluginError {
         GuiError::SurfaceAcquire(_) => "Failed to acquire swapchain texture",
         GuiError::ThreadSpawn => "Failed to spawn GUI thread",
         GuiError::DeviceCachePoison => "GUI device cache was poisoned",
+        GuiError::FrameCaptureUnavailable => "GUI frame capture is unavailable",
+        GuiError::FrameCaptureStatePoisoned => "GUI frame capture state is poisoned",
+        GuiError::FrameCaptureTimeout(_) => "GUI frame capture timed out",
+        GuiError::FrameCaptureReadback(_) => "GUI frame capture readback failed",
     })
 }

@@ -192,6 +192,11 @@ where
                 self.render_frame();
                 Some(LRESULT(0))
             }
+            #[cfg(feature = "frame-capture")]
+            PATCHBAY_MSG_CAPTURE_FRAME => {
+                self.render_frame();
+                Some(LRESULT(0))
+            }
             WM_ERASEBKGND => {
                 self.erase_background(wparam);
                 Some(LRESULT(0))

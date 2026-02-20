@@ -76,6 +76,20 @@ impl WindowHandle {
             .is_ok()
         }
     }
+
+    /// Request one immediate render tick that fulfills a pending frame capture.
+    #[cfg(feature = "frame-capture")]
+    pub fn request_frame_capture(&self) -> bool {
+        unsafe {
+            PostMessageW(
+                Some(self.hwnd),
+                PATCHBAY_MSG_CAPTURE_FRAME,
+                WPARAM(0),
+                LPARAM(0),
+            )
+            .is_ok()
+        }
+    }
 }
 
 unsafe impl Send for WindowHandle {}

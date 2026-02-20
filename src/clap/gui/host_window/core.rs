@@ -69,6 +69,19 @@ impl GuiHostWindow {
         self.inner.request_resize(width, height);
     }
 
+    /// Capture the next rendered frame from the hosted window.
+    ///
+    /// This is intended for screenshot tests that require exact renderer parity.
+    #[cfg(feature = "screenshot-test")]
+    pub fn capture_next_frame(
+        &self,
+        timeout: std::time::Duration,
+    ) -> Result<patchbay_gui::CapturedWindowFrame, String> {
+        self.inner
+            .capture_next_frame(timeout)
+            .map_err(|err| err.to_string())
+    }
+
     /// Inject one text character into the hosted native GUI input queue.
     pub fn post_text_char(&self, ch: char) -> bool {
         self.inner.post_text_char(ch)

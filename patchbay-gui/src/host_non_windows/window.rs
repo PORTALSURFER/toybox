@@ -1,11 +1,15 @@
 //! HostWindow behavior for non-Windows stubs.
 
 use std::sync::atomic::Ordering;
+#[cfg(feature = "frame-capture")]
+use std::time::Duration;
 
 use raw_window_handle::RawWindowHandle;
 
 use crate::canvas::Size;
 use crate::declarative::{UiAction, UiSpec};
+#[cfg(feature = "frame-capture")]
+use crate::frame_capture::CapturedWindowFrame;
 
 use super::errors::GuiError;
 use super::requests::{OpenParentedCallbacks, OpenParentedRequest};
@@ -162,6 +166,15 @@ impl HostWindow {
     /// Access the OS-level window handle if one exists.
     pub fn handle(&self) -> Option<WindowHandle> {
         self.handle.clone()
+    }
+
+    /// Capture the next rendered hosted-window frame.
+    ///
+    /// Non-Windows builds do not host native windows and therefore do not
+    /// support live frame capture.
+    #[cfg(feature = "frame-capture")]
+    pub fn capture_next_frame(&self, _timeout: Duration) -> Result<CapturedWindowFrame, GuiError> {
+        Err(GuiError::UnsupportedHandle)
     }
 
     /// Stub text-input injection for non-Windows builds.

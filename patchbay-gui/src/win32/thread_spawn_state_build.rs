@@ -29,6 +29,8 @@ where
         aspect_ratio,
         active_text_edit,
         shortcut_bindings,
+        #[cfg(feature = "frame-capture")]
+        frame_capture,
         ..
     } = shared;
     let SpawnUiConfig {
@@ -50,6 +52,8 @@ where
             aspect_ratio,
             active_text_edit,
             shortcut_bindings,
+            #[cfg(feature = "frame-capture")]
+            frame_capture,
             ui_state,
             layout,
             theme,
@@ -77,6 +81,9 @@ struct WindowStateParts<State, Init, Build, Reduce> {
     active_text_edit: Arc<AtomicBool>,
     /// Registered shortcut bindings.
     shortcut_bindings: Arc<Mutex<Vec<ShortcutBinding>>>,
+    /// Shared frame-capture request/result state.
+    #[cfg(feature = "frame-capture")]
+    frame_capture: Arc<FrameCaptureState>,
     /// UI interaction and transient state.
     ui_state: UiState,
     /// Current layout state.
@@ -125,6 +132,8 @@ where
         aspect_ratio: parts.aspect_ratio,
         active_text_edit_shared: parts.active_text_edit,
         shortcut_bindings: parts.shortcut_bindings,
+        #[cfg(feature = "frame-capture")]
+        frame_capture: parts.frame_capture,
         initialized: false,
         shown: false,
         prewarm_frames: PREWARM_FRAMES,

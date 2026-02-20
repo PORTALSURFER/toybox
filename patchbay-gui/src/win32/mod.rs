@@ -5,10 +5,12 @@ use crate::declarative::{
     LayoutEngineState, UiAction, UiInvalidationScope, UiSpec, plan_root_render,
     render_checked_with_engine,
 };
+#[cfg(feature = "frame-capture")]
+use crate::frame_capture::FrameCaptureState;
 use crate::host::{GuiError, InputState, ShortcutBinding, ShortcutModifiers};
 use crate::logging::log_line_safe;
 use crate::renderer::{PresentationTransform, Renderer, RendererDevice};
-use crate::ui::{Layout, Theme, Ui, UiState, WidgetId};
+use crate::ui::{Layout, Theme, Ui, UiState};
 use raw_window_handle_06::{
     DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
     RawWindowHandle as RawWindowHandle06, Win32WindowHandle, WindowHandle as WindowHandle06,
@@ -38,13 +40,12 @@ use windows::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDR
 use windows::Win32::UI::WindowsAndMessaging::{
     CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, CreateWindowExW, DLGC_WANTALLKEYS,
     DLGC_WANTCHARS, DefWindowProcW, DestroyWindow, GWLP_USERDATA, GetClientRect, GetCursorPos,
-    GetParent, GetWindowRect, HMENU, HTCLIENT, LoadCursorW, MA_ACTIVATE, PostMessageW,
-    RegisterClassW, SW_HIDE, SW_SHOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER, SetTimer,
-    SetWindowLongPtrW, SetWindowPos, ShowWindow, WM_CHAR, WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND,
-    WM_GETDLGCODE, WM_KEYDOWN, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEACTIVATE,
-    WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_NCHITTEST, WM_PAINT, WM_RBUTTONDOWN,
-    WM_RBUTTONUP, WM_SIZE, WM_TIMER, WM_USER, WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN,
-    WS_CLIPSIBLINGS,
+    GetParent, HMENU, HTCLIENT, LoadCursorW, MA_ACTIVATE, PostMessageW, RegisterClassW, SW_HIDE,
+    SW_SHOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER, SetTimer, SetWindowLongPtrW, SetWindowPos,
+    ShowWindow, WM_CHAR, WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND, WM_GETDLGCODE, WM_KEYDOWN,
+    WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_MOUSEWHEEL,
+    WM_NCDESTROY, WM_NCHITTEST, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WM_TIMER, WM_USER,
+    WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
 };
 use windows::core::PCWSTR;
 
@@ -53,6 +54,8 @@ const TIMER_INTERVAL_MS: u32 = 16;
 const PREWARM_FRAMES: u8 = 2;
 const MIN_SHOW_DELAY_MS: u128 = 80;
 const PATCHBAY_MSG_INJECTED_CHAR: u32 = WM_USER + 0x221;
+#[cfg(feature = "frame-capture")]
+const PATCHBAY_MSG_CAPTURE_FRAME: u32 = WM_USER + 0x222;
 const DEDUPE_CHAR_WINDOW_MS: u128 = 32;
 
 include!("window_handle_types.rs");

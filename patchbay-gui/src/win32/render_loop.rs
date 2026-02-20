@@ -163,8 +163,28 @@ where
     fn present_canvas(&mut self) -> bool {
         self.renderer
             .upload(self.canvas.size(), self.canvas.pixels());
-        self.renderer.render().is_ok()
+        let render_result = self.renderer.render();
+        self.fulfill_frame_capture_if_requested(&render_result);
+        render_result.is_ok()
     }
+
+    #[cfg(feature = "frame-capture")]
+    fn fulfill_frame_capture_if_requested(&self, render_result: &Result<(), GuiError>) {
+        let Some(request_id) = self.frame_capture.pending_request_id() else {
+            return;
+        };
+        let result = match render_result {
+            Ok(()) => self
+                .renderer
+                .readback_render_target_rgba8()
+                .map_err(|err| format!("readback failed: {err}")),
+            Err(err) => Err(format!("render failed before readback: {err}")),
+        };
+        self.frame_capture.complete_request(request_id, result);
+    }
+
+    #[cfg(not(feature = "frame-capture"))]
+    fn fulfill_frame_capture_if_requested(&self, _render_result: &Result<(), GuiError>) {}
 
     fn maybe_show_window(&mut self, render_ok: bool) {
         if self.shown || !render_ok {

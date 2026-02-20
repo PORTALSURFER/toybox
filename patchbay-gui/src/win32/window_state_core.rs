@@ -25,6 +25,8 @@ where
     aspect_ratio: Arc<AtomicU32>,
     active_text_edit_shared: Arc<AtomicBool>,
     shortcut_bindings: Arc<Mutex<Vec<ShortcutBinding>>>,
+    #[cfg(feature = "frame-capture")]
+    frame_capture: Arc<FrameCaptureState>,
     initialized: bool,
     shown: bool,
     prewarm_frames: u8,

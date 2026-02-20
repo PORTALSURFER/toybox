@@ -17,7 +17,7 @@ toybox-process-log = { path = "crates/process-log" }
 [features]
 default = []
 gui = ["dep:patchbay-gui", "dep:raw-window-handle"]
-screenshot-test = ["gui", "dep:image"]
+screenshot-test = ["gui", "dep:image", "patchbay-gui/frame-capture"]
 vst3 = ["dep:toybox-vst3-ffi"]
 
 [lints]

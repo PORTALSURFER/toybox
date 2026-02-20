@@ -20,6 +20,8 @@ impl HostWindow {
             aspect_ratio: self.aspect_ratio.clone(),
             active_text_edit: self.active_text_edit.clone(),
             shortcut_bindings: self.shortcut_bindings.clone(),
+            #[cfg(feature = "frame-capture")]
+            frame_capture: self.frame_capture.clone(),
         }
     }
 

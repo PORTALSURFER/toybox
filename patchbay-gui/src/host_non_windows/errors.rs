@@ -33,4 +33,16 @@ pub enum GuiError {
     /// Device cache mutex was poisoned.
     #[error("renderer device cache mutex poisoned")]
     DeviceCachePoison,
+    /// Frame-capture request could not be started.
+    #[error("frame capture is unavailable because no window is open")]
+    FrameCaptureUnavailable,
+    /// Frame-capture state synchronization failed.
+    #[error("frame capture synchronization state is poisoned")]
+    FrameCaptureStatePoisoned,
+    /// Frame-capture did not complete before timeout.
+    #[error("frame capture timed out after {0:?}")]
+    FrameCaptureTimeout(std::time::Duration),
+    /// Frame readback failed.
+    #[error("frame capture readback failed: {0}")]
+    FrameCaptureReadback(String),
 }

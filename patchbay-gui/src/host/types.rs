@@ -7,6 +7,8 @@ use std::sync::{Arc, Mutex};
 use raw_window_handle::RawWindowHandle;
 
 use crate::canvas::Size;
+#[cfg(feature = "frame-capture")]
+use crate::frame_capture::FrameCaptureState;
 use crate::renderer::RendererDevice;
 use crate::win32::WindowHandle;
 
@@ -126,6 +128,8 @@ pub struct HostWindow {
     pub(super) aspect_ratio: Arc<AtomicU32>,
     pub(super) active_text_edit: Arc<AtomicBool>,
     pub(super) shortcut_bindings: Arc<Mutex<Vec<ShortcutBinding>>>,
+    #[cfg(feature = "frame-capture")]
+    pub(super) frame_capture: Arc<FrameCaptureState>,
 }
 
 impl Default for HostWindow {
@@ -140,6 +144,8 @@ impl Default for HostWindow {
             aspect_ratio: Arc::new(AtomicU32::new(0)),
             active_text_edit: Arc::new(AtomicBool::new(false)),
             shortcut_bindings: Arc::new(Mutex::new(Vec::new())),
+            #[cfg(feature = "frame-capture")]
+            frame_capture: Arc::new(FrameCaptureState::default()),
         }
     }
 }

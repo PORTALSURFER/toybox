@@ -14,3 +14,4 @@ include!("upload_and_present/upload.rs");
 include!("upload_and_present/surface_acquire.rs");
 include!("upload_and_present/render_pass.rs");
 include!("upload_and_present/output.rs");
+include!("upload_and_present/readback.rs");

@@ -36,6 +36,9 @@ pub(crate) struct SpawnSharedState {
     pub(crate) active_text_edit: Arc<AtomicBool>,
     /// Registered shortcut bindings for focused key consumption.
     pub(crate) shortcut_bindings: Arc<Mutex<Vec<ShortcutBinding>>>,
+    /// Shared frame-capture request/result state.
+    #[cfg(feature = "frame-capture")]
+    pub(crate) frame_capture: Arc<FrameCaptureState>,
 }
 
 /// Initial UI container defaults applied to the window state.
