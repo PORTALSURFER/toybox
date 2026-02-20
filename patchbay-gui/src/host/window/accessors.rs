@@ -5,11 +5,38 @@ use std::sync::atomic::Ordering;
 use raw_window_handle::RawWindowHandle;
 
 use crate::canvas::Size;
-use crate::host::types::HostWindow;
+use crate::host::types::{HostWindow, ShortcutBinding, ShortcutModifiers};
 use crate::host::{pack_size, unpack_size};
 use crate::win32::WindowHandle;
 
 impl HostWindow {
+    /// Return `true` when any editable text box is active this frame.
+    pub fn text_edit_active(&self) -> bool {
+        self.active_text_edit.load(Ordering::Acquire)
+    }
+
+    /// Replace focused-window shortcut bindings.
+    pub fn set_shortcuts(&self, shortcuts: Vec<ShortcutBinding>) {
+        if let Ok(mut current) = self.shortcut_bindings.lock() {
+            *current = shortcuts;
+        }
+    }
+
+    /// Resolve one registered shortcut action key from input.
+    pub fn shortcut_action_for_input(
+        &self,
+        ch: char,
+        modifiers: ShortcutModifiers,
+    ) -> Option<String> {
+        let Ok(current) = self.shortcut_bindings.lock() else {
+            return None;
+        };
+        current
+            .iter()
+            .find(|binding| binding.matches(ch, modifiers))
+            .map(|binding| binding.action_key.clone())
+    }
+
     /// Assign the raw parent handle supplied by the CLAP host.
     pub fn set_parent(&mut self, parent: RawWindowHandle) {
         let new_parent_hwnd = match parent {
@@ -85,6 +112,17 @@ impl HostWindow {
         self.handle
             .as_ref()
             .map(|handle| handle.post_text_char(ch))
+            .unwrap_or(false)
+    }
+
+    /// Inject one text character with explicit modifiers.
+    ///
+    /// This path is used by hosted APIs (for example VST3 key callbacks) so
+    /// Patchbay can distinguish injected keys from native `WM_CHAR` delivery.
+    pub fn post_injected_text_char(&self, ch: char, modifiers: ShortcutModifiers) -> bool {
+        self.handle
+            .as_ref()
+            .map(|handle| handle.post_injected_text_char(ch, modifiers))
             .unwrap_or(false)
     }
 

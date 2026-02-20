@@ -6,6 +6,8 @@ where
     State: Send + 'static,
 {
     fn drop(&mut self) {
+        self.active_text_edit_shared
+            .store(false, std::sync::atomic::Ordering::Release);
         unsafe {
             let _ = DeleteObject(self.background_brush.into());
         }

@@ -5,7 +5,7 @@ use crate::declarative::{
     LayoutEngineState, UiAction, UiInvalidationScope, UiSpec, plan_root_render,
     render_checked_with_engine,
 };
-use crate::host::{GuiError, InputState};
+use crate::host::{GuiError, InputState, ShortcutBinding, ShortcutModifiers};
 use crate::logging::log_line_safe;
 use crate::renderer::{PresentationTransform, Renderer, RendererDevice};
 use crate::ui::{Layout, Theme, Ui, UiState, WidgetId};
@@ -18,7 +18,7 @@ use std::ffi::OsStr;
 use std::num::NonZeroIsize;
 use std::os::windows::ffi::OsStrExt;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
@@ -30,8 +30,8 @@ use windows::Win32::System::LibraryLoader::{
     GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GetModuleHandleExW, GetModuleHandleW,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, ReleaseCapture, SetCapture, SetFocus, VK_BACK, VK_ESCAPE, VK_LBUTTON,
-    VK_MENU, VK_RBUTTON, VK_RETURN, VK_SHIFT, VK_SPACE, VK_TAB,
+    GetAsyncKeyState, ReleaseCapture, SetCapture, SetFocus, VK_BACK, VK_CONTROL, VK_ESCAPE,
+    VK_LBUTTON, VK_MENU, VK_RBUTTON, VK_RETURN, VK_SHIFT, VK_SPACE, VK_TAB,
 };
 use windows::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDROP};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -42,7 +42,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SetWindowLongPtrW, SetWindowPos, ShowWindow, WM_CHAR, WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND,
     WM_GETDLGCODE, WM_KEYDOWN, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEACTIVATE,
     WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_NCHITTEST, WM_PAINT, WM_RBUTTONDOWN,
-    WM_RBUTTONUP, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
+    WM_RBUTTONUP, WM_SIZE, WM_TIMER, WM_USER, WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN,
+    WS_CLIPSIBLINGS,
 };
 use windows::core::PCWSTR;
 
@@ -50,6 +51,8 @@ const TIMER_ID: usize = 1;
 const TIMER_INTERVAL_MS: u32 = 16;
 const PREWARM_FRAMES: u8 = 2;
 const MIN_SHOW_DELAY_MS: u128 = 80;
+const PATCHBAY_MSG_INJECTED_CHAR: u32 = WM_USER + 0x221;
+const DEDUPE_CHAR_WINDOW_MS: u128 = 32;
 
 include!("window_handle_types.rs");
 include!("window_state_core.rs");

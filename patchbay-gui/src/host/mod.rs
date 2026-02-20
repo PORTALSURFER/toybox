@@ -7,7 +7,7 @@ mod window;
 
 pub use errors::GuiError;
 pub use requests::{OpenParentedCallbacks, OpenParentedMode, OpenParentedRequest};
-pub use types::{HostWindow, InputState};
+pub use types::{HostWindow, InputState, ShortcutBinding, ShortcutModifiers};
 
 /// Pack a width/height pair into an atomic payload.
 pub(super) fn pack_size(width: u32, height: u32) -> u64 {

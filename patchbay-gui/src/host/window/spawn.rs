@@ -18,6 +18,8 @@ impl HostWindow {
             resize_request: self.resize_request.clone(),
             last_size: self.last_size.clone(),
             aspect_ratio: self.aspect_ratio.clone(),
+            active_text_edit: self.active_text_edit.clone(),
+            shortcut_bindings: self.shortcut_bindings.clone(),
         }
     }
 

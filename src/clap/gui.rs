@@ -7,7 +7,9 @@ mod requester;
 mod types;
 
 /// Re-export Patchbay GUI types for downstream declarative GUI integrations.
-pub use patchbay_gui::{Color, InputState, OpenParentedMode, ThemeTokens};
+pub use patchbay_gui::{
+    Color, InputState, OpenParentedMode, ShortcutBinding, ShortcutModifiers, ThemeTokens,
+};
 
 pub use host_window::GuiHostWindow;
 pub use requester::{HostParamRequester, host_param_requester};

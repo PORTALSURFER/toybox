@@ -13,7 +13,7 @@ where
     ) -> Option<LRESULT> {
         self.handle_frame_messages(message, wparam, lparam)
             .or_else(|| self.handle_pointer_messages(message, wparam, lparam))
-            .or_else(|| self.handle_input_messages(message, wparam))
+            .or_else(|| self.handle_input_messages(message, wparam, lparam))
             .or_else(|| self.handle_paint_timer_messages(message, wparam))
     }
 
@@ -68,11 +68,20 @@ where
         }
     }
 
-    fn handle_input_messages(&mut self, message: u32, wparam: WPARAM) -> Option<LRESULT> {
+    fn handle_input_messages(
+        &mut self,
+        message: u32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> Option<LRESULT> {
         match message {
             WM_GETDLGCODE => {
-                let flags = DLGC_WANTALLKEYS | DLGC_WANTCHARS;
-                Some(LRESULT(flags as isize))
+                if self.active_text_edit || self.has_registered_shortcuts() {
+                    let flags = DLGC_WANTALLKEYS | DLGC_WANTCHARS;
+                    Some(LRESULT(flags as isize))
+                } else {
+                    None
+                }
             }
             WM_DROPFILES => {
                 let hdrop = HDROP(wparam.0 as *mut _);
@@ -84,22 +93,92 @@ where
                 Some(LRESULT(0))
             }
             WM_KEYDOWN => {
+                let modifiers = self.current_shortcut_modifiers();
                 if let Some(ch) = translate_virtual_key_to_input_char(wparam) {
-                    self.input.key_pressed = Some(ch);
-                    self.render_frame();
+                    if self.handle_key_char_input(ch, modifiers) {
+                        return Some(LRESULT(0));
+                    }
                 }
-                Some(LRESULT(0))
+                None
             }
             WM_CHAR => {
                 let code = (wparam.0 & 0xFFFF) as u16;
-                if let Some(ch) = char::from_u32(code as u32) {
-                    self.input.key_pressed = Some(ch);
+                let Some(ch) = char::from_u32(code as u32) else {
+                    return None;
+                };
+                if self.should_dedupe_native_char(ch) {
+                    return Some(LRESULT(0));
                 }
-                self.render_frame();
+                let modifiers = self.current_shortcut_modifiers();
+                if self.handle_key_char_input(ch, modifiers) {
+                    Some(LRESULT(0))
+                } else {
+                    None
+                }
+            }
+            PATCHBAY_MSG_INJECTED_CHAR => {
+                let code = (wparam.0 & 0xFFFF) as u16;
+                let Some(ch) = char::from_u32(code as u32) else {
+                    return Some(LRESULT(0));
+                };
+                let modifiers = ShortcutModifiers::from_bits(lparam.0 as usize);
+                self.recent_injected_char = Some((ch, Instant::now()));
+                let _ = self.handle_key_char_input(ch, modifiers);
                 Some(LRESULT(0))
             }
             _ => None,
         }
+    }
+
+    fn has_registered_shortcuts(&self) -> bool {
+        self.shortcut_bindings
+            .lock()
+            .map(|bindings| !bindings.is_empty())
+            .unwrap_or(false)
+    }
+
+    fn resolve_shortcut_action(&self, ch: char, modifiers: ShortcutModifiers) -> Option<String> {
+        let Ok(bindings) = self.shortcut_bindings.lock() else {
+            return None;
+        };
+        bindings
+            .iter()
+            .find(|binding| binding.matches(ch, modifiers))
+            .map(|binding| binding.action_key.clone())
+    }
+
+    fn handle_key_char_input(&mut self, ch: char, modifiers: ShortcutModifiers) -> bool {
+        if self.active_text_edit {
+            self.input.key_pressed = Some(ch);
+            self.render_frame();
+            return true;
+        }
+        let Some(action_key) = self.resolve_shortcut_action(ch, modifiers) else {
+            return false;
+        };
+        let action = UiAction::ButtonPressed { key: action_key };
+        invalidate_engine_for_action(&mut self.layout_engine, &action);
+        (self.reduce_action)(&mut self.state, action);
+        self.render_frame();
+        true
+    }
+
+    fn should_dedupe_native_char(&mut self, ch: char) -> bool {
+        let Some((recent_char, at)) = self.recent_injected_char else {
+            return false;
+        };
+        if at.elapsed().as_millis() > DEDUPE_CHAR_WINDOW_MS {
+            self.recent_injected_char = None;
+            return false;
+        }
+        recent_char == ch
+    }
+
+    fn current_shortcut_modifiers(&self) -> ShortcutModifiers {
+        let shift = unsafe { GetAsyncKeyState(VK_SHIFT.0 as i32) } < 0;
+        let alt = unsafe { GetAsyncKeyState(VK_MENU.0 as i32) } < 0;
+        let ctrl = unsafe { GetAsyncKeyState(VK_CONTROL.0 as i32) } < 0;
+        ShortcutModifiers::new(shift, alt, ctrl)
     }
 
     fn handle_paint_timer_messages(&mut self, message: u32, wparam: WPARAM) -> Option<LRESULT> {
@@ -192,7 +271,6 @@ where
             }
         }
     }
-
 }
 
 /// Translate Win32 virtual keys into declarative text-edit control characters.

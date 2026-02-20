@@ -1,7 +1,7 @@
 //! Host-facing input and window state types.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU32, AtomicU64};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64};
 use std::sync::{Arc, Mutex};
 
 use raw_window_handle::RawWindowHandle;
@@ -47,6 +47,73 @@ pub struct InputState {
     pub dropped_files: Vec<PathBuf>,
 }
 
+/// Keyboard modifier flags used for shortcut matching.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ShortcutModifiers {
+    /// Whether Shift must be held.
+    pub shift: bool,
+    /// Whether Alt must be held.
+    pub alt: bool,
+    /// Whether Ctrl must be held.
+    pub ctrl: bool,
+}
+
+impl ShortcutModifiers {
+    /// Build one explicit modifier set.
+    pub const fn new(shift: bool, alt: bool, ctrl: bool) -> Self {
+        Self { shift, alt, ctrl }
+    }
+
+    /// Return packed bit flags suitable for Win32 message payloads.
+    pub const fn to_bits(self) -> usize {
+        (self.shift as usize) | ((self.alt as usize) << 1) | ((self.ctrl as usize) << 2)
+    }
+
+    /// Decode packed bit flags from Win32 message payloads.
+    pub const fn from_bits(bits: usize) -> Self {
+        Self {
+            shift: (bits & 0b001) != 0,
+            alt: (bits & 0b010) != 0,
+            ctrl: (bits & 0b100) != 0,
+        }
+    }
+}
+
+/// One plugin-registered keyboard shortcut.
+///
+/// The shortcut dispatches a synthetic `UiAction::ButtonPressed` with
+/// `action_key` when `key` and `modifiers` match exactly.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ShortcutBinding {
+    /// Key of the button-style action dispatched into the reducer.
+    pub action_key: String,
+    /// Trigger character for this shortcut.
+    pub key: char,
+    /// Required modifier flags.
+    pub modifiers: ShortcutModifiers,
+}
+
+impl ShortcutBinding {
+    /// Create one shortcut binding.
+    pub fn new(action_key: impl Into<String>, key: char, modifiers: ShortcutModifiers) -> Self {
+        Self {
+            action_key: action_key.into(),
+            key: canonical_shortcut_char(key),
+            modifiers,
+        }
+    }
+
+    /// Return `true` when this shortcut matches the provided input.
+    pub fn matches(&self, key: char, modifiers: ShortcutModifiers) -> bool {
+        canonical_shortcut_char(key) == self.key && modifiers == self.modifiers
+    }
+}
+
+/// Normalize shortcut characters for deterministic matching.
+pub(crate) fn canonical_shortcut_char(key: char) -> char {
+    key.to_ascii_lowercase()
+}
+
 /// Handle to an open GUI window.
 #[derive(Clone, Debug)]
 pub struct HostWindow {
@@ -57,6 +124,8 @@ pub struct HostWindow {
     pub(super) resize_request: Arc<AtomicU64>,
     pub(super) last_size: Arc<AtomicU64>,
     pub(super) aspect_ratio: Arc<AtomicU32>,
+    pub(super) active_text_edit: Arc<AtomicBool>,
+    pub(super) shortcut_bindings: Arc<Mutex<Vec<ShortcutBinding>>>,
 }
 
 impl Default for HostWindow {
@@ -69,6 +138,8 @@ impl Default for HostWindow {
             resize_request: Arc::new(AtomicU64::new(0)),
             last_size: Arc::new(AtomicU64::new(0)),
             aspect_ratio: Arc::new(AtomicU32::new(0)),
+            active_text_edit: Arc::new(AtomicBool::new(false)),
+            shortcut_bindings: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }

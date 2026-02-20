@@ -68,6 +68,9 @@ where
                 .surface_to_design_clamped(self.input.pointer_pos)
         };
         let spec = (self.build_spec)(&mapped_input, &self.state);
+        self.active_text_edit = spec_has_active_text_edit(&spec);
+        self.active_text_edit_shared
+            .store(self.active_text_edit, Ordering::Release);
         let plan = plan_root_render(&spec, self.input.window_size);
         mapped_input.window_size = plan.layout_size;
         mapped_input.pointer_pos = if drag_active {
@@ -105,6 +108,9 @@ where
         ) {
             Ok(result) => {
                 for action in result.actions {
+                    update_text_edit_tracking_for_action(&mut self.active_text_edit, &action);
+                    self.active_text_edit_shared
+                        .store(self.active_text_edit, Ordering::Release);
                     invalidate_engine_for_action(&mut self.layout_engine, &action);
                     (self.reduce_action)(&mut self.state, action);
                 }
@@ -207,5 +213,65 @@ fn action_source_key(action: &UiAction) -> &str {
         UiAction::TextBoxEditCanceled { key } => key,
         UiAction::RegionHover { key, .. } => key,
         UiAction::RegionInteracted { key, .. } => key,
+    }
+}
+
+/// Update text-edit tracking from one emitted action.
+fn update_text_edit_tracking_for_action(active: &mut bool, action: &UiAction) {
+    match action {
+        UiAction::TextBoxEditRequested { .. } => *active = true,
+        UiAction::TextBoxEditCommitted { .. } | UiAction::TextBoxEditCanceled { .. } => {
+            *active = false
+        }
+        _ => {}
+    }
+}
+
+/// Return `true` when any text box in `spec` is currently in edit mode.
+fn spec_has_active_text_edit(spec: &UiSpec) -> bool {
+    node_has_active_text_edit(spec.root.content())
+}
+
+/// Return `true` when `node` or descendants include an editable active text box.
+fn node_has_active_text_edit(node: &crate::declarative::Node) -> bool {
+    use crate::declarative::Node;
+
+    match node {
+        Node::Slot(slot) => node_has_active_text_edit(slot.child()),
+        Node::Panel(panel) => node_has_active_text_edit(panel.content()),
+        Node::PaddingBox(spec) => node_has_active_text_edit(spec.content()),
+        Node::AlignBox(spec) => node_has_active_text_edit(spec.content()),
+        Node::AspectBox(spec) => node_has_active_text_edit(spec.content()),
+        Node::Row(spec) | Node::Column(spec) => spec
+            .children()
+            .iter()
+            .any(node_has_active_text_edit),
+        Node::Grid(spec) => spec.children().iter().any(node_has_active_text_edit),
+        Node::Absolute(spec) => spec
+            .children()
+            .iter()
+            .any(|child| node_has_active_text_edit(child.node())),
+        Node::Stack(spec) => spec.children().iter().any(node_has_active_text_edit),
+        Node::ScrollView(spec) => node_has_active_text_edit(spec.content()),
+        Node::Wrap(spec) => spec.children().iter().any(node_has_active_text_edit),
+        Node::SwitchLayout(spec) => {
+            spec.cases()
+                .iter()
+                .any(|case_entry| node_has_active_text_edit(case_entry.child()))
+                || node_has_active_text_edit(spec.fallback())
+        }
+        Node::TextBox(text_box) => text_box
+            .edit
+            .as_ref()
+            .map(|edit| edit.editing)
+            .unwrap_or(false),
+        Node::Spacer(_)
+        | Node::Knob(_)
+        | Node::Slider(_)
+        | Node::Toggle(_)
+        | Node::Button(_)
+        | Node::Dropdown(_)
+        | Node::Region(_)
+        | Node::Indicator(_) => false,
     }
 }

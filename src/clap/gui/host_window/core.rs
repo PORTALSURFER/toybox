@@ -8,6 +8,25 @@ pub struct GuiHostWindow {
 }
 
 impl GuiHostWindow {
+    /// Return `true` when any editable text box is currently active.
+    pub fn text_edit_active(&self) -> bool {
+        self.inner.text_edit_active()
+    }
+
+    /// Replace focused-window shortcut bindings.
+    pub fn set_shortcuts(&self, shortcuts: Vec<ShortcutBinding>) {
+        self.inner.set_shortcuts(shortcuts);
+    }
+
+    /// Resolve one registered shortcut action key for input.
+    pub fn shortcut_action_for_input(
+        &self,
+        ch: char,
+        modifiers: ShortcutModifiers,
+    ) -> Option<String> {
+        self.inner.shortcut_action_for_input(ch, modifiers)
+    }
+
     /// Set the raw parent handle provided by the host.
     pub fn set_parent(&mut self, parent: RawWindowHandle) {
         log_line_safe("toybox/gui: set_parent");
@@ -53,6 +72,11 @@ impl GuiHostWindow {
     /// Inject one text character into the hosted native GUI input queue.
     pub fn post_text_char(&self, ch: char) -> bool {
         self.inner.post_text_char(ch)
+    }
+
+    /// Inject one text character tagged as host-injected input.
+    pub fn post_injected_text_char(&self, ch: char, modifiers: ShortcutModifiers) -> bool {
+        self.inner.post_injected_text_char(ch, modifiers)
     }
 
     /// Set an optional aspect ratio for window resizing.

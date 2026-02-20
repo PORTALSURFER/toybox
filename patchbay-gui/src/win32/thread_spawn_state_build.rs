@@ -27,6 +27,8 @@ where
         resize_request,
         last_size,
         aspect_ratio,
+        active_text_edit,
+        shortcut_bindings,
         ..
     } = shared;
     let SpawnUiConfig {
@@ -46,6 +48,8 @@ where
             resize_request,
             last_size,
             aspect_ratio,
+            active_text_edit,
+            shortcut_bindings,
             ui_state,
             layout,
             theme,
@@ -69,6 +73,10 @@ struct WindowStateParts<State, Init, Build, Reduce> {
     last_size: Arc<AtomicU64>,
     /// Optional aspect ratio lock.
     aspect_ratio: Arc<AtomicU32>,
+    /// Shared flag indicating active text-edit mode.
+    active_text_edit: Arc<AtomicBool>,
+    /// Registered shortcut bindings.
+    shortcut_bindings: Arc<Mutex<Vec<ShortcutBinding>>>,
     /// UI interaction and transient state.
     ui_state: UiState,
     /// Current layout state.
@@ -115,10 +123,14 @@ where
         resize_request: parts.resize_request,
         last_size: parts.last_size,
         aspect_ratio: parts.aspect_ratio,
+        active_text_edit_shared: parts.active_text_edit,
+        shortcut_bindings: parts.shortcut_bindings,
         initialized: false,
         shown: false,
         prewarm_frames: PREWARM_FRAMES,
         created_at: Instant::now(),
+        active_text_edit: false,
+        recent_injected_char: None,
         last_mouse_down: false,
         last_mouse_secondary_down: false,
         debug_input,

@@ -54,6 +54,28 @@ impl WindowHandle {
             .is_ok()
         }
     }
+
+    /// Post one injected Unicode character with explicit modifier flags.
+    ///
+    /// This uses a private Patchbay window message so input handling can
+    /// distinguish host-injected keys (for example VST3 `onKeyDown`) from
+    /// native `WM_CHAR` delivery and dedupe as needed.
+    pub fn post_injected_text_char(&self, ch: char, modifiers: ShortcutModifiers) -> bool {
+        let mut units = [0u16; 2];
+        let encoded = ch.encode_utf16(&mut units);
+        if encoded.len() != 1 {
+            return false;
+        }
+        unsafe {
+            PostMessageW(
+                Some(self.hwnd),
+                PATCHBAY_MSG_INJECTED_CHAR,
+                WPARAM(encoded[0] as usize),
+                LPARAM(modifiers.to_bits() as isize),
+            )
+            .is_ok()
+        }
+    }
 }
 
 unsafe impl Send for WindowHandle {}

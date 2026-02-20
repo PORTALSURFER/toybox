@@ -49,6 +49,7 @@ pub use crate::declarative::{
 pub use crate::host::WindowHandle;
 pub use crate::host::{
     GuiError, HostWindow, InputState, OpenParentedCallbacks, OpenParentedMode, OpenParentedRequest,
+    ShortcutBinding, ShortcutModifiers,
 };
 pub use crate::screenshot::{RenderedFrame, render_spec_to_frame};
 pub use crate::ui::MainPalette;

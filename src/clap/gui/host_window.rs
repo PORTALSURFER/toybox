@@ -4,8 +4,8 @@ use crate::logging::log_line_safe;
 use clack_extensions::gui::GuiSize;
 use clack_plugin::plugin::PluginError;
 use patchbay_gui::{
-    HostWindow, OpenParentedCallbacks, OpenParentedRequest as PatchbayOpenParentedRequest, Size,
-    UiAction, UiSpec,
+    HostWindow, OpenParentedCallbacks, OpenParentedRequest as PatchbayOpenParentedRequest,
+    ShortcutBinding, ShortcutModifiers, Size, UiAction, UiSpec,
 };
 use raw_window_handle::RawWindowHandle;
 

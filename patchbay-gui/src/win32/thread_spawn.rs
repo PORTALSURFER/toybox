@@ -32,6 +32,10 @@ pub(crate) struct SpawnSharedState {
     pub(crate) last_size: Arc<AtomicU64>,
     /// Optional aspect ratio lock.
     pub(crate) aspect_ratio: Arc<AtomicU32>,
+    /// Shared flag indicating active text-edit mode.
+    pub(crate) active_text_edit: Arc<AtomicBool>,
+    /// Registered shortcut bindings for focused key consumption.
+    pub(crate) shortcut_bindings: Arc<Mutex<Vec<ShortcutBinding>>>,
 }
 
 /// Initial UI container defaults applied to the window state.

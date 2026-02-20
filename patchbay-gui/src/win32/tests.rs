@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use super::{
-        VK_BACK, VK_ESCAPE, VK_RETURN, VK_SPACE, VK_TAB, WPARAM, client_size_changed,
-        enforce_aspect_min, resolved_layout_size_for_resize_request,
+        ShortcutBinding, ShortcutModifiers, VK_BACK, VK_ESCAPE, VK_RETURN, VK_SPACE, VK_TAB,
+        WPARAM, client_size_changed, enforce_aspect_min, resolved_layout_size_for_resize_request,
         translate_virtual_key_to_input_char,
     };
     use crate::canvas::Size;
@@ -124,5 +124,19 @@ mod tests {
             Some(' ')
         );
         assert_eq!(translate_virtual_key_to_input_char(WPARAM(0x41)), None);
+    }
+
+    #[test]
+    fn shortcut_modifiers_roundtrip_bits() {
+        let modifiers = ShortcutModifiers::new(true, false, true);
+        assert_eq!(ShortcutModifiers::from_bits(modifiers.to_bits()), modifiers);
+    }
+
+    #[test]
+    fn shortcut_binding_matches_case_insensitive_key() {
+        let binding = ShortcutBinding::new("save", 'S', ShortcutModifiers::default());
+        assert!(binding.matches('s', ShortcutModifiers::default()));
+        assert!(binding.matches('S', ShortcutModifiers::default()));
+        assert!(!binding.matches('s', ShortcutModifiers::new(true, false, false)));
     }
 }
