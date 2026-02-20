@@ -75,20 +75,13 @@ fn should_draw_all_layout_debug_borders_from_env(
     matches!(env_value.ok().as_deref(), Some("1" | "true" | "True" | "TRUE" | "yes" | "Yes" | "YES" | "on" | "On" | "ON"))
 }
 
-/// Return a pixel-safe debug border rectangle that stays inside viewport bounds.
+/// Return the exact debug border rectangle for one node candidate.
 ///
-/// The debug stroke helper can lose bottom/right edges when a container reaches
-/// the viewport edge. Shrinking the border box by one stroke thickness on the
-/// max edges keeps all four lines visible.
+/// Debug overlays should map 1:1 to resolved slot/container rectangles so
+/// shared edges between adjacent slots do not appear inset.
 fn debug_border_draw_rect(rect: Rect, thickness: u32) -> Option<Rect> {
-    if thickness == 0 || rect.size.width <= thickness || rect.size.height <= thickness {
+    if thickness == 0 || rect.size.width == 0 || rect.size.height == 0 {
         return None;
     }
-    Some(Rect {
-        origin: rect.origin,
-        size: Size {
-            width: rect.size.width.saturating_sub(thickness),
-            height: rect.size.height.saturating_sub(thickness),
-        },
-    })
+    Some(rect)
 }

@@ -231,7 +231,7 @@ use crate::ui::{Layout, Theme, UiState};
     }
 
     #[test]
-    fn debug_border_draw_rect_shrinks_max_edges_by_thickness() {
+    fn debug_border_draw_rect_preserves_exact_candidate_bounds() {
         let rect = Rect {
             origin: Point { x: 10, y: 20 },
             size: Size {
@@ -240,18 +240,11 @@ use crate::ui::{Layout, Theme, UiState};
             },
         };
         let draw = debug_border_draw_rect(rect, 1).expect("draw rect");
-        assert_eq!(draw.origin, rect.origin);
-        assert_eq!(
-            draw.size,
-            Size {
-                width: 99,
-                height: 49
-            }
-        );
+        assert_eq!(draw, rect);
     }
 
     #[test]
-    fn debug_border_draw_rect_rejects_too_small_rectangles() {
+    fn debug_border_draw_rect_rejects_zero_thickness() {
         let rect = Rect {
             origin: Point { x: 0, y: 0 },
             size: Size {
@@ -259,5 +252,18 @@ use crate::ui::{Layout, Theme, UiState};
                 height: 1,
             },
         };
-        assert!(debug_border_draw_rect(rect, 1).is_none());
+        assert!(debug_border_draw_rect(rect, 0).is_none());
+    }
+
+    #[test]
+    fn debug_border_draw_rect_accepts_single_pixel_rectangles() {
+        let rect = Rect {
+            origin: Point { x: 2, y: 3 },
+            size: Size {
+                width: 1,
+                height: 1,
+            },
+        };
+        let draw = debug_border_draw_rect(rect, 1).expect("single-pixel draw rect");
+        assert_eq!(draw, rect);
     }
