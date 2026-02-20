@@ -71,7 +71,7 @@ where
     fn handle_input_messages(&mut self, message: u32, wparam: WPARAM) -> Option<LRESULT> {
         match message {
             WM_GETDLGCODE => {
-                let flags = DLGC_WANTALLKEYS.0 | DLGC_WANTCHARS.0;
+                let flags = DLGC_WANTALLKEYS | DLGC_WANTCHARS;
                 Some(LRESULT(flags as isize))
             }
             WM_DROPFILES => {
