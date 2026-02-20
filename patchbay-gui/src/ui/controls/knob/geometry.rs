@@ -105,9 +105,8 @@ impl<'a> Ui<'a> {
         }
     }
 
-    /// Render helper rectangles used for layout bounds and debug visualization.
+    /// Track knob block bounds for layout/debug diagnostics.
     fn draw_knob_bounds(&mut self, geometry: KnobGeometry) {
-        self.stroke_rect_clipped(geometry.block_rect, 1, self.theme.knob_indicator);
         self.track_rect_internal(geometry.block_rect);
     }
 

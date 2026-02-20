@@ -11,12 +11,11 @@ use super::types::KnobVisual;
 /// Emit vector geometry for a knob visual payload.
 pub(super) fn draw_knob(scene: &mut Scene, knob: KnobVisual, transform: Affine) {
     draw_knob_body(scene, knob, transform);
-    draw_knob_outline_ring(scene, knob, transform);
     draw_knob_active_arc(scene, knob, transform);
     draw_knob_indicator_line(scene, knob, transform);
 }
 
-/// Draw the knob circular body fill and outline.
+/// Draw the knob circular body fill.
 fn draw_knob_body(scene: &mut Scene, knob: KnobVisual, transform: Affine) {
     let center = KurboPoint::new(knob.center.x as f64, knob.center.y as f64);
     let body = Circle::new(center, knob.radius.max(1) as f64);
@@ -26,30 +25,6 @@ fn draw_knob_body(scene: &mut Scene, knob: KnobVisual, transform: Affine) {
         color_to_vello(knob.fill),
         None,
         &body,
-    );
-    scene.stroke(
-        &Stroke::new(2.0),
-        transform,
-        color_to_vello(knob.outline),
-        None,
-        &body,
-    );
-}
-
-/// Draw the full knob ring arc.
-fn draw_knob_outline_ring(scene: &mut Scene, knob: KnobVisual, transform: Affine) {
-    let ring = arc_path(
-        knob.center,
-        knob.arc_radius.max(1) as f32,
-        knob.arc_start,
-        knob.arc_end,
-    );
-    scene.stroke(
-        &arc_stroke(knob),
-        transform,
-        color_to_vello(knob.outline),
-        None,
-        &ring,
     );
 }
 
