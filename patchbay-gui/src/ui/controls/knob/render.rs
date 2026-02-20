@@ -26,7 +26,7 @@ impl<'a> Ui<'a> {
             center: geometry.center,
             radius: geometry.radius,
             arc_radius: geometry.radius + 6,
-            arc_thickness: 3,
+            arc_thickness: 1.5,
             arc_start: 7.0 * std::f32::consts::PI / 4.0,
             arc_end: 5.0 * std::f32::consts::PI / 4.0,
             value_angle,

@@ -55,7 +55,7 @@ pub(crate) struct KnobVisual {
     /// Ring arc radius in pixels.
     pub arc_radius: i32,
     /// Ring arc stroke thickness in pixels.
-    pub arc_thickness: i32,
+    pub arc_thickness: f32,
     /// Arc start angle in radians.
     pub arc_start: f32,
     /// Arc end angle in radians.

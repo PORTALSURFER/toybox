@@ -2,7 +2,7 @@
 
 use crate::canvas::Point;
 use vello::Scene;
-use vello::kurbo::{Affine, BezPath, Circle, Line, Point as KurboPoint, Stroke};
+use vello::kurbo::{Affine, BezPath, Cap, Circle, Line, Point as KurboPoint, Stroke};
 use vello::peniko::Fill;
 
 use super::color_and_angle_helpers::{color_to_vello, normalize_angle};
@@ -45,7 +45,7 @@ fn draw_knob_outline_ring(scene: &mut Scene, knob: KnobVisual, transform: Affine
         knob.arc_end,
     );
     scene.stroke(
-        &Stroke::new(knob.arc_thickness.max(1) as f64),
+        &arc_stroke(knob),
         transform,
         color_to_vello(knob.outline),
         None,
@@ -62,7 +62,7 @@ fn draw_knob_active_arc(scene: &mut Scene, knob: KnobVisual, transform: Affine) 
         knob.arc_end,
     );
     scene.stroke(
-        &Stroke::new(knob.arc_thickness.max(1) as f64),
+        &arc_stroke(knob),
         transform,
         color_to_vello(knob.indicator),
         None,
@@ -124,4 +124,9 @@ fn indicator_point(center: Point, radius: i32, angle: f32) -> Point {
         x: center.x + (radius as f32 * angle.cos()) as i32,
         y: center.y - (radius as f32 * angle.sin()) as i32,
     }
+}
+
+/// Return the standard ring stroke for knob arcs.
+fn arc_stroke(knob: KnobVisual) -> Stroke {
+    Stroke::new(knob.arc_thickness.max(1.0) as f64).with_caps(Cap::Butt)
 }
