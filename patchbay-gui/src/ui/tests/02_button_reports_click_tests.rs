@@ -217,15 +217,15 @@
     #[test]
     fn main_palette_matches_documented_values() {
         let palette = MainPalette::main();
-        assert_eq!(palette.accent_focus, Color::rgb(199, 240, 0));
-        assert_eq!(palette.syntax_emphasis, Color::rgb(99, 214, 176));
-        assert_eq!(palette.identifiers, Color::rgb(143, 191, 159));
-        assert_eq!(palette.literals, Color::rgb(79, 175, 160));
-        assert_eq!(palette.text_primary, Color::rgb(201, 201, 194));
-        assert_eq!(palette.text_muted, Color::rgb(126, 138, 106));
-        assert_eq!(palette.ui_secondary, Color::rgb(95, 102, 84));
-        assert_eq!(palette.background_primary, Color::rgb(27, 30, 26));
-        assert_eq!(palette.background_secondary, Color::rgb(35, 40, 35));
+        assert_eq!(palette.accent_focus, Color::rgb(255, 196, 64));
+        assert_eq!(palette.syntax_emphasis, Color::rgb(64, 214, 255));
+        assert_eq!(palette.identifiers, Color::rgb(128, 255, 128));
+        assert_eq!(palette.literals, Color::rgb(255, 128, 128));
+        assert_eq!(palette.text_primary, Color::rgb(255, 255, 255));
+        assert_eq!(palette.text_muted, Color::rgb(156, 156, 156));
+        assert_eq!(palette.ui_secondary, Color::rgb(92, 92, 92));
+        assert_eq!(palette.background_primary, Color::rgb(24, 24, 24));
+        assert_eq!(palette.background_secondary, Color::rgb(38, 38, 38));
     }
 
     #[test]

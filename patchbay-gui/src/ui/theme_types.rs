@@ -96,15 +96,15 @@ impl MainPalette {
     /// Return the canonical main palette used by Patchbay GUI defaults.
     pub const fn main() -> Self {
         Self {
-            accent_focus: Color::rgb(199, 240, 0),
-            syntax_emphasis: Color::rgb(99, 214, 176),
-            identifiers: Color::rgb(143, 191, 159),
-            literals: Color::rgb(79, 175, 160),
-            text_primary: Color::rgb(201, 201, 194),
-            text_muted: Color::rgb(126, 138, 106),
-            ui_secondary: Color::rgb(95, 102, 84),
-            background_primary: Color::rgb(27, 30, 26),
-            background_secondary: Color::rgb(35, 40, 35),
+            accent_focus: Color::rgb(255, 196, 64),
+            syntax_emphasis: Color::rgb(64, 214, 255),
+            identifiers: Color::rgb(128, 255, 128),
+            literals: Color::rgb(255, 128, 128),
+            text_primary: Color::rgb(255, 255, 255),
+            text_muted: Color::rgb(156, 156, 156),
+            ui_secondary: Color::rgb(92, 92, 92),
+            background_primary: Color::rgb(24, 24, 24),
+            background_secondary: Color::rgb(38, 38, 38),
         }
     }
 }
