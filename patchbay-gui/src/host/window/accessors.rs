@@ -78,6 +78,16 @@ impl HostWindow {
         self.handle.clone()
     }
 
+    /// Inject one text character into the hosted native window input queue.
+    ///
+    /// Returns `false` when no native window is open or when posting fails.
+    pub fn post_text_char(&self, ch: char) -> bool {
+        self.handle
+            .as_ref()
+            .map(|handle| handle.post_text_char(ch))
+            .unwrap_or(false)
+    }
+
     /// Clamp requested open size to at least one pixel per dimension.
     pub(super) fn normalize_open_size(size: Size) -> Size {
         Size {

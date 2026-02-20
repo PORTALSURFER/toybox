@@ -58,12 +58,18 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
         kResultFalse
     }
 
-    unsafe fn onKeyDown(&self, _key: char16, _key_code: int16, _modifiers: int16) -> tresult {
-        kResultFalse
+    unsafe fn onKeyDown(&self, key: char16, key_code: int16, modifiers: int16) -> tresult {
+        let Ok(gui) = self.gui.lock() else {
+            return kResultFalse;
+        };
+        bool_to_tresult(gui.on_key_down(key, key_code, modifiers))
     }
 
-    unsafe fn onKeyUp(&self, _key: char16, _key_code: int16, _modifiers: int16) -> tresult {
-        kResultFalse
+    unsafe fn onKeyUp(&self, key: char16, key_code: int16, modifiers: int16) -> tresult {
+        let Ok(gui) = self.gui.lock() else {
+            return kResultFalse;
+        };
+        bool_to_tresult(gui.on_key_up(key, key_code, modifiers))
     }
 
     unsafe fn getSize(&self, size: *mut ViewRect) -> tresult {

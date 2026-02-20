@@ -18,6 +18,22 @@ pub trait Vst3HostedGui {
     /// Implementations should treat this as a local view update path and must
     /// avoid host-callback feedback loops.
     fn request_resize(&self, width: u32, height: u32);
+
+    /// Forward one VST3 key-down event to the hosted GUI.
+    ///
+    /// Return `true` when the event was consumed by the plugin UI and should
+    /// not be handled by the host.
+    fn on_key_down(&self, _key: char16, _key_code: int16, _modifiers: int16) -> bool {
+        false
+    }
+
+    /// Forward one VST3 key-up event to the hosted GUI.
+    ///
+    /// Return `true` when the event was consumed by the plugin UI and should
+    /// not be handled by the host.
+    fn on_key_up(&self, _key: char16, _key_code: int16, _modifiers: int16) -> bool {
+        false
+    }
 }
 
 /// Reusable VST3 `IPlugView` implementation for host-parented Patchbay GUIs.

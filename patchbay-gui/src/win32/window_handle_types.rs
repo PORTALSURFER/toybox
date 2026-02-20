@@ -33,6 +33,19 @@ impl WindowHandle {
             let _ = DestroyWindow(self.hwnd);
         }
     }
+
+    /// Post one Unicode character to the window's input queue.
+    ///
+    /// Returns `false` when the scalar value cannot be represented as one
+    /// UTF-16 unit or when `PostMessageW` fails.
+    pub fn post_text_char(&self, ch: char) -> bool {
+        let mut units = [0u16; 2];
+        let encoded = ch.encode_utf16(&mut units);
+        if encoded.len() != 1 {
+            return false;
+        }
+        unsafe { PostMessageW(self.hwnd, WM_CHAR, WPARAM(encoded[0] as usize), LPARAM(0)).as_bool() }
+    }
 }
 
 unsafe impl Send for WindowHandle {}

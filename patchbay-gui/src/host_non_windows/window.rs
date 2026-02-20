@@ -136,4 +136,9 @@ impl HostWindow {
     pub fn handle(&self) -> Option<WindowHandle> {
         self.handle.clone()
     }
+
+    /// Stub text-input injection for non-Windows builds.
+    pub fn post_text_char(&self, _ch: char) -> bool {
+        false
+    }
 }

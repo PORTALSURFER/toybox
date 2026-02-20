@@ -50,6 +50,11 @@ impl GuiHostWindow {
         self.inner.request_resize(width, height);
     }
 
+    /// Inject one text character into the hosted native GUI input queue.
+    pub fn post_text_char(&self, ch: char) -> bool {
+        self.inner.post_text_char(ch)
+    }
+
     /// Set an optional aspect ratio for window resizing.
     pub fn set_aspect_ratio(&mut self, ratio: Option<f32>) {
         log_line_safe(&format!("toybox/gui: set_aspect_ratio ratio={ratio:?}"));
