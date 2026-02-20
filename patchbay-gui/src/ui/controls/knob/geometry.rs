@@ -42,7 +42,7 @@ impl<'a> Ui<'a> {
             x: knob_rect.origin.x + knob_size / 2,
             y: knob_rect.origin.y + knob_size / 2,
         };
-        let radius = (knob_size / 2 - 4).max(1);
+        let radius = (knob_size / 2 - 2).max(1);
         KnobGeometry {
             block_rect,
             knob_rect,
@@ -85,7 +85,7 @@ impl<'a> Ui<'a> {
             x: knob_rect.origin.x + knob_size / 2,
             y: knob_rect.origin.y + knob_size / 2,
         };
-        let radius = (knob_size / 2 - 4).max(1);
+        let radius = (knob_size / 2 - 2).max(1);
         KnobGeometry {
             block_rect: rect,
             knob_rect,
