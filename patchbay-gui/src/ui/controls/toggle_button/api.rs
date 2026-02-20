@@ -57,12 +57,12 @@ impl<'a> Ui<'a> {
         id: WidgetId,
         label: &str,
         value: &mut bool,
-        control_size: Size,
+        _control_size: Size,
         rect: Rect,
     ) -> ToggleResponse {
         let previous = *self.layout;
         self.layout.cursor = rect.origin;
-        let height = control_size.height.max(1) as i32;
+        let height = rect.size.height.max(1) as i32;
         let response = {
             let mut response = ToggleResponse::default();
             self.with_clip(rect, |ui| {

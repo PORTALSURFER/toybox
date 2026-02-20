@@ -7,8 +7,6 @@ pub(crate) struct DropdownRectRenderRequest<'a> {
     label: &'a str,
     /// Option labels shown by the dropdown.
     options: &'a [&'a str],
-    /// Control footprint for dropdown visuals.
-    control_size: Size,
     /// Bounds used for clipping and placement.
     rect: Rect,
     /// Explicit text scale override for the dropdown label.
@@ -23,14 +21,12 @@ impl<'a> DropdownRectRenderRequest<'a> {
         id: WidgetId,
         label: &'a str,
         options: &'a [&'a str],
-        control_size: Size,
         rect: Rect,
     ) -> Self {
         Self {
             id,
             label,
             options,
-            control_size,
             rect,
             text_scale: 1,
             visual_style: DropdownVisualStyle::default(),
@@ -85,7 +81,7 @@ impl<'a> Ui<'a> {
     ) -> DropdownResponse {
         let previous = *self.layout;
         self.layout.cursor = request.rect.origin;
-        let height = request.control_size.height.max(1) as i32;
+        let height = request.rect.size.height.max(1) as i32;
         let previous_text_scale = self.theme.text_scale;
         self.theme.text_scale = request.text_scale;
         let response = self.dropdown_with_visual_style(

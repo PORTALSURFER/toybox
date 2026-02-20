@@ -7,8 +7,6 @@ pub(crate) struct SliderRectRenderRequest<'a> {
     label: &'a str,
     /// Inclusive value range.
     range: (f32, f32),
-    /// Control footprint for slider visuals.
-    control_size: Size,
     /// Bounds used for clipping and placement.
     rect: Rect,
     /// Explicit text scale override for the label.
@@ -21,14 +19,12 @@ impl<'a> SliderRectRenderRequest<'a> {
         id: WidgetId,
         label: &'a str,
         range: (f32, f32),
-        control_size: Size,
         rect: Rect,
     ) -> Self {
         Self {
             id,
             label,
             range,
-            control_size,
             rect,
             text_scale: 1,
         }

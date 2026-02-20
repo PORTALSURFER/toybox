@@ -34,12 +34,8 @@ fn render_slider(
 ) {
     let id = WidgetId::from_label(&slider.key);
     let mut value = slider.value;
-    let control_size = slider.control_size.unwrap_or(Size {
-        width: tokens.controls.slider_width,
-        height: tokens.controls.slider_height,
-    });
     let slider_request =
-        SliderRectRenderRequest::new(id, "", slider.range, control_size, rect)
+        SliderRectRenderRequest::new(id, "", slider.range, rect)
             .with_text_scale(tokens.typography.text_scale);
     let response = ui.slider_in_rect_scaled(&mut value, slider_request);
     if response.changed {
@@ -117,15 +113,11 @@ fn render_dropdown(
     actions: &mut Vec<UiAction>,
 ) {
     let id = WidgetId::from_label(&dropdown.key);
-    let control_size = dropdown.control_size.unwrap_or(Size {
-        width: tokens.controls.dropdown_width,
-        height: tokens.controls.dropdown_height,
-    });
     let mut selected = dropdown.selected;
     let option_labels = resolve_dropdown_option_labels(dropdown);
     let option_refs: Vec<&str> = option_labels.iter().map(String::as_str).collect();
     let mut dropdown_request =
-        DropdownRectRenderRequest::new(id, "", &option_refs, control_size, rect)
+        DropdownRectRenderRequest::new(id, "", &option_refs, rect)
             .with_text_scale(tokens.typography.text_scale);
     if let Some(color) = dropdown.background_override {
         dropdown_request = dropdown_request.with_background_color(color);

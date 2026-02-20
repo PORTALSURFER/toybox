@@ -58,7 +58,7 @@ impl<'a> Ui<'a> {
                         range: request.range,
                         size: Size {
                             width: request.rect.size.width.max(1),
-                            height: request.control_size.height.max(1),
+                            height: request.rect.size.height.max(1),
                         },
                     },
                 );
