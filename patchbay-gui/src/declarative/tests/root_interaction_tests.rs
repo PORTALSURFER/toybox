@@ -215,6 +215,79 @@ fn dropdown_emits_double_click_action() {
 }
 
 #[test]
+fn knob_double_click_emits_changed_action_at_default_value() {
+    let mut canvas = Canvas::new(220, 180);
+    let mut layout = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let input = InputState {
+        pointer_pos: Point { x: 40, y: 60 },
+        mouse_pressed: true,
+        mouse_double_clicked: true,
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        Node::Absolute(
+            AbsoluteSpec::new(vec![AbsoluteChild::new(
+                Point { x: 0, y: 0 },
+                Node::Knob(KnobSpec::new("mix", 0.8, (0.0, 1.0)).default_value(0.3)),
+            )])
+            .layout(ContainerLayout::fill()),
+        ),
+    ));
+    let result = render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    assert!(result.actions.iter().any(
+        |action| matches!(
+            action,
+            UiAction::KnobChanged { key, value }
+                if key == "mix" && (*value - 0.3).abs() <= f32::EPSILON
+        )
+    ));
+}
+
+#[test]
+fn slider_double_click_emits_changed_action_at_default_value() {
+    let mut canvas = Canvas::new(240, 120);
+    let mut layout = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let input = InputState {
+        pointer_pos: Point { x: 24, y: 24 },
+        mouse_pressed: true,
+        mouse_double_clicked: true,
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        panel(
+            "panel",
+            Node::Slider(
+                SliderSpec::new("mix", 0.75, (0.0, 1.0))
+                    .default_value(0.2)
+                    .control_size(Size {
+                        width: 120,
+                        height: 16,
+                    }),
+            ),
+        )
+        .pad_all(0),
+    ));
+    let result = render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    assert!(result.actions.iter().any(
+        |action| matches!(
+            action,
+            UiAction::SliderChanged { key, value }
+                if key == "mix" && (*value - 0.2).abs() <= f32::EPSILON
+        )
+    ));
+}
+
+#[test]
 fn editable_text_box_emits_edit_and_commit_actions() {
     let mut canvas = Canvas::new(200, 80);
     let mut layout = Layout::default();

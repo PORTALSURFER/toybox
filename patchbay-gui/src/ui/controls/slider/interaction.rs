@@ -65,6 +65,23 @@ impl<'a> Ui<'a> {
         true
     }
 
+    /// Reset slider value when the control receives a primary-button double click.
+    pub(crate) fn apply_slider_double_click_reset(
+        &mut self,
+        id: WidgetId,
+        range: (f32, f32),
+        default_value: f32,
+        value: &mut f32,
+    ) -> bool {
+        if self.input.mouse_pressed {
+            let _ = self.claim_mouse_pressed();
+        }
+        if self.state.active == Some(id) {
+            self.state.active = None;
+        }
+        self.apply_slider_value(value, range, default_value)
+    }
+
     /// Resolve slider track fill color from interaction state.
     pub(crate) fn resolve_slider_fill_color(&self, response: SliderResponse) -> Color {
         if response.active {

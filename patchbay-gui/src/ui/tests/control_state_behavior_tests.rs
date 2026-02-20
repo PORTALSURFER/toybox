@@ -108,6 +108,41 @@ fn slider_clears_active_state_when_mouse_up_without_release_event() {
 }
 
 #[test]
+fn slider_double_click_resets_to_explicit_default_value() {
+    let mut canvas = Canvas::new(200, 200);
+    let mut layout = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let mut value = 0.9;
+    let input = InputState {
+        pointer_pos: Point { x: 60, y: 40 },
+        mouse_pressed: true,
+        mouse_down: true,
+        mouse_double_clicked: true,
+        ..InputState::default()
+    };
+
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+    let response = ui.slider_with_default(
+        WidgetId::new(24),
+        "GAIN",
+        &mut value,
+        SliderConfig {
+            range: (0.0, 1.0),
+            size: Size {
+                width: 100,
+                height: 16,
+            },
+        },
+        0.2,
+    );
+
+    assert!(response.changed);
+    assert!(!response.active);
+    assert!((value - 0.2).abs() <= f32::EPSILON);
+}
+
+#[test]
 fn root_frame_measures_text_content() {
     let mut canvas = Canvas::new(200, 200);
     let mut layout = Layout::default();

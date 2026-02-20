@@ -7,6 +7,8 @@ pub struct KnobSpec {
     pub value: f32,
     /// Value range.
     pub range: (f32, f32),
+    /// Value restored by core double-click reset interactions.
+    pub default_value: f32,
     /// Optional explicit control size.
     pub control_size: Option<Size>,
     /// Layout constraints.

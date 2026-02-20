@@ -98,15 +98,24 @@ struct KnobRenderSpec<'a> {
     labels: KnobLabels<'a>,
     /// Interaction range limits.
     range: KnobRange,
+    /// Value restored when the knob is double-clicked.
+    default_value: f32,
 }
 
 impl<'a> KnobRenderSpec<'a> {
-    /// Build a render spec from primitive knob arguments.
-    fn from_args(id: WidgetId, name_label: &'a str, value_label: &'a str, range: (f32, f32)) -> Self {
+    /// Build a render spec from primitive knob arguments and explicit default.
+    fn from_args_with_default(
+        id: WidgetId,
+        name_label: &'a str,
+        value_label: &'a str,
+        range: (f32, f32),
+        default_value: f32,
+    ) -> Self {
         Self {
             id,
             labels: KnobLabels::new(name_label, value_label),
             range: KnobRange::from_tuple(range),
+            default_value,
         }
     }
 }
@@ -139,6 +148,8 @@ pub(crate) struct KnobRectRenderRequest<'a> {
     labels: KnobLabels<'a>,
     /// Inclusive interaction range.
     range: (f32, f32),
+    /// Value restored when the knob is double-clicked.
+    default_value: f32,
     /// Preferred dial diameter before clamping.
     desired_diameter: u32,
     /// Rectangular section bounds for clipped rendering.
@@ -161,6 +172,7 @@ impl<'a> KnobRectRenderRequest<'a> {
             id,
             labels: KnobLabels::new(name_label, value_label),
             range,
+            default_value: knob_default_value(range),
             desired_diameter,
             rect,
             text_scale: 1,
@@ -172,4 +184,16 @@ impl<'a> KnobRectRenderRequest<'a> {
         self.text_scale = text_scale.max(1);
         self
     }
+
+    /// Override the value restored by knob double-click interactions.
+    pub(crate) fn with_default_value(mut self, default_value: f32) -> Self {
+        self.default_value = default_value;
+        self
+    }
+}
+
+/// Resolve the midpoint default value for a knob range.
+fn knob_default_value(range: (f32, f32)) -> f32 {
+    let normalized = KnobRange::from_tuple(range);
+    normalized.min + (normalized.max - normalized.min) * 0.5
 }

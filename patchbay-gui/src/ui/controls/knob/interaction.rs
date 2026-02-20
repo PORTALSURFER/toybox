@@ -15,6 +15,12 @@ impl<'a> Ui<'a> {
             active: self.state.active == Some(spec.id),
             changed: false,
         };
+        if hovered && self.input.mouse_double_clicked {
+            response.changed =
+                self.apply_knob_double_click_reset(spec.id, spec.range, spec.default_value, value);
+            response.active = false;
+            return response;
+        }
         self.update_knob_active_state(spec.id, hovered, &mut response, *value);
         let drag_changed = self.apply_knob_drag(spec.id, spec.range, value);
         let wheel_changed = self.apply_knob_wheel(hovered, spec.range, value);
@@ -78,6 +84,29 @@ impl<'a> Ui<'a> {
             return false;
         }
         *value = new_value;
+        true
+    }
+
+    /// Reset knob value when the control receives a primary-button double click.
+    fn apply_knob_double_click_reset(
+        &mut self,
+        id: WidgetId,
+        range: KnobRange,
+        default_value: f32,
+        value: &mut f32,
+    ) -> bool {
+        if self.input.mouse_pressed {
+            let _ = self.claim_mouse_pressed();
+        }
+        if self.state.active == Some(id) {
+            self.state.active = None;
+            self.state.drag_start = None;
+        }
+        let next = range.clamp(default_value);
+        if (*value - next).abs() <= f32::EPSILON {
+            return false;
+        }
+        *value = next;
         true
     }
 }

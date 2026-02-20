@@ -233,6 +233,7 @@ fn validate_knob_node(
     validate_value_range("Knob", &knob.key, knob.range)?;
     validate_layout_bounds("Knob", knob.layout)?;
     validate_control_value("Knob", &knob.key, knob.value, knob.range)?;
+    validate_control_value("Knob", &knob.key, knob.default_value, knob.range)?;
     validate_optional_control_size("Knob", &knob.key, knob.control_size)
 }
 
@@ -246,6 +247,7 @@ fn validate_slider_node(
     validate_value_range("Slider", &slider.key, slider.range)?;
     validate_layout_bounds("Slider", slider.layout)?;
     validate_control_value("Slider", &slider.key, slider.value, slider.range)?;
+    validate_control_value("Slider", &slider.key, slider.default_value, slider.range)?;
     validate_optional_control_size("Slider", &slider.key, slider.control_size)
 }
 

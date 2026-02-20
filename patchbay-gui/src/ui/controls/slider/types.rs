@@ -7,6 +7,8 @@ pub(crate) struct SliderRectRenderRequest<'a> {
     label: &'a str,
     /// Inclusive value range.
     range: (f32, f32),
+    /// Value restored when the slider is double-clicked.
+    default_value: f32,
     /// Bounds used for clipping and placement.
     rect: Rect,
     /// Explicit text scale override for the label.
@@ -25,6 +27,7 @@ impl<'a> SliderRectRenderRequest<'a> {
             id,
             label,
             range,
+            default_value: slider_default_value(range),
             rect,
             text_scale: 1,
         }
@@ -33,6 +36,12 @@ impl<'a> SliderRectRenderRequest<'a> {
     /// Override text scale for slider label rendering.
     pub(crate) fn with_text_scale(mut self, text_scale: u32) -> Self {
         self.text_scale = text_scale.max(1);
+        self
+    }
+
+    /// Override the value restored by slider double-click interactions.
+    pub(crate) fn with_default_value(mut self, default_value: f32) -> Self {
+        self.default_value = default_value;
         self
     }
 }
@@ -70,4 +79,14 @@ pub struct SliderConfig {
     pub range: (f32, f32),
     /// Slider control footprint.
     pub size: Size,
+}
+
+/// Resolve the midpoint default value for a slider range.
+fn slider_default_value(range: (f32, f32)) -> f32 {
+    let (min, max) = if range.0 <= range.1 {
+        (range.0, range.1)
+    } else {
+        (range.1, range.0)
+    };
+    min + (max - min) * 0.5
 }

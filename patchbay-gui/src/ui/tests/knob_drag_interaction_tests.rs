@@ -131,3 +131,26 @@ fn knob_clears_active_state_when_mouse_up_without_release_event() {
         "knob should recover from missing release events when mouse is up"
     );
 }
+
+#[test]
+fn knob_double_click_resets_to_explicit_default_value() {
+    let mut canvas = Canvas::new(200, 200);
+    let mut layout = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let mut value = 0.82;
+    let input = InputState {
+        pointer_pos: Point { x: 40, y: 60 },
+        mouse_pressed: true,
+        mouse_down: true,
+        mouse_double_clicked: true,
+        ..InputState::default()
+    };
+
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+    let response = ui.knob_with_default(WidgetId::new(72), "GAIN", &mut value, (0.0, 1.0), 0.25);
+
+    assert!(response.changed);
+    assert!(!response.active);
+    assert!((value - 0.25).abs() <= f32::EPSILON);
+}

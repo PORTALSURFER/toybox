@@ -14,7 +14,8 @@ fn render_knob(
         .unwrap_or(tokens.controls.knob_diameter);
     let knob_request =
         KnobRectRenderRequest::new(id, "", "", knob.range, knob_diameter, rect)
-            .with_text_scale(tokens.typography.text_scale);
+            .with_text_scale(tokens.typography.text_scale)
+            .with_default_value(knob.default_value);
     let response = ui.knob_with_labels_in_rect_scaled(&mut value, knob_request);
     if response.changed {
         actions.push(UiAction::KnobChanged {
@@ -36,7 +37,8 @@ fn render_slider(
     let mut value = slider.value;
     let slider_request =
         SliderRectRenderRequest::new(id, "", slider.range, rect)
-            .with_text_scale(tokens.typography.text_scale);
+            .with_text_scale(tokens.typography.text_scale)
+            .with_default_value(slider.default_value);
     let response = ui.slider_in_rect_scaled(&mut value, slider_request);
     if response.changed {
         actions.push(UiAction::SliderChanged {

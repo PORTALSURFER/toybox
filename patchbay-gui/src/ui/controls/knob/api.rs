@@ -12,7 +12,27 @@ impl<'a> Ui<'a> {
         range: (f32, f32),
     ) -> KnobResponse {
         let value_label = Self::format_knob_value(*value);
-        self.knob_with_labels(id, label, &value_label, value, range)
+        self.knob_with_labels_and_default(
+            id,
+            label,
+            &value_label,
+            value,
+            range,
+            knob_default_value(range),
+        )
+    }
+
+    /// Draw a knob with the given name label and value and explicit reset default.
+    pub fn knob_with_default(
+        &mut self,
+        id: WidgetId,
+        label: &str,
+        value: &mut f32,
+        range: (f32, f32),
+        default_value: f32,
+    ) -> KnobResponse {
+        let value_label = Self::format_knob_value(*value);
+        self.knob_with_labels_and_default(id, label, &value_label, value, range, default_value)
     }
 
     /// Draw a knob with a name label above and a value label below.
@@ -28,7 +48,33 @@ impl<'a> Ui<'a> {
         value: &mut f32,
         range: (f32, f32),
     ) -> KnobResponse {
-        let spec = KnobRenderSpec::from_args(id, name_label, value_label, range);
+        self.knob_with_labels_and_default(
+            id,
+            name_label,
+            value_label,
+            value,
+            range,
+            knob_default_value(range),
+        )
+    }
+
+    /// Draw a knob with explicit labels and a custom double-click default value.
+    pub fn knob_with_labels_and_default(
+        &mut self,
+        id: WidgetId,
+        name_label: &str,
+        value_label: &str,
+        value: &mut f32,
+        range: (f32, f32),
+        default_value: f32,
+    ) -> KnobResponse {
+        let spec = KnobRenderSpec::from_args_with_default(
+            id,
+            name_label,
+            value_label,
+            range,
+            default_value,
+        );
         self.render_knob_from_spec(spec, value)
     }
 
@@ -61,6 +107,19 @@ impl<'a> Ui<'a> {
         self.knob(id, label, value, range)
     }
 
+    /// Draw a knob with a stable key and explicit double-click default value.
+    pub fn knob_with_key_default(
+        &mut self,
+        key: &str,
+        label: &str,
+        value: &mut f32,
+        range: (f32, f32),
+        default_value: f32,
+    ) -> KnobResponse {
+        let id = WidgetId::from_label(key);
+        self.knob_with_default(id, label, value, range, default_value)
+    }
+
     /// Draw a knob with explicit name and value labels and a stable key.
     pub fn knob_with_key_labels(
         &mut self,
@@ -74,6 +133,27 @@ impl<'a> Ui<'a> {
         self.knob_with_labels(id, name_label, value_label, value, range)
     }
 
+    /// Draw a knob with explicit labels, stable key, and custom default value.
+    pub fn knob_with_key_labels_default(
+        &mut self,
+        key: &str,
+        name_label: &str,
+        value_label: &str,
+        value: &mut f32,
+        range: (f32, f32),
+        default_value: f32,
+    ) -> KnobResponse {
+        let id = WidgetId::from_label(key);
+        self.knob_with_labels_and_default(
+            id,
+            name_label,
+            value_label,
+            value,
+            range,
+            default_value,
+        )
+    }
+
     /// Render a knob in a fixed rectangle without affecting surrounding layout.
     pub(crate) fn knob_with_labels_in_rect(
         &mut self,
@@ -84,6 +164,7 @@ impl<'a> Ui<'a> {
             id: request.id,
             labels: request.labels,
             range: KnobRange::from_tuple(request.range),
+            default_value: request.default_value,
         };
         let rect_spec = KnobRectSpec::new(request.rect, request.desired_diameter);
         let previous_text_scale = self.theme.text_scale;
