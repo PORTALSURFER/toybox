@@ -50,6 +50,8 @@ pub(crate) struct DropdownVisualStyle {
     pub(crate) fill: Option<Color>,
     /// Override control/menu hover fill color.
     pub(crate) hover_fill: Option<Color>,
+    /// Override control fill color while the menu is open.
+    pub(crate) active_fill: Option<Color>,
     /// Override control/menu outline color.
     pub(crate) outline: Option<Color>,
     /// Override dropdown text color.

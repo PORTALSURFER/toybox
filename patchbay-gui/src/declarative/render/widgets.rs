@@ -124,6 +124,12 @@ fn render_dropdown(
     if let Some(color) = dropdown.background_override {
         dropdown_request = dropdown_request.with_background_color(color);
     }
+    if let Some(color) = dropdown.hover_background_override {
+        dropdown_request = dropdown_request.with_hover_background_color(color);
+    }
+    if let Some(color) = dropdown.active_background_override {
+        dropdown_request = dropdown_request.with_active_background_color(color);
+    }
     if let Some(color) = dropdown.outline_override {
         dropdown_request = dropdown_request.with_outline_color(color);
     }

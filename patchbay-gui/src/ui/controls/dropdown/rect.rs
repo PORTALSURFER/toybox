@@ -47,6 +47,19 @@ impl<'a> DropdownRectRenderRequest<'a> {
     pub(crate) fn with_background_color(mut self, color: Color) -> Self {
         self.visual_style.fill = Some(color);
         self.visual_style.hover_fill = Some(color);
+        self.visual_style.active_fill = Some(color);
+        self
+    }
+
+    /// Override dropdown background fill color for hovered rows/states only.
+    pub(crate) fn with_hover_background_color(mut self, color: Color) -> Self {
+        self.visual_style.hover_fill = Some(color);
+        self
+    }
+
+    /// Override dropdown control fill color while open.
+    pub(crate) fn with_active_background_color(mut self, color: Color) -> Self {
+        self.visual_style.active_fill = Some(color);
         self
     }
 

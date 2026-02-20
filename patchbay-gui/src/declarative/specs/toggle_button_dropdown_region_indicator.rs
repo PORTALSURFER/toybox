@@ -87,6 +87,10 @@ pub struct DropdownSpec {
     pub control_size: Option<Size>,
     /// Optional override for the dropdown control background fill.
     pub background_override: Option<Color>,
+    /// Optional override for dropdown hover fill.
+    pub hover_background_override: Option<Color>,
+    /// Optional override for dropdown open-state control fill.
+    pub active_background_override: Option<Color>,
     /// Optional override for the dropdown control outline color.
     pub outline_override: Option<Color>,
     /// Optional override for dropdown label text color.
@@ -109,6 +113,8 @@ impl DropdownSpec {
             selected,
             control_size: None,
             background_override: None,
+            hover_background_override: None,
+            active_background_override: None,
             outline_override: None,
             text_color_override: None,
             layout: LayoutBox::auto(),
@@ -130,6 +136,18 @@ impl DropdownSpec {
     /// Override dropdown control background fill color.
     pub fn background_color(mut self, color: Color) -> Self {
         self.background_override = Some(color);
+        self
+    }
+
+    /// Override dropdown hover fill color.
+    pub fn hover_background_color(mut self, color: Color) -> Self {
+        self.hover_background_override = Some(color);
+        self
+    }
+
+    /// Override dropdown open-state control fill color.
+    pub fn active_background_color(mut self, color: Color) -> Self {
+        self.active_background_override = Some(color);
         self
     }
 

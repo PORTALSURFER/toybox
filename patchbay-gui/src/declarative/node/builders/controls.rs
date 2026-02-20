@@ -43,6 +43,26 @@ impl Node {
         self
     }
 
+    /// Override dropdown hover fill color for dropdown nodes.
+    ///
+    /// Non-dropdown node kinds are returned unchanged.
+    pub fn dropdown_hover_background_color(mut self, color: Color) -> Self {
+        if let Self::Dropdown(dropdown) = &mut self {
+            dropdown.hover_background_override = Some(color);
+        }
+        self
+    }
+
+    /// Override dropdown open-state control fill color for dropdown nodes.
+    ///
+    /// Non-dropdown node kinds are returned unchanged.
+    pub fn dropdown_active_background_color(mut self, color: Color) -> Self {
+        if let Self::Dropdown(dropdown) = &mut self {
+            dropdown.active_background_override = Some(color);
+        }
+        self
+    }
+
     /// Override dropdown control outline color for dropdown nodes.
     ///
     /// Non-dropdown node kinds are returned unchanged.

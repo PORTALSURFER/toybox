@@ -9,7 +9,10 @@ impl<'a> Ui<'a> {
         visual_style: DropdownVisualStyle,
     ) {
         let fill = if response.open {
-            visual_style.fill.unwrap_or(self.theme.knob_active)
+            visual_style
+                .active_fill
+                .or(visual_style.fill)
+                .unwrap_or(self.theme.knob_active)
         } else if response.hovered {
             visual_style.hover_fill.unwrap_or(self.theme.knob_hover)
         } else {

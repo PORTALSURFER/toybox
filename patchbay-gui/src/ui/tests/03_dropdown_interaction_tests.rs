@@ -2,6 +2,13 @@ use super::*;
 use crate::canvas::Canvas;
 use crate::host::InputState;
 
+fn canvas_pixel(canvas: &Canvas, x: u32, y: u32) -> Color {
+    let width = canvas.size().width as usize;
+    let idx = ((y as usize) * width + (x as usize)) * 4;
+    let pixels = canvas.pixels();
+    Color::rgba(pixels[idx], pixels[idx + 1], pixels[idx + 2], pixels[idx + 3])
+}
+
 #[test]
 fn dropdown_opens_and_closes_on_primary_press() {
     let mut canvas = Canvas::new(200, 200);
@@ -207,6 +214,7 @@ fn dropdown_visual_style_overrides_apply_to_open_menu_overlay() {
     let style = DropdownVisualStyle {
         fill: Some(Color::rgb(150, 44, 44)),
         hover_fill: Some(Color::rgb(150, 44, 44)),
+        active_fill: Some(Color::rgb(170, 66, 66)),
         outline: Some(Color::rgb(95, 31, 31)),
         text: Some(Color::rgb(240, 220, 220)),
     };
@@ -246,6 +254,12 @@ fn dropdown_visual_style_overrides_apply_to_open_menu_overlay() {
         );
         assert_eq!(overlay.text_color, style.text.expect("text color should exist"));
     }
+    let fill_color = canvas_pixel(&canvas, 92, 38);
+    assert_eq!(
+        fill_color,
+        style.active_fill.expect("active fill color should exist"),
+        "open dropdown control should use active fill override"
+    );
 }
 
 #[test]
