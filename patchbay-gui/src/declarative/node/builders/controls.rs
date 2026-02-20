@@ -94,4 +94,16 @@ impl Node {
         }
         self
     }
+
+    /// Set double-click reset default value for knob and slider nodes.
+    ///
+    /// Non-knob/slider node kinds are returned unchanged.
+    pub fn default_value(mut self, default_value: f32) -> Self {
+        match &mut self {
+            Self::Knob(knob) => knob.default_value = default_value,
+            Self::Slider(slider) => slider.default_value = default_value,
+            _ => {}
+        }
+        self
+    }
 }
