@@ -335,6 +335,43 @@ fn knob_in_rect_centers_visual_when_cell_is_oversized() {
 }
 
 #[test]
+fn knob_in_rect_uses_half_minus_one_radius_regression() {
+    let mut canvas = Canvas::new(240, 200);
+    let mut layout = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let input = InputState::default();
+    let mut value = 0.5;
+    let requested_diameter = 40u32;
+    let rect = Rect {
+        origin: Point { x: 20, y: 24 },
+        size: knob_block_size_for_diameter(requested_diameter, theme.text_scale),
+    };
+
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+    let request = KnobRectRenderRequest::new(
+        WidgetId::new(994),
+        "GAIN",
+        "50%",
+        (0.0, 1.0),
+        requested_diameter,
+        rect,
+    );
+    let _ = ui.knob_with_labels_in_rect(&mut value, request);
+    let commands = ui.take_vector_commands();
+    let knob = commands
+        .into_iter()
+        .find_map(|command| match command {
+            VectorCommand::Knob(knob) => Some(knob),
+            _ => None,
+        })
+        .expect("knob render should emit a vector knob command");
+
+    let expected_radius = (requested_diameter as i32 / 2 - 1).max(1);
+    assert_eq!(knob.radius, expected_radius);
+}
+
+#[test]
 fn hard_clamped_text_respects_rect_height() {
     let mut canvas = Canvas::new(200, 120);
     let mut layout = Layout::default();
