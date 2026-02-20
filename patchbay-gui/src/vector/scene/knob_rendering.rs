@@ -1,6 +1,6 @@
 //! Knob vector primitive rendering helpers.
 
-use crate::canvas::Point;
+use crate::canvas::{Color, Point};
 use vello::Scene;
 use vello::kurbo::{Affine, BezPath, Cap, Circle, Line, Point as KurboPoint, Stroke};
 use vello::peniko::Fill;
@@ -11,6 +11,7 @@ use super::types::KnobVisual;
 /// Emit vector geometry for a knob visual payload.
 pub(super) fn draw_knob(scene: &mut Scene, knob: KnobVisual, transform: Affine) {
     draw_knob_body(scene, knob, transform);
+    draw_knob_inactive_arc(scene, knob, transform);
     draw_knob_active_arc(scene, knob, transform);
     draw_knob_indicator_line(scene, knob, transform);
 }
@@ -25,6 +26,23 @@ fn draw_knob_body(scene: &mut Scene, knob: KnobVisual, transform: Affine) {
         color_to_vello(knob.fill),
         None,
         &body,
+    );
+}
+
+/// Draw the unfilled-value arc segment with a muted dark tone.
+fn draw_knob_inactive_arc(scene: &mut Scene, knob: KnobVisual, transform: Affine) {
+    let inactive = arc_path(
+        knob.center,
+        knob.arc_radius.max(1) as f32,
+        knob.arc_start,
+        knob.value_angle,
+    );
+    scene.stroke(
+        &arc_stroke(knob),
+        transform,
+        color_to_vello(inactive_arc_color(knob)),
+        None,
+        &inactive,
     );
 }
 
@@ -104,4 +122,43 @@ fn indicator_point(center: Point, radius: i32, angle: f32) -> Point {
 /// Return the standard ring stroke for knob arcs.
 fn arc_stroke(knob: KnobVisual) -> Stroke {
     Stroke::new(knob.arc_thickness.max(1.0) as f64).with_caps(Cap::Butt)
+}
+
+/// Resolve a darker color used for the unfilled knob arc segment.
+fn inactive_arc_color(knob: KnobVisual) -> Color {
+    let mix_channel =
+        |outline: u8, fill: u8| ((u16::from(outline) * 3 + u16::from(fill)) / 4) as u8;
+    Color::rgba(
+        mix_channel(knob.outline.r, knob.fill.r),
+        mix_channel(knob.outline.g, knob.fill.g),
+        mix_channel(knob.outline.b, knob.fill.b),
+        knob.outline.a,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::inactive_arc_color;
+    use crate::canvas::{Color, Point};
+    use crate::vector::scene::KnobVisual;
+
+    #[test]
+    fn inactive_arc_color_is_darker_than_outline() {
+        let knob = KnobVisual {
+            center: Point { x: 0, y: 0 },
+            radius: 8,
+            arc_radius: 10,
+            arc_thickness: 1.0,
+            arc_start: 0.0,
+            arc_end: 1.0,
+            value_angle: 0.5,
+            fill: Color::rgb(20, 20, 20),
+            outline: Color::rgb(120, 140, 100),
+            indicator: Color::rgb(220, 240, 180),
+        };
+        let inactive = inactive_arc_color(knob);
+        assert!(inactive.r < knob.outline.r);
+        assert!(inactive.g < knob.outline.g);
+        assert!(inactive.b < knob.outline.b);
+    }
 }
