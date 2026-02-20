@@ -156,6 +156,9 @@ impl GridContext {
     pub fn cell_rect_rc(&mut self, row: i32, col: i32) -> Rect {
         let row = row.max(0);
         let col = col.max(0);
+        let columns = self.spec.columns.max(1);
+        let linear_index = row.saturating_mul(columns).saturating_add(col);
+        self.max_index = self.max_index.max(linear_index);
         let x = self.origin.x + col * (self.spec.cell_size.width as i32 + self.spec.gap);
         let y = self.origin.y + row * (self.spec.cell_size.height as i32 + self.spec.gap);
         Rect {

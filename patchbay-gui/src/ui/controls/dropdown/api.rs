@@ -42,9 +42,6 @@ impl<'a> Ui<'a> {
             if response.open {
                 self.push_dropdown_overlay(options, menu.hovered_index, menu.geometry, visual_style);
             }
-            if menu.pressed {
-                self.consume_mouse_pressed();
-            }
         }
 
         self.advance_dropdown_layout_cursor(layout);

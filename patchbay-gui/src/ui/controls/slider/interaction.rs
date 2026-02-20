@@ -11,7 +11,7 @@ impl<'a> Ui<'a> {
             active: self.state.active == Some(id),
             changed: false,
         };
-        if hovered && self.mouse_pressed() {
+        if hovered && self.claim_mouse_pressed() {
             self.state.active = Some(id);
             response.active = true;
         }

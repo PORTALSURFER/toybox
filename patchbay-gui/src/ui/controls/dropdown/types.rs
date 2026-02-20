@@ -20,8 +20,6 @@ pub(crate) struct DropdownMenuInteraction {
     pub(crate) hovered_index: Option<usize>,
     /// Resolved menu viewport geometry.
     pub(crate) geometry: DropdownMenuGeometry,
-    /// Snapshot of mouse-pressed state for this pass.
-    pub(crate) pressed: bool,
 }
 
 /// Geometry required to evaluate option hit-testing.

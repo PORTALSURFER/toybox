@@ -11,7 +11,7 @@ impl<'a> Ui<'a> {
             open: self.state.open_dropdown == Some(id),
             changed: false,
         };
-        if hovered && self.mouse_pressed() {
+        if hovered && self.claim_mouse_pressed() {
             if response.open {
                 self.state.clear_open_dropdown();
                 response.open = false;
@@ -42,7 +42,7 @@ impl<'a> Ui<'a> {
         if scroll_px != geometry.scroll_px {
             geometry = self.resolve_dropdown_menu_geometry(layout, options.len(), scroll_px);
         }
-        let pressed = self.mouse_pressed();
+        let pressed = self.claim_mouse_pressed();
         let hovered_index = self.find_hovered_dropdown_option(geometry);
         let selection_change = self.apply_dropdown_selection(pressed, hovered_index, selected);
         let open = self.resolve_dropdown_open_after_press(
@@ -57,7 +57,6 @@ impl<'a> Ui<'a> {
             changed: selection_change,
             hovered_index,
             geometry,
-            pressed,
         }
     }
 

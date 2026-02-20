@@ -163,3 +163,32 @@ fn toggle_flips_on_click() {
     assert!(response.changed);
     assert!(value);
 }
+
+#[test]
+fn first_overlapping_region_claims_mouse_press_for_frame() {
+    let mut canvas = Canvas::new(200, 200);
+    let mut layout = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let input = InputState {
+        pointer_pos: Point { x: 40, y: 40 },
+        mouse_pressed: true,
+        ..InputState::default()
+    };
+    let rect = Rect {
+        origin: Point { x: 20, y: 20 },
+        size: Size {
+            width: 60,
+            height: 60,
+        },
+    };
+
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+    let first = ui.region_with_key("region-first", rect);
+    let second = ui.region_with_key("region-second", rect);
+
+    assert!(first.pressed);
+    assert!(first.active);
+    assert!(!second.pressed);
+    assert!(!second.active);
+}

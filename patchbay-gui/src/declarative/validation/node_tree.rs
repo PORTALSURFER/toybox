@@ -44,54 +44,7 @@ fn validate_tree_depth_limit(root: &Node, max_depth: usize) -> Result<(), Declar
             });
         }
         let next_depth = depth.saturating_add(1);
-        match node {
-            Node::Slot(slot) => stack.push((&slot.child, next_depth)),
-            Node::Panel(panel) => stack.push((&panel.content, next_depth)),
-            Node::PaddingBox(padding_box) => stack.push((padding_box.content(), next_depth)),
-            Node::AlignBox(align_box) => stack.push((align_box.content(), next_depth)),
-            Node::AspectBox(aspect_box) => stack.push((aspect_box.content(), next_depth)),
-            Node::Row(flex) | Node::Column(flex) => {
-                for child in &flex.children {
-                    stack.push((child, next_depth));
-                }
-            }
-            Node::Grid(grid) => {
-                for child in &grid.children {
-                    stack.push((child, next_depth));
-                }
-            }
-            Node::Absolute(absolute) => {
-                for child in &absolute.children {
-                    stack.push((&child.node, next_depth));
-                }
-            }
-            Node::Stack(stack_node) => {
-                for child in &stack_node.children {
-                    stack.push((child, next_depth));
-                }
-            }
-            Node::ScrollView(scroll_view) => stack.push((scroll_view.content(), next_depth)),
-            Node::Wrap(wrap) => {
-                for child in &wrap.children {
-                    stack.push((child, next_depth));
-                }
-            }
-            Node::SwitchLayout(switch_layout) => {
-                for case_entry in switch_layout.cases() {
-                    stack.push((case_entry.child(), next_depth));
-                }
-                stack.push((switch_layout.fallback(), next_depth));
-            }
-            Node::TextBox(_)
-            | Node::Spacer(_)
-            | Node::Knob(_)
-            | Node::Slider(_)
-            | Node::Toggle(_)
-            | Node::Button(_)
-            | Node::Dropdown(_)
-            | Node::Region(_)
-            | Node::Indicator(_) => {}
-        }
+        node.for_each_child(|child| stack.push((child, next_depth)));
     }
     Ok(())
 }

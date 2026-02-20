@@ -13,7 +13,7 @@ impl<'a> Ui<'a> {
 
     /// Apply press interaction and update the toggle value.
     fn apply_toggle_press(&mut self, hovered: bool, value: &mut bool) -> bool {
-        if !(hovered && self.mouse_pressed()) {
+        if !(hovered && self.claim_mouse_pressed()) {
             return false;
         }
         *value = !*value;
@@ -26,9 +26,10 @@ impl<'a> Ui<'a> {
         if hovered {
             self.state.hot = Some(id);
         }
+        let clicked = hovered && self.claim_mouse_pressed();
         ButtonResponse {
             hovered,
-            clicked: hovered && self.mouse_pressed(),
+            clicked,
         }
     }
 }

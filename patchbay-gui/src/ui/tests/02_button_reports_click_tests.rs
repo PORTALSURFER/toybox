@@ -186,6 +186,35 @@
     }
 
     #[test]
+    fn grid_rows_are_tracked_when_addressing_cells_by_row_and_column() {
+        let mut canvas = Canvas::new(240, 240);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState::default();
+
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let origin = Point { x: 8, y: 10 };
+        let spec = GridSpec {
+            columns: 4,
+            cell_size: Size {
+                width: 10,
+                height: 12,
+            },
+            gap: 2,
+            rows: None,
+        };
+        let response = ui.grid_with_key("grid-rc", spec, origin, |_ui, grid| {
+            let rect = grid.cell_rect_rc(2, 3);
+            assert_eq!(rect.origin.x, origin.x + 3 * (10 + 2));
+            assert_eq!(rect.origin.y, origin.y + 2 * (12 + 2));
+        });
+
+        assert_eq!(response.rows, 3);
+        assert_eq!(response.columns, 4);
+    }
+
+    #[test]
     fn main_palette_matches_documented_values() {
         let palette = MainPalette::main();
         assert_eq!(palette.accent_focus, Color::rgb(199, 240, 0));

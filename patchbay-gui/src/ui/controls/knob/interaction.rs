@@ -30,7 +30,7 @@ impl<'a> Ui<'a> {
         response: &mut KnobResponse,
         current_value: f32,
     ) {
-        if hovered && self.mouse_pressed() {
+        if hovered && self.claim_mouse_pressed() {
             self.state.active = Some(id);
             self.state.drag_start = Some(self.input.pointer_pos);
             self.state.drag_value = current_value;

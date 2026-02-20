@@ -26,7 +26,7 @@ impl<'a> Ui<'a> {
             double_clicked: false,
         };
 
-        if hovered && self.mouse_pressed() {
+        if hovered && self.claim_mouse_pressed() {
             self.state.active = Some(id);
             self.state.drag_start = Some(self.input.pointer_pos);
             response.active = true;

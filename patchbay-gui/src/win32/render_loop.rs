@@ -236,42 +236,19 @@ fn spec_has_active_text_edit(spec: &UiSpec) -> bool {
 fn node_has_active_text_edit(node: &crate::declarative::Node) -> bool {
     use crate::declarative::Node;
 
-    match node {
-        Node::Slot(slot) => node_has_active_text_edit(slot.child()),
-        Node::Panel(panel) => node_has_active_text_edit(panel.content()),
-        Node::PaddingBox(spec) => node_has_active_text_edit(spec.content()),
-        Node::AlignBox(spec) => node_has_active_text_edit(spec.content()),
-        Node::AspectBox(spec) => node_has_active_text_edit(spec.content()),
-        Node::Row(spec) | Node::Column(spec) => spec
-            .children()
-            .iter()
-            .any(node_has_active_text_edit),
-        Node::Grid(spec) => spec.children().iter().any(node_has_active_text_edit),
-        Node::Absolute(spec) => spec
-            .children()
-            .iter()
-            .any(|child| node_has_active_text_edit(child.node())),
-        Node::Stack(spec) => spec.children().iter().any(node_has_active_text_edit),
-        Node::ScrollView(spec) => node_has_active_text_edit(spec.content()),
-        Node::Wrap(spec) => spec.children().iter().any(node_has_active_text_edit),
-        Node::SwitchLayout(spec) => {
-            spec.cases()
-                .iter()
-                .any(|case_entry| node_has_active_text_edit(case_entry.child()))
-                || node_has_active_text_edit(spec.fallback())
-        }
-        Node::TextBox(text_box) => text_box
+    if let Node::TextBox(text_box) = node {
+        return text_box
             .edit
             .as_ref()
             .map(|edit| edit.editing)
-            .unwrap_or(false),
-        Node::Spacer(_)
-        | Node::Knob(_)
-        | Node::Slider(_)
-        | Node::Toggle(_)
-        | Node::Button(_)
-        | Node::Dropdown(_)
-        | Node::Region(_)
-        | Node::Indicator(_) => false,
+            .unwrap_or(false);
     }
+
+    let mut active = false;
+    node.for_each_child(|child| {
+        if !active && node_has_active_text_edit(child) {
+            active = true;
+        }
+    });
+    active
 }

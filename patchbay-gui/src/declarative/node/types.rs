@@ -76,4 +76,63 @@ impl Node {
             other => Node::Slot(SlotSpec::new(other)),
         }
     }
+
+    /// Visit children in deterministic declaration order.
+    pub(crate) fn for_each_child<'a>(&'a self, mut visit: impl FnMut(&'a Node)) {
+        self.for_each_indexed_child(|_, child| visit(child));
+    }
+
+    /// Visit children with deterministic indices in declaration order.
+    ///
+    /// For `SwitchLayout`, fallback is visited after all explicit cases.
+    pub(crate) fn for_each_indexed_child<'a>(&'a self, mut visit: impl FnMut(usize, &'a Node)) {
+        match self {
+            Node::Slot(slot) => visit(0, slot.child()),
+            Node::Panel(panel) => visit(0, panel.content()),
+            Node::PaddingBox(padding_box) => visit(0, padding_box.content()),
+            Node::AlignBox(align_box) => visit(0, align_box.content()),
+            Node::AspectBox(aspect_box) => visit(0, aspect_box.content()),
+            Node::Row(flex) | Node::Column(flex) => {
+                for (index, child) in flex.children.iter().enumerate() {
+                    visit(index, child);
+                }
+            }
+            Node::Grid(grid) => {
+                for (index, child) in grid.children.iter().enumerate() {
+                    visit(index, child);
+                }
+            }
+            Node::Absolute(absolute) => {
+                for (index, child) in absolute.children.iter().enumerate() {
+                    visit(index, child.node());
+                }
+            }
+            Node::Stack(stack) => {
+                for (index, child) in stack.children.iter().enumerate() {
+                    visit(index, child);
+                }
+            }
+            Node::ScrollView(scroll_view) => visit(0, scroll_view.content()),
+            Node::Wrap(wrap) => {
+                for (index, child) in wrap.children.iter().enumerate() {
+                    visit(index, child);
+                }
+            }
+            Node::SwitchLayout(switch_layout) => {
+                for (index, case_entry) in switch_layout.cases().iter().enumerate() {
+                    visit(index, case_entry.child());
+                }
+                visit(switch_layout.cases().len(), switch_layout.fallback());
+            }
+            Node::TextBox(_)
+            | Node::Spacer(_)
+            | Node::Knob(_)
+            | Node::Slider(_)
+            | Node::Toggle(_)
+            | Node::Button(_)
+            | Node::Dropdown(_)
+            | Node::Region(_)
+            | Node::Indicator(_) => {}
+        }
+    }
 }

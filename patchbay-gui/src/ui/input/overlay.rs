@@ -28,7 +28,7 @@ impl<'a> Ui<'a> {
 
     /// Draw any deferred overlays (dropdown menus).
     pub fn draw_overlays(&mut self) {
-        let overlays = self.state.overlays.clone();
+        let overlays = std::mem::take(&mut self.state.overlays);
         for overlay in overlays.iter() {
             let height = overlay.row_height;
             for (index, option) in overlay.options.iter().enumerate() {
@@ -73,6 +73,7 @@ impl<'a> Ui<'a> {
                 );
             }
         }
+        self.state.overlays = overlays;
     }
 
     /// Clear any deferred overlay drawings for the next frame.
@@ -93,5 +94,14 @@ impl<'a> Ui<'a> {
     /// Consume the frame's primary-button press.
     fn consume_mouse_pressed(&mut self) {
         self.state.consume_mouse_pressed = true;
+    }
+
+    /// Return true if this call successfully claimed the primary-button press.
+    fn claim_mouse_pressed(&mut self) -> bool {
+        if !self.mouse_pressed() {
+            return false;
+        }
+        self.consume_mouse_pressed();
+        true
     }
 }
