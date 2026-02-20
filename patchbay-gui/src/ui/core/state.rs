@@ -24,6 +24,8 @@ pub struct UiState {
     root_frame_size: Option<Size>,
     /// Whether root frame sizing was updated this frame.
     root_frame_used: bool,
+    /// Per-textbox edit cursor/selection runtime keyed by textbox id.
+    text_edit_runtime: HashMap<WidgetId, TextEditRuntimeState>,
 }
 
 /// Cached container sizes for auto layout.
@@ -31,6 +33,15 @@ pub struct UiState {
 struct LayoutState {
     /// Last measured size for each keyed layout container.
     sizes: HashMap<WidgetId, Size>,
+}
+
+/// Runtime cursor/selection state for editable text boxes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct TextEditRuntimeState {
+    /// Current cursor index in character units.
+    pub(crate) cursor: usize,
+    /// Selection anchor index in character units.
+    pub(crate) anchor: usize,
 }
 
 impl LayoutState {

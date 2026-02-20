@@ -268,3 +268,124 @@ fn editable_text_box_emits_edit_and_commit_actions() {
         )
     ));
 }
+
+#[test]
+fn editable_text_box_left_arrow_moves_cursor_for_next_insert() {
+    let mut ui_state = UiState::default();
+    let theme = Theme::default();
+
+    let mut canvas = Canvas::new(200, 80);
+    let mut layout = Layout::default();
+    let input_move_left = InputState {
+        key_pressed: Some('\u{1c}'),
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(
+        &mut canvas,
+        &input_move_left,
+        &mut ui_state,
+        &mut layout,
+        &theme,
+    );
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        panel(
+            "panel",
+            textbox("Init")
+                .text_editable("preset-title", true)
+                .text_edit_max_chars(24),
+        )
+        .pad_all(0),
+    ));
+    let result = render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    assert!(
+        result.actions.is_empty(),
+        "moving cursor should not emit edit actions by itself"
+    );
+
+    let mut canvas = Canvas::new(200, 80);
+    let mut layout = Layout::default();
+    let input_insert = InputState {
+        key_pressed: Some('X'),
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &input_insert, &mut ui_state, &mut layout, &theme);
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        panel(
+            "panel",
+            textbox("Init")
+                .text_editable("preset-title", true)
+                .text_edit_max_chars(24),
+        )
+        .pad_all(0),
+    ));
+    let result = render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    assert!(result.actions.iter().any(
+        |action| matches!(
+            action,
+            UiAction::TextBoxEdited { key, text } if key == "preset-title" && text == "IniXt"
+        )
+    ));
+}
+
+#[test]
+fn editable_text_box_shift_arrow_selects_text_and_replaces_it() {
+    let mut ui_state = UiState::default();
+    let theme = Theme::default();
+
+    let mut canvas = Canvas::new(200, 80);
+    let mut layout = Layout::default();
+    let input_select_last = InputState {
+        key_pressed: Some('\u{1c}'),
+        shift_down: true,
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(
+        &mut canvas,
+        &input_select_last,
+        &mut ui_state,
+        &mut layout,
+        &theme,
+    );
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        panel(
+            "panel",
+            textbox("Init")
+                .text_editable("preset-title", true)
+                .text_edit_max_chars(24),
+        )
+        .pad_all(0),
+    ));
+    let result = render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    assert!(
+        result.actions.is_empty(),
+        "selection movement should not emit edit actions by itself"
+    );
+
+    let mut canvas = Canvas::new(200, 80);
+    let mut layout = Layout::default();
+    let input_replace = InputState {
+        key_pressed: Some('Z'),
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &input_replace, &mut ui_state, &mut layout, &theme);
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        panel(
+            "panel",
+            textbox("Init")
+                .text_editable("preset-title", true)
+                .text_edit_max_chars(24),
+        )
+        .pad_all(0),
+    ));
+    let result = render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    assert!(result.actions.iter().any(
+        |action| matches!(
+            action,
+            UiAction::TextBoxEdited { key, text } if key == "preset-title" && text == "IniZ"
+        )
+    ));
+}

@@ -133,6 +133,42 @@ impl<'a> Ui<'a> {
         self.canvas
     }
 
+    /// Return or initialize editable textbox runtime state for one stable key.
+    pub(crate) fn begin_text_edit_runtime(
+        &mut self,
+        edit_key: &str,
+        text_char_count: usize,
+    ) -> TextEditRuntimeState {
+        let id = WidgetId::from_label(edit_key);
+        let entry = self
+            .state
+            .text_edit_runtime
+            .entry(id)
+            .or_insert(TextEditRuntimeState {
+                cursor: text_char_count,
+                anchor: text_char_count,
+            });
+        entry.cursor = entry.cursor.min(text_char_count);
+        entry.anchor = entry.anchor.min(text_char_count);
+        *entry
+    }
+
+    /// Persist editable textbox runtime state for one stable key.
+    pub(crate) fn set_text_edit_runtime(
+        &mut self,
+        edit_key: &str,
+        runtime: TextEditRuntimeState,
+    ) {
+        let id = WidgetId::from_label(edit_key);
+        self.state.text_edit_runtime.insert(id, runtime);
+    }
+
+    /// Remove editable textbox runtime state for one stable key.
+    pub(crate) fn clear_text_edit_runtime(&mut self, edit_key: &str) {
+        let id = WidgetId::from_label(edit_key);
+        self.state.text_edit_runtime.remove(&id);
+    }
+
     /// Access the current theme settings.
     pub fn theme(&self) -> &Theme {
         &self.theme

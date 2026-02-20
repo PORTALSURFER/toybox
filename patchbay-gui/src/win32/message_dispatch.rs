@@ -277,10 +277,15 @@ where
 fn translate_virtual_key_to_input_char(wparam: WPARAM) -> Option<char> {
     match (wparam.0 & 0xFFFF) as u16 {
         key if key == VK_BACK.0 as u16 => Some('\u{8}'),
+        key if key == VK_DELETE.0 as u16 => Some('\u{7f}'),
         key if key == VK_RETURN.0 as u16 => Some('\r'),
         key if key == VK_ESCAPE.0 as u16 => Some('\u{1b}'),
         key if key == VK_TAB.0 as u16 => Some('\t'),
         key if key == VK_SPACE.0 as u16 => Some(' '),
+        key if key == VK_LEFT.0 as u16 => Some('\u{1c}'),
+        key if key == VK_RIGHT.0 as u16 => Some('\u{1d}'),
+        key if key == VK_HOME.0 as u16 => Some('\u{1e}'),
+        key if key == VK_END.0 as u16 => Some('\u{1f}'),
         _ => None,
     }
 }

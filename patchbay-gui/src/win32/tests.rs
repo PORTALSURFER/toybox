@@ -1,8 +1,9 @@
 #[cfg(test)]
 mod tests {
     use super::{
-        ShortcutBinding, ShortcutModifiers, VK_BACK, VK_ESCAPE, VK_RETURN, VK_SPACE, VK_TAB,
-        WPARAM, client_size_changed, enforce_aspect_min, resolved_layout_size_for_resize_request,
+        ShortcutBinding, ShortcutModifiers, VK_BACK, VK_DELETE, VK_END, VK_ESCAPE, VK_HOME,
+        VK_LEFT, VK_RETURN, VK_RIGHT, VK_SPACE, VK_TAB, WPARAM, client_size_changed,
+        enforce_aspect_min, resolved_layout_size_for_resize_request,
         translate_virtual_key_to_input_char,
     };
     use crate::canvas::Size;
@@ -108,6 +109,10 @@ mod tests {
             Some('\u{8}')
         );
         assert_eq!(
+            translate_virtual_key_to_input_char(WPARAM(VK_DELETE.0 as usize)),
+            Some('\u{7f}')
+        );
+        assert_eq!(
             translate_virtual_key_to_input_char(WPARAM(VK_RETURN.0 as usize)),
             Some('\r')
         );
@@ -122,6 +127,22 @@ mod tests {
         assert_eq!(
             translate_virtual_key_to_input_char(WPARAM(VK_SPACE.0 as usize)),
             Some(' ')
+        );
+        assert_eq!(
+            translate_virtual_key_to_input_char(WPARAM(VK_LEFT.0 as usize)),
+            Some('\u{1c}')
+        );
+        assert_eq!(
+            translate_virtual_key_to_input_char(WPARAM(VK_RIGHT.0 as usize)),
+            Some('\u{1d}')
+        );
+        assert_eq!(
+            translate_virtual_key_to_input_char(WPARAM(VK_HOME.0 as usize)),
+            Some('\u{1e}')
+        );
+        assert_eq!(
+            translate_virtual_key_to_input_char(WPARAM(VK_END.0 as usize)),
+            Some('\u{1f}')
         );
         assert_eq!(translate_virtual_key_to_input_char(WPARAM(0x41)), None);
     }
