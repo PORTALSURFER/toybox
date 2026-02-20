@@ -59,7 +59,13 @@ impl<'a> Ui<'a> {
         let content_height = row_height.saturating_mul(option_count as i32);
         let (space_above, space_below) = self.dropdown_menu_available_space(layout.rect, row_height, root);
         let open_up = self.resolve_dropdown_open_up(content_height, space_above, space_below);
-        let viewport_height = dropdown_viewport_height(content_height, space_above, space_below, open_up);
+        let viewport_height = dropdown_viewport_height(
+            content_height,
+            space_above,
+            space_below,
+            open_up,
+            row_height,
+        );
         let menu_origin = dropdown_menu_origin(layout.rect, root, viewport_height, row_height, open_up);
         let max_scroll_px = (content_height - viewport_height).max(0);
         DropdownMenuGeometry {
@@ -172,9 +178,23 @@ impl DropdownMenuGeometry {
 }
 
 /// Resolve clamped viewport height for a dropdown menu.
-fn dropdown_viewport_height(content_height: i32, space_above: i32, space_below: i32, open_up: bool) -> i32 {
+fn dropdown_viewport_height(
+    content_height: i32,
+    space_above: i32,
+    space_below: i32,
+    open_up: bool,
+    row_height: i32,
+) -> i32 {
     let available = if open_up { space_above } else { space_below };
-    content_height.max(1).min(available.max(1))
+    let available = available.max(1);
+    let row_height = row_height.max(1);
+    let full_rows = available / row_height;
+    let viewport_height = if full_rows > 0 {
+        full_rows * row_height
+    } else {
+        available
+    };
+    content_height.max(1).min(viewport_height.max(1))
 }
 
 /// Resolve menu origin while clamping to root viewport bounds.

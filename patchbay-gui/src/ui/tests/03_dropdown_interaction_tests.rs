@@ -244,6 +244,39 @@ fn dropdown_clamped_menu_allows_wheel_scroll() {
 }
 
 #[test]
+fn dropdown_clamped_menu_uses_whole_row_viewport_height() {
+    let mut canvas = Canvas::new(120, 69);
+    let mut layout = Layout {
+        cursor: Point { x: 16, y: 8 },
+        ..Layout::default()
+    };
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let options = ["0", "1", "2", "3", "4", "5"];
+    let mut selected = 0;
+    let id = WidgetId::new(26);
+
+    let open_input = InputState {
+        pointer_pos: Point { x: 20, y: 12 },
+        mouse_pressed: true,
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &open_input, &mut ui_state, &mut layout, &theme);
+    let response = ui.dropdown(id, "", &options, &mut selected, 80, 16);
+    assert!(response.open);
+    let overlay = ui
+        .state
+        .overlays
+        .last()
+        .expect("dropdown overlay should be queued");
+    assert_eq!(
+        overlay.menu_rect.size.height % overlay.row_height as u32,
+        0,
+        "clamped menu viewport should snap to full option rows when space allows"
+    );
+}
+
+#[test]
 fn dropdown_menu_keeps_root_edge_inset() {
     let mut canvas = Canvas::new(120, 90);
     let mut layout = Layout {
