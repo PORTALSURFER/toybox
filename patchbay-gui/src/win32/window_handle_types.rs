@@ -87,10 +87,10 @@ impl WindowHandle {
         // normal Win32 message loop between API calls.
         unsafe {
             let _ = SendMessageW(
-                Some(self.hwnd),
+                self.hwnd,
                 PATCHBAY_MSG_CAPTURE_FRAME,
-                WPARAM(0),
-                LPARAM(0),
+                Some(WPARAM(0)),
+                Some(LPARAM(0)),
             );
         }
         true
