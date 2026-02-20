@@ -31,8 +31,6 @@ where
     last_mouse_secondary_down: bool,
     debug_input: bool,
     frame_counter: u64,
-    dropdown_popup_request: Option<DropdownPopupRequest>,
-    dropdown_popup_dispatch_queued: bool,
 }
 
 impl<State, Init, Build, Reduce> WindowState<State, Init, Build, Reduce>

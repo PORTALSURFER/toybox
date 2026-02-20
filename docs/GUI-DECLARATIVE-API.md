@@ -36,6 +36,11 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 - Engine API: `LayoutEngineState`, `render_checked_with_engine(...)`
 - Engine invalidation API: `NodeId`, `node_id_for_key(...)`, `invalidate_layout_subtree(...)`, `invalidate_measure_subtree(...)`, `invalidate_all_layout(...)`, `invalidate_all_measure(...)`, `measure_cache_stats(...)`
 
+Dropdown runtime behavior:
+- Dropdown menus render as in-window floating overlays on all platforms (no native OS popup menus).
+- Menu direction is root-aware: dropdowns open downward when space allows, otherwise upward, and clamp to root bounds.
+- When neither side fully fits, dropdown menus use clamped viewport + wheel scrolling.
+
 ## Fluent Helpers
 - Layout:
   - containers: `.layout(ContainerLayout::...)`, `.overflow(OverflowPolicy::...)`, `.container_layout(...)`, `.container_overflow(...)`, `.fill()`, `.fill_width()`, `.fill_height()`

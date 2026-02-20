@@ -1,21 +1,19 @@
 impl<'a> Ui<'a> {
-
     /// Queue a dropdown overlay for deferred draw order.
-    #[cfg_attr(target_os = "windows", allow(dead_code))]
     fn push_dropdown_overlay(
         &mut self,
-        base_rect: Rect,
         options: &[&str],
         hovered: Option<usize>,
-        open_up: bool,
-        clip_rect: Rect,
+        geometry: DropdownMenuGeometry,
     ) {
         self.state.overlays.push(DropdownOverlay {
-            base_rect,
+            base_rect: geometry.rect,
+            menu_rect: geometry.menu_rect,
             options: options.iter().map(|option| (*option).to_string()).collect(),
             hovered,
-            open_up,
-            clip_rect,
+            open_up: geometry.open_up,
+            scroll_px: geometry.scroll_px,
+            row_height: geometry.control_height.max(1),
         });
     }
 
@@ -23,21 +21,25 @@ impl<'a> Ui<'a> {
     pub fn draw_overlays(&mut self) {
         let overlays = self.state.overlays.clone();
         for overlay in overlays.iter() {
-            let rect = overlay.base_rect;
-            let height = rect.size.height as i32;
+            let height = overlay.row_height;
             for (index, option) in overlay.options.iter().enumerate() {
                 let option_rect = Rect {
                     origin: Point {
-                        x: rect.origin.x,
+                        x: overlay.menu_rect.origin.x,
                         y: if overlay.open_up {
-                            rect.origin.y - height * (index as i32 + 1)
+                            overlay.base_rect.origin.y - height * (index as i32 + 1)
+                                + overlay.scroll_px
                         } else {
-                            rect.origin.y + height * (index as i32 + 1)
+                            overlay.base_rect.origin.y + height * (index as i32 + 1)
+                                - overlay.scroll_px
                         },
                     },
-                    size: rect.size,
+                    size: Size {
+                        width: overlay.menu_rect.size.width,
+                        height: height as u32,
+                    },
                 };
-                let Some(visible_rect) = rect_intersection(option_rect, overlay.clip_rect) else {
+                let Some(visible_rect) = rect_intersection(option_rect, overlay.menu_rect) else {
                     continue;
                 };
                 let option_fill = if overlay.hovered == Some(index) {

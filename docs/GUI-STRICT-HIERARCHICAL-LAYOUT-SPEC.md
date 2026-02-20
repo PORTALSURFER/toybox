@@ -68,6 +68,12 @@ Every container declares explicit behavior when content does not fit:
 - `Ellipsize` (widget-level, typically text)
 - `Shrink/Compress` (deterministic compression rules)
 
+Widget overlay policy:
+
+- Dropdown menus are rendered as in-window floating overlays constrained to root bounds.
+- Direction is deterministic from root-space availability (`down` when it fits, otherwise `up`, otherwise side with greater space).
+- When full menu content cannot fit either side, dropdown overlays clamp viewport height and use explicit scroll state.
+
 ## 3) Deterministic Layout Algorithm
 
 ### 3.1 Two-Pass Model

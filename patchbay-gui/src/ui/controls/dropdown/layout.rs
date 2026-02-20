@@ -49,42 +49,111 @@ impl<'a> Ui<'a> {
         &self,
         layout: DropdownLayout,
         option_count: usize,
+        scroll_px: i32,
     ) -> DropdownMenuGeometry {
-        let menu_height = layout.control_height * option_count as i32;
-        let canvas_height = self.canvas.size().height as i32;
-        let open_up = layout.rect.origin.y + layout.control_height + menu_height > canvas_height
-            && layout.rect.origin.y >= menu_height;
+        let root = self.dropdown_root_bounds();
+        let row_height = layout.control_height.max(1);
+        let content_height = row_height.saturating_mul(option_count as i32);
+        let control_top = layout.rect.origin.y;
+        let control_bottom = layout.rect.origin.y + row_height;
+        let root_top = root.origin.y;
+        let root_bottom = root.origin.y + root.size.height as i32;
+        let space_above = (control_top - root_top).max(0);
+        let space_below = (root_bottom - control_bottom).max(0);
+        let open_up = self.resolve_dropdown_open_up(content_height, space_above, space_below);
+        let available = if open_up { space_above } else { space_below };
+        let viewport_height = content_height.max(1).min(available.max(1));
+        let max_menu_x = root.origin.x + root.size.width as i32 - layout.rect.size.width as i32;
+        let menu_x = layout.rect.origin.x.clamp(root.origin.x, max_menu_x.max(root.origin.x));
+        let unclamped_menu_y = if open_up {
+            control_top - viewport_height
+        } else {
+            control_bottom
+        };
+        let max_menu_y = root_bottom - viewport_height;
+        let menu_y = unclamped_menu_y.clamp(root_top, max_menu_y.max(root_top));
+        let max_scroll_px = (content_height - viewport_height).max(0);
         DropdownMenuGeometry {
             rect: layout.rect,
-            control_height: layout.control_height,
+            menu_rect: Rect {
+                origin: Point {
+                    x: menu_x,
+                    y: menu_y,
+                },
+                size: Size {
+                    width: layout.rect.size.width.max(1),
+                    height: viewport_height.max(1) as u32,
+                },
+            },
+            control_height: row_height,
+            option_count,
+            max_scroll_px,
+            scroll_px: 0,
             open_up,
         }
+        .with_scroll(scroll_px)
     }
 
     /// Resolve one option row rectangle for a given index.
-    #[cfg_attr(target_os = "windows", allow(dead_code))]
     pub(crate) fn dropdown_option_rect(
         &self,
         geometry: DropdownMenuGeometry,
         index: usize,
+        scroll_px: i32,
     ) -> Rect {
-        let row_offset = geometry.control_height * (index as i32 + 1);
         let y = if geometry.open_up {
-            geometry.rect.origin.y - row_offset
+            geometry.rect.origin.y - geometry.control_height * (index as i32 + 1) + scroll_px
         } else {
-            geometry.rect.origin.y + row_offset
+            geometry.rect.origin.y + geometry.control_height * (index as i32 + 1) - scroll_px
         };
         Rect {
             origin: Point {
-                x: geometry.rect.origin.x,
+                x: geometry.menu_rect.origin.x,
                 y,
             },
-            size: geometry.rect.size,
+            size: Size {
+                width: geometry.menu_rect.size.width,
+                height: geometry.control_height as u32,
+            },
         }
+    }
+
+    /// Resolve root viewport bounds used for floating dropdown menus.
+    fn dropdown_root_bounds(&self) -> Rect {
+        Rect {
+            origin: Point { x: 0, y: 0 },
+            size: self.canvas.size(),
+        }
+    }
+
+    /// Resolve whether a dropdown menu should open upward.
+    fn resolve_dropdown_open_up(
+        &self,
+        content_height: i32,
+        space_above: i32,
+        space_below: i32,
+    ) -> bool {
+        if content_height <= space_below {
+            return false;
+        }
+        if content_height <= space_above {
+            return true;
+        }
+        space_above > space_below
     }
 
     /// Advance the block layout cursor after dropdown rendering.
     pub(crate) fn advance_dropdown_layout_cursor(&mut self, layout: DropdownLayout) {
         self.layout.cursor.y = layout.rect.origin.y + layout.block_size.height as i32 + self.layout.spacing;
+    }
+}
+
+impl DropdownMenuGeometry {
+    /// Return this geometry with a scroll offset clamped to valid bounds.
+    fn with_scroll(self, scroll_px: i32) -> Self {
+        Self {
+            scroll_px: scroll_px.clamp(0, self.max_scroll_px),
+            ..self
+        }
     }
 }

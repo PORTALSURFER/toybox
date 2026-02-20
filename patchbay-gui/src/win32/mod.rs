@@ -8,7 +8,7 @@ use crate::declarative::{
 use crate::host::{GuiError, InputState};
 use crate::logging::log_line_safe;
 use crate::renderer::{PresentationTransform, Renderer, RendererDevice};
-use crate::ui::{DropdownPopupRequest, DropdownPopupResult, Layout, Theme, Ui, UiState, WidgetId};
+use crate::ui::{Layout, Theme, Ui, UiState, WidgetId};
 use raw_window_handle_06::{
     DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
     RawWindowHandle as RawWindowHandle06, Win32WindowHandle, WindowHandle as WindowHandle06,
@@ -23,8 +23,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    BeginPaint, ClientToScreen, CreateSolidBrush, DeleteObject, EndPaint, FillRect, GetDC, HBRUSH,
-    HDC, PAINTSTRUCT, ReleaseDC, ScreenToClient,
+    BeginPaint, CreateSolidBrush, DeleteObject, EndPaint, FillRect, GetDC, HBRUSH, HDC,
+    PAINTSTRUCT, ReleaseDC, ScreenToClient,
 };
 use windows::Win32::System::LibraryLoader::{
     GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GetModuleHandleExW, GetModuleHandleW,
@@ -34,18 +34,15 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDROP};
 use windows::Win32::UI::WindowsAndMessaging::{
-    AppendMenuW, CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, CreatePopupMenu,
-    CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow, GWLP_USERDATA, GetClientRect,
-    GetCursorPos, GetParent, GetSystemMetrics, GetWindowRect, HMENU, HTCLIENT, LoadCursorW,
-    MA_ACTIVATE, MF_CHECKED, MF_STRING, PostMessageW, RegisterClassW, SM_CXSCREEN, SM_CYSCREEN,
-    SW_HIDE, SW_SHOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER, SetTimer, SetWindowLongPtrW,
-    SetWindowPos, ShowWindow, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TPM_NONOTIFY, TPM_RETURNCMD,
-    TPM_RIGHTBUTTON, TPM_TOPALIGN, TrackPopupMenu, WM_APP, WM_CHAR, WM_DESTROY, WM_DROPFILES,
-    WM_ERASEBKGND, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE,
-    WM_MOUSEWHEEL, WM_NCDESTROY, WM_NCHITTEST, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE,
-    WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
+    CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, CreateWindowExW, DefWindowProcW,
+    DestroyWindow, GWLP_USERDATA, GetClientRect, GetCursorPos, GetParent, GetWindowRect, HMENU,
+    HTCLIENT, LoadCursorW, MA_ACTIVATE, RegisterClassW, SW_HIDE, SW_SHOW, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOZORDER, SetTimer, SetWindowLongPtrW, SetWindowPos, ShowWindow, WM_CHAR,
+    WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_NCHITTEST, WM_PAINT,
+    WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN,
+    WS_CLIPSIBLINGS,
 };
-use windows::core::PCWSTR;
 
 const TIMER_ID: usize = 1;
 const TIMER_INTERVAL_MS: u32 = 16;
