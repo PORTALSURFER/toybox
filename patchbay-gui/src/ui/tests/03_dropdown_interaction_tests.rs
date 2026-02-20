@@ -366,6 +366,7 @@ fn dropdown_visual_style_overrides_apply_to_open_menu_overlay() {
         active_fill: Some(Color::rgb(170, 66, 66)),
         outline: Some(Color::rgb(95, 31, 31)),
         text: Some(Color::rgb(240, 220, 220)),
+        selected_option_fill: Some(Color::rgb(200, 88, 88)),
     };
     let open_input = InputState {
         pointer_pos: Point { x: 20, y: 36 },
@@ -402,12 +403,73 @@ fn dropdown_visual_style_overrides_apply_to_open_menu_overlay() {
             style.outline.expect("outline color should exist")
         );
         assert_eq!(overlay.text_color, style.text.expect("text color should exist"));
+        assert_eq!(
+            overlay.selected_fill_color,
+            style.selected_option_fill,
+            "selected option fill override should propagate to overlay state"
+        );
     }
     let fill_color = canvas_pixel(&canvas, 92, 38);
     assert_eq!(
         fill_color,
         style.active_fill.expect("active fill color should exist"),
         "open dropdown control should use active fill override"
+    );
+}
+
+#[test]
+fn dropdown_selected_option_fill_applies_to_selected_menu_row() {
+    let mut canvas = Canvas::new(120, 90);
+    let mut layout = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let options = ["Init", "Verse", "Hook"];
+    let mut selected = 1;
+    let id = WidgetId::new(27);
+    let selected_fill = Color::rgb(188, 66, 66);
+    let style = DropdownVisualStyle {
+        selected_option_fill: Some(selected_fill),
+        ..DropdownVisualStyle::default()
+    };
+    let open_input = InputState {
+        pointer_pos: Point { x: 20, y: 36 },
+        mouse_pressed: true,
+        ..InputState::default()
+    };
+
+    let mut ui = Ui::new(&mut canvas, &open_input, &mut ui_state, &mut layout, &theme);
+    let response = ui.dropdown_with_visual_style(
+        id,
+        "Preset",
+        &options,
+        &mut selected,
+        Size {
+            width: 80,
+            height: 16,
+        },
+        style,
+    );
+    assert!(response.open);
+    let overlay = ui
+        .state
+        .overlays
+        .last()
+        .expect("dropdown overlay should be queued");
+    let sample_x = (overlay.menu_rect.origin.x + 2).max(0) as u32;
+    let row_top = if overlay.open_up {
+        overlay.base_rect.origin.y
+            - overlay.row_height * (overlay.selected as i32 + 1)
+            + overlay.scroll_px
+    } else {
+        overlay.base_rect.origin.y
+            + overlay.row_height * (overlay.selected as i32 + 1)
+            - overlay.scroll_px
+    };
+    let selected_row_y = row_top + overlay.row_height / 2;
+    ui.draw_overlays();
+    assert_eq!(
+        canvas_pixel(&canvas, sample_x, selected_row_y.max(0) as u32),
+        selected_fill
     );
 }
 

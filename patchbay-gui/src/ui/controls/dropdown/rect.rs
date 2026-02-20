@@ -70,6 +70,15 @@ impl<'a> DropdownRectRenderRequest<'a> {
         self.visual_style.text = Some(color);
         self
     }
+
+    /// Override selected option row fill color in the open menu.
+    pub(crate) fn with_selected_option_background_color(
+        mut self,
+        color: Color,
+    ) -> Self {
+        self.visual_style.selected_option_fill = Some(color);
+        self
+    }
 }
 
 impl<'a> Ui<'a> {

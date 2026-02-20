@@ -95,6 +95,19 @@ impl Node {
         self
     }
 
+    /// Override selected option row fill color for dropdown nodes.
+    ///
+    /// Non-dropdown node kinds are returned unchanged.
+    pub fn dropdown_selected_option_background_color(
+        mut self,
+        color: Color,
+    ) -> Self {
+        if let Self::Dropdown(dropdown) = &mut self {
+            dropdown.selected_option_background_override = Some(color);
+        }
+        self
+    }
+
     /// Set double-click reset default value for knob and slider nodes.
     ///
     /// Non-knob/slider node kinds are returned unchanged.

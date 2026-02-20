@@ -43,7 +43,13 @@ impl<'a> Ui<'a> {
             response.open = menu.open;
             response.changed = menu.changed;
             if response.open {
-                self.push_dropdown_overlay(options, menu.hovered_index, menu.geometry, visual_style);
+                self.push_dropdown_overlay(
+                    options,
+                    menu.hovered_index,
+                    *selected,
+                    menu.geometry,
+                    visual_style,
+                );
             }
         }
 

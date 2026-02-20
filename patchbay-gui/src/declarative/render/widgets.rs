@@ -136,6 +136,10 @@ fn render_dropdown(
     if let Some(color) = dropdown.text_color_override {
         dropdown_request = dropdown_request.with_text_color(color);
     }
+    if let Some(color) = dropdown.selected_option_background_override {
+        dropdown_request =
+            dropdown_request.with_selected_option_background_color(color);
+    }
     let response = ui.dropdown_in_rect_scaled(&mut selected, dropdown_request);
     if response.changed {
         actions.push(UiAction::DropdownSelected {

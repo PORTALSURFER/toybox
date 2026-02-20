@@ -13,11 +13,13 @@ impl<'a> Ui<'a> {
         &mut self,
         options: &[&str],
         hovered: Option<usize>,
+        selected: usize,
         geometry: DropdownMenuGeometry,
         visual_style: DropdownVisualStyle,
     ) {
         let fill_color = visual_style.fill.unwrap_or(self.theme.knob_fill);
         let hover_fill_color = visual_style.hover_fill.unwrap_or(self.theme.knob_hover);
+        let selected_fill_color = visual_style.selected_option_fill;
         let outline_color = visual_style.outline.unwrap_or(self.theme.knob_outline);
         let text_color = visual_style.text.unwrap_or(self.theme.text);
         let scrollbar = resolve_dropdown_scrollbar(
@@ -34,12 +36,14 @@ impl<'a> Ui<'a> {
             menu_rect: geometry.menu_rect,
             options: options.iter().map(|option| (*option).to_string()).collect(),
             hovered,
+            selected,
             open_up: geometry.open_up,
             scroll_px: geometry.scroll_px,
             row_height: geometry.control_height.max(1),
             scrollbar,
             fill_color,
             hover_fill_color,
+            selected_fill_color,
             outline_color,
             text_color,
         });
@@ -76,6 +80,8 @@ impl<'a> Ui<'a> {
                 };
                 let option_fill = if overlay.hovered == Some(index) {
                     overlay.hover_fill_color
+                } else if overlay.selected == index {
+                    overlay.selected_fill_color.unwrap_or(overlay.fill_color)
                 } else {
                     overlay.fill_color
                 };

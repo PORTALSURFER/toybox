@@ -107,6 +107,8 @@ pub struct DropdownSpec {
     pub outline_override: Option<Color>,
     /// Optional override for dropdown label text color.
     pub text_color_override: Option<Color>,
+    /// Optional override for the selected option row fill in the open menu.
+    pub selected_option_background_override: Option<Color>,
     /// Layout constraints.
     pub layout: LayoutBox,
 }
@@ -129,6 +131,7 @@ impl DropdownSpec {
             active_background_override: None,
             outline_override: None,
             text_color_override: None,
+            selected_option_background_override: None,
             layout: LayoutBox::auto(),
         }
     }
@@ -172,6 +175,12 @@ impl DropdownSpec {
     /// Override dropdown label text color.
     pub fn text_color(mut self, color: Color) -> Self {
         self.text_color_override = Some(color);
+        self
+    }
+
+    /// Override selected option row fill color in the open menu.
+    pub fn selected_option_background_color(mut self, color: Color) -> Self {
+        self.selected_option_background_override = Some(color);
         self
     }
 

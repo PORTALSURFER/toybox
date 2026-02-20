@@ -112,6 +112,8 @@ struct DropdownOverlay {
     options: Vec<String>,
     /// Option index currently hovered by the pointer.
     hovered: Option<usize>,
+    /// Option index currently selected in the dropdown model.
+    selected: usize,
     /// Whether overlay options render upward instead of downward.
     open_up: bool,
     /// Scroll offset in pixels for menu content.
@@ -124,6 +126,8 @@ struct DropdownOverlay {
     fill_color: Color,
     /// Hover fill color for menu options.
     hover_fill_color: Color,
+    /// Optional selected-option fill color for menu options.
+    selected_fill_color: Option<Color>,
     /// Outline color for menu options.
     outline_color: Color,
     /// Text color for menu options.
