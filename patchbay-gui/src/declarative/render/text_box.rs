@@ -13,8 +13,16 @@ fn render_text_box(
 
     let text_scale = resolve_text_box_scale(rect);
     let text_rect = inset_text_box_rect(rect, text_scale);
+    let line_rect = resolve_text_line_rect(text_rect, text_scale);
     let color = text_box.color.unwrap_or(tokens.colors.text);
-    let _ = draw_text_box_line(ui, text_rect, text_box.text.as_str(), color, text_scale, text_box.align);
+    let _ = draw_text_box_line(
+        ui,
+        line_rect,
+        text_box.text.as_str(),
+        color,
+        text_scale,
+        text_box.align,
+    );
 }
 
 /// Render an editable text box and emit edit actions.
@@ -28,6 +36,7 @@ fn render_editable_text_box(
 ) {
     let text_scale = resolve_text_box_scale(rect);
     let text_rect = inset_text_box_rect(rect, text_scale);
+    let line_rect = resolve_text_line_rect(text_rect, text_scale);
     let response = ui.region_with_key(&edit.key, rect);
     if response.double_clicked && !edit.editing {
         actions.push(UiAction::TextBoxEditRequested {
@@ -51,7 +60,7 @@ fn render_editable_text_box(
     if edit.editing {
         draw_text_selection_background(
             text_box.text.as_str(),
-            text_rect,
+            line_rect,
             runtime,
             text_scale,
             ui,
@@ -65,14 +74,14 @@ fn render_editable_text_box(
     };
     let _ = draw_text_box_line(
         ui,
-        text_rect,
+        line_rect,
         text_box.text.as_str(),
         color,
         text_scale,
         align,
     );
     if edit.editing {
-        draw_text_cursor(text_rect, runtime, text_scale, ui, tokens);
+        draw_text_cursor(line_rect, runtime, text_scale, ui, tokens);
     }
     if should_clear_runtime {
         ui.clear_text_edit_runtime(&edit.key);
@@ -467,6 +476,41 @@ fn inset_text_box_rect(rect: Rect, text_scale: u32) -> Rect {
     }
 }
 
+/// Return the single-line draw rectangle centered vertically in `rect`.
+///
+/// The output keeps the input width/origin-x so horizontal clipping and
+/// selection math remain stable. Height clamps to one text line at
+/// `text_scale`.
+fn resolve_text_line_rect(rect: Rect, text_scale: u32) -> Rect {
+    const TEXT_LINE_HEIGHT_BASE_PX: u32 = 8;
+    let line_height = TEXT_LINE_HEIGHT_BASE_PX
+        .saturating_mul(text_scale.max(1))
+        .max(1);
+    if rect.size.height <= line_height {
+        return Rect {
+            origin: rect.origin,
+            size: Size {
+                width: rect.size.width,
+                height: rect.size.height.max(1),
+            },
+        };
+    }
+    let y_offset = rect.size.height.saturating_sub(line_height) / 2;
+    Rect {
+        origin: Point {
+            x: rect.origin.x,
+            y: rect
+                .origin
+                .y
+                .saturating_add(i32::try_from(y_offset).unwrap_or(i32::MAX)),
+        },
+        size: Size {
+            width: rect.size.width,
+            height: line_height,
+        },
+    }
+}
+
 /// Resolve text scale directly from textbox height.
 ///
 /// This keeps text sizing deterministic and tied to textbox geometry while the
@@ -557,5 +601,41 @@ mod text_box_inset_tests {
             }),
             1
         );
+    }
+
+    #[test]
+    fn resolve_text_line_rect_centers_single_line_vertically() {
+        let line_rect = resolve_text_line_rect(
+            Rect {
+                origin: Point { x: 10, y: 20 },
+                size: Size {
+                    width: 40,
+                    height: 12,
+                },
+            },
+            1,
+        );
+        assert_eq!(line_rect.origin.x, 10);
+        assert_eq!(line_rect.origin.y, 22);
+        assert_eq!(line_rect.size.width, 40);
+        assert_eq!(line_rect.size.height, 8);
+    }
+
+    #[test]
+    fn resolve_text_line_rect_keeps_origin_when_height_matches_line() {
+        let line_rect = resolve_text_line_rect(
+            Rect {
+                origin: Point { x: 4, y: 6 },
+                size: Size {
+                    width: 32,
+                    height: 8,
+                },
+            },
+            1,
+        );
+        assert_eq!(line_rect.origin.x, 4);
+        assert_eq!(line_rect.origin.y, 6);
+        assert_eq!(line_rect.size.width, 32);
+        assert_eq!(line_rect.size.height, 8);
     }
 }
