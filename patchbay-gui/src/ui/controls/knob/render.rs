@@ -25,7 +25,7 @@ impl<'a> Ui<'a> {
         self.vector_commands.push(VectorCommand::Knob(KnobVisual {
             center: geometry.center,
             radius: geometry.radius,
-            arc_radius: geometry.radius + 6,
+            arc_radius: geometry.radius + 2,
             arc_thickness: 1.5,
             arc_start: 7.0 * std::f32::consts::PI / 4.0,
             arc_end: 5.0 * std::f32::consts::PI / 4.0,
