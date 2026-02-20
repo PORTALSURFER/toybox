@@ -9,6 +9,16 @@ pub struct TextBoxEditSpec {
     pub max_chars: usize,
 }
 
+/// Horizontal text alignment for text-box rendering.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TextBoxAlign {
+    /// Render text starting from the left edge of the textbox content bounds.
+    #[default]
+    Start,
+    /// Render text centered within the textbox content bounds.
+    Center,
+}
+
 /// Text box widget specification.
 #[derive(Clone, Debug)]
 pub struct TextBoxSpec {
@@ -16,6 +26,8 @@ pub struct TextBoxSpec {
     pub text: String,
     /// Optional text color override.
     pub color: Option<Color>,
+    /// Horizontal alignment for rendered text content.
+    pub align: TextBoxAlign,
     /// Layout constraints.
     pub layout: LayoutBox,
     /// Optional editable interaction contract.
@@ -28,6 +40,7 @@ impl TextBoxSpec {
         Self {
             text: text.into(),
             color: None,
+            align: TextBoxAlign::Start,
             layout: LayoutBox::auto(),
             edit: None,
         }
@@ -54,6 +67,12 @@ impl TextBoxSpec {
         if let Some(edit) = self.edit.as_mut() {
             edit.max_chars = max_chars.max(1);
         }
+        self
+    }
+
+    /// Override horizontal text alignment.
+    pub fn align(mut self, align: TextBoxAlign) -> Self {
+        self.align = align;
         self
     }
 }

@@ -39,6 +39,16 @@ impl Node {
         self
     }
 
+    /// Center text for text box nodes.
+    ///
+    /// Non-text-box node kinds are returned unchanged.
+    pub fn text_align_center(mut self) -> Self {
+        if let Self::TextBox(text_box) = &mut self {
+            text_box.align = TextBoxAlign::Center;
+        }
+        self
+    }
+
     /// Enable editable text behavior on text box nodes.
     ///
     /// Non-text-box node kinds are returned unchanged.

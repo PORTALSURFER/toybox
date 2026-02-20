@@ -14,12 +14,7 @@ fn render_text_box(
     let text_scale = resolve_text_box_scale(rect);
     let text_rect = inset_text_box_rect(rect, text_scale);
     let color = text_box.color.unwrap_or(tokens.colors.text);
-    let _ = ui.text_single_line_hard_clamped_in_rect_scaled(
-        text_rect,
-        &text_box.text,
-        color,
-        text_scale,
-    );
+    let _ = draw_text_box_line(ui, text_rect, text_box.text.as_str(), color, text_scale, text_box.align);
 }
 
 /// Render an editable text box and emit edit actions.
@@ -54,19 +49,52 @@ fn render_editable_text_box(
 
     let color = text_box.color.unwrap_or(tokens.colors.text);
     if edit.editing {
-        draw_text_selection_background(text_box.text.as_str(), text_rect, runtime, text_scale, ui, tokens);
+        draw_text_selection_background(
+            text_box.text.as_str(),
+            text_rect,
+            runtime,
+            text_scale,
+            ui,
+            tokens,
+        );
     }
-    let _ = ui.text_single_line_hard_clamped_in_rect_scaled(
+    let align = if edit.editing {
+        TextBoxAlign::Start
+    } else {
+        text_box.align
+    };
+    let _ = draw_text_box_line(
+        ui,
         text_rect,
-        &text_box.text,
+        text_box.text.as_str(),
         color,
         text_scale,
+        align,
     );
     if edit.editing {
         draw_text_cursor(text_rect, runtime, text_scale, ui, tokens);
     }
     if should_clear_runtime {
         ui.clear_text_edit_runtime(&edit.key);
+    }
+}
+
+/// Draw one hard-clamped textbox line using the requested alignment mode.
+fn draw_text_box_line(
+    ui: &mut Ui<'_>,
+    rect: Rect,
+    text: &str,
+    color: Color,
+    text_scale: u32,
+    align: TextBoxAlign,
+) -> Size {
+    match align {
+        TextBoxAlign::Start => {
+            ui.text_single_line_hard_clamped_in_rect_scaled(rect, text, color, text_scale)
+        }
+        TextBoxAlign::Center => ui.text_single_line_hard_clamped_centered_in_rect_scaled(
+            rect, text, color, text_scale,
+        ),
     }
 }
 

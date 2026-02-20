@@ -50,9 +50,14 @@ fn node_fluent_helpers_apply_container_and_style_fields() {
         _ => panic!("expected grid node"),
     }
 
-    let text_box_node = textbox("name").text_color(Color::rgb(200, 180, 90));
+    let text_box_node = textbox("name")
+        .text_color(Color::rgb(200, 180, 90))
+        .text_align_center();
     match text_box_node {
-        Node::TextBox(text_box) => assert_eq!(text_box.color, Some(Color::rgb(200, 180, 90))),
+        Node::TextBox(text_box) => {
+            assert_eq!(text_box.color, Some(Color::rgb(200, 180, 90)));
+            assert_eq!(text_box.align, TextBoxAlign::Center);
+        }
         _ => panic!("expected text box node"),
     }
 

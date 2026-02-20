@@ -190,6 +190,38 @@ impl<'a> Ui<'a> {
         rendered
     }
 
+    /// Draw bounded centered single-line text in a rect with an explicit scale.
+    pub(crate) fn text_single_line_hard_clamped_centered_in_rect_scaled(
+        &mut self,
+        rect: Rect,
+        text: &str,
+        color: Color,
+        text_scale: u32,
+    ) -> Size {
+        let previous = self.theme.text_scale;
+        self.theme.text_scale = text_scale.max(1);
+        let line_height = text_line_height(self.theme.text_scale.max(1));
+        if rect.size.height < line_height {
+            self.theme.text_scale = previous;
+            return Size {
+                width: 0,
+                height: 0,
+            };
+        }
+        let half_width = i32::try_from(rect.size.width / 2).unwrap_or(i32::MAX);
+        let center_x = rect.origin.x.saturating_add(half_width);
+        let rendered = self.draw_text_single_line_hard_clamped_centered_on_char_size(
+            rect.origin,
+            center_x,
+            text,
+            rect.size.width,
+            color,
+            true,
+        );
+        self.theme.text_scale = previous;
+        rendered
+    }
+
     /// Draw a label at the current cursor and advance the cursor.
     pub fn label(&mut self, text: &str) {
         let pos = self.layout.cursor;
