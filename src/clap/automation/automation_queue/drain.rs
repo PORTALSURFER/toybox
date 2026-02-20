@@ -2,25 +2,10 @@ impl AutomationQueue {
     /// Drain queued automation events into an output buffer.
     ///
     /// The caller supplies a scratch buffer to avoid allocations in realtime
-    /// threads. Returns `true` if any events were drained. If the queue is
-    /// temporarily locked by another thread, no events are drained and the
-    /// caller should try again on the next cycle.
-    pub fn drain_to_output(
-        &self,
-        output: &mut OutputEvents<'_>,
-        scratch: &mut Vec<AutomationEvent>,
-    ) -> bool {
-        let stats = self.drain_to_output_with_stats(output, scratch);
-        stats.attempted > 0
-    }
-
-    /// Drain queued automation events into an output buffer with stats.
-    ///
-    /// The caller supplies a scratch buffer to avoid allocations in realtime
     /// threads. Events that fail to push are dropped and counted in the stats.
     /// If the queue is temporarily locked by another thread, `locked` is set
     /// and no events are drained.
-    pub fn drain_to_output_with_stats(
+    pub fn drain_to_output(
         &self,
         output: &mut OutputEvents<'_>,
         scratch: &mut Vec<AutomationEvent>,

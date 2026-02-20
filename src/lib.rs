@@ -10,6 +10,7 @@
 #![warn(missing_docs)]
 #![warn(rustdoc::missing_crate_level_docs)]
 
+pub mod bundle;
 pub mod clap;
 pub mod dsp;
 #[cfg(feature = "gui")]

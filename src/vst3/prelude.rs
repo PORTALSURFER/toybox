@@ -10,9 +10,9 @@ pub use toybox_vst3_ffi::{
     Class, ComPtr, ComRef, ComWrapper, Interface, Steinberg, Steinberg::Vst::*, uid,
 };
 
-pub use crate::vst3::bundle::{
-    WindowsVst3BundlePaths, windows_vst3_bundle_name, windows_vst3_bundle_paths,
-    windows_vst3_rustc_link_arg,
+pub use crate::bundle::windows::{
+    WindowsBundleFormat, WindowsBundlePaths, windows_bundle_name, windows_bundle_paths,
+    windows_rustc_link_arg,
 };
 pub use crate::vst3::component::{
     CATEGORY_AUDIO_MODULE_CLASS, CATEGORY_COMPONENT_CONTROLLER_CLASS, copy_cstring,

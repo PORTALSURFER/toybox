@@ -25,8 +25,9 @@ On Windows, output paths are:
 
 ### CLAP helper APIs
 
-`toybox::clap::bundle` provides:
+CLAP build scripts use `toybox::bundle::windows` with:
 
+- `WindowsBundleFormat::Clap`
 - `windows_bundle_name`
 - `windows_bundle_paths`
 - `windows_rustc_link_arg`
@@ -62,11 +63,12 @@ On Windows, output paths are:
 
 ### VST3 helper APIs
 
-`toybox::vst3::bundle` provides:
+VST3 build scripts use `toybox::bundle::windows` with:
 
-- `windows_vst3_bundle_name`
-- `windows_vst3_bundle_paths`
-- `windows_vst3_rustc_link_arg`
+- `WindowsBundleFormat::Vst3`
+- `windows_bundle_name`
+- `windows_bundle_paths`
+- `windows_rustc_link_arg`
 
 ## SDK requirement for VST3
 

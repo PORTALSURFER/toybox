@@ -19,17 +19,13 @@ pub struct AutomationDrainBuffer {
 impl AutomationDrainBuffer {
     /// Drain queued automation events into an output buffer.
     ///
-    /// Returns `true` when at least one queued event was consumed.
-    pub fn drain(&mut self, queue: &AutomationQueue, output: &mut OutputEvents<'_>) -> bool {
-        queue.drain_to_output(output, &mut self.scratch)
-    }
-
-    /// Drain queued automation events into an output buffer with stats.
-    pub fn drain_with_stats(
+    /// Returns detailed drain statistics so callers can track lock contention
+    /// and host push failures.
+    pub fn drain(
         &mut self,
         queue: &AutomationQueue,
         output: &mut OutputEvents<'_>,
     ) -> AutomationDrainStats {
-        queue.drain_to_output_with_stats(output, &mut self.scratch)
+        queue.drain_to_output(output, &mut self.scratch)
     }
 }

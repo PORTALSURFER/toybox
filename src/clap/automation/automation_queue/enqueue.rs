@@ -21,8 +21,8 @@ impl AutomationQueue {
         AutomationEnqueueStatus::Enqueued
     }
 
-    /// Try to enqueue a parameter value update and return the enqueue status.
-    pub fn try_push_value(
+    /// Enqueue a parameter value update and return the enqueue status.
+    pub fn push_value(
         &self,
         config: &AutomationConfig,
         param_id: ClapId,
@@ -34,13 +34,8 @@ impl AutomationQueue {
         self.try_enqueue(AutomationEvent::Value(param_id, value))
     }
 
-    /// Enqueue a parameter value update if automation is enabled.
-    pub fn push_value(&self, config: &AutomationConfig, param_id: ClapId, value: f64) {
-        let _ = self.try_push_value(config, param_id, value);
-    }
-
-    /// Try to enqueue a gesture begin event and return the enqueue status.
-    pub fn try_push_gesture_begin(
+    /// Enqueue a gesture begin event and return the enqueue status.
+    pub fn push_gesture_begin(
         &self,
         config: &AutomationConfig,
         param_id: ClapId,
@@ -51,13 +46,8 @@ impl AutomationQueue {
         self.try_enqueue(AutomationEvent::GestureBegin(param_id))
     }
 
-    /// Enqueue a gesture begin event if automation is enabled.
-    pub fn push_gesture_begin(&self, config: &AutomationConfig, param_id: ClapId) {
-        let _ = self.try_push_gesture_begin(config, param_id);
-    }
-
-    /// Try to enqueue a gesture end event and return the enqueue status.
-    pub fn try_push_gesture_end(
+    /// Enqueue a gesture end event and return the enqueue status.
+    pub fn push_gesture_end(
         &self,
         config: &AutomationConfig,
         param_id: ClapId,
@@ -66,10 +56,5 @@ impl AutomationQueue {
             return AutomationEnqueueStatus::Disabled;
         }
         self.try_enqueue(AutomationEvent::GestureEnd(param_id))
-    }
-
-    /// Enqueue a gesture end event if automation is enabled.
-    pub fn push_gesture_end(&self, config: &AutomationConfig, param_id: ClapId) {
-        let _ = self.try_push_gesture_end(config, param_id);
     }
 }

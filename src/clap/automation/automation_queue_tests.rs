@@ -31,7 +31,7 @@ fn queue_drains_to_output() {
     let mut output = buffer.as_output();
     let mut scratch = Vec::new();
 
-    let stats = queue.drain_to_output_with_stats(&mut output, &mut scratch);
+    let stats = queue.drain_to_output(&mut output, &mut scratch);
     assert_eq!(stats.attempted, 3);
     assert_eq!(stats.pushed, 3);
     assert_eq!(stats.failed, 0);
@@ -48,29 +48,29 @@ fn drain_buffer_drains_without_external_scratch() {
     let mut output = output_buffer.as_output();
     let mut drain_buffer = crate::clap::automation::AutomationDrainBuffer::default();
 
-    let drained = drain_buffer.drain(&queue, &mut output);
-    assert!(drained);
+    let stats = drain_buffer.drain(&queue, &mut output);
+    assert_eq!(stats.attempted, 1);
 }
 
 #[test]
-fn try_push_respects_disabled_params() {
+fn push_respects_disabled_params() {
     let queue = AutomationQueue::default();
     let mut config = AutomationConfig::default();
     let param_id = ClapId::new(9);
     config.disable_param(param_id);
 
-    let status = queue.try_push_value(&config, param_id, 0.7);
+    let status = queue.push_value(&config, param_id, 0.7);
     assert_eq!(status, AutomationEnqueueStatus::Disabled);
 
     let mut output_buffer = EventBuffer::new();
     let mut output = output_buffer.as_output();
     let mut scratch = Vec::new();
-    let stats = queue.drain_to_output_with_stats(&mut output, &mut scratch);
+    let stats = queue.drain_to_output(&mut output, &mut scratch);
     assert_eq!(stats.attempted, 0);
 }
 
 #[test]
-fn try_push_reports_poisoned_queue() {
+fn push_reports_poisoned_queue() {
     let queue = AutomationQueue::default();
     let config = AutomationConfig::default();
     let param_id = ClapId::new(3);
@@ -80,7 +80,7 @@ fn try_push_reports_poisoned_queue() {
         panic!("poison queue");
     }));
 
-    let status = queue.try_push_value(&config, param_id, 0.25);
+    let status = queue.push_value(&config, param_id, 0.25);
     assert_eq!(status, AutomationEnqueueStatus::QueuePoisoned);
 }
 
@@ -94,18 +94,18 @@ fn queue_full_drop_newest_rejects_extra_events() {
     let param_id = ClapId::new(13);
 
     assert_eq!(
-        queue.try_push_value(&config, param_id, 0.1),
+        queue.push_value(&config, param_id, 0.1),
         AutomationEnqueueStatus::Enqueued
     );
     assert_eq!(
-        queue.try_push_value(&config, param_id, 0.2),
+        queue.push_value(&config, param_id, 0.2),
         AutomationEnqueueStatus::QueueFull
     );
 
     let mut output_buffer = EventBuffer::new();
     let mut output = output_buffer.as_output();
     let mut scratch = Vec::new();
-    let stats = queue.drain_to_output_with_stats(&mut output, &mut scratch);
+    let stats = queue.drain_to_output(&mut output, &mut scratch);
     assert_eq!(stats.attempted, 1);
     assert_eq!(stats.pushed, 1);
     assert_eq!(output_buffer.len(), 1);
@@ -123,22 +123,22 @@ fn queue_full_drop_oldest_keeps_newest_events() {
     let third = ClapId::new(23);
 
     assert_eq!(
-        queue.try_push_value(&config, first, 0.1),
+        queue.push_value(&config, first, 0.1),
         AutomationEnqueueStatus::Enqueued
     );
     assert_eq!(
-        queue.try_push_value(&config, second, 0.2),
+        queue.push_value(&config, second, 0.2),
         AutomationEnqueueStatus::Enqueued
     );
     assert_eq!(
-        queue.try_push_value(&config, third, 0.3),
+        queue.push_value(&config, third, 0.3),
         AutomationEnqueueStatus::Enqueued
     );
 
     let mut output_buffer = EventBuffer::new();
     let mut output = output_buffer.as_output();
     let mut scratch = Vec::new();
-    let stats = queue.drain_to_output_with_stats(&mut output, &mut scratch);
+    let stats = queue.drain_to_output(&mut output, &mut scratch);
     assert_eq!(stats.attempted, 2);
     assert_eq!(stats.pushed, 2);
 
