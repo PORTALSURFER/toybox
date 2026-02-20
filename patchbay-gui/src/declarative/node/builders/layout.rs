@@ -194,42 +194,6 @@ impl Node {
         self
     }
 
-    /// Set container gap for row/column/grid nodes.
-    ///
-    /// For grid nodes this sets both column and row gaps. Other node kinds are
-    /// returned unchanged.
-    pub fn gap(mut self, gap: i32) -> Self {
-        match &mut self {
-            Self::Row(flex) | Self::Column(flex) => {
-                flex.gap = gap;
-            }
-            Self::Grid(grid) => {
-                grid.template.column_gap = gap;
-                grid.template.row_gap = gap;
-            }
-            Self::Wrap(wrap) => {
-                wrap.column_gap = gap;
-                wrap.row_gap = gap;
-            }
-            _ => {}
-        }
-        self
-    }
-
-    /// Set independent column/row gaps for grid nodes.
-    ///
-    /// Non-grid node kinds are returned unchanged.
-    pub fn gap_xy(mut self, column_gap: i32, row_gap: i32) -> Self {
-        if let Self::Grid(grid) = &mut self {
-            grid.template.column_gap = column_gap;
-            grid.template.row_gap = row_gap;
-        } else if let Self::Wrap(wrap) = &mut self {
-            wrap.column_gap = column_gap;
-            wrap.row_gap = row_gap;
-        }
-        self
-    }
-
     /// Set uniform padding for padding-capable container nodes.
     ///
     /// Non-container node kinds are returned unchanged.

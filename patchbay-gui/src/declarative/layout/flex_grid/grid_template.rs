@@ -5,10 +5,6 @@ pub struct GridTemplate {
     pub columns: Vec<TrackSize>,
     /// Optional row tracks. Missing rows default to `Auto`.
     pub rows: Vec<TrackSize>,
-    /// Gap between columns in pixels.
-    pub column_gap: i32,
-    /// Gap between rows in pixels.
-    pub row_gap: i32,
     /// Horizontal distribution for leftover width.
     pub justify_x: Justify,
     /// Grid padding.

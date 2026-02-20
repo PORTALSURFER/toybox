@@ -22,8 +22,6 @@ struct PreparedGridLayout {
     column_widths: Vec<u32>,
     /// Resolved height for each row track.
     row_heights: Vec<u32>,
-    /// Final row gap value applied during placement.
-    row_gap: i32,
 }
 
 /// Horizontal spacing details computed from grid justification.
@@ -73,13 +71,11 @@ fn prepare_grid_layout(grid: &GridSpec, rect: Rect, tokens: &ThemeTokens) -> Opt
             &mut column_widths,
             &grid.template.columns,
             inner.size.width,
-            grid.template.column_gap,
         );
         compress_tracks_for_overflow_policy(
             &mut row_heights,
             &row_tracks,
             inner.size.height,
-            grid.template.row_gap,
         );
     }
     Some(PreparedGridLayout {
@@ -89,7 +85,6 @@ fn prepare_grid_layout(grid: &GridSpec, rect: Rect, tokens: &ThemeTokens) -> Opt
         intrinsic,
         column_widths,
         row_heights,
-        row_gap: grid.template.row_gap.max(0),
     })
 }
 
@@ -98,10 +93,8 @@ fn compress_tracks_for_overflow_policy(
     resolved_tracks: &mut [u32],
     source_tracks: &[TrackSize],
     available: u32,
-    gap: i32,
 ) {
-    let gap_total = gap.max(0) as u32 * resolved_tracks.len().saturating_sub(1) as u32;
-    let used = resolved_tracks.iter().copied().sum::<u32>() + gap_total;
+    let used = resolved_tracks.iter().copied().sum::<u32>();
     if used <= available {
         return;
     }
@@ -177,7 +170,7 @@ fn resolve_grid_tracks(request: ResolveGridTracksRequest<'_>) -> (Vec<u32>, Vec<
         tracks: &request.grid.template.columns,
         columns: request.columns,
         rows: request.rows,
-        gap: request.grid.template.column_gap.max(0),
+        gap: 0,
         available: request.inner.size.width,
         is_columns: true,
         intrinsic: request.intrinsic,
@@ -186,7 +179,7 @@ fn resolve_grid_tracks(request: ResolveGridTracksRequest<'_>) -> (Vec<u32>, Vec<
         tracks: request.row_tracks,
         columns: request.columns,
         rows: request.rows,
-        gap: request.grid.template.row_gap.max(0),
+        gap: 0,
         available: request.inner.size.height,
         is_columns: false,
         intrinsic: request.intrinsic,
@@ -241,13 +234,11 @@ fn expanded_row_tracks(grid: &GridSpec, rows: usize) -> Vec<TrackSize> {
 
 /// Build horizontal spacing from resolved tracks and justification strategy.
 fn compute_grid_column_spacing(grid: &GridSpec, layout: &PreparedGridLayout) -> GridColumnSpacing {
-    let column_gap = grid.template.column_gap.max(0);
-    let packed_width = layout.column_widths.iter().copied().sum::<u32>()
-        + (column_gap as u32).saturating_mul(layout.columns.saturating_sub(1) as u32);
+    let packed_width = layout.column_widths.iter().copied().sum::<u32>();
     let free_width = (layout.inner.size.width as i32 - packed_width as i32).max(0);
     let weights = justify_space_weights(grid.template.justify_x, layout.columns);
     let extra_spaces = distribute_space(free_width, &weights);
-    let mut column_gaps = vec![column_gap; layout.columns.saturating_sub(1)];
+    let mut column_gaps = vec![0; layout.columns.saturating_sub(1)];
     for (index, gap_value) in column_gaps.iter_mut().enumerate() {
         *gap_value += extra_spaces.get(index + 1).copied().unwrap_or(0);
     }

@@ -4,8 +4,6 @@ impl GridTemplate {
         Self {
             columns,
             rows: Vec::new(),
-            column_gap: 0,
-            row_gap: 0,
             justify_x: Justify::Start,
             padding: EdgeInsets::default(),
         }
@@ -39,20 +37,6 @@ impl GridTemplate {
     /// Set horizontal and vertical grid padding.
     pub fn pad_xy(mut self, horizontal: i32, vertical: i32) -> Self {
         self.padding = EdgeInsets::symmetric(horizontal, vertical);
-        self
-    }
-
-    /// Override track gap.
-    pub fn gap(mut self, gap: i32) -> Self {
-        self.column_gap = gap;
-        self.row_gap = gap;
-        self
-    }
-
-    /// Override column and row gaps.
-    pub fn gap_xy(mut self, column_gap: i32, row_gap: i32) -> Self {
-        self.column_gap = column_gap;
-        self.row_gap = row_gap;
         self
     }
 

@@ -5,7 +5,7 @@ fn render_flex(flex: &FlexSpec, rect: Rect, ui: &mut Ui<'_>, axis: Axis, ctx: &m
         return;
     }
 
-    let gap = flex.gap.max(0);
+    let gap = 0;
     let inner = inset_rect(rect, flex.padding);
     let available_main = to_i32_saturating(axis.main(inner.size));
     let intrinsic = measure_flex_intrinsic_children(flex, ctx.tokens);

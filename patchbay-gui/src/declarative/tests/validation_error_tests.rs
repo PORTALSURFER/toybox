@@ -226,7 +226,6 @@ fn rejects_root_slot_child_when_not_container() {
 fn rejects_container_children_when_not_slot_wrapped() {
     let invalid_row = Node::Row(FlexSpec {
         layout: ContainerLayout::auto(),
-        gap: 0,
         padding: EdgeInsets::default(),
         align: Align::Start,
         justify: Justify::Start,

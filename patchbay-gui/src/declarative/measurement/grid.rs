@@ -58,16 +58,12 @@ fn apply_px_track_mins(tracks: &[TrackSize], measured: &mut [u32]) {
     }
 }
 
-/// Compute final measured width/height from tracks, gaps, and padding.
+/// Compute final measured width/height from tracks and padding.
 fn measured_grid_extent(grid: &GridSpec, column_widths: &[u32], row_heights: &[u32]) -> (u32, u32) {
-    let column_gap = grid.template.column_gap.max(0) as u32;
-    let row_gap = grid.template.row_gap.max(0) as u32;
     let width = column_widths.iter().copied().sum::<u32>()
-        + column_gap.saturating_mul(column_widths.len().saturating_sub(1) as u32)
         + grid.template.padding.left.max(0) as u32
         + grid.template.padding.right.max(0) as u32;
     let height = row_heights.iter().copied().sum::<u32>()
-        + row_gap.saturating_mul(row_heights.len().saturating_sub(1) as u32)
         + grid.template.padding.top.max(0) as u32
         + grid.template.padding.bottom.max(0) as u32;
     (width, height)

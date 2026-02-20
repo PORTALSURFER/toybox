@@ -43,7 +43,7 @@ fn render_grid_children(
     let mut y = layout.inner.origin.y;
     for (row, height) in layout.row_heights.iter().copied().enumerate().take(layout.rows) {
         render_grid_row(GridRowGeometry { row, y, height }, &row_ctx, ui, ctx);
-        y += height as i32 + layout.row_gap;
+        y += height as i32;
     }
 }
 

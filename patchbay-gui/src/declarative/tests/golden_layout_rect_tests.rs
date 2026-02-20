@@ -30,14 +30,12 @@ fn golden_nested_flex_spec(size: Size) -> UiSpec {
         weighted_slot(panel("left", textbox("L")).pad_all(0).fill(), 1),
         weighted_slot(panel("right", textbox("R")).pad_all(0).fill(), 2),
     ])
-    .gap(10)
     .fill();
 
     let content = column_slots(vec![
         weighted_slot(top_row, 2),
         weighted_slot(panel("bottom", textbox("B")).pad_all(0).fill(), 1),
     ])
-    .gap(6)
     .fill();
 
     UiSpec::new(
@@ -50,8 +48,7 @@ fn golden_nested_flex_spec(size: Size) -> UiSpec {
 
 fn golden_fixed_grid_spec(size: Size) -> UiSpec {
     let template = GridTemplate::new(vec![TrackSize::Px(60), TrackSize::Px(140)])
-        .rows(vec![TrackSize::Px(40), TrackSize::Px(80)])
-        .gap_xy(10, 6);
+        .rows(vec![TrackSize::Px(40), TrackSize::Px(80)]);
     let content = grid(
         template,
         vec![
@@ -162,8 +159,6 @@ fn golden_wrap_spec(size: Size) -> UiSpec {
             .pad_all(0),
         ])
         .layout(ContainerLayout::fill())
-        .column_gap(5)
-        .row_gap(4)
         .justify(Justify::Start),
     );
     UiSpec::new(
@@ -232,22 +227,22 @@ fn golden_nested_flex_rects_match_expected_for_multiple_root_sizes() {
             Rect {
                 origin: Point { x: 0, y: 0 },
                 size: Size {
-                    width: 100,
-                    height: 120,
+                    width: 103,
+                    height: 124,
                 },
             },
             Rect {
-                origin: Point { x: 110, y: 0 },
+                origin: Point { x: 103, y: 0 },
                 size: Size {
-                    width: 200,
-                    height: 120,
+                    width: 207,
+                    height: 124,
                 },
             },
             Rect {
-                origin: Point { x: 0, y: 126 },
+                origin: Point { x: 0, y: 124 },
                 size: Size {
                     width: 310,
-                    height: 60,
+                    height: 62,
                 },
             },
         ),
@@ -259,22 +254,22 @@ fn golden_nested_flex_rects_match_expected_for_multiple_root_sizes() {
             Rect {
                 origin: Point { x: 0, y: 0 },
                 size: Size {
-                    width: 200,
-                    height: 240,
+                    width: 203,
+                    height: 244,
                 },
             },
             Rect {
-                origin: Point { x: 210, y: 0 },
+                origin: Point { x: 203, y: 0 },
                 size: Size {
-                    width: 400,
-                    height: 240,
+                    width: 407,
+                    height: 244,
                 },
             },
             Rect {
-                origin: Point { x: 0, y: 246 },
+                origin: Point { x: 0, y: 244 },
                 size: Size {
                     width: 610,
-                    height: 120,
+                    height: 122,
                 },
             },
         ),
@@ -408,7 +403,7 @@ fn golden_wrap_rects_match_deterministic_row_breaks() {
     assert_eq!(
         golden_panel_rect_by_key(&result, "w2"),
         Rect {
-            origin: Point { x: 35, y: 0 },
+            origin: Point { x: 30, y: 0 },
             size: Size {
                 width: 40,
                 height: 20,
@@ -418,7 +413,7 @@ fn golden_wrap_rects_match_deterministic_row_breaks() {
     assert_eq!(
         golden_panel_rect_by_key(&result, "w3"),
         Rect {
-            origin: Point { x: 0, y: 24 },
+            origin: Point { x: 0, y: 20 },
             size: Size {
                 width: 50,
                 height: 15,
@@ -428,7 +423,7 @@ fn golden_wrap_rects_match_deterministic_row_breaks() {
     assert_eq!(
         golden_panel_rect_by_key(&result, "w4"),
         Rect {
-            origin: Point { x: 55, y: 24 },
+            origin: Point { x: 50, y: 20 },
             size: Size {
                 width: 25,
                 height: 12,

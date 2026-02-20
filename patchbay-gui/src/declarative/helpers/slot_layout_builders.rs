@@ -32,7 +32,6 @@ pub fn column_slots(children: Vec<Slot>) -> Node {
     let mut spec = GridSpec::new(
         GridTemplate::new(vec![TrackSize::Fr(1)])
             .rows(rows)
-            .gap(0)
             .pad_all(0)
             .justify_start(),
         nodes,
@@ -53,7 +52,6 @@ pub fn row_slots(children: Vec<Slot>) -> Node {
     let mut spec = GridSpec::new(
         GridTemplate::new(columns)
             .rows(vec![TrackSize::Fr(1)])
-            .gap(0)
             .pad_all(0)
             .justify_start(),
         nodes,
@@ -109,7 +107,6 @@ fn wrap_slot_child(child: Slot) -> Node {
     };
     Node::Row(
         FlexSpec::row(vec![content])
-            .gap(0)
             .padding(child.params.margin)
             .justify(justify)
             .align(align)

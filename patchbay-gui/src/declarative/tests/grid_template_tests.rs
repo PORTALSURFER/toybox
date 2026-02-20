@@ -1,17 +1,14 @@
 use super::super::*;
 
 #[test]
-fn grid_gap_sets_both_axes() {
-    let template = GridTemplate::columns_fr(2).gap(9);
-    assert_eq!(template.column_gap, 9);
-    assert_eq!(template.row_gap, 9);
+fn grid_template_defaults_to_tight_tracks() {
+    let template = GridTemplate::columns_fr(2);
+    assert_eq!(template.columns.len(), 2);
 }
 
 #[test]
 fn grid_template_defaults_to_tight_left_packing() {
     let template = GridTemplate::columns_fr(3);
-    assert_eq!(template.column_gap, 0);
-    assert_eq!(template.row_gap, 0);
     assert_eq!(template.justify_x, Justify::Start);
 }
 

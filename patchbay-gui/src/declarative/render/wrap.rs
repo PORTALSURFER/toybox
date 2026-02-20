@@ -5,8 +5,6 @@ fn render_wrap(wrap: &WrapSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx
         return;
     }
 
-    let column_gap = wrap.column_gap.max(0);
-    let row_gap = wrap.row_gap.max(0);
     let inner_width = i32::try_from(inner.size.width).unwrap_or(i32::MAX);
     let available = Size {
         width: inner.size.width,
@@ -30,14 +28,14 @@ fn render_wrap(wrap: &WrapSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx
         })
         .collect();
 
-    let rows = build_wrap_rows(&measured, inner_width, column_gap);
+    let rows = build_wrap_rows(&measured, inner_width);
     let mut y = inner.origin.y;
     for row in rows {
         let row_height = row.height;
         let weights = justify_space_weights(wrap.justify, row.items.len());
         let extra_spaces = distribute_space((inner_width - row.width).max(0), &weights);
         let mut x = inner.origin.x + extra_spaces.first().copied().unwrap_or(0);
-        let mut gaps = vec![column_gap; row.items.len().saturating_sub(1)];
+        let mut gaps = vec![0; row.items.len().saturating_sub(1)];
         for (index, gap) in gaps.iter_mut().enumerate() {
             *gap += extra_spaces.get(index + 1).copied().unwrap_or(0);
         }
@@ -69,7 +67,7 @@ fn render_wrap(wrap: &WrapSpec, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx
             x = x.saturating_add(measured[item_index].width as i32);
             x = x.saturating_add(gaps.get(item_offset).copied().unwrap_or(0));
         }
-        y = y.saturating_add(row_height).saturating_add(row_gap);
+        y = y.saturating_add(row_height);
     }
 
     collect_container_debug_border_candidate(
@@ -92,7 +90,7 @@ struct WrapRow {
 }
 
 /// Build deterministic wrap rows from measured child sizes.
-fn build_wrap_rows(measured: &[Size], max_width: i32, column_gap: i32) -> Vec<WrapRow> {
+fn build_wrap_rows(measured: &[Size], max_width: i32) -> Vec<WrapRow> {
     let mut rows = Vec::new();
     let mut current = WrapRow {
         items: Vec::new(),
@@ -103,7 +101,7 @@ fn build_wrap_rows(measured: &[Size], max_width: i32, column_gap: i32) -> Vec<Wr
     for (index, size) in measured.iter().copied().enumerate() {
         let item_w = i32::try_from(size.width).unwrap_or(i32::MAX).min(max_width.max(0));
         let item_h = i32::try_from(size.height).unwrap_or(i32::MAX);
-        let gap = if current.items.is_empty() { 0 } else { column_gap };
+        let gap = 0;
         let next_width = current.width.saturating_add(gap).saturating_add(item_w);
         if !current.items.is_empty() && next_width > max_width {
             rows.push(current);

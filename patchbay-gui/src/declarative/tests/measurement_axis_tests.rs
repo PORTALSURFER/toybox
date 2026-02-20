@@ -306,15 +306,15 @@ fn grid_compression_reduces_fill_then_auto_then_px_tracks() {
     let source = [TrackSize::Fill, TrackSize::Auto, TrackSize::Px(20)];
 
     let mut resolved = vec![40, 30, 20];
-    compress_tracks_for_overflow_policy(&mut resolved, &source, 70, 0);
+    compress_tracks_for_overflow_policy(&mut resolved, &source, 70);
     assert_eq!(resolved, vec![20, 30, 20]);
 
     let mut resolved = vec![0, 30, 20];
-    compress_tracks_for_overflow_policy(&mut resolved, &source, 40, 0);
+    compress_tracks_for_overflow_policy(&mut resolved, &source, 40);
     assert_eq!(resolved, vec![0, 20, 20]);
 
     let mut resolved = vec![0, 0, 20];
-    compress_tracks_for_overflow_policy(&mut resolved, &source, 10, 0);
+    compress_tracks_for_overflow_policy(&mut resolved, &source, 10);
     assert_eq!(resolved, vec![0, 0, 10]);
 }
 

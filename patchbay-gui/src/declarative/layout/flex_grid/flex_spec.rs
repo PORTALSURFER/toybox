@@ -3,8 +3,6 @@
 pub struct FlexSpec {
     /// Layout constraints for this container.
     pub(crate) layout: ContainerLayout,
-    /// Gap between children.
-    pub gap: i32,
     /// Container padding.
     pub padding: EdgeInsets,
     /// Cross-axis alignment.
@@ -24,7 +22,6 @@ impl FlexSpec {
             .collect();
         Self {
             layout: ContainerLayout::auto(),
-            gap: 12,
             padding: EdgeInsets::default(),
             align: Align::Start,
             justify: Justify::Start,
@@ -40,7 +37,6 @@ impl FlexSpec {
             .collect();
         Self {
             layout: ContainerLayout::auto(),
-            gap: 12,
             padding: EdgeInsets::default(),
             align: Align::Start,
             justify: Justify::Start,
@@ -57,12 +53,6 @@ impl FlexSpec {
     /// Set flex overflow behavior.
     pub fn overflow(mut self, overflow_policy: OverflowPolicy) -> Self {
         self.layout = self.layout.overflow(overflow_policy);
-        self
-    }
-
-    /// Override gap.
-    pub fn gap(mut self, gap: i32) -> Self {
-        self.gap = gap;
         self
     }
 

@@ -49,7 +49,7 @@ fn root_vertical_slots_tile_parent_without_gaps() {
         tracks: &root_grid.template.rows,
         columns: 1,
         rows: root_grid.children.len(),
-        gap: root_grid.template.row_gap,
+        gap: 0,
         available: measured.height,
         is_columns: false,
         intrinsic: &vec![
@@ -62,7 +62,7 @@ fn root_vertical_slots_tile_parent_without_gaps() {
     });
     super::slot_tiling_layout_helpers::assert_tracks_tile_parent_exactly(
         measured.height,
-        root_grid.template.row_gap,
+        0,
         &row_heights,
     );
 }
@@ -95,7 +95,7 @@ fn root_horizontal_slots_tile_parent_without_gaps() {
         tracks: &root_grid.template.columns,
         columns: root_grid.template.columns.len(),
         rows: 1,
-        gap: root_grid.template.column_gap,
+        gap: 0,
         available: measured.width,
         is_columns: true,
         intrinsic: &vec![
@@ -108,7 +108,7 @@ fn root_horizontal_slots_tile_parent_without_gaps() {
     });
     super::slot_tiling_layout_helpers::assert_tracks_tile_parent_exactly(
         measured.width,
-        root_grid.template.column_gap,
+        0,
         &column_widths,
     );
 }
@@ -143,7 +143,7 @@ fn nested_slot_layouts_tile_each_parent_without_gaps() {
         tracks: &root_grid.template.rows,
         columns: 1,
         rows: root_grid.children.len(),
-        gap: root_grid.template.row_gap,
+        gap: 0,
         available: measured.height,
         is_columns: false,
         intrinsic: &vec![
@@ -156,7 +156,7 @@ fn nested_slot_layouts_tile_each_parent_without_gaps() {
     });
     super::slot_tiling_layout_helpers::assert_tracks_tile_parent_exactly(
         measured.height,
-        root_grid.template.row_gap,
+        0,
         &root_row_heights,
     );
 
@@ -168,7 +168,7 @@ fn nested_slot_layouts_tile_each_parent_without_gaps() {
         tracks: &controls_grid.template.columns,
         columns: controls_grid.template.columns.len(),
         rows: 1,
-        gap: controls_grid.template.column_gap,
+        gap: 0,
         available: measured.width,
         is_columns: true,
         intrinsic: &vec![
@@ -181,7 +181,7 @@ fn nested_slot_layouts_tile_each_parent_without_gaps() {
     });
     super::slot_tiling_layout_helpers::assert_tracks_tile_parent_exactly(
         measured.width,
-        controls_grid.template.column_gap,
+        0,
         &controls_column_widths,
     );
 
@@ -193,7 +193,7 @@ fn nested_slot_layouts_tile_each_parent_without_gaps() {
         tracks: &right_grid.template.rows,
         columns: 1,
         rows: right_grid.children.len(),
-        gap: right_grid.template.row_gap,
+        gap: 0,
         available: root_row_heights[2],
         is_columns: false,
         intrinsic: &vec![
@@ -206,7 +206,7 @@ fn nested_slot_layouts_tile_each_parent_without_gaps() {
     });
     super::slot_tiling_layout_helpers::assert_tracks_tile_parent_exactly(
         root_row_heights[2],
-        right_grid.template.row_gap,
+        0,
         &nested_row_heights,
     );
 }

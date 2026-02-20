@@ -45,8 +45,6 @@ fn column_slots_apply_weighted_height_fill() {
         grid.template.rows,
         vec![TrackSize::Fr(7), TrackSize::Fr(30)]
     );
-    assert_eq!(grid.template.column_gap, 0);
-    assert_eq!(grid.template.row_gap, 0);
     assert_eq!(grid.template.padding, EdgeInsets::all(0));
     assert_eq!(grid.template.justify_x, Justify::Start);
     assert_eq!(grid.children.len(), 2);
@@ -72,8 +70,6 @@ fn row_slots_apply_weighted_width_fill() {
         vec![TrackSize::Fr(70), TrackSize::Fr(30)]
     );
     assert_eq!(grid.template.rows, vec![TrackSize::Fr(1)]);
-    assert_eq!(grid.template.column_gap, 0);
-    assert_eq!(grid.template.row_gap, 0);
     assert_eq!(grid.template.padding, EdgeInsets::all(0));
     assert_eq!(grid.template.justify_x, Justify::Start);
     assert_eq!(grid.children.len(), 2);

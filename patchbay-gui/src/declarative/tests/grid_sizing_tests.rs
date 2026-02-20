@@ -59,9 +59,9 @@ fn measures_grid_from_template_and_children() {
 }
 
 #[test]
-fn grid_gap_xy_affects_measured_width_and_height_independently() {
+fn grid_measure_uses_tight_tracks_without_gap_spacing() {
     let grid = GridSpec::new(
-        GridTemplate::columns_fr(2).gap_xy(3, 7),
+        GridTemplate::columns_fr(2),
         vec![
             spacer(Size {
                 width: 10,
@@ -83,6 +83,6 @@ fn grid_gap_xy_affects_measured_width_and_height_independently() {
     );
     let spec = UiSpec::new(RootFrameSpec::new("root", Node::Grid(grid)).padding(0));
     let measured = measure_checked(&spec).expect("measurement should succeed");
-    assert_eq!(measured.width, 23);
-    assert_eq!(measured.height, 27);
+    assert_eq!(measured.width, 20);
+    assert_eq!(measured.height, 20);
 }

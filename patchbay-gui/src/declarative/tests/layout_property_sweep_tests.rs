@@ -37,7 +37,6 @@ fn property_sweep_spec(size: Size) -> UiSpec {
         weighted_slot(panel("left", textbox("L")).pad_all(2).fill(), 1),
         weighted_slot(panel("right", textbox("R")).pad_all(2).fill(), 1),
     ])
-    .gap(6)
     .container_overflow(OverflowPolicy::Compress)
     .fill();
 
@@ -55,7 +54,6 @@ fn property_sweep_spec(size: Size) -> UiSpec {
     .fill();
 
     let content = column_slots(vec![weighted_slot(top, 2), weighted_slot(absolute, 1)])
-        .gap(4)
         .container_overflow(OverflowPolicy::Compress)
         .fill();
 

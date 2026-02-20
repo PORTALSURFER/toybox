@@ -96,7 +96,7 @@ fn stress_10k_scroll_column_is_deterministic_and_stable() {
             height: 2,
         },
     );
-    let content = scroll_view(column_slots(slots).gap(0).pad_all(0)).fill();
+    let content = scroll_view(column_slots(slots).pad_all(0)).fill();
     let size = Size {
         width: 640,
         height: 200,

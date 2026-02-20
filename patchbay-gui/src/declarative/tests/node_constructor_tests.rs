@@ -18,13 +18,11 @@ fn node_fluent_helpers_apply_container_and_style_fields() {
     }
 
     let row_node = row(vec![textbox("a"), textbox("b")])
-        .gap(6)
         .pad_xy(10, 8)
         .align_center()
         .justify_space_between();
     match row_node {
         Node::Row(flex) => {
-            assert_eq!(flex.gap, 6);
             assert_eq!(flex.padding, EdgeInsets::symmetric(10, 8));
             assert_eq!(flex.align, Align::Center);
             assert_eq!(flex.justify, Justify::SpaceBetween);
@@ -39,12 +37,9 @@ fn node_fluent_helpers_apply_container_and_style_fields() {
             height: 8,
         })],
     )
-    .gap_xy(3, 9)
     .pad_all(5);
     match grid_node {
         Node::Grid(grid) => {
-            assert_eq!(grid.template.column_gap, 3);
-            assert_eq!(grid.template.row_gap, 9);
             assert_eq!(grid.template.padding, EdgeInsets::all(5));
         }
         _ => panic!("expected grid node"),
@@ -157,7 +152,7 @@ fn helper_node_constructors_build_valid_spec() {
         textbox("Header"),
         controls,
         grid(
-            GridTemplate::columns_fr(2).rows_fr(1).pad_all(4).gap(8),
+            GridTemplate::columns_fr(2).rows_fr(1).pad_all(4),
             vec![
                 spacer(Size {
                     width: 8,

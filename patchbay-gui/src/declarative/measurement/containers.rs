@@ -97,7 +97,6 @@ fn measure_aspect_box(aspect_box: &AspectBoxSpec, tokens: &ThemeTokens) -> Size 
 fn measure_flex(flex: &FlexSpec, tokens: &ThemeTokens, axis: Axis) -> Size {
     let mut total_main = 0u64;
     let mut max_cross = 0u64;
-    let mut child_count = 0u64;
 
     for child in &flex.children {
         let child_size = measure_node(child, tokens);
@@ -107,12 +106,7 @@ fn measure_flex(flex: &FlexSpec, tokens: &ThemeTokens, axis: Axis) -> Size {
         };
         total_main = total_main.saturating_add(main);
         max_cross = max_cross.max(cross);
-        child_count = child_count.saturating_add(1);
     }
-
-    let gap = u64::from(flex.gap.max(0) as u32);
-    let gap_total = gap.saturating_mul(child_count.saturating_sub(1));
-    total_main = total_main.saturating_add(gap_total);
 
     let (main_padding, cross_padding) = match axis {
         Axis::Horizontal => (
@@ -205,17 +199,13 @@ fn measure_scroll_view(scroll_view: &ScrollViewSpec, tokens: &ThemeTokens) -> Si
 fn measure_wrap(wrap: &WrapSpec, tokens: &ThemeTokens) -> Size {
     let mut total_width = 0u64;
     let mut max_height = 0u64;
-    let mut child_count = 0u64;
     for child in &wrap.children {
         let measured = measure_node(child, tokens);
         total_width = total_width.saturating_add(u64::from(measured.width));
         max_height = max_height.max(u64::from(measured.height));
-        child_count = child_count.saturating_add(1);
     }
-    let gap_total = u64::from(wrap.column_gap.max(0) as u32).saturating_mul(child_count.saturating_sub(1));
     let measured = Size {
         width: total_width
-            .saturating_add(gap_total)
             .saturating_add(wrap.padding.left.max(0) as u64)
             .saturating_add(wrap.padding.right.max(0) as u64)
             .min(u64::from(u32::MAX)) as u32,

@@ -23,8 +23,7 @@ fn scroll_view_measure_tracks_content_size() {
             textbox("line-1").widget_layout(LayoutBox::fixed(30, 12).max(30, 12)),
             textbox("line-2").widget_layout(LayoutBox::fixed(30, 12).max(30, 12)),
             textbox("line-3").widget_layout(LayoutBox::fixed(30, 12).max(30, 12)),
-        ])
-        .gap(2),
+        ]),
     )
     .pad_xy(2, 1);
     let spec = UiSpec::new(RootFrameSpec::new("root", content).padding(0));
@@ -33,26 +32,25 @@ fn scroll_view_measure_tracks_content_size() {
         measured,
         Size {
             width: 34,
-            height: 42,
+            height: 38,
         }
     );
 }
 
 #[test]
-fn wrap_measure_accumulates_children_and_gaps() {
+fn wrap_measure_accumulates_children_without_gap_spacing() {
     let content = wrap(vec![
         textbox("a").widget_layout(LayoutBox::fixed(10, 10).max(10, 10)),
         textbox("b").widget_layout(LayoutBox::fixed(20, 15).max(20, 15)),
         textbox("c").widget_layout(LayoutBox::fixed(30, 5).max(30, 5)),
     ])
-    .gap(3)
     .pad_xy(1, 2);
     let spec = UiSpec::new(RootFrameSpec::new("root", content).padding(0));
     let measured = measure_checked(&spec).expect("wrap measure should succeed");
     assert_eq!(
         measured,
         Size {
-            width: 68,
+            width: 62,
             height: 19,
         }
     );
@@ -420,7 +418,6 @@ fn layout_is_deterministic_across_repeated_renders_for_multiple_root_sizes() {
             panel("b", textbox("B")).pad_all(0),
             panel("c", textbox("C")).pad_all(0),
         ])
-        .gap(6)
         .pad_all(4),
         Size {
             width: 420,
