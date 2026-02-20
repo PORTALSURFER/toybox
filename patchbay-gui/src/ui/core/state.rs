@@ -116,6 +116,8 @@ struct DropdownOverlay {
     scroll_px: i32,
     /// Single option row height in pixels.
     row_height: i32,
+    /// Optional scrollbar geometry when menu content overflows.
+    scrollbar: Option<DropdownOverlayScrollbar>,
     /// Background fill color for menu options.
     fill_color: Color,
     /// Hover fill color for menu options.
@@ -124,4 +126,13 @@ struct DropdownOverlay {
     outline_color: Color,
     /// Text color for menu options.
     text_color: Color,
+}
+
+/// Precomputed scrollbar geometry for a dropdown overlay menu.
+#[derive(Clone, Copy, Debug)]
+struct DropdownOverlayScrollbar {
+    /// Scrollbar track bounds.
+    track_rect: Rect,
+    /// Scrollbar thumb bounds.
+    thumb_rect: Rect,
 }

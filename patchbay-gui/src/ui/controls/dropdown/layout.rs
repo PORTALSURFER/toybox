@@ -1,4 +1,7 @@
 impl<'a> Ui<'a> {
+    /// Inset floating dropdown menus away from the root frame edges.
+    const DROPDOWN_ROOT_EDGE_INSET_PX: i32 = 2;
+
     /// Resolve control placement and draw optional label text.
     pub(crate) fn resolve_dropdown_layout(
         &mut self,
@@ -100,9 +103,23 @@ impl<'a> Ui<'a> {
 
     /// Resolve root viewport bounds used for floating dropdown menus.
     fn dropdown_root_bounds(&self) -> Rect {
-        Rect {
+        let inset = Self::DROPDOWN_ROOT_EDGE_INSET_PX.max(0);
+        let root = Rect {
             origin: Point { x: 0, y: 0 },
             size: self.canvas.size(),
+        };
+        let root_width = root.size.width as i32;
+        let root_height = root.size.height as i32;
+        let inset_x = inset.min((root_width - 1).max(0));
+        let inset_y = inset.min((root_height - 1).max(0));
+        let width = (root_width - inset_x.saturating_mul(2)).max(1) as u32;
+        let height = (root_height - inset_y.saturating_mul(2)).max(1) as u32;
+        Rect {
+            origin: Point {
+                x: root.origin.x + inset_x,
+                y: root.origin.y + inset_y,
+            },
+            size: Size { width, height },
         }
     }
 

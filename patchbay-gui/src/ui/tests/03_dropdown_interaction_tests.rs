@@ -244,6 +244,81 @@ fn dropdown_clamped_menu_allows_wheel_scroll() {
 }
 
 #[test]
+fn dropdown_menu_keeps_root_edge_inset() {
+    let mut canvas = Canvas::new(120, 90);
+    let mut layout = Layout {
+        cursor: Point { x: 92, y: 2 },
+        ..Layout::default()
+    };
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let options = ["0", "1", "2", "3", "4", "5"];
+    let mut selected = 0;
+    let id = WidgetId::new(24);
+
+    let open_input = InputState {
+        pointer_pos: Point { x: 95, y: 8 },
+        mouse_pressed: true,
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &open_input, &mut ui_state, &mut layout, &theme);
+    let response = ui.dropdown(id, "", &options, &mut selected, 40, 16);
+    assert!(response.open);
+    let overlay = ui
+        .state
+        .overlays
+        .last()
+        .expect("dropdown overlay should be queued");
+    let menu_right = overlay.menu_rect.origin.x + overlay.menu_rect.size.width as i32;
+    let menu_bottom = overlay.menu_rect.origin.y + overlay.menu_rect.size.height as i32;
+    assert!(overlay.menu_rect.origin.x >= 2);
+    assert!(overlay.menu_rect.origin.y >= 2);
+    assert!(menu_right <= 118);
+    assert!(menu_bottom <= 88);
+}
+
+#[test]
+fn dropdown_overlay_draws_scrollbar_when_menu_overflows() {
+    let mut canvas = Canvas::new(120, 70);
+    let mut layout = Layout {
+        cursor: Point { x: 16, y: 8 },
+        ..Layout::default()
+    };
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let options = ["0", "1", "2", "3", "4", "5", "6", "7"];
+    let mut selected = 0;
+    let id = WidgetId::new(25);
+
+    let open_input = InputState {
+        pointer_pos: Point { x: 20, y: 30 },
+        mouse_pressed: true,
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &open_input, &mut ui_state, &mut layout, &theme);
+    let response = ui.dropdown(id, "Mode", &options, &mut selected, 80, 16);
+    assert!(response.open);
+    let overlay = ui
+        .state
+        .overlays
+        .last()
+        .expect("dropdown overlay should be queued");
+    let scrollbar = overlay
+        .scrollbar
+        .expect("overflowing dropdown should resolve scrollbar geometry");
+    assert!(scrollbar.thumb_rect.size.height < scrollbar.track_rect.size.height);
+    ui.draw_overlays();
+    let thumb_center = Point {
+        x: scrollbar.thumb_rect.origin.x + scrollbar.thumb_rect.size.width as i32 / 2,
+        y: scrollbar.thumb_rect.origin.y + scrollbar.thumb_rect.size.height as i32 / 2,
+    };
+    assert_eq!(
+        canvas_pixel(&canvas, thumb_center.x as u32, thumb_center.y as u32),
+        theme.knob_active
+    );
+}
+
+#[test]
 fn dropdown_visual_style_overrides_apply_to_open_menu_overlay() {
     let mut canvas = Canvas::new(120, 90);
     let mut layout = Layout::default();
