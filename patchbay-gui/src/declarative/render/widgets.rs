@@ -118,9 +118,18 @@ fn render_dropdown(
     let mut selected = dropdown.selected;
     let option_labels = resolve_dropdown_option_labels(dropdown);
     let option_refs: Vec<&str> = option_labels.iter().map(String::as_str).collect();
-    let dropdown_request =
+    let mut dropdown_request =
         DropdownRectRenderRequest::new(id, "", &option_refs, control_size, rect)
             .with_text_scale(tokens.typography.text_scale);
+    if let Some(color) = dropdown.background_override {
+        dropdown_request = dropdown_request.with_background_color(color);
+    }
+    if let Some(color) = dropdown.outline_override {
+        dropdown_request = dropdown_request.with_outline_color(color);
+    }
+    if let Some(color) = dropdown.text_color_override {
+        dropdown_request = dropdown_request.with_text_color(color);
+    }
     let response = ui.dropdown_in_rect_scaled(&mut selected, dropdown_request);
     if response.changed {
         actions.push(UiAction::DropdownSelected {

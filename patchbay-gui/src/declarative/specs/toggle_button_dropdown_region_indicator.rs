@@ -85,6 +85,12 @@ pub struct DropdownSpec {
     pub selected: usize,
     /// Optional explicit control size.
     pub control_size: Option<Size>,
+    /// Optional override for the dropdown control background fill.
+    pub background_override: Option<Color>,
+    /// Optional override for the dropdown control outline color.
+    pub outline_override: Option<Color>,
+    /// Optional override for dropdown label text color.
+    pub text_color_override: Option<Color>,
     /// Layout constraints.
     pub layout: LayoutBox,
 }
@@ -102,6 +108,9 @@ impl DropdownSpec {
             option_labels: None,
             selected,
             control_size: None,
+            background_override: None,
+            outline_override: None,
+            text_color_override: None,
             layout: LayoutBox::auto(),
         }
     }
@@ -115,6 +124,24 @@ impl DropdownSpec {
     /// Override control size.
     pub fn control_size(mut self, size: Size) -> Self {
         self.control_size = Some(size);
+        self
+    }
+
+    /// Override dropdown control background fill color.
+    pub fn background_color(mut self, color: Color) -> Self {
+        self.background_override = Some(color);
+        self
+    }
+
+    /// Override dropdown control outline color.
+    pub fn outline_color(mut self, color: Color) -> Self {
+        self.outline_override = Some(color);
+        self
+    }
+
+    /// Override dropdown label text color.
+    pub fn text_color(mut self, color: Color) -> Self {
+        self.text_color_override = Some(color);
         self
     }
 

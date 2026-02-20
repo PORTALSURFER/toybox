@@ -5,7 +5,12 @@ impl<'a> Ui<'a> {
         options: &[&str],
         hovered: Option<usize>,
         geometry: DropdownMenuGeometry,
+        visual_style: DropdownVisualStyle,
     ) {
+        let fill_color = visual_style.fill.unwrap_or(self.theme.knob_fill);
+        let hover_fill_color = visual_style.hover_fill.unwrap_or(self.theme.knob_hover);
+        let outline_color = visual_style.outline.unwrap_or(self.theme.knob_outline);
+        let text_color = visual_style.text.unwrap_or(self.theme.text);
         self.state.overlays.push(DropdownOverlay {
             base_rect: geometry.rect,
             menu_rect: geometry.menu_rect,
@@ -14,6 +19,10 @@ impl<'a> Ui<'a> {
             open_up: geometry.open_up,
             scroll_px: geometry.scroll_px,
             row_height: geometry.control_height.max(1),
+            fill_color,
+            hover_fill_color,
+            outline_color,
+            text_color,
         });
     }
 
@@ -43,13 +52,13 @@ impl<'a> Ui<'a> {
                     continue;
                 };
                 let option_fill = if overlay.hovered == Some(index) {
-                    self.theme.knob_hover
+                    overlay.hover_fill_color
                 } else {
-                    self.theme.knob_fill
+                    overlay.fill_color
                 };
                 self.canvas.fill_rect(visible_rect, option_fill);
                 self.canvas
-                    .stroke_rect(visible_rect, 1, self.theme.knob_outline);
+                    .stroke_rect(visible_rect, 1, overlay.outline_color);
                 let option_text = Point {
                     x: visible_rect.origin.x + 4,
                     y: visible_rect.origin.y + (height - (7 * self.theme.text_scale as i32)) / 2,
@@ -62,7 +71,7 @@ impl<'a> Ui<'a> {
                 self.draw_text_internal(
                     option_text,
                     &fitted,
-                    self.theme.text,
+                    overlay.text_color,
                     self.theme.text_scale,
                 );
             }

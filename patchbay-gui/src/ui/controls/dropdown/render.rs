@@ -6,16 +6,19 @@ impl<'a> Ui<'a> {
         options: &[&str],
         selected: usize,
         response: &DropdownResponse,
+        visual_style: DropdownVisualStyle,
     ) {
         let fill = if response.open {
-            self.theme.knob_active
+            visual_style.fill.unwrap_or(self.theme.knob_active)
         } else if response.hovered {
-            self.theme.knob_hover
+            visual_style.hover_fill.unwrap_or(self.theme.knob_hover)
         } else {
-            self.theme.knob_fill
+            visual_style.fill.unwrap_or(self.theme.knob_fill)
         };
+        let outline = visual_style.outline.unwrap_or(self.theme.knob_outline);
+        let text_color = visual_style.text.unwrap_or(self.theme.text);
         self.fill_rect_clipped(layout.rect, fill);
-        self.stroke_rect_clipped(layout.rect, 1, self.theme.knob_outline);
+        self.stroke_rect_clipped(layout.rect, 1, outline);
 
         let current = options.get(selected).copied().unwrap_or("-");
         let text_pos = Point {
@@ -27,7 +30,7 @@ impl<'a> Ui<'a> {
             text_pos,
             current,
             layout.rect.size.width.saturating_sub(8),
-            self.theme.text,
+            text_color,
             false,
         );
     }

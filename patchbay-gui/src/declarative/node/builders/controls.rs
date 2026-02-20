@@ -32,4 +32,34 @@ impl Node {
         }
         self
     }
+
+    /// Override dropdown control background color for dropdown nodes.
+    ///
+    /// Non-dropdown node kinds are returned unchanged.
+    pub fn dropdown_background_color(mut self, color: Color) -> Self {
+        if let Self::Dropdown(dropdown) = &mut self {
+            dropdown.background_override = Some(color);
+        }
+        self
+    }
+
+    /// Override dropdown control outline color for dropdown nodes.
+    ///
+    /// Non-dropdown node kinds are returned unchanged.
+    pub fn dropdown_outline_color(mut self, color: Color) -> Self {
+        if let Self::Dropdown(dropdown) = &mut self {
+            dropdown.outline_override = Some(color);
+        }
+        self
+    }
+
+    /// Override dropdown label text color for dropdown nodes.
+    ///
+    /// Non-dropdown node kinds are returned unchanged.
+    pub fn dropdown_text_color(mut self, color: Color) -> Self {
+        if let Self::Dropdown(dropdown) = &mut self {
+            dropdown.text_color_override = Some(color);
+        }
+        self
+    }
 }

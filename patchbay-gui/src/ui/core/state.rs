@@ -89,4 +89,12 @@ struct DropdownOverlay {
     scroll_px: i32,
     /// Single option row height in pixels.
     row_height: i32,
+    /// Background fill color for menu options.
+    fill_color: Color,
+    /// Hover fill color for menu options.
+    hover_fill_color: Color,
+    /// Outline color for menu options.
+    outline_color: Color,
+    /// Text color for menu options.
+    text_color: Color,
 }

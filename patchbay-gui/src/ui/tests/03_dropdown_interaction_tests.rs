@@ -194,3 +194,56 @@ fn dropdown_clamped_menu_allows_wheel_scroll() {
         );
     }
 }
+
+#[test]
+fn dropdown_visual_style_overrides_apply_to_open_menu_overlay() {
+    let mut canvas = Canvas::new(120, 90);
+    let mut layout = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let options = ["Init", "Verse", "Hook"];
+    let mut selected = 0;
+    let id = WidgetId::new(22);
+    let style = DropdownVisualStyle {
+        fill: Some(Color::rgb(150, 44, 44)),
+        hover_fill: Some(Color::rgb(150, 44, 44)),
+        outline: Some(Color::rgb(95, 31, 31)),
+        text: Some(Color::rgb(240, 220, 220)),
+    };
+    let open_input = InputState {
+        pointer_pos: Point { x: 20, y: 36 },
+        mouse_pressed: true,
+        ..InputState::default()
+    };
+
+    {
+        let mut ui = Ui::new(&mut canvas, &open_input, &mut ui_state, &mut layout, &theme);
+        let response = ui.dropdown_with_visual_style(
+            id,
+            "Preset",
+            &options,
+            &mut selected,
+            Size {
+                width: 80,
+                height: 16,
+            },
+            style,
+        );
+        assert!(response.open);
+        let overlay = ui
+            .state
+            .overlays
+            .last()
+            .expect("dropdown overlay should be queued");
+        assert_eq!(overlay.fill_color, style.fill.expect("fill color should exist"));
+        assert_eq!(
+            overlay.hover_fill_color,
+            style.hover_fill.expect("hover fill color should exist")
+        );
+        assert_eq!(
+            overlay.outline_color,
+            style.outline.expect("outline color should exist")
+        );
+        assert_eq!(overlay.text_color, style.text.expect("text color should exist"));
+    }
+}

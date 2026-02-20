@@ -42,3 +42,16 @@ pub(crate) struct DropdownMenuGeometry {
     /// Whether menu rows are placed upward.
     pub(crate) open_up: bool,
 }
+
+/// Optional style overrides for dropdown rendering.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct DropdownVisualStyle {
+    /// Override control/menu background fill color.
+    pub(crate) fill: Option<Color>,
+    /// Override control/menu hover fill color.
+    pub(crate) hover_fill: Option<Color>,
+    /// Override control/menu outline color.
+    pub(crate) outline: Option<Color>,
+    /// Override dropdown text color.
+    pub(crate) text: Option<Color>,
+}
