@@ -88,22 +88,25 @@ impl<'a> Ui<'a> {
                 self.canvas.fill_rect(visible_rect, option_fill);
                 self.canvas
                     .stroke_rect(visible_rect, 1, overlay.outline_color);
+                let option_text_max_width = option_rect
+                    .size
+                    .width
+                    .saturating_sub(8)
+                    .saturating_sub(scrollbar_reserved_width);
                 let option_text = Point {
-                    x: visible_rect.origin.x + 4,
-                    y: visible_rect.origin.y + (height - (7 * self.theme.text_scale as i32)) / 2,
+                    x: option_rect.origin.x + 4,
+                    y: option_rect.origin.y + (height - (7 * self.theme.text_scale as i32)) / 2,
                 };
-                let _ = self.draw_text_single_line_hard_clamped(
-                    option_text,
-                    option,
-                    visible_rect
-                        .size
-                        .width
-                        .saturating_sub(8)
-                        .saturating_sub(scrollbar_reserved_width),
-                    visible_rect.size.height,
-                    overlay.text_color,
-                    false,
-                );
+                self.with_clip(visible_rect, |ui| {
+                    let _ = ui.draw_text_single_line_hard_clamped(
+                        option_text,
+                        option,
+                        option_text_max_width,
+                        option_rect.size.height,
+                        overlay.text_color,
+                        false,
+                    );
+                });
             }
             if let Some(scrollbar) = overlay.scrollbar {
                 self.canvas.fill_rect(scrollbar.track_rect, overlay.fill_color);

@@ -244,6 +244,77 @@ fn dropdown_clamped_menu_allows_wheel_scroll() {
 }
 
 #[test]
+fn dropdown_overlay_text_scrolls_with_option_rows_in_vector_mode() {
+    let mut canvas = Canvas::new(120, 69);
+    let mut layout = Layout {
+        cursor: Point { x: 16, y: 8 },
+        ..Layout::default()
+    };
+    let layout_origin = layout.cursor;
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let options = ["OPT0", "OPT1", "OPT2", "OPT3", "OPT4", "OPT5"];
+    let mut selected = 0;
+    let id = WidgetId::new(28);
+
+    let open_input = InputState {
+        pointer_pos: Point { x: 20, y: 12 },
+        mouse_pressed: true,
+        ..InputState::default()
+    };
+    {
+        let mut ui = Ui::new(&mut canvas, &open_input, &mut ui_state, &mut layout, &theme);
+        ui.set_vector_text_enabled(true);
+        let response = ui.dropdown(id, "", &options, &mut selected, 80, 16);
+        assert!(response.open);
+    }
+
+    layout.cursor = layout_origin;
+    let scroll_input = InputState {
+        pointer_pos: Point { x: 20, y: 50 },
+        wheel_delta: -1.0,
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &scroll_input, &mut ui_state, &mut layout, &theme);
+    ui.set_vector_text_enabled(true);
+    ui.reset_input_consumption();
+    let response = ui.dropdown(id, "", &options, &mut selected, 80, 16);
+    assert!(response.open);
+    let overlay = ui
+        .state
+        .overlays
+        .last()
+        .expect("dropdown overlay should be queued");
+    let menu_origin_y = overlay.menu_rect.origin.y;
+    let row_top = if overlay.open_up {
+        overlay.base_rect.origin.y - overlay.row_height + overlay.scroll_px
+    } else {
+        overlay.base_rect.origin.y + overlay.row_height - overlay.scroll_px
+    };
+    let expected_text_y =
+        row_top + (overlay.row_height - (7 * theme.text_scale as i32)) / 2;
+    ui.draw_overlays();
+    let commands = ui.take_vector_commands();
+    let found = commands.iter().any(|command| {
+        matches!(
+            command,
+            VectorCommand::Text {
+                origin,
+                clip_rect: Some(clip_rect),
+                text,
+                ..
+            } if text == "OPT0"
+                && origin.y == expected_text_y
+                && clip_rect.origin.y >= menu_origin_y
+        )
+    });
+    assert!(
+        found,
+        "expected first overlay option text to track row origin while scrolling"
+    );
+}
+
+#[test]
 fn dropdown_clamped_menu_uses_whole_row_viewport_height() {
     let mut canvas = Canvas::new(120, 69);
     let mut layout = Layout {
