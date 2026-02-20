@@ -6,18 +6,19 @@ fn render_text_box(
     tokens: &ThemeTokens,
     actions: &mut Vec<UiAction>,
 ) {
-    let text_rect = inset_text_box_rect(rect);
     if let Some(edit) = text_box.edit.as_ref() {
-        render_editable_text_box(text_box, edit, rect, text_rect, ui, tokens, actions);
+        render_editable_text_box(text_box, edit, rect, ui, tokens, actions);
         return;
     }
 
+    let text_scale = resolve_text_box_scale(rect);
+    let text_rect = inset_text_box_rect(rect, text_scale);
     let color = text_box.color.unwrap_or(tokens.colors.text);
     let _ = ui.text_single_line_hard_clamped_in_rect_scaled(
         text_rect,
         &text_box.text,
         color,
-        tokens.typography.text_scale,
+        text_scale,
     );
 }
 
@@ -26,11 +27,12 @@ fn render_editable_text_box(
     text_box: &TextBoxSpec,
     edit: &TextBoxEditSpec,
     rect: Rect,
-    text_rect: Rect,
     ui: &mut Ui<'_>,
     tokens: &ThemeTokens,
     actions: &mut Vec<UiAction>,
 ) {
+    let text_scale = resolve_text_box_scale(rect);
+    let text_rect = inset_text_box_rect(rect, text_scale);
     let response = ui.region_with_key(&edit.key, rect);
     if response.double_clicked && !edit.editing {
         actions.push(UiAction::TextBoxEditRequested {
@@ -52,16 +54,16 @@ fn render_editable_text_box(
 
     let color = text_box.color.unwrap_or(tokens.colors.text);
     if edit.editing {
-        draw_text_selection_background(text_box.text.as_str(), text_rect, runtime, ui, tokens);
+        draw_text_selection_background(text_box.text.as_str(), text_rect, runtime, text_scale, ui, tokens);
     }
     let _ = ui.text_single_line_hard_clamped_in_rect_scaled(
         text_rect,
         &text_box.text,
         color,
-        tokens.typography.text_scale,
+        text_scale,
     );
     if edit.editing {
-        draw_text_cursor(text_rect, runtime, ui, tokens);
+        draw_text_cursor(text_rect, runtime, text_scale, ui, tokens);
     }
     if should_clear_runtime {
         ui.clear_text_edit_runtime(&edit.key);
@@ -316,6 +318,7 @@ fn draw_text_selection_background(
     text: &str,
     text_rect: Rect,
     runtime: crate::ui::TextEditRuntimeState,
+    text_scale: u32,
     ui: &mut Ui<'_>,
     tokens: &ThemeTokens,
 ) {
@@ -325,7 +328,7 @@ fn draw_text_selection_background(
     if text_rect.size.width == 0 || text_rect.size.height == 0 {
         return;
     }
-    let scale = tokens.typography.text_scale.max(1);
+    let scale = text_scale.max(1);
     let char_width = (6 * scale) as i32;
     if char_width <= 0 {
         return;
@@ -374,13 +377,14 @@ fn draw_text_selection_background(
 fn draw_text_cursor(
     text_rect: Rect,
     runtime: crate::ui::TextEditRuntimeState,
+    text_scale: u32,
     ui: &mut Ui<'_>,
     tokens: &ThemeTokens,
 ) {
     if text_rect.size.width == 0 || text_rect.size.height == 0 {
         return;
     }
-    let scale = tokens.typography.text_scale.max(1);
+    let scale = text_scale.max(1);
     let char_width = (6 * scale) as i32;
     if char_width <= 0 {
         return;
@@ -410,13 +414,16 @@ fn draw_text_cursor(
 }
 
 /// Return a textbox content rectangle inset from its outer bounds.
-fn inset_text_box_rect(rect: Rect) -> Rect {
+fn inset_text_box_rect(rect: Rect, text_scale: u32) -> Rect {
     const TEXTBOX_INSET_PX: i32 = 2;
+    const TEXT_LINE_HEIGHT_BASE_PX: u32 = 8;
     let inset = TEXTBOX_INSET_PX.max(0);
     let max_horizontal = (rect.size.width / 2) as i32;
     let max_vertical = (rect.size.height / 2) as i32;
     let x_inset = inset.min(max_horizontal);
-    let y_inset = inset.min(max_vertical);
+    let line_height = TEXT_LINE_HEIGHT_BASE_PX.saturating_mul(text_scale.max(1));
+    let max_vertical_with_text = rect.size.height.saturating_sub(line_height).saturating_div(2) as i32;
+    let y_inset = inset.min(max_vertical).min(max_vertical_with_text.max(0));
     Rect {
         origin: Point {
             x: rect.origin.x + x_inset,
@@ -432,19 +439,34 @@ fn inset_text_box_rect(rect: Rect) -> Rect {
     }
 }
 
+/// Resolve text scale directly from textbox height.
+///
+/// This keeps text sizing deterministic and tied to textbox geometry while the
+/// draw path still hard-clamps overlong text to textbox width.
+fn resolve_text_box_scale(rect: Rect) -> u32 {
+    const TEXT_LINE_HEIGHT_BASE_PX: u32 = 8;
+    rect.size
+        .height
+        .saturating_div(TEXT_LINE_HEIGHT_BASE_PX)
+        .max(1)
+}
+
 #[cfg(test)]
 mod text_box_inset_tests {
     use super::*;
 
     #[test]
     fn inset_text_box_rect_applies_small_padding_when_space_allows() {
-        let inset = inset_text_box_rect(Rect {
-            origin: Point { x: 10, y: 20 },
-            size: Size {
-                width: 40,
-                height: 20,
+        let inset = inset_text_box_rect(
+            Rect {
+                origin: Point { x: 10, y: 20 },
+                size: Size {
+                    width: 40,
+                    height: 20,
+                },
             },
-        });
+            2,
+        );
         assert_eq!(inset.origin.x, 12);
         assert_eq!(inset.origin.y, 22);
         assert_eq!(inset.size.width, 36);
@@ -453,16 +475,59 @@ mod text_box_inset_tests {
 
     #[test]
     fn inset_text_box_rect_clamps_for_tiny_bounds() {
-        let inset = inset_text_box_rect(Rect {
-            origin: Point { x: 0, y: 0 },
-            size: Size {
-                width: 1,
-                height: 1,
+        let inset = inset_text_box_rect(
+            Rect {
+                origin: Point { x: 0, y: 0 },
+                size: Size {
+                    width: 1,
+                    height: 1,
+                },
             },
-        });
+            1,
+        );
         assert_eq!(inset.origin.x, 0);
         assert_eq!(inset.origin.y, 0);
         assert_eq!(inset.size.width, 1);
         assert_eq!(inset.size.height, 1);
+    }
+
+    #[test]
+    fn inset_text_box_rect_reduces_vertical_inset_to_preserve_line_height() {
+        let inset = inset_text_box_rect(
+            Rect {
+                origin: Point { x: 0, y: 0 },
+                size: Size {
+                    width: 20,
+                    height: 10,
+                },
+            },
+            1,
+        );
+        assert_eq!(inset.origin.y, 1);
+        assert_eq!(inset.size.height, 8);
+    }
+
+    #[test]
+    fn resolve_text_box_scale_follows_textbox_height() {
+        assert_eq!(
+            resolve_text_box_scale(Rect {
+                origin: Point { x: 0, y: 0 },
+                size: Size {
+                    width: 20,
+                    height: 16,
+                },
+            }),
+            2
+        );
+        assert_eq!(
+            resolve_text_box_scale(Rect {
+                origin: Point { x: 0, y: 0 },
+                size: Size {
+                    width: 20,
+                    height: 10,
+                },
+            }),
+            1
+        );
     }
 }
