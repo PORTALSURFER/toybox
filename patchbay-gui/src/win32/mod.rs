@@ -43,6 +43,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN,
     WS_CLIPSIBLINGS,
 };
+use windows::core::PCWSTR;
 
 const TIMER_ID: usize = 1;
 const TIMER_INTERVAL_MS: u32 = 16;
