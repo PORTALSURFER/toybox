@@ -80,15 +80,20 @@ impl WindowHandle {
     /// Request one immediate render tick that fulfills a pending frame capture.
     #[cfg(feature = "frame-capture")]
     pub fn request_frame_capture(&self) -> bool {
+        if !self.is_valid() {
+            return false;
+        }
+        // Send synchronously so capture works even when tests do not pump a
+        // normal Win32 message loop between API calls.
         unsafe {
-            PostMessageW(
+            let _ = SendMessageW(
                 Some(self.hwnd),
                 PATCHBAY_MSG_CAPTURE_FRAME,
                 WPARAM(0),
                 LPARAM(0),
-            )
-            .is_ok()
+            );
         }
+        true
     }
 }
 
