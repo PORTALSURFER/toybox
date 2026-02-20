@@ -99,6 +99,7 @@ fn knob_in_rect_does_not_expand_beyond_default_diameter() {
 
 #[test]
 fn knob_in_rect_without_labels_expands_dial_and_hit_area_only() {
+    let desired_diameter = 72u32;
     let rect = Rect {
         origin: Point { x: 10, y: 20 },
         size: Size {
@@ -126,7 +127,14 @@ fn knob_in_rect_without_labels_expands_dial_and_hit_area_only() {
         &theme,
     );
     let with_labels_request =
-        KnobRectRenderRequest::new(WidgetId::new(901), "MIX", "50%", (0.0, 1.0), 72, rect)
+        KnobRectRenderRequest::new(
+            WidgetId::new(901),
+            "MIX",
+            "50%",
+            (0.0, 1.0),
+            desired_diameter,
+            rect,
+        )
             .with_text_scale(2);
     let with_labels_response =
         ui_with_labels.knob_with_labels_in_rect(&mut value_with_labels, with_labels_request);
@@ -150,7 +158,14 @@ fn knob_in_rect_without_labels_expands_dial_and_hit_area_only() {
         &theme,
     );
     let without_labels_request =
-        KnobRectRenderRequest::new(WidgetId::new(902), "", "", (0.0, 1.0), 72, rect)
+        KnobRectRenderRequest::new(
+            WidgetId::new(902),
+            "",
+            "",
+            (0.0, 1.0),
+            desired_diameter,
+            rect,
+        )
             .with_text_scale(2);
     let without_labels_response = ui_without_labels
         .knob_with_labels_in_rect(&mut value_without_labels, without_labels_request);
@@ -162,6 +177,18 @@ fn knob_in_rect_without_labels_expands_dial_and_hit_area_only() {
             _ => None,
         })
         .expect("knob render should emit a vector knob command");
+    let side_padding = KNOB_BLOCK_SIDE_PADDING.max(0);
+    let unclamped_unlabeled = (desired_diameter as i32)
+        .min((rect.size.width as i32 - side_padding * 2).max(1))
+        .min(rect.size.height as i32)
+        .max(1);
+    let expected_unlabeled_size = unclamped_unlabeled.saturating_mul(3).saturating_div(4).max(1);
+    let expected_unlabeled_radius = (expected_unlabeled_size / 2 - 1).max(1);
+
+    assert_eq!(
+        without_labels_radius, expected_unlabeled_radius,
+        "unlabeled knob radius should be reduced to 75% of unclamped rect fit"
+    );
 
     assert!(
         without_labels_radius >= with_labels_radius.saturating_mul(3),

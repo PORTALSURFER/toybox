@@ -128,10 +128,16 @@ impl<'a> Ui<'a> {
         let side_padding = KNOB_BLOCK_SIDE_PADDING.max(0);
         let available_height = (rect.size.height as i32 - top_reserved - bottom_reserved).max(1);
         let available_width = (rect.size.width as i32 - side_padding * 2).max(1);
-        (desired_diameter.max(1) as i32)
+        let mut knob_size = (desired_diameter.max(1) as i32)
             .min(available_width)
             .min(available_height)
-            .max(1)
+            .max(1);
+        if !labels.has_name() && !labels.has_value() {
+            // Keep unlabeled dials visually dominant while preserving margin inside
+            // fixed rect slots so they do not overpower neighboring controls.
+            knob_size = knob_size.saturating_mul(3).saturating_div(4).max(1);
+        }
+        knob_size
     }
 
     /// Resolve top/bottom label reservation for knob-in-rect rendering.

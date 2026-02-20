@@ -4,18 +4,7 @@ use crate::host::InputState;
 use crate::ui::{Layout, Theme, UiState};
 
 #[test]
-fn render_knob_uses_token_diameter_for_hit_region() {
-    let mut canvas = Canvas::new(360, 220);
-    let mut layout = Layout::default();
-    let theme = Theme::default();
-    let mut ui_state = UiState::default();
-    let input = InputState {
-        pointer_pos: Point { x: 100, y: 60 },
-        wheel_delta: 1.0,
-        ..InputState::default()
-    };
-    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
-
+fn render_unlabeled_knob_uses_reduced_hit_region() {
     let mut tokens = ThemeTokens::default();
     tokens.controls.knob_diameter = 96;
     let spec = UiSpec::new(
@@ -33,13 +22,32 @@ fn render_knob_uses_token_diameter_for_hit_region() {
         .padding(0)
         .layout(LayoutBox::fixed(320, 200)),
     );
-
-    let result = render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
-    assert!(
+    let theme = Theme::default();
+    let changed_at = |pointer_pos: Point| {
+        let mut canvas = Canvas::new(360, 220);
+        let mut layout = Layout::default();
+        let mut ui_state = UiState::default();
+        let input = InputState {
+            pointer_pos,
+            wheel_delta: 1.0,
+            ..InputState::default()
+        };
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let result =
+            render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
         result
             .actions
             .iter()
             .any(|action| matches!(action, UiAction::KnobChanged { key, .. } if key == "k"))
+    };
+
+    assert!(
+        changed_at(Point { x: 80, y: 60 }),
+        "wheel interaction should still apply inside reduced unlabeled hit-region"
+    );
+    assert!(
+        !changed_at(Point { x: 100, y: 60 }),
+        "wheel interaction should be rejected near the old oversized unlabeled edge"
     );
 }
 
