@@ -147,6 +147,7 @@ impl<'a> Ui<'a> {
             .or_insert(TextEditRuntimeState {
                 cursor: text_char_count,
                 anchor: text_char_count,
+                pointer_selecting: false,
             });
         entry.cursor = entry.cursor.min(text_char_count);
         entry.anchor = entry.anchor.min(text_char_count);

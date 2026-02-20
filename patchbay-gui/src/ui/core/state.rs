@@ -44,6 +44,8 @@ pub(crate) struct TextEditRuntimeState {
     pub(crate) cursor: usize,
     /// Selection anchor index in character units.
     pub(crate) anchor: usize,
+    /// True while a pointer-initiated text selection drag is active.
+    pub(crate) pointer_selecting: bool,
 }
 
 impl LayoutState {

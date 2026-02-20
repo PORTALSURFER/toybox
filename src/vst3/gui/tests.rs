@@ -52,6 +52,40 @@ fn parent_handle_conversion_rejects_unsupported_platform() {
 }
 
 #[test]
+fn vst3_key_translation_maps_navigation_virtual_keys() {
+    use toybox_vst3_ffi::Steinberg::VirtualKeyCodes_::{
+        KEY_DELETE, KEY_END, KEY_HOME, KEY_LEFT, KEY_RIGHT,
+    };
+
+    assert_eq!(
+        vst3_key_down_to_input_char(0, KEY_LEFT as i16),
+        Some('\u{1c}')
+    );
+    assert_eq!(
+        vst3_key_down_to_input_char(0, KEY_RIGHT as i16),
+        Some('\u{1d}')
+    );
+    assert_eq!(
+        vst3_key_down_to_input_char(0, KEY_HOME as i16),
+        Some('\u{1e}')
+    );
+    assert_eq!(
+        vst3_key_down_to_input_char(0, KEY_END as i16),
+        Some('\u{1f}')
+    );
+    assert_eq!(
+        vst3_key_down_to_input_char(0, KEY_DELETE as i16),
+        Some('\u{7f}')
+    );
+}
+
+#[test]
+fn vst3_key_translation_falls_back_to_unicode_key() {
+    assert_eq!(vst3_key_down_to_input_char('A' as u16, 0), Some('A'));
+    assert_eq!(vst3_key_down_to_input_char('ß' as u16, 0), Some('ß'));
+}
+
+#[test]
 fn hosted_view_reports_default_size_before_attach() {
     let view = HostedVst3View::new(
         MockHostedGui {

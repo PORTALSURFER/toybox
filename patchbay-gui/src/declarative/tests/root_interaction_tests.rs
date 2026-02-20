@@ -470,3 +470,190 @@ fn editable_text_box_shift_arrow_selects_text_and_replaces_it() {
         )
     ));
 }
+
+#[test]
+fn editable_text_box_click_places_caret_before_insert() {
+    let mut ui_state = UiState::default();
+    let theme = Theme::default();
+    let size = Size {
+        width: 120,
+        height: 16,
+    };
+    let spec = || {
+        UiSpec::new(
+            root_frame_sized(
+                "root",
+                Node::Absolute(
+                    AbsoluteSpec::new(vec![AbsoluteChild::new(
+                        Point { x: 0, y: 0 },
+                        textbox("Init")
+                            .text_editable("preset-title", true)
+                            .text_edit_max_chars(24),
+                    )])
+                    .layout(ContainerLayout::fill()),
+                ),
+                size,
+            )
+            .padding(0),
+        )
+    };
+
+    let mut canvas = Canvas::new(size.width, size.height);
+    let mut layout = Layout::default();
+    let click_input = InputState {
+        pointer_pos: Point { x: 26, y: 8 },
+        mouse_pressed: true,
+        mouse_down: true,
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &click_input, &mut ui_state, &mut layout, &theme);
+    let result = render_checked(&spec(), &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    assert!(
+        result.actions.is_empty(),
+        "clicking to place caret should not emit edit actions by itself"
+    );
+
+    let mut canvas = Canvas::new(size.width, size.height);
+    let mut layout = Layout::default();
+    let insert_input = InputState {
+        key_pressed: Some('X'),
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &insert_input, &mut ui_state, &mut layout, &theme);
+    let result = render_checked(&spec(), &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    assert!(result.actions.iter().any(
+        |action| matches!(
+            action,
+            UiAction::TextBoxEdited { key, text } if key == "preset-title" && text == "InXit"
+        )
+    ));
+}
+
+#[test]
+fn editable_text_box_drag_select_replaces_selected_range() {
+    let mut ui_state = UiState::default();
+    let theme = Theme::default();
+    let size = Size {
+        width: 120,
+        height: 16,
+    };
+    let spec = || {
+        UiSpec::new(
+            root_frame_sized(
+                "root",
+                Node::Absolute(
+                    AbsoluteSpec::new(vec![AbsoluteChild::new(
+                        Point { x: 0, y: 0 },
+                        textbox("Init")
+                            .text_editable("preset-title", true)
+                            .text_edit_max_chars(24),
+                    )])
+                    .layout(ContainerLayout::fill()),
+                ),
+                size,
+            )
+            .padding(0),
+        )
+    };
+
+    let mut canvas = Canvas::new(size.width, size.height);
+    let mut layout = Layout::default();
+    let press_input = InputState {
+        pointer_pos: Point { x: 14, y: 8 },
+        mouse_pressed: true,
+        mouse_down: true,
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &press_input, &mut ui_state, &mut layout, &theme);
+    let _ = render_checked(&spec(), &mut ui, Point { x: 0, y: 0 }).expect("press frame should render");
+
+    let mut canvas = Canvas::new(size.width, size.height);
+    let mut layout = Layout::default();
+    let drag_input = InputState {
+        pointer_pos: Point { x: 38, y: 8 },
+        mouse_down: true,
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &drag_input, &mut ui_state, &mut layout, &theme);
+    let _ = render_checked(&spec(), &mut ui, Point { x: 0, y: 0 }).expect("drag frame should render");
+
+    let mut canvas = Canvas::new(size.width, size.height);
+    let mut layout = Layout::default();
+    let replace_input = InputState {
+        key_pressed: Some('Z'),
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &replace_input, &mut ui_state, &mut layout, &theme);
+    let result = render_checked(&spec(), &mut ui, Point { x: 0, y: 0 }).expect("replace frame should render");
+    assert!(result.actions.iter().any(
+        |action| matches!(
+            action,
+            UiAction::TextBoxEdited { key, text } if key == "preset-title" && text == "IZt"
+        )
+    ));
+}
+
+#[test]
+fn editable_text_box_shift_click_extends_selection_from_existing_anchor() {
+    let mut ui_state = UiState::default();
+    let theme = Theme::default();
+    let size = Size {
+        width: 120,
+        height: 16,
+    };
+    let spec = || {
+        UiSpec::new(
+            root_frame_sized(
+                "root",
+                Node::Absolute(
+                    AbsoluteSpec::new(vec![AbsoluteChild::new(
+                        Point { x: 0, y: 0 },
+                        textbox("Init")
+                            .text_editable("preset-title", true)
+                            .text_edit_max_chars(24),
+                    )])
+                    .layout(ContainerLayout::fill()),
+                ),
+                size,
+            )
+            .padding(0),
+        )
+    };
+
+    let mut canvas = Canvas::new(size.width, size.height);
+    let mut layout = Layout::default();
+    let shift_click_input = InputState {
+        pointer_pos: Point { x: 14, y: 8 },
+        mouse_pressed: true,
+        mouse_down: true,
+        shift_down: true,
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(
+        &mut canvas,
+        &shift_click_input,
+        &mut ui_state,
+        &mut layout,
+        &theme,
+    );
+    let result = render_checked(&spec(), &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    assert!(
+        result.actions.is_empty(),
+        "shift-click selection should not emit edit actions by itself"
+    );
+
+    let mut canvas = Canvas::new(size.width, size.height);
+    let mut layout = Layout::default();
+    let replace_input = InputState {
+        key_pressed: Some('Z'),
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &replace_input, &mut ui_state, &mut layout, &theme);
+    let result = render_checked(&spec(), &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    assert!(result.actions.iter().any(
+        |action| matches!(
+            action,
+            UiAction::TextBoxEdited { key, text } if key == "preset-title" && text == "IZ"
+        )
+    ));
+}

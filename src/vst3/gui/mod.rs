@@ -24,6 +24,7 @@ use toybox_vst3_ffi::Steinberg::{
 };
 
 include!("string_conversion.rs");
+include!("key_input.rs");
 include!("platform_type.rs");
 include!("hosted_view_types.rs");
 include!("plug_view_impl.rs");

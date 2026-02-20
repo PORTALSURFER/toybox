@@ -51,8 +51,18 @@ fn render_editable_text_box(
 
     let mut should_clear_runtime = false;
     if edit.editing {
-        should_clear_runtime =
-            emit_text_edit_actions(text_box, edit, response.hovered, &mut runtime, ui, actions);
+        should_clear_runtime = emit_text_edit_actions(
+            text_box,
+            edit,
+            TextEditInteractionCtx {
+                region: response,
+                line_rect,
+                text_scale,
+            },
+            &mut runtime,
+            ui,
+            actions,
+        );
         ui.set_text_edit_runtime(&edit.key, runtime);
     }
 

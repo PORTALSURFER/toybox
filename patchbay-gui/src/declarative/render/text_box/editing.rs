@@ -1,16 +1,41 @@
+/// Static interaction context for one editable textbox render pass.
+#[derive(Clone, Copy)]
+struct TextEditInteractionCtx {
+    /// Region response snapshot from the textbox interaction pass.
+    region: crate::ui::RegionResponse,
+    /// Single-line text draw rectangle used for caret and selection mapping.
+    line_rect: crate::canvas::Rect,
+    /// Resolved text scale for this textbox.
+    text_scale: u32,
+}
+
 /// Emit pending edit actions from keyboard or pointer state.
 fn emit_text_edit_actions(
     text_box: &TextBoxSpec,
     edit: &TextBoxEditSpec,
-    hovered: bool,
+    ctx: TextEditInteractionCtx,
     runtime: &mut crate::ui::TextEditRuntimeState,
     ui: &Ui<'_>,
     actions: &mut Vec<UiAction>,
 ) -> bool {
+    let text_len = text_box.text.chars().count();
+    runtime.cursor = runtime.cursor.min(text_len);
+    runtime.anchor = runtime.anchor.min(text_len);
+    if ctx.region.released || !ui.input().mouse_down {
+        runtime.pointer_selecting = false;
+    }
+
+    apply_pointer_edit_selection(
+        text_box.text.as_str(),
+        ctx.line_rect,
+        ctx.text_scale,
+        ctx.region,
+        runtime,
+        ui,
+    );
+
     if let Some(ch) = ui.key_pressed() {
-        let text_len = text_box.text.chars().count();
-        runtime.cursor = runtime.cursor.min(text_len);
-        runtime.anchor = runtime.anchor.min(text_len);
+        runtime.pointer_selecting = false;
 
         match ch {
             '\r' | '\n' => {
@@ -83,7 +108,7 @@ fn emit_text_edit_actions(
         }
     }
 
-    if ui.input().mouse_pressed && !hovered {
+    if ui.input().mouse_pressed && !ctx.region.hovered {
         actions.push(UiAction::TextBoxEditCommitted {
             key: edit.key.clone(),
             text: text_box.text.clone(),
@@ -91,6 +116,72 @@ fn emit_text_edit_actions(
         return true;
     }
     false
+}
+
+/// Apply pointer-driven cursor moves and selection changes for editable text.
+fn apply_pointer_edit_selection(
+    text: &str,
+    line_rect: crate::canvas::Rect,
+    text_scale: u32,
+    region: crate::ui::RegionResponse,
+    runtime: &mut crate::ui::TextEditRuntimeState,
+    ui: &Ui<'_>,
+) {
+    if !(region.pressed || (region.active && ui.input().mouse_down)) {
+        return;
+    }
+
+    let pointer_index =
+        pointer_char_index_in_line(text, line_rect, text_scale, ui.input().pointer_pos.x);
+    if region.pressed {
+        runtime.pointer_selecting = true;
+        if ui.input().shift_down {
+            runtime.cursor = pointer_index;
+            return;
+        }
+        runtime.cursor = pointer_index;
+        runtime.anchor = pointer_index;
+        return;
+    }
+
+    if runtime.pointer_selecting && region.active && ui.input().mouse_down {
+        runtime.cursor = pointer_index;
+    }
+}
+
+/// Return the visible text character capacity for a line rectangle.
+fn visible_char_capacity_for_line(line_rect: crate::canvas::Rect, text_scale: u32) -> usize {
+    let scale = text_scale.max(1) as i32;
+    let char_width = 6i32.saturating_mul(scale);
+    if char_width <= 0 {
+        return 0;
+    }
+    (line_rect.size.width as i32 / char_width).max(0) as usize
+}
+
+/// Map a pointer x-position to one caret index inside the visible text range.
+fn pointer_char_index_in_line(
+    text: &str,
+    line_rect: crate::canvas::Rect,
+    text_scale: u32,
+    pointer_x: i32,
+) -> usize {
+    let scale = text_scale.max(1) as i32;
+    let char_width = 6i32.saturating_mul(scale).max(1);
+    let visible_len = text
+        .chars()
+        .count()
+        .min(visible_char_capacity_for_line(line_rect, text_scale));
+
+    let relative_x = pointer_x.saturating_sub(line_rect.origin.x);
+    let rounded = if relative_x <= 0 {
+        0
+    } else {
+        relative_x
+            .saturating_add(char_width / 2)
+            .saturating_div(char_width)
+    };
+    rounded.clamp(0, visible_len as i32) as usize
 }
 
 /// Return true when a typed character should be inserted into editable text.
