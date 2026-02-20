@@ -8,8 +8,13 @@ fn render_knob(
 ) {
     let id = WidgetId::from_label(&knob.key);
     let mut value = knob.value;
-    let knob_request = KnobRectRenderRequest::new(id, "", "", knob.range, tokens.controls.knob_diameter, rect)
-        .with_text_scale(tokens.typography.text_scale);
+    let knob_diameter = knob
+        .control_size
+        .map(|size| size.width.min(size.height).max(1))
+        .unwrap_or(tokens.controls.knob_diameter);
+    let knob_request =
+        KnobRectRenderRequest::new(id, "", "", knob.range, knob_diameter, rect)
+            .with_text_scale(tokens.typography.text_scale);
     let response = ui.knob_with_labels_in_rect_scaled(&mut value, knob_request);
     if response.changed {
         actions.push(UiAction::KnobChanged {
@@ -164,13 +169,7 @@ fn resolve_dropdown_option_labels(dropdown: &DropdownSpec) -> Vec<String> {
 
 /// Render an indicator node.
 fn render_indicator(indicator: &IndicatorSpec, rect: Rect, ui: &mut Ui<'_>) {
-    ui.indicator(
-        Rect {
-            origin: rect.origin,
-            size: indicator.size,
-        },
-        indicator.active,
-    );
+    ui.indicator(rect, indicator.active);
 }
 
 #[cfg(test)]

@@ -1,9 +1,11 @@
 impl Node {
-    /// Set explicit control size for slider/toggle/button/dropdown nodes.
+    /// Set explicit control size for control-widget nodes.
     ///
-    /// Non-control node kinds and knobs are returned unchanged.
+    /// Applies to knob/slider/toggle/button/dropdown; other node kinds are
+    /// returned unchanged.
     pub fn control_size(mut self, size: Size) -> Self {
         match &mut self {
+            Self::Knob(knob) => knob.control_size = Some(size),
             Self::Slider(slider) => slider.control_size = Some(size),
             Self::Toggle(toggle) => toggle.control_size = Some(size),
             Self::Button(button) => button.control_size = Some(size),

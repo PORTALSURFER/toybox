@@ -15,14 +15,14 @@ fn node_layout(node: &Node) -> LayoutBox {
         Node::Wrap(wrap) => wrap.layout.to_layout_box(),
         Node::SwitchLayout(switch_layout) => switch_layout.layout.to_layout_box(),
         Node::TextBox(text_box) => text_box.layout,
-        Node::Spacer(spacer) => LayoutBox::fixed(spacer.size.width, spacer.size.height),
+        Node::Spacer(spacer) => spacer.layout,
         Node::Knob(knob) => knob.layout,
         Node::Slider(slider) => slider.layout,
         Node::Toggle(toggle) => toggle.layout,
         Node::Button(button) => button.layout,
         Node::Dropdown(dropdown) => dropdown.layout,
-        Node::Region(region) => LayoutBox::fixed(region.size.width, region.size.height),
-        Node::Indicator(indicator) => LayoutBox::fixed(indicator.size.width, indicator.size.height),
+        Node::Region(region) => region.layout,
+        Node::Indicator(indicator) => indicator.layout,
     }
 }
 

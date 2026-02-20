@@ -12,13 +12,7 @@
         };
         let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
 
-        let region = RegionSpec::new(
-            "plot",
-            Size {
-                width: 64,
-                height: 48,
-            },
-        )
+        let region = RegionSpec::new("plot").layout(LayoutBox::fixed(64, 48).max(64, 48))
         .draw_commands(vec![
             DrawCommand::FillRect {
                 rect: Rect {
@@ -98,13 +92,7 @@
             "root",
             panel(
                 "panel",
-                Node::Region(RegionSpec::new(
-                    "plot",
-                    Size {
-                        width: 64,
-                        height: 48,
-                    },
-                )),
+                Node::Region(RegionSpec::new("plot").layout(LayoutBox::fixed(64, 48).max(64, 48))),
             )
             .pad_all(0),
         ));
@@ -129,13 +117,7 @@
             weighted_slot(
                 panel(
                     "left-panel",
-                    Node::Region(RegionSpec::new(
-                        "left-region",
-                        Size {
-                            width: 100,
-                            height: 100,
-                        },
-                    )),
+                    Node::Region(RegionSpec::new("left-region").layout(LayoutBox::fixed(100, 100).max(100, 100))),
                 )
                 .pad_all(0)
                 .background(Color::rgb(15, 20, 25))
@@ -145,13 +127,7 @@
             weighted_slot(
                 panel(
                     "right-panel",
-                    Node::Region(RegionSpec::new(
-                        "right-region",
-                        Size {
-                            width: 100,
-                            height: 100,
-                        },
-                    )),
+                    Node::Region(RegionSpec::new("right-region").layout(LayoutBox::fixed(100, 100).max(100, 100))),
                 )
                 .pad_all(0)
                 .background(Color::rgb(30, 35, 40))

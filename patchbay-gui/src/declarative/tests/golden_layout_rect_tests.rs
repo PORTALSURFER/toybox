@@ -291,54 +291,27 @@ fn golden_nested_flex_rects_match_expected_for_multiple_root_sizes() {
 }
 
 #[test]
-fn golden_fixed_grid_rects_match_expected_cell_origins() {
+fn fixed_grid_tracks_are_rejected_by_validation() {
     let size = Size {
         width: 210,
         height: 126,
     };
     let spec = golden_fixed_grid_spec(size);
-    let result = golden_render_spec_for_size(&spec, size);
-    assert_eq!(
-        golden_panel_rect_by_key(&result, "g1"),
-        Rect {
-            origin: Point { x: 0, y: 0 },
-            size: Size {
-                width: 60,
-                height: 40,
-            },
-        }
-    );
-    assert_eq!(
-        golden_panel_rect_by_key(&result, "g2"),
-        Rect {
-            origin: Point { x: 70, y: 0 },
-            size: Size {
-                width: 140,
-                height: 40,
-            },
-        }
-    );
-    assert_eq!(
-        golden_panel_rect_by_key(&result, "g3"),
-        Rect {
-            origin: Point { x: 0, y: 46 },
-            size: Size {
-                width: 60,
-                height: 80,
-            },
-        }
-    );
-    assert_eq!(
-        golden_panel_rect_by_key(&result, "g4"),
-        Rect {
-            origin: Point { x: 70, y: 46 },
-            size: Size {
-                width: 140,
-                height: 80,
-            },
-        }
-    );
-    assert!(result.layout_diagnostics.is_empty());
+    let input = InputState {
+        window_size: size,
+        ..InputState::default()
+    };
+    let mut canvas = Canvas::new(size.width, size.height);
+    let mut layout = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+    let error = render_checked(&spec, &mut ui, Point { x: 0, y: 0 })
+        .expect_err("fixed grid tracks should be rejected");
+    assert!(matches!(
+        error,
+        DeclarativeError::InvalidFixedGridTrack { axis } if axis == "columns"
+    ));
 }
 
 #[test]

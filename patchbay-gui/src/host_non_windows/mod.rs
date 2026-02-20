@@ -45,12 +45,10 @@ mod tests {
         fn build_root_frame(_: &crate::InputState, _: &()) -> UiSpec {
             UiSpec::new(crate::declarative::RootFrameSpec::new(
                 "root",
-                crate::declarative::Node::Spacer(crate::declarative::SpacerSpec::new(
-                    crate::canvas::Size {
-                        width: 1,
-                        height: 1,
-                    },
-                )),
+                crate::declarative::Node::Spacer(
+                    crate::declarative::SpacerSpec::new()
+                        .layout(crate::declarative::LayoutBox::fixed(1, 1).max(1, 1)),
+                ),
             ))
         }
 

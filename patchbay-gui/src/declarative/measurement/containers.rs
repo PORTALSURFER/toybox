@@ -15,14 +15,33 @@ fn measure_node(node: &Node, tokens: &ThemeTokens) -> Size {
         Node::Wrap(wrap) => measure_wrap(wrap, tokens),
         Node::SwitchLayout(switch_layout) => measure_switch_layout(switch_layout, tokens),
         Node::TextBox(text_box) => measure_text_box(text_box, tokens),
-        Node::Spacer(spacer) => spacer.size,
+        Node::Spacer(spacer) => {
+            let measured = Size {
+                width: 1,
+                height: 1,
+            };
+            resolve_size(spacer.layout, measured, measured)
+        }
         Node::Knob(knob) => measure_knob(knob, tokens),
         Node::Slider(slider) => measure_slider(slider, tokens),
         Node::Toggle(toggle) => measure_toggle(toggle, tokens),
         Node::Button(button) => measure_button(button, tokens),
         Node::Dropdown(dropdown) => measure_dropdown(dropdown, tokens),
-        Node::Region(region) => region.size,
-        Node::Indicator(indicator) => indicator.size,
+        Node::Region(region) => {
+            let measured = Size {
+                width: 1,
+                height: 1,
+            };
+            resolve_size(region.layout, measured, measured)
+        }
+        Node::Indicator(indicator) => {
+            let indicator_edge = u32::try_from(tokens.spacing.sm.max(1)).unwrap_or(1);
+            let measured = Size {
+                width: indicator_edge,
+                height: indicator_edge,
+            };
+            resolve_size(indicator.layout, measured, measured)
+        }
     }
 }
 

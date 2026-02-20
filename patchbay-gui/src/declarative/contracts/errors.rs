@@ -111,6 +111,12 @@ pub enum DeclarativeError {
         /// Number of fill tracks in the slot layout.
         fill_count: usize,
     },
+    /// Grid tracks use disallowed fixed-pixel sizing.
+    #[error("grid `{axis}` tracks must not use fixed pixel sizing")]
+    InvalidFixedGridTrack {
+        /// Grid axis name.
+        axis: &'static str,
+    },
     /// Container layout uses disallowed absolute constraints.
     #[error(
         "container `{container_kind}` must use host-derived fill/auto layout only (no pixel/min/max constraints)"

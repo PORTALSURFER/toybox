@@ -93,13 +93,14 @@ fn validate_node(
         }
         Node::SwitchLayout(switch_layout) => validate_switch_layout_node(switch_layout, seen_keys),
         Node::TextBox(text_box) => validate_text_box_node(text_box, seen_keys),
-        Node::Spacer(_) | Node::Indicator(_) => Ok(()),
+        Node::Spacer(spacer) => validate_spacer_node(spacer),
         Node::Knob(knob) => validate_knob_node(knob, seen_keys),
         Node::Slider(slider) => validate_slider_node(slider, seen_keys),
         Node::Toggle(toggle) => validate_toggle_node(toggle, seen_keys),
         Node::Button(button) => validate_button_node(button, seen_keys),
         Node::Dropdown(dropdown) => validate_dropdown_node(dropdown, seen_keys),
         Node::Region(region) => validate_region_node(region, seen_keys),
+        Node::Indicator(indicator) => validate_indicator_node(indicator),
     }
 }
 
@@ -169,6 +170,7 @@ fn validate_grid_node(
     seen_keys: &mut std::collections::HashSet<String>,
 ) -> Result<(), DeclarativeError> {
     validate_container_layout("Grid", grid.layout.to_layout_box())?;
+    validate_no_fixed_grid_tracks(grid)?;
     if grid.template.columns.is_empty() {
         return Err(DeclarativeError::EmptyGridColumns);
     }
@@ -230,7 +232,8 @@ fn validate_knob_node(
     validate_unique_key(&knob.key, seen_keys)?;
     validate_value_range("Knob", &knob.key, knob.range)?;
     validate_layout_bounds("Knob", knob.layout)?;
-    validate_control_value("Knob", &knob.key, knob.value, knob.range)
+    validate_control_value("Knob", &knob.key, knob.value, knob.range)?;
+    validate_optional_control_size("Knob", &knob.key, knob.control_size)
 }
 
 /// Validate slider constraints.
@@ -286,7 +289,18 @@ fn validate_region_node(
     seen_keys: &mut std::collections::HashSet<String>,
 ) -> Result<(), DeclarativeError> {
     validate_non_empty_key(&region.key, "Region")?;
-    validate_unique_key(&region.key, seen_keys)
+    validate_unique_key(&region.key, seen_keys)?;
+    validate_layout_bounds("Region", region.layout)
+}
+
+/// Validate spacer constraints.
+fn validate_spacer_node(spacer: &SpacerSpec) -> Result<(), DeclarativeError> {
+    validate_layout_bounds("Spacer", spacer.layout)
+}
+
+/// Validate indicator constraints.
+fn validate_indicator_node(indicator: &IndicatorSpec) -> Result<(), DeclarativeError> {
+    validate_layout_bounds("Indicator", indicator.layout)
 }
 
 /// Validate an optional control size override when supplied.

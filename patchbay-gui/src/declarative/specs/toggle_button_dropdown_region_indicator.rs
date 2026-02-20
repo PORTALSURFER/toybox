@@ -175,20 +175,26 @@ impl DropdownSpec {
 pub struct RegionSpec {
     /// Stable widget key.
     pub key: String,
-    /// Region size.
-    pub size: Size,
+    /// Layout constraints.
+    pub layout: LayoutBox,
     /// Region-relative draw commands rendered before interaction handling.
     pub draw: Vec<DrawCommand>,
 }
 
 impl RegionSpec {
     /// Create an interactive region.
-    pub fn new(key: impl Into<String>, size: Size) -> Self {
+    pub fn new(key: impl Into<String>) -> Self {
         Self {
             key: key.into(),
-            size,
+            layout: LayoutBox::auto(),
             draw: Vec::new(),
         }
+    }
+
+    /// Override layout constraints.
+    pub fn layout(mut self, layout: LayoutBox) -> Self {
+        self.layout = layout;
+        self
     }
 
     /// Override region draw commands.
@@ -201,15 +207,24 @@ impl RegionSpec {
 /// Indicator specification.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IndicatorSpec {
-    /// Indicator size.
-    pub size: Size,
+    /// Layout constraints.
+    pub layout: LayoutBox,
     /// Active state.
     pub active: bool,
 }
 
 impl IndicatorSpec {
     /// Create an indicator.
-    pub const fn new(size: Size, active: bool) -> Self {
-        Self { size, active }
+    pub const fn new(active: bool) -> Self {
+        Self {
+            layout: LayoutBox::auto(),
+            active,
+        }
+    }
+
+    /// Override layout constraints.
+    pub const fn layout(mut self, layout: LayoutBox) -> Self {
+        self.layout = layout;
+        self
     }
 }

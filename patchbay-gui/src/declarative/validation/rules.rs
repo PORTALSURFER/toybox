@@ -19,7 +19,8 @@ fn validate_slot_tracks(grid: &GridSpec) -> Result<(), DeclarativeError> {
             TrackSize::Fill | TrackSize::Fr(_) => {
                 flexible_count = flexible_count.saturating_add(1)
             }
-            TrackSize::Auto | TrackSize::Px(_) => {}
+            TrackSize::Auto => {}
+            TrackSize::Px(_) => return Err(DeclarativeError::InvalidFixedGridTrack { axis: "slot" }),
         }
     }
     if total_percent > 100 {
@@ -27,6 +28,27 @@ fn validate_slot_tracks(grid: &GridSpec) -> Result<(), DeclarativeError> {
             total_percent,
             fill_count: flexible_count,
         });
+    }
+    Ok(())
+}
+
+/// Validate that grid templates do not use fixed-pixel tracks.
+fn validate_no_fixed_grid_tracks(grid: &GridSpec) -> Result<(), DeclarativeError> {
+    if grid
+        .template
+        .columns
+        .iter()
+        .any(|track| matches!(track, TrackSize::Px(_)))
+    {
+        return Err(DeclarativeError::InvalidFixedGridTrack { axis: "columns" });
+    }
+    if grid
+        .template
+        .rows
+        .iter()
+        .any(|track| matches!(track, TrackSize::Px(_)))
+    {
+        return Err(DeclarativeError::InvalidFixedGridTrack { axis: "rows" });
     }
     Ok(())
 }

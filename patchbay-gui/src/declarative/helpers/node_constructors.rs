@@ -15,7 +15,9 @@ pub fn textbox(text: impl Into<String>) -> Node {
 
 /// Create a fixed-size spacer node.
 pub fn spacer(size: Size) -> Node {
-    Node::Spacer(SpacerSpec::new(size))
+    Node::Spacer(
+        SpacerSpec::new().layout(LayoutBox::fixed(size.width, size.height).max(size.width, size.height)),
+    )
 }
 
 /// Create a knob control node.
@@ -57,7 +59,9 @@ pub fn dropdown(
 
 /// Create an interactive region node.
 pub fn region(key: impl Into<String>, size: Size) -> Node {
-    Node::Region(RegionSpec::new(key, size))
+    Node::Region(
+        RegionSpec::new(key).layout(LayoutBox::fixed(size.width, size.height).max(size.width, size.height)),
+    )
 }
 
 /// Create a structured surface node for custom graphics content.
@@ -67,11 +71,15 @@ pub fn surface(
     commands: Vec<SurfaceCommand>,
 ) -> Node {
     Node::Region(
-        RegionSpec::new(key, size).draw_commands(commands),
+        RegionSpec::new(key)
+            .layout(LayoutBox::fixed(size.width, size.height).max(size.width, size.height))
+            .draw_commands(commands),
     )
 }
 
 /// Create an indicator node.
 pub fn indicator(size: Size, active: bool) -> Node {
-    Node::Indicator(IndicatorSpec::new(size, active))
+    Node::Indicator(
+        IndicatorSpec::new(active).layout(LayoutBox::fixed(size.width, size.height).max(size.width, size.height)),
+    )
 }

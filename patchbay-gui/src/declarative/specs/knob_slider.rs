@@ -9,8 +9,15 @@ impl KnobSpec {
             key: key.into(),
             value,
             range,
+            control_size: None,
             layout: LayoutBox::auto(),
         }
+    }
+
+    /// Override control size.
+    pub fn control_size(mut self, size: Size) -> Self {
+        self.control_size = Some(size);
+        self
     }
 
     /// Override layout constraints.

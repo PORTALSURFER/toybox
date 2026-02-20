@@ -26,7 +26,9 @@ impl Node {
             Self::Toggle(toggle) => toggle.layout = layout,
             Self::Button(button) => button.layout = layout,
             Self::Dropdown(dropdown) => dropdown.layout = layout,
-            Self::Spacer(_) | Self::Region(_) | Self::Indicator(_) => {}
+            Self::Spacer(spacer) => spacer.layout = layout,
+            Self::Region(region) => region.layout = layout,
+            Self::Indicator(indicator) => indicator.layout = layout,
         }
         self
     }
@@ -87,7 +89,10 @@ impl Node {
             Self::Toggle(toggle) => toggle.layout = LayoutBox::fill(),
             Self::Button(button) => button.layout = LayoutBox::fill(),
             Self::Dropdown(dropdown) => dropdown.layout = LayoutBox::fill(),
-            Self::Slot(_) | Self::Spacer(_) | Self::Region(_) | Self::Indicator(_) => {}
+            Self::Spacer(spacer) => spacer.layout = LayoutBox::fill(),
+            Self::Region(region) => region.layout = LayoutBox::fill(),
+            Self::Indicator(indicator) => indicator.layout = LayoutBox::fill(),
+            Self::Slot(_) => {}
         }
         self
     }
@@ -114,7 +119,10 @@ impl Node {
             Self::Toggle(toggle) => toggle.layout = LayoutBox::auto().fill_width(),
             Self::Button(button) => button.layout = LayoutBox::auto().fill_width(),
             Self::Dropdown(dropdown) => dropdown.layout = LayoutBox::auto().fill_width(),
-            Self::Slot(_) | Self::Spacer(_) | Self::Region(_) | Self::Indicator(_) => {}
+            Self::Spacer(spacer) => spacer.layout = LayoutBox::auto().fill_width(),
+            Self::Region(region) => region.layout = LayoutBox::auto().fill_width(),
+            Self::Indicator(indicator) => indicator.layout = LayoutBox::auto().fill_width(),
+            Self::Slot(_) => {}
         }
         self
     }
@@ -145,7 +153,10 @@ impl Node {
             Self::Toggle(toggle) => toggle.layout = LayoutBox::auto().fill_height(),
             Self::Button(button) => button.layout = LayoutBox::auto().fill_height(),
             Self::Dropdown(dropdown) => dropdown.layout = LayoutBox::auto().fill_height(),
-            Self::Slot(_) | Self::Spacer(_) | Self::Region(_) | Self::Indicator(_) => {}
+            Self::Spacer(spacer) => spacer.layout = LayoutBox::auto().fill_height(),
+            Self::Region(region) => region.layout = LayoutBox::auto().fill_height(),
+            Self::Indicator(indicator) => indicator.layout = LayoutBox::auto().fill_height(),
+            Self::Slot(_) => {}
         }
         self
     }

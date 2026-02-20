@@ -40,21 +40,21 @@ fn rejects_root_key_collision_with_child() {
 #[test]
 fn measures_grid_from_template_and_children() {
     let grid = GridSpec::new(
-        GridTemplate::new(vec![TrackSize::Px(32), TrackSize::Fr(1)]),
+        GridTemplate::new(vec![TrackSize::Fr(1), TrackSize::Fr(1)]),
         vec![
-            Node::Spacer(SpacerSpec::new(Size {
-                width: 10,
-                height: 12,
-            })),
-            Node::Spacer(SpacerSpec::new(Size {
-                width: 20,
-                height: 14,
-            })),
+            Node::Spacer(
+                SpacerSpec::new()
+                    .layout(LayoutBox::fixed(10, 12).max(10, 12)),
+            ),
+            Node::Spacer(
+                SpacerSpec::new()
+                    .layout(LayoutBox::fixed(20, 14).max(20, 14)),
+            ),
         ],
     );
     let spec = UiSpec::new(RootFrameSpec::new("root", Node::Grid(grid)));
     let measured = measure_checked(&spec).expect("measurement should succeed");
-    assert!(measured.width >= 32);
+    assert!(measured.width >= 30);
     assert!(measured.height >= 14);
 }
 
