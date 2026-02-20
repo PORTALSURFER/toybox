@@ -137,6 +137,7 @@ fn node_layout_kind(node: &Node) -> LayoutNodeKind {
 /// Resolve optional container kind for node diagnostics.
 fn node_container_kind(node: &Node) -> Option<LayoutContainerKind> {
     Some(match node {
+        Node::Slot(_) => LayoutContainerKind::Slot,
         Node::Panel(_) => LayoutContainerKind::Panel,
         Node::PaddingBox(_) => LayoutContainerKind::PaddingBox,
         Node::AlignBox(_) => LayoutContainerKind::AlignBox,
@@ -200,7 +201,16 @@ fn render_node(node: &Node, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx<'_>
     }
 
     ui.with_clip(rect, |ui| match node {
-        Node::Slot(slot) => render_node(&slot.child, rect, ui, ctx),
+        Node::Slot(slot) => {
+            collect_container_debug_border_candidate(
+                ctx.debug_border_candidates,
+                ui,
+                rect,
+                ContainerKind::Slot,
+                ctx.depth,
+            );
+            render_node(&slot.child, rect, ui, ctx)
+        }
         Node::Panel(panel) => render_panel(panel, rect, ui, ctx),
         Node::PaddingBox(padding_box) => render_padding_box(padding_box, rect, ui, ctx),
         Node::AlignBox(align_box) => render_align_box(align_box, rect, ui, ctx),

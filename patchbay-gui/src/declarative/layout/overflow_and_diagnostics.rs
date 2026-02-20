@@ -113,6 +113,7 @@ fn record_layout_diagnostic(
 /// Convert internal debug container kind into public diagnostic kind.
 fn layout_container_kind(kind: ContainerKind) -> LayoutContainerKind {
     match kind {
+        ContainerKind::Slot => LayoutContainerKind::Slot,
         ContainerKind::RootFrame => LayoutContainerKind::RootFrame,
         ContainerKind::Panel => LayoutContainerKind::Panel,
         ContainerKind::PaddingBox => LayoutContainerKind::PaddingBox,

@@ -1,6 +1,8 @@
-/// Declarative container node kinds that can emit debug layout borders.
+/// Declarative node kinds that can emit debug layout borders.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ContainerKind {
+    /// Slot wrapper node.
+    Slot,
     /// Root frame wrapper that owns the full declarative content tree.
     RootFrame,
     /// Panel container.
@@ -32,7 +34,7 @@ enum ContainerKind {
 struct DebugBorderCandidate {
     /// Surface-space rectangle considered for debug border drawing.
     rect: Rect,
-    /// Container category used for border color resolution.
+    /// Node category used for border color resolution.
     kind: ContainerKind,
     /// Nesting depth in the declarative container tree.
     depth: usize,
@@ -45,7 +47,8 @@ fn container_debug_border_color(kind: ContainerKind, depth: usize) -> Option<Col
         let _ = depth;
         match kind {
             ContainerKind::RootFrame => None,
-            ContainerKind::Panel
+            ContainerKind::Slot
+            | ContainerKind::Panel
             | ContainerKind::PaddingBox
             | ContainerKind::AlignBox
             | ContainerKind::AspectBox
@@ -73,9 +76,11 @@ fn collect_container_debug_border_candidate(
     kind: ContainerKind,
     depth: usize,
 ) {
-    // Skip root-level wrappers so debug outlines focus on meaningful inner
-    // layout partitions instead of the full-window container.
-    if !should_draw_container_debug_border(kind, depth, rect.contains(ui.input().pointer_pos)) {
+    if !should_collect_container_debug_border_candidate(
+        kind,
+        depth,
+        rect.contains(ui.input().pointer_pos),
+    ) {
         return;
     }
     if container_debug_border_color(kind, depth).is_none() {

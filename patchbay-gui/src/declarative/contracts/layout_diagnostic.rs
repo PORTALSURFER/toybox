@@ -1,6 +1,8 @@
 /// Declarative container category associated with a layout diagnostic.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LayoutContainerKind {
+    /// Slot wrapper node.
+    Slot,
     /// Root frame wrapper that hosts the full declarative content tree.
     RootFrame,
     /// Panel container.

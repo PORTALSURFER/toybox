@@ -12,6 +12,7 @@ use crate::ui::{Layout, Theme, UiState};
         );
         let expected = Some(Color::rgb(245, 98, 98));
         for kind in [
+            ContainerKind::Slot,
             ContainerKind::Panel,
             ContainerKind::PaddingBox,
             ContainerKind::AlignBox,
@@ -40,24 +41,34 @@ use crate::ui::{Layout, Theme, UiState};
 
     #[test]
     fn debug_border_is_not_drawn_for_root_or_top_level_containers() {
-        assert!(!should_draw_container_debug_border(
+        assert!(!should_collect_container_debug_border_candidate_with_mode(
             ContainerKind::RootFrame,
             0,
-            true
+            true,
+            false
         ));
-        assert!(!should_draw_container_debug_border(
+        assert!(!should_collect_container_debug_border_candidate_with_mode(
             ContainerKind::Flex,
             1,
-            true
+            true,
+            false
         ));
-        assert!(should_draw_container_debug_border(
+        assert!(should_collect_container_debug_border_candidate_with_mode(
             ContainerKind::Panel,
             2,
-            true
+            true,
+            false
         ));
-        assert!(!should_draw_container_debug_border(
+        assert!(should_collect_container_debug_border_candidate_with_mode(
+            ContainerKind::Slot,
+            2,
+            true,
+            false
+        ));
+        assert!(!should_collect_container_debug_border_candidate_with_mode(
             ContainerKind::Panel,
             2,
+            false,
             false
         ));
     }
@@ -200,6 +211,23 @@ use crate::ui::{Layout, Theme, UiState};
             "off".to_string()
         )));
         assert!(!should_draw_all_layout_debug_borders_from_env(Ok("0".to_string())));
+    }
+
+    #[cfg(feature = "layout-debug-borders")]
+    #[test]
+    fn debug_border_all_mode_collects_non_hovered_slot_candidates() {
+        assert!(!should_collect_container_debug_border_candidate_with_mode(
+            ContainerKind::Slot,
+            3,
+            false,
+            false
+        ));
+        assert!(should_collect_container_debug_border_candidate_with_mode(
+            ContainerKind::Slot,
+            3,
+            false,
+            true
+        ));
     }
 
     #[test]

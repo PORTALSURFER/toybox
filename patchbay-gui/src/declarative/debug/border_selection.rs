@@ -32,13 +32,35 @@ fn candidate_area(candidate: DebugBorderCandidate) -> u64 {
     u64::from(candidate.rect.size.width) * u64::from(candidate.rect.size.height)
 }
 
-/// Return whether a hovered container should render the debug layout border.
-fn should_draw_container_debug_border(
+/// Return whether a candidate should be collected for the current debug mode.
+fn should_collect_container_debug_border_candidate(
     kind: ContainerKind,
     depth: usize,
     pointer_inside: bool,
 ) -> bool {
-    kind != ContainerKind::RootFrame && depth > 1 && pointer_inside
+    #[cfg(feature = "layout-debug-borders")]
+    {
+        return should_collect_container_debug_border_candidate_with_mode(
+            kind,
+            depth,
+            pointer_inside,
+            should_draw_all_layout_debug_borders(),
+        );
+    }
+    #[cfg(not(feature = "layout-debug-borders"))]
+    {
+        should_collect_container_debug_border_candidate_with_mode(kind, depth, pointer_inside, false)
+    }
+}
+
+/// Return whether a candidate should be collected under one explicit mode.
+fn should_collect_container_debug_border_candidate_with_mode(
+    kind: ContainerKind,
+    depth: usize,
+    pointer_inside: bool,
+    draw_all: bool,
+) -> bool {
+    kind != ContainerKind::RootFrame && depth > 1 && (draw_all || pointer_inside)
 }
 
 #[cfg(feature = "layout-debug-borders")]
