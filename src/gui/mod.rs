@@ -8,6 +8,9 @@ pub use patchbay_gui::{
     Canvas, Color, InputState, MainPalette, Point, Rect, RenderedFrame, Size, render_spec_to_frame,
 };
 
+/// Reusable waveform view rendering helpers for declarative surfaces.
+pub mod waveform;
+
 /// Strict declarative GUI types and rendering helpers.
 pub mod declarative {
     pub use patchbay_gui::{
