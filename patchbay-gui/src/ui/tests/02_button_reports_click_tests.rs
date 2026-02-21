@@ -19,6 +19,25 @@
     }
 
     #[test]
+    fn button_ignores_pointer_when_outside_window_bounds() {
+        let mut canvas = Canvas::new(200, 200);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState {
+            pointer_pos: Point { x: 20, y: 20 },
+            pointer_in_window: false,
+            mouse_pressed: true,
+            ..InputState::default()
+        };
+
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let response = ui.button(WidgetId::new(41), "OK", 40, 16);
+        assert!(!response.hovered);
+        assert!(!response.clicked);
+    }
+
+    #[test]
     fn dropdown_selects_option() {
         let mut canvas = Canvas::new(200, 200);
         let mut layout = Layout::default();

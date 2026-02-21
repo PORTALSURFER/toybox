@@ -60,24 +60,26 @@ where
         let mut mapped_input = self.input.clone();
         mapped_input.window_size = initial_plan.layout_size;
         let drag_active = self.input.mouse_down || self.input.mouse_secondary_down;
-        mapped_input.pointer_pos = if drag_active {
-            initial_plan.transform.surface_to_design(self.input.pointer_pos)
-        } else {
-            initial_plan
-                .transform
-                .surface_to_design_clamped(self.input.pointer_pos)
-        };
+        mapped_input.pointer_in_window = self.input.pointer_in_window || drag_active;
+        mapped_input.pointer_pos = map_surface_pointer_to_design(
+            &initial_plan.transform,
+            self.input.pointer_pos,
+            self.input.pointer_in_window,
+            drag_active,
+        );
         let spec = (self.build_spec)(&mapped_input, &self.state);
         self.active_text_edit = spec_has_active_text_edit(&spec);
         self.active_text_edit_shared
             .store(self.active_text_edit, Ordering::Release);
         let plan = plan_root_render(&spec, self.input.window_size);
         mapped_input.window_size = plan.layout_size;
-        mapped_input.pointer_pos = if drag_active {
-            plan.transform.surface_to_design(self.input.pointer_pos)
-        } else {
-            plan.transform.surface_to_design_clamped(self.input.pointer_pos)
-        };
+        mapped_input.pointer_in_window = self.input.pointer_in_window || drag_active;
+        mapped_input.pointer_pos = map_surface_pointer_to_design(
+            &plan.transform,
+            self.input.pointer_pos,
+            self.input.pointer_in_window,
+            drag_active,
+        );
         if self.canvas.size() != plan.layout_size {
             self.canvas
                 .resize(plan.layout_size.width, plan.layout_size.height);
@@ -214,6 +216,21 @@ where
         self.input.key_pressed = None;
         self.input.dropped_files.clear();
     }
+}
+
+fn map_surface_pointer_to_design(
+    transform: &RootTransform,
+    surface_pointer: Point,
+    pointer_in_window: bool,
+    drag_active: bool,
+) -> Point {
+    if drag_active {
+        return transform.surface_to_design(surface_pointer);
+    }
+    if pointer_in_window {
+        return transform.surface_to_design_clamped(surface_pointer);
+    }
+    transform.surface_to_design(surface_pointer)
 }
 
 /// Resolve a pending host resize request from measured root-frame output.

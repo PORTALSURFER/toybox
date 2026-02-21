@@ -13,12 +13,17 @@ use crate::renderer::RendererDevice;
 use crate::win32::WindowHandle;
 
 /// Input snapshot delivered to UI widgets for a single frame.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct InputState {
     /// Current logical window size in pixels.
     pub window_size: Size,
     /// Current pointer position in pixels.
     pub pointer_pos: crate::canvas::Point,
+    /// Whether the pointer is currently inside the client window.
+    ///
+    /// This remains `true` while dragging with mouse capture so controls can
+    /// continue receiving drag updates after leaving window bounds.
+    pub pointer_in_window: bool,
     /// Whether the primary mouse button is held.
     pub mouse_down: bool,
     /// Whether the primary mouse button was pressed this frame.
@@ -47,6 +52,28 @@ pub struct InputState {
     pub key_pressed: Option<char>,
     /// Files dropped onto the window this frame.
     pub dropped_files: Vec<PathBuf>,
+}
+
+impl Default for InputState {
+    fn default() -> Self {
+        Self {
+            window_size: Size::default(),
+            pointer_pos: crate::canvas::Point::default(),
+            pointer_in_window: true,
+            mouse_down: false,
+            mouse_pressed: false,
+            mouse_released: false,
+            mouse_double_clicked: false,
+            mouse_secondary_down: false,
+            mouse_secondary_pressed: false,
+            mouse_secondary_released: false,
+            shift_down: false,
+            alt_down: false,
+            wheel_delta: 0.0,
+            key_pressed: None,
+            dropped_files: Vec::new(),
+        }
+    }
 }
 
 /// Keyboard modifier flags used for shortcut matching.

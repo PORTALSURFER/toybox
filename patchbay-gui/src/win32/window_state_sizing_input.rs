@@ -65,33 +65,31 @@ where
     fn sync_pointer_pos(&mut self) {
         let mut point = windows::Win32::Foundation::POINT::default();
         if unsafe { GetCursorPos(&mut point) }.is_err() {
+            self.input.pointer_in_window = false;
             return;
         }
         if !unsafe { ScreenToClient(self.hwnd, &mut point).as_bool() } {
+            self.input.pointer_in_window = false;
             return;
         }
 
-        if self.input.mouse_down || self.input.mouse_secondary_down {
-            self.input.pointer_pos = Point {
-                x: point.x,
-                y: point.y,
-            };
-            return;
-        }
+        let pointer = Point {
+            x: point.x,
+            y: point.y,
+        };
+        let drag_active = self.input.mouse_down || self.input.mouse_secondary_down;
+        let (width, height) = self
+            .current_client_size()
+            .unwrap_or((self.input.window_size.width, self.input.window_size.height));
+        let width_i32 = (width as u64).min(i32::MAX as u64) as i32;
+        let height_i32 = (height as u64).min(i32::MAX as u64) as i32;
+        let inside_window = pointer.x >= 0
+            && pointer.y >= 0
+            && pointer.x < width_i32
+            && pointer.y < height_i32;
 
-        if let Some((width, height)) = self.current_client_size() {
-            let clamped_x = point.x.clamp(0, width.saturating_sub(1) as i32);
-            let clamped_y = point.y.clamp(0, height.saturating_sub(1) as i32);
-            self.input.pointer_pos = Point {
-                x: clamped_x,
-                y: clamped_y,
-            };
-        } else {
-            self.input.pointer_pos = Point {
-                x: point.x,
-                y: point.y,
-            };
-        }
+        self.input.pointer_pos = pointer;
+        self.input.pointer_in_window = inside_window || drag_active;
     }
 
     fn sync_mouse_buttons(&mut self) {

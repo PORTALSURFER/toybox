@@ -100,6 +100,9 @@ impl<'a> Ui<'a> {
     /// Return true when the pointer lies inside the currently visible portion
     /// of `rect`.
     fn pointer_inside_clipped_rect(&self, rect: Rect) -> bool {
+        if !self.input.pointer_in_window {
+            return false;
+        }
         self.clipped_rect(rect)
             .map(|clipped| clipped.contains(self.input.pointer_pos))
             .unwrap_or(false)
