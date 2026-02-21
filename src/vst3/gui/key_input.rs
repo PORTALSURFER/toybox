@@ -9,19 +9,38 @@ pub fn vst3_key_down_to_input_char(key: u16, key_code: i16) -> Option<char> {
         KEY_RIGHT, KEY_SPACE, KEY_TAB,
     };
 
-    let key_code = key_code as u32;
-    match key_code {
-        KEY_BACK => return Some('\u{8}'),
-        KEY_DELETE => return Some('\u{7f}'),
-        KEY_ENTER | KEY_RETURN => return Some('\r'),
-        KEY_ESCAPE => return Some('\u{1b}'),
-        KEY_TAB => return Some('\t'),
-        KEY_SPACE => return Some(' '),
-        KEY_LEFT => return Some('\u{1c}'),
-        KEY_RIGHT => return Some('\u{1d}'),
-        KEY_HOME => return Some('\u{1e}'),
-        KEY_END => return Some('\u{1f}'),
-        _ => {}
+    // Virtual key constants differ between generated targets (`u32` vs `i32`).
+    // Compare through a neutral integer type so this code stays portable.
+    let key_code = i64::from(key_code);
+    if key_code == KEY_BACK as i64 {
+        return Some('\u{8}');
+    }
+    if key_code == KEY_DELETE as i64 {
+        return Some('\u{7f}');
+    }
+    if key_code == KEY_ENTER as i64 || key_code == KEY_RETURN as i64 {
+        return Some('\r');
+    }
+    if key_code == KEY_ESCAPE as i64 {
+        return Some('\u{1b}');
+    }
+    if key_code == KEY_TAB as i64 {
+        return Some('\t');
+    }
+    if key_code == KEY_SPACE as i64 {
+        return Some(' ');
+    }
+    if key_code == KEY_LEFT as i64 {
+        return Some('\u{1c}');
+    }
+    if key_code == KEY_RIGHT as i64 {
+        return Some('\u{1d}');
+    }
+    if key_code == KEY_HOME as i64 {
+        return Some('\u{1e}');
+    }
+    if key_code == KEY_END as i64 {
+        return Some('\u{1f}');
     }
 
     let code = key as u32;
@@ -30,7 +49,7 @@ pub fn vst3_key_down_to_input_char(key: u16, key_code: i16) -> Option<char> {
     }
 
     match key_code {
-        value @ 0x21..=0x7e => char::from_u32(value),
+        value @ 0x21..=0x7e => char::from_u32(value as u32),
         _ => None,
     }
 }
