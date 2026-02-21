@@ -35,6 +35,7 @@ where
     recent_injected_char: Option<(char, Instant)>,
     last_mouse_down: bool,
     last_mouse_secondary_down: bool,
+    mouse_leave_tracking_armed: bool,
     debug_input: bool,
     frame_counter: u64,
 }

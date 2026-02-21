@@ -2,7 +2,7 @@
 
 use crate::canvas::{Canvas, Color, Point, Size};
 use crate::declarative::{
-    LayoutEngineState, UiAction, UiInvalidationScope, UiSpec, plan_root_render,
+    LayoutEngineState, RootTransform, UiAction, UiInvalidationScope, UiSpec, plan_root_render,
     render_checked_with_engine,
 };
 #[cfg(feature = "frame-capture")]
@@ -32,20 +32,22 @@ use windows::Win32::System::LibraryLoader::{
     GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GetModuleHandleExW, GetModuleHandleW,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, ReleaseCapture, SetCapture, SetFocus, VK_BACK, VK_CONTROL, VK_DELETE, VK_END,
-    VK_ESCAPE, VK_HOME, VK_LBUTTON, VK_LEFT, VK_MENU, VK_RBUTTON, VK_RETURN, VK_RIGHT, VK_SHIFT,
-    VK_SPACE, VK_TAB,
+    GetAsyncKeyState, ReleaseCapture, SetCapture, SetFocus, TME_LEAVE, TRACKMOUSEEVENT,
+    TrackMouseEvent, VK_BACK, VK_CONTROL, VK_DELETE, VK_END, VK_ESCAPE, VK_HOME, VK_LBUTTON,
+    VK_LEFT, VK_MENU, VK_RBUTTON, VK_RETURN, VK_RIGHT, VK_SHIFT, VK_SPACE, VK_TAB,
 };
 use windows::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDROP};
+#[cfg(feature = "frame-capture")]
+use windows::Win32::UI::WindowsAndMessaging::SendMessageW;
 use windows::Win32::UI::WindowsAndMessaging::{
     CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, CreateWindowExW, DLGC_WANTALLKEYS,
     DLGC_WANTCHARS, DefWindowProcW, DestroyWindow, GWLP_USERDATA, GetClientRect, GetCursorPos,
     GetParent, HMENU, HTCLIENT, LoadCursorW, MA_ACTIVATE, PostMessageW, RegisterClassW, SW_HIDE,
-    SW_SHOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER, SendMessageW, SetTimer, SetWindowLongPtrW,
-    SetWindowPos, ShowWindow, WM_CHAR, WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND, WM_GETDLGCODE,
-    WM_KEYDOWN, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE,
-    WM_MOUSEWHEEL, WM_NCDESTROY, WM_NCHITTEST, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE,
-    WM_TIMER, WM_USER, WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
+    SW_SHOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER, SetTimer, SetWindowLongPtrW, SetWindowPos,
+    ShowWindow, WM_CHAR, WM_DESTROY, WM_DROPFILES, WM_ERASEBKGND, WM_GETDLGCODE, WM_KEYDOWN,
+    WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_MOUSEWHEEL,
+    WM_NCDESTROY, WM_NCHITTEST, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WM_TIMER, WM_USER,
+    WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
 };
 use windows::core::PCWSTR;
 
@@ -57,6 +59,7 @@ const PATCHBAY_MSG_INJECTED_CHAR: u32 = WM_USER + 0x221;
 #[cfg(feature = "frame-capture")]
 const PATCHBAY_MSG_CAPTURE_FRAME: u32 = WM_USER + 0x222;
 const DEDUPE_CHAR_WINDOW_MS: u128 = 32;
+const WM_MOUSELEAVE: u32 = 0x02A3;
 
 include!("window_handle_types.rs");
 include!("window_state_core.rs");

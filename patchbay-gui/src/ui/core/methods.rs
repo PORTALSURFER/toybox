@@ -108,6 +108,15 @@ impl<'a> Ui<'a> {
             .unwrap_or(false)
     }
 
+    /// Return true when the pointer lies inside `rect`.
+    ///
+    /// Unlike `pointer_inside_clipped_rect`, this does not apply clip-stack
+    /// intersection and is intended for overlay surfaces such as open dropdown
+    /// menus that intentionally render outside control clip bounds.
+    fn pointer_inside_rect(&self, rect: Rect) -> bool {
+        self.input.pointer_in_window && rect.contains(self.input.pointer_pos)
+    }
+
     /// Run a closure with an additional rectangular clip constraint.
     pub(crate) fn with_clip<F>(&mut self, rect: Rect, mut f: F)
     where

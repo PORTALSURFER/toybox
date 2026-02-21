@@ -244,6 +244,65 @@ fn dropdown_clamped_menu_allows_wheel_scroll() {
 }
 
 #[test]
+fn dropdown_menu_ignores_pointer_hits_outside_window() {
+    let mut canvas = Canvas::new(120, 70);
+    let mut layout = Layout {
+        cursor: Point { x: 16, y: 8 },
+        ..Layout::default()
+    };
+    let layout_origin = layout.cursor;
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let options = ["0", "1", "2", "3", "4", "5"];
+    let mut selected = 0;
+    let id = WidgetId::new(221);
+
+    let open_input = InputState {
+        pointer_pos: Point { x: 20, y: 30 },
+        mouse_pressed: true,
+        ..InputState::default()
+    };
+    {
+        let mut ui = Ui::new(&mut canvas, &open_input, &mut ui_state, &mut layout, &theme);
+        let response = ui.dropdown(id, "Mode", &options, &mut selected, 80, 16);
+        assert!(response.open);
+    }
+
+    layout.cursor = layout_origin;
+    let outside_window_input = InputState {
+        pointer_pos: Point { x: 20, y: 50 },
+        pointer_in_window: false,
+        wheel_delta: -1.0,
+        ..InputState::default()
+    };
+    {
+        let mut ui = Ui::new(
+            &mut canvas,
+            &outside_window_input,
+            &mut ui_state,
+            &mut layout,
+            &theme,
+        );
+        ui.reset_input_consumption();
+        let response = ui.dropdown(id, "Mode", &options, &mut selected, 80, 16);
+        assert!(response.open);
+        assert_eq!(
+            ui.state.open_dropdown_scroll_px, 0,
+            "wheel input outside the plugin window must not scroll the open menu"
+        );
+        let overlay = ui
+            .state
+            .overlays
+            .last()
+            .expect("dropdown overlay should remain visible");
+        assert_eq!(
+            overlay.hovered, None,
+            "outside-window pointer must not mark any dropdown row as hovered"
+        );
+    }
+}
+
+#[test]
 fn dropdown_overlay_text_scrolls_with_option_rows_in_vector_mode() {
     let mut canvas = Canvas::new(120, 69);
     let mut layout = Layout {

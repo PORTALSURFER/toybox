@@ -46,6 +46,7 @@ where
     ) -> Option<LRESULT> {
         match message {
             WM_MOUSEMOVE => {
+                self.arm_mouse_leave_tracking();
                 self.input.pointer_pos = Point {
                     x: (lparam.0 & 0xFFFF) as i16 as i32,
                     y: ((lparam.0 >> 16) & 0xFFFF) as i16 as i32,
@@ -53,6 +54,7 @@ where
                 self.render_frame();
                 Some(LRESULT(0))
             }
+            WM_MOUSELEAVE => self.handle_mouse_leave(),
             WM_LBUTTONDOWN => self.handle_primary_button_down(false),
             WM_LBUTTONDBLCLK => self.handle_primary_button_down(true),
             WM_LBUTTONUP => self.handle_primary_button_up(),
@@ -66,6 +68,32 @@ where
             }
             _ => None,
         }
+    }
+
+    /// Register one-shot leave tracking so hover is cleared when the pointer
+    /// exits the plugin client area.
+    fn arm_mouse_leave_tracking(&mut self) {
+        if self.mouse_leave_tracking_armed {
+            return;
+        }
+        let mut tracking = TRACKMOUSEEVENT {
+            cbSize: std::mem::size_of::<TRACKMOUSEEVENT>() as u32,
+            dwFlags: TME_LEAVE,
+            hwndTrack: self.hwnd,
+            dwHoverTime: 0,
+        };
+        let ok = unsafe { TrackMouseEvent(&mut tracking).is_ok() };
+        if ok {
+            self.mouse_leave_tracking_armed = true;
+        }
+    }
+
+    /// Drop pointer hover state immediately after Win32 reports cursor leave.
+    fn handle_mouse_leave(&mut self) -> Option<LRESULT> {
+        self.mouse_leave_tracking_armed = false;
+        self.input.pointer_in_window = false;
+        self.render_frame();
+        Some(LRESULT(0))
     }
 
     fn handle_input_messages(

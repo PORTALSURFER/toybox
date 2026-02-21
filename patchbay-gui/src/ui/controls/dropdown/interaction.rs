@@ -38,7 +38,7 @@ impl<'a> Ui<'a> {
             options.len(),
             self.state.open_dropdown_scroll_px,
         );
-        let menu_hovered = geometry.menu_rect.contains(self.input.pointer_pos);
+        let menu_hovered = self.pointer_inside_rect(geometry.menu_rect);
         let scroll_px = self.apply_dropdown_scroll(geometry, menu_hovered);
         if scroll_px != geometry.scroll_px {
             geometry = self.resolve_dropdown_menu_geometry(layout, options.len(), scroll_px);
@@ -69,7 +69,7 @@ impl<'a> Ui<'a> {
         let mut hovered_index = None;
         for index in 0..geometry.option_count {
             let option_rect = self.dropdown_option_rect(geometry, index, geometry.scroll_px);
-            if option_rect.contains(self.input.pointer_pos) {
+            if self.pointer_inside_rect(option_rect) {
                 hovered_index = Some(index);
             }
         }

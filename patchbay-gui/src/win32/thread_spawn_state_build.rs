@@ -142,6 +142,7 @@ where
         recent_injected_char: None,
         last_mouse_down: false,
         last_mouse_secondary_down: false,
+        mouse_leave_tracking_armed: false,
         debug_input,
         frame_counter: 0,
     }

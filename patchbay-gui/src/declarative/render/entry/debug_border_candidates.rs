@@ -79,7 +79,7 @@ fn collect_container_debug_border_candidate(
     if !should_collect_container_debug_border_candidate(
         kind,
         depth,
-        rect.contains(ui.input().pointer_pos),
+        ui.input().pointer_in_window && rect.contains(ui.input().pointer_pos),
     ) {
         return;
     }
