@@ -100,14 +100,11 @@ where
         let shift = unsafe { GetAsyncKeyState(VK_SHIFT.0 as i32) } < 0;
         let alt = unsafe { GetAsyncKeyState(VK_MENU.0 as i32) } < 0;
 
-        if primary && !self.last_mouse_down {
-            self.input.mouse_pressed = true;
-        }
+        // Do not synthesize press edges from global key state. Client-area
+        // button-down messages provide precise intent; global polling can
+        // report presses used for window resize drags and trigger controls.
         if !primary && self.last_mouse_down {
             self.input.mouse_released = true;
-        }
-        if secondary && !self.last_mouse_secondary_down {
-            self.input.mouse_secondary_pressed = true;
         }
         if !secondary && self.last_mouse_secondary_down {
             self.input.mouse_secondary_released = true;
