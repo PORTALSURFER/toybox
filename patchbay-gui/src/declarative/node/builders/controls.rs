@@ -119,4 +119,44 @@ impl Node {
         }
         self
     }
+
+    /// Override curve-editor model for curve-editor nodes.
+    ///
+    /// Non-curve-editor node kinds are returned unchanged.
+    pub fn curve_model(mut self, model: CurveModel) -> Self {
+        if let Self::CurveEditor(curve_editor) = &mut self {
+            curve_editor.model = model;
+        }
+        self
+    }
+
+    /// Override curve-editor style payload for curve-editor nodes.
+    ///
+    /// Non-curve-editor node kinds are returned unchanged.
+    pub fn curve_style(mut self, style: CurveEditorStyle) -> Self {
+        if let Self::CurveEditor(curve_editor) = &mut self {
+            curve_editor.style = style;
+        }
+        self
+    }
+
+    /// Override curve-editor interaction settings for curve-editor nodes.
+    ///
+    /// Non-curve-editor node kinds are returned unchanged.
+    pub fn curve_interaction(mut self, interaction: CurveInteractionOptions) -> Self {
+        if let Self::CurveEditor(curve_editor) = &mut self {
+            curve_editor.interaction = interaction;
+        }
+        self
+    }
+
+    /// Override curve-editor optional playhead position for curve-editor nodes.
+    ///
+    /// Non-curve-editor node kinds are returned unchanged.
+    pub fn curve_playhead_x(mut self, playhead_x: Option<f32>) -> Self {
+        if let Self::CurveEditor(curve_editor) = &mut self {
+            curve_editor.playhead_x = playhead_x;
+        }
+        self
+    }
 }

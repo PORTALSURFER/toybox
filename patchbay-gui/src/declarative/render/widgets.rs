@@ -171,6 +171,30 @@ fn render_indicator(indicator: &IndicatorSpec, rect: Rect, ui: &mut Ui<'_>) {
     ui.indicator(rect, indicator.active);
 }
 
+/// Render a curve-editor node and emit model change actions.
+fn render_curve_editor(
+    curve_editor: &CurveEditorSpec,
+    rect: Rect,
+    ui: &mut Ui<'_>,
+    actions: &mut Vec<UiAction>,
+) {
+    let mut model = curve_editor.model.clone();
+    let request = crate::ui::CurveEditorRectRenderRequest::new(
+        WidgetId::from_label(&curve_editor.key),
+        rect,
+        curve_editor.style,
+        curve_editor.interaction,
+        curve_editor.playhead_x,
+    );
+    let response = ui.curve_editor_in_rect(&mut model, request);
+    if response.changed {
+        actions.push(UiAction::CurveEditorChanged {
+            key: curve_editor.key.clone(),
+            model,
+        });
+    }
+}
+
 #[cfg(test)]
 mod dropdown_label_tests {
     use super::resolve_dropdown_option_labels;

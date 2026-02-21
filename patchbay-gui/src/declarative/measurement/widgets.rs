@@ -51,3 +51,12 @@ fn measure_dropdown(dropdown: &DropdownSpec, tokens: &ThemeTokens) -> Size {
     });
     resolve_size(dropdown.layout, measured, measured)
 }
+
+/// Measure a curve-editor node.
+fn measure_curve_editor(curve_editor: &CurveEditorSpec, _tokens: &ThemeTokens) -> Size {
+    let measured = Size {
+        width: 1,
+        height: 1,
+    };
+    resolve_size(curve_editor.layout, measured, measured)
+}

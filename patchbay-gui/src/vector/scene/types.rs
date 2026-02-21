@@ -7,6 +7,10 @@ use vello::peniko::FontData;
 
 use super::font_loading::load_default_font;
 use super::knob_rendering::draw_knob;
+use super::shapes_rendering::{
+    draw_circle_fill, draw_circle_stroke, draw_line_stroke, draw_polyline_stroke, draw_rect_fill,
+    draw_rect_stroke,
+};
 
 /// Vector command stream emitted by the UI layer.
 #[derive(Clone, Debug)]
@@ -43,6 +47,18 @@ pub(crate) enum VectorCommand {
     },
     /// Draw a knob primitive with anti-aliased vector geometry.
     Knob(KnobVisual),
+    /// Draw a filled rectangle.
+    RectFill(RectVisual),
+    /// Draw a stroked rectangle.
+    RectStroke(RectStrokeVisual),
+    /// Draw a stroked line segment.
+    Line(LineVisual),
+    /// Draw a stroked polyline path.
+    Polyline(PolylineVisual),
+    /// Draw a filled circle.
+    CircleFill(CircleVisual),
+    /// Draw a stroked circle.
+    CircleStroke(CircleStrokeVisual),
 }
 
 /// Knob visual parameters emitted by [`crate::ui::Ui`].
@@ -68,6 +84,74 @@ pub(crate) struct KnobVisual {
     pub outline: Color,
     /// Indicator color.
     pub indicator: Color,
+}
+
+/// Filled rectangle payload emitted by [`crate::ui::Ui`].
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct RectVisual {
+    /// Rectangle bounds in canvas-space pixels.
+    pub rect: Rect,
+    /// Fill color.
+    pub color: Color,
+}
+
+/// Stroked rectangle payload emitted by [`crate::ui::Ui`].
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct RectStrokeVisual {
+    /// Rectangle bounds in canvas-space pixels.
+    pub rect: Rect,
+    /// Stroke thickness in pixels.
+    pub thickness: f32,
+    /// Stroke color.
+    pub color: Color,
+}
+
+/// Stroked line payload emitted by [`crate::ui::Ui`].
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct LineVisual {
+    /// Start point in canvas-space pixels.
+    pub start: Point,
+    /// End point in canvas-space pixels.
+    pub end: Point,
+    /// Stroke thickness in pixels.
+    pub thickness: f32,
+    /// Stroke color.
+    pub color: Color,
+}
+
+/// Stroked polyline payload emitted by [`crate::ui::Ui`].
+#[derive(Clone, Debug)]
+pub(crate) struct PolylineVisual {
+    /// Polyline points in canvas-space pixels.
+    pub points: Vec<Point>,
+    /// Stroke thickness in pixels.
+    pub thickness: f32,
+    /// Stroke color.
+    pub color: Color,
+}
+
+/// Filled circle payload emitted by [`crate::ui::Ui`].
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct CircleVisual {
+    /// Circle center in canvas-space pixels.
+    pub center: Point,
+    /// Radius in pixels.
+    pub radius: f32,
+    /// Fill color.
+    pub color: Color,
+}
+
+/// Stroked circle payload emitted by [`crate::ui::Ui`].
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct CircleStrokeVisual {
+    /// Circle center in canvas-space pixels.
+    pub center: Point,
+    /// Radius in pixels.
+    pub radius: f32,
+    /// Stroke thickness in pixels.
+    pub thickness: f32,
+    /// Stroke color.
+    pub color: Color,
 }
 
 /// Loaded font payload used for vector text rendering.
@@ -149,6 +233,16 @@ impl VectorScenePainter {
                     transform,
                 ),
                 VectorCommand::Knob(knob) => draw_knob(scene, *knob, transform),
+                VectorCommand::RectFill(rect) => draw_rect_fill(scene, *rect, transform),
+                VectorCommand::RectStroke(rect) => draw_rect_stroke(scene, *rect, transform),
+                VectorCommand::Line(line) => draw_line_stroke(scene, *line, transform),
+                VectorCommand::Polyline(polyline) => {
+                    draw_polyline_stroke(scene, polyline, transform)
+                }
+                VectorCommand::CircleFill(circle) => draw_circle_fill(scene, *circle, transform),
+                VectorCommand::CircleStroke(circle) => {
+                    draw_circle_stroke(scene, *circle, transform)
+                }
             }
         }
     }

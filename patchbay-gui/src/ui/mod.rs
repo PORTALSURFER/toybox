@@ -4,7 +4,10 @@ use std::collections::HashMap;
 
 use crate::canvas::{Canvas, Color, Point, Rect, Size};
 use crate::host::InputState;
-use crate::vector::scene::{KnobVisual, VectorCommand};
+use crate::vector::scene::{
+    CircleStrokeVisual, CircleVisual, KnobVisual, LineVisual, PolylineVisual, RectStrokeVisual,
+    RectVisual, VectorCommand,
+};
 
 include!("theme_types.rs");
 include!("core/state.rs");
@@ -43,6 +46,11 @@ include!("controls/dropdown/render.rs");
 include!("controls/dropdown/api.rs");
 include!("controls/dropdown/keyed.rs");
 include!("controls/dropdown/rect.rs");
+include!("controls/curve_editor/types.rs");
+include!("controls/curve_editor/geometry.rs");
+include!("controls/curve_editor/interaction.rs");
+include!("controls/curve_editor/render.rs");
+include!("controls/curve_editor/api.rs");
 include!("input/pointer.rs");
 #[cfg(test)]
 mod tests;

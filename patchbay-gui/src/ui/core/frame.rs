@@ -21,5 +21,6 @@ pub struct Ui<'a> {
     vector_commands: Vec<VectorCommand>,
     /// Use vector text instead of CPU bitmap glyphs when available.
     vector_text_enabled: bool,
+    /// Use vector shape commands instead of CPU raster primitives when available.
+    vector_shapes_enabled: bool,
 }
-

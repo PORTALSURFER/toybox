@@ -21,6 +21,7 @@ fn node_layout(node: &Node) -> LayoutBox {
         Node::Toggle(toggle) => toggle.layout,
         Node::Button(button) => button.layout,
         Node::Dropdown(dropdown) => dropdown.layout,
+        Node::CurveEditor(curve_editor) => curve_editor.layout,
         Node::Region(region) => region.layout,
         Node::Indicator(indicator) => indicator.layout,
     }

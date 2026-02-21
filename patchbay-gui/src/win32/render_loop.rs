@@ -100,6 +100,7 @@ where
             &self.theme,
         );
         ui.set_vector_text_enabled(self.renderer.vector_text_available());
+        ui.set_vector_shapes_enabled(true);
         ui.reset_input_consumption();
         ui.clear_overlays();
         match render_checked_with_engine(
@@ -282,6 +283,7 @@ fn action_source_key(action: &UiAction) -> &str {
         UiAction::ButtonPressed { key } => key,
         UiAction::DropdownSelected { key, .. } => key,
         UiAction::DropdownDoubleClicked { key } => key,
+        UiAction::CurveEditorChanged { key, .. } => key,
         UiAction::TextBoxEditRequested { key } => key,
         UiAction::TextBoxEdited { key, .. } => key,
         UiAction::TextBoxEditCommitted { key, .. } => key,

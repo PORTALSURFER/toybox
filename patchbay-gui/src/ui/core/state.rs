@@ -28,6 +28,8 @@ pub struct UiState {
     root_frame_used: bool,
     /// Per-textbox edit cursor/selection runtime keyed by textbox id.
     text_edit_runtime: HashMap<WidgetId, TextEditRuntimeState>,
+    /// Per-curve-editor runtime keyed by curve-editor widget id.
+    curve_editor_runtime: HashMap<WidgetId, CurveEditorRuntimeState>,
 }
 
 /// Cached container sizes for auto layout.

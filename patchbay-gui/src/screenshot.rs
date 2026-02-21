@@ -119,6 +119,7 @@ where
         &theme,
     );
     ui.set_vector_text_enabled(false);
+    ui.set_vector_shapes_enabled(false);
 
     let render_result = render_checked(&spec, &mut ui, crate::canvas::Point { x: 0, y: 0 })
         .map_err(|err| err.to_string())?;

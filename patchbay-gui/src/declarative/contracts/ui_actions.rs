@@ -39,6 +39,13 @@ pub enum UiAction {
         /// Stable widget key.
         key: String,
     },
+    /// Curve-editor model update.
+    CurveEditorChanged {
+        /// Stable widget key.
+        key: String,
+        /// Updated curve model.
+        model: CurveModel,
+    },
     /// Text-box edit-mode entry request.
     TextBoxEditRequested {
         /// Stable widget key.
@@ -110,7 +117,9 @@ impl UiAction {
             | UiAction::TextBoxEdited { .. }
             | UiAction::TextBoxEditCommitted { .. }
             | UiAction::TextBoxEditCanceled { .. } => UiInvalidationScope::MeasureSubtree,
-            UiAction::RegionHover { .. } | UiAction::RegionInteracted { .. } => {
+            UiAction::RegionHover { .. }
+            | UiAction::RegionInteracted { .. }
+            | UiAction::CurveEditorChanged { .. } => {
                 UiInvalidationScope::LayoutSubtree
             }
         }

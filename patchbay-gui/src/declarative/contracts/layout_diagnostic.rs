@@ -125,6 +125,8 @@ pub enum LayoutNodeKind {
     Button,
     /// Dropdown widget.
     Dropdown,
+    /// Curve-editor widget.
+    CurveEditor,
     /// Region widget.
     Region,
     /// Indicator widget.

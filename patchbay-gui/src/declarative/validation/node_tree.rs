@@ -99,6 +99,7 @@ fn validate_node(
         Node::Toggle(toggle) => validate_toggle_node(toggle, seen_keys),
         Node::Button(button) => validate_button_node(button, seen_keys),
         Node::Dropdown(dropdown) => validate_dropdown_node(dropdown, seen_keys),
+        Node::CurveEditor(curve_editor) => validate_curve_editor_node(curve_editor, seen_keys),
         Node::Region(region) => validate_region_node(region, seen_keys),
         Node::Indicator(indicator) => validate_indicator_node(indicator),
     }
@@ -285,6 +286,16 @@ fn validate_dropdown_node(
     validate_optional_control_size("Dropdown", &dropdown.key, dropdown.control_size)
 }
 
+/// Validate curve-editor constraints.
+fn validate_curve_editor_node(
+    curve_editor: &CurveEditorSpec,
+    seen_keys: &mut std::collections::HashSet<String>,
+) -> Result<(), DeclarativeError> {
+    validate_non_empty_key(&curve_editor.key, "CurveEditor")?;
+    validate_unique_key(&curve_editor.key, seen_keys)?;
+    validate_layout_bounds("CurveEditor", curve_editor.layout)
+}
+
 /// Validate region constraints.
 fn validate_region_node(
     region: &RegionSpec,
@@ -347,6 +358,7 @@ fn is_widget_node(node: &Node) -> bool {
             | Node::Toggle(_)
             | Node::Button(_)
             | Node::Dropdown(_)
+            | Node::CurveEditor(_)
             | Node::Region(_)
             | Node::Indicator(_)
     )
@@ -375,6 +387,7 @@ fn node_kind_name(node: &Node) -> &'static str {
         Node::Toggle(_) => "Toggle",
         Node::Button(_) => "Button",
         Node::Dropdown(_) => "Dropdown",
+        Node::CurveEditor(_) => "CurveEditor",
         Node::Region(_) => "Region",
         Node::Indicator(_) => "Indicator",
     }

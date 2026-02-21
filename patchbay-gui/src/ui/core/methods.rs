@@ -18,6 +18,7 @@ impl<'a> Ui<'a> {
             bounds_stack: Vec::new(),
             vector_commands: Vec::new(),
             vector_text_enabled: false,
+            vector_shapes_enabled: false,
         }
     }
 
@@ -25,6 +26,12 @@ impl<'a> Ui<'a> {
     #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     pub(crate) fn set_vector_text_enabled(&mut self, enabled: bool) {
         self.vector_text_enabled = enabled;
+    }
+
+    /// Enable or disable vector shape emission for this frame.
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    pub(crate) fn set_vector_shapes_enabled(&mut self, enabled: bool) {
+        self.vector_shapes_enabled = enabled;
     }
 
     /// Drain queued vector commands for renderer submission.

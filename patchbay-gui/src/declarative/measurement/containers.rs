@@ -27,6 +27,7 @@ fn measure_node(node: &Node, tokens: &ThemeTokens) -> Size {
         Node::Toggle(toggle) => measure_toggle(toggle, tokens),
         Node::Button(button) => measure_button(button, tokens),
         Node::Dropdown(dropdown) => measure_dropdown(dropdown, tokens),
+        Node::CurveEditor(curve_editor) => measure_curve_editor(curve_editor, tokens),
         Node::Region(region) => {
             let measured = Size {
                 width: 1,

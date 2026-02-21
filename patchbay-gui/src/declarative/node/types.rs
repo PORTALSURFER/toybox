@@ -62,6 +62,8 @@ pub enum Node {
     Button(ButtonSpec),
     /// Dropdown control.
     Dropdown(DropdownSpec),
+    /// Curve editor widget.
+    CurveEditor(CurveEditorSpec),
     /// Interactive region.
     Region(RegionSpec),
     /// Indicator node.
@@ -131,6 +133,7 @@ impl Node {
             | Node::Toggle(_)
             | Node::Button(_)
             | Node::Dropdown(_)
+            | Node::CurveEditor(_)
             | Node::Region(_)
             | Node::Indicator(_) => {}
         }

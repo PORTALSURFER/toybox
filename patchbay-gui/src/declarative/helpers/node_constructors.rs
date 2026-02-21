@@ -57,6 +57,11 @@ pub fn dropdown(
     Node::Dropdown(DropdownSpec::new(key, option_count, selected))
 }
 
+/// Create a curve-editor widget node.
+pub fn curve_editor(key: impl Into<String>, model: CurveModel) -> Node {
+    Node::CurveEditor(CurveEditorSpec::new(key, model))
+}
+
 /// Create an interactive region node.
 pub fn region(key: impl Into<String>, size: Size) -> Node {
     Node::Region(

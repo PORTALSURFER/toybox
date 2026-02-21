@@ -8,9 +8,13 @@
 mod color_and_angle_helpers;
 mod font_loading;
 mod knob_rendering;
+mod shapes_rendering;
 mod text_rendering;
 mod types;
 
 #[cfg(target_os = "windows")]
 pub(crate) use types::VectorScenePainter;
-pub(crate) use types::{KnobVisual, VectorCommand};
+pub(crate) use types::{
+    CircleStrokeVisual, CircleVisual, KnobVisual, LineVisual, PolylineVisual, RectStrokeVisual,
+    RectVisual, VectorCommand,
+};
