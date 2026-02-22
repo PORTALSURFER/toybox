@@ -74,9 +74,15 @@ fn draw_text_cursor(
     if max_visible == 0 {
         return;
     }
+    let char_width = (6u32.saturating_mul(scale)).max(1);
     let caret_index = runtime.cursor.min(max_visible);
     let caret_x = caret_x_for_index(line_rect, text_scale, caret_index);
-    let caret_width = 1;
+    let line_end_x = line_rect
+        .origin
+        .x
+        .saturating_add(i32::try_from(line_rect.size.width).unwrap_or(i32::MAX));
+    let available_width = line_end_x.saturating_sub(caret_x).max(1) as u32;
+    let caret_width = char_width.min(available_width).max(1);
     let caret_height = line_rect
         .size
         .height

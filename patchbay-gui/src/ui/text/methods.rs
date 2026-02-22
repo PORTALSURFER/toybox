@@ -190,26 +190,6 @@ impl<'a> Ui<'a> {
         rendered
     }
 
-    /// Draw bounded single-line text in a rect using bitmap-text raster only.
-    ///
-    /// Editable text boxes rely on fixed-width bitmap character cells for caret
-    /// and pointer index math. This helper keeps rendered glyph layout and
-    /// caret mapping in the same coordinate model even when vector text is
-    /// globally enabled.
-    pub(crate) fn text_single_line_hard_clamped_in_rect_scaled_bitmap(
-        &mut self,
-        rect: Rect,
-        text: &str,
-        color: Color,
-        text_scale: u32,
-    ) -> Size {
-        let previous_vector_text = self.vector_text_enabled;
-        self.vector_text_enabled = false;
-        let rendered = self.text_single_line_hard_clamped_in_rect_scaled(rect, text, color, text_scale);
-        self.vector_text_enabled = previous_vector_text;
-        rendered
-    }
-
     /// Draw bounded centered single-line text in a rect with an explicit scale.
     pub(crate) fn text_single_line_hard_clamped_centered_in_rect_scaled(
         &mut self,
