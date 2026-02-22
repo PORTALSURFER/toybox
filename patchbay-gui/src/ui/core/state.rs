@@ -48,6 +48,8 @@ pub(crate) struct TextEditRuntimeState {
     pub(crate) anchor: usize,
     /// True while a pointer-initiated text selection drag is active.
     pub(crate) pointer_selecting: bool,
+    /// Frame counter used for caret pulse animation while editing.
+    pub(crate) cursor_pulse_frame: u32,
 }
 
 impl LayoutState {

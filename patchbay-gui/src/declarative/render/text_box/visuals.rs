@@ -76,12 +76,19 @@ fn draw_text_cursor(
     }
     let caret_index = runtime.cursor.min(max_visible);
     let caret_x = caret_x_for_index(line_rect, text_scale, caret_index);
-    let caret_width = (scale / 2).max(1);
+    let caret_width = 1;
     let caret_height = line_rect
         .size
         .height
         .min(8u32.saturating_mul(scale))
         .max(1);
+    let caret_alpha = cursor_pulse_alpha(runtime.cursor_pulse_frame);
+    let caret_color = Color::rgba(
+        tokens.colors.text.r,
+        tokens.colors.text.g,
+        tokens.colors.text.b,
+        caret_alpha,
+    );
     ui.canvas().fill_rect(
         Rect {
             origin: Point {
@@ -93,7 +100,7 @@ fn draw_text_cursor(
                 height: caret_height,
             },
         },
-        tokens.colors.text,
+        caret_color,
     );
 }
 
@@ -104,4 +111,45 @@ fn caret_x_for_index(line_rect: Rect, text_scale: u32, index: usize) -> i32 {
         .origin
         .x
         .saturating_add(i32::try_from(index).unwrap_or(i32::MAX).saturating_mul(char_width))
+}
+
+/// Resolve pulsing alpha for the active text caret.
+///
+/// The pulse uses a deterministic triangle wave in frame space so editing
+/// visuals remain stable and testable without wall-clock dependencies.
+fn cursor_pulse_alpha(frame: u32) -> u8 {
+    const PERIOD_FRAMES: u32 = 48;
+    const MIN_ALPHA: u32 = 96;
+    const MAX_ALPHA: u32 = 255;
+
+    let half = PERIOD_FRAMES / 2;
+    let phase = frame % PERIOD_FRAMES;
+    let distance = (phase as i32 - half as i32).unsigned_abs();
+    let amplitude = half.saturating_sub(distance);
+    let span = MAX_ALPHA - MIN_ALPHA;
+    (MIN_ALPHA + (amplitude * span) / half.max(1)) as u8
+}
+
+#[cfg(test)]
+mod caret_pulse_tests {
+    use super::cursor_pulse_alpha;
+
+    #[test]
+    fn caret_pulse_alpha_stays_in_expected_range() {
+        for frame in 0..256u32 {
+            let alpha = cursor_pulse_alpha(frame);
+            assert!((96..=255).contains(&alpha));
+        }
+    }
+
+    #[test]
+    fn caret_pulse_alpha_varies_over_time() {
+        let early = cursor_pulse_alpha(0);
+        let pre_peak = cursor_pulse_alpha(12);
+        let peak = cursor_pulse_alpha(24);
+        let post_peak = cursor_pulse_alpha(36);
+        assert!(early < pre_peak, "pulse should brighten before midpoint");
+        assert!(pre_peak < peak, "pulse should reach maximum at midpoint");
+        assert!(peak > post_peak, "pulse should dim after midpoint");
+    }
 }

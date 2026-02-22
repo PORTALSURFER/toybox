@@ -235,6 +235,7 @@ impl<'a> Ui<'a> {
                 cursor: text_char_count,
                 anchor: text_char_count,
                 pointer_selecting: false,
+                cursor_pulse_frame: 0,
             });
         entry.cursor = entry.cursor.min(text_char_count);
         entry.anchor = entry.anchor.min(text_char_count);

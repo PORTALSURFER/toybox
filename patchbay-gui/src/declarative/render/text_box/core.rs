@@ -22,6 +22,7 @@ fn render_text_box(
         color,
         text_scale,
         text_box.align,
+        false,
     );
 }
 
@@ -51,6 +52,7 @@ fn render_editable_text_box(
 
     let mut should_clear_runtime = false;
     if edit.editing {
+        runtime.cursor_pulse_frame = runtime.cursor_pulse_frame.wrapping_add(1);
         should_clear_runtime = emit_text_edit_actions(
             text_box,
             edit,
@@ -89,6 +91,7 @@ fn render_editable_text_box(
         color,
         text_scale,
         align,
+        edit.editing,
     );
     if edit.editing {
         draw_text_cursor(line_rect, runtime, text_scale, ui, tokens);
@@ -106,8 +109,17 @@ fn draw_text_box_line(
     color: Color,
     text_scale: u32,
     align: TextBoxAlign,
+    force_bitmap_cells: bool,
 ) -> Size {
     match align {
+        TextBoxAlign::Start if force_bitmap_cells => {
+            ui.text_single_line_hard_clamped_in_rect_scaled_bitmap(
+                rect,
+                text,
+                color,
+                text_scale,
+            )
+        }
         TextBoxAlign::Start => {
             ui.text_single_line_hard_clamped_in_rect_scaled(rect, text, color, text_scale)
         }
