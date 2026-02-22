@@ -130,6 +130,35 @@ pub struct Theme {
     pub knob_indicator: Color,
 }
 
+/// State-specific color variants for controls rendered inside the UI module.
+///
+/// Declarative renderers can provide this optional payload when a control is
+/// color-role driven. Immediate-mode APIs keep using the theme fields directly.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ControlColorVariants {
+    /// Base color used in the default, non-interacting state.
+    pub(crate) base: Color,
+    /// Hover state color.
+    pub(crate) hover: Color,
+    /// Active/pressed state color.
+    pub(crate) active: Color,
+    /// Disabled state color.
+    pub(crate) disabled: Color,
+    /// Focus-ring color.
+    pub(crate) focus_ring: Color,
+}
+
+/// Runtime styling state used by control render helpers.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ControlVisualState {
+    /// Optional role-resolved color variants.
+    pub(crate) variants: Option<ControlColorVariants>,
+    /// Disable pointer interaction and render disabled state colors.
+    pub(crate) disabled: bool,
+    /// Render focus-ring styling for focused controls.
+    pub(crate) focused: bool,
+}
+
 impl Theme {
     /// Build widget theme defaults from a semantic palette.
     pub const fn from_palette(palette: MainPalette) -> Self {

@@ -75,6 +75,9 @@ fn node_fluent_helpers_apply_container_and_style_fields() {
             assert_eq!(knob.key, "k");
             assert_eq!(knob.value, 0.5);
             assert_eq!(knob.range, (0.0, 1.0));
+            assert_eq!(knob.color_role, None);
+            assert!(!knob.disabled);
+            assert!(!knob.focused);
         }
         _ => panic!("expected knob node"),
     }
@@ -110,6 +113,9 @@ fn node_fluent_helpers_apply_container_and_style_fields() {
                     height: 24
                 })
             );
+            assert_eq!(button.color_role, None);
+            assert!(!button.disabled);
+            assert!(!button.focused);
         }
         _ => panic!("expected button node"),
     }
@@ -136,6 +142,22 @@ fn node_fluent_helpers_apply_container_and_style_fields() {
             );
         }
         _ => panic!("expected dropdown node"),
+    }
+
+    let focused_toggle = toggle("sync", true)
+        .color_role(WidgetColorRole::Accent(AccentKey::Entity(7)))
+        .disabled(true)
+        .focused(true);
+    match focused_toggle {
+        Node::Toggle(toggle) => {
+            assert_eq!(
+                toggle.color_role,
+                Some(WidgetColorRole::Accent(AccentKey::Entity(7)))
+            );
+            assert!(toggle.disabled);
+            assert!(toggle.focused);
+        }
+        _ => panic!("expected toggle node"),
     }
 }
 

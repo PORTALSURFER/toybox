@@ -7,7 +7,7 @@ impl<'a> Ui<'a> {
         response: KnobResponse,
         value: f32,
     ) {
-        self.push_knob_vector_command(geometry, response, value, spec.range);
+        self.push_knob_vector_command(spec, geometry, response, value, spec.range);
         self.draw_knob_name_label(spec.labels, geometry);
         self.draw_knob_value_label(spec.labels, geometry);
     }
@@ -15,13 +15,16 @@ impl<'a> Ui<'a> {
     /// Queue the vector-scene knob primitive.
     fn push_knob_vector_command(
         &mut self,
+        spec: KnobRenderSpec<'_>,
         geometry: KnobGeometry,
         response: KnobResponse,
         value: f32,
         range: KnobRange,
     ) {
         let value_angle = Self::resolve_knob_value_angle(value, range);
-        let fill = self.resolve_knob_fill(response);
+        let fill = self.resolve_knob_fill(spec.color_variants, spec.disabled, response);
+        let outline = self.resolve_knob_outline(spec.color_variants, spec.focused);
+        let indicator = self.resolve_knob_indicator(spec.color_variants, spec.disabled, response);
         self.vector_commands.push(VectorCommand::Knob(KnobVisual {
             center: geometry.center,
             radius: geometry.radius,
@@ -31,8 +34,8 @@ impl<'a> Ui<'a> {
             arc_end: 5.0 * std::f32::consts::PI / 4.0,
             value_angle,
             fill,
-            outline: self.theme.knob_outline,
-            indicator: self.theme.knob_indicator,
+            outline,
+            indicator,
         }));
     }
 
@@ -50,7 +53,24 @@ impl<'a> Ui<'a> {
     }
 
     /// Resolve dial fill color from current interaction response.
-    fn resolve_knob_fill(&self, response: KnobResponse) -> Color {
+    fn resolve_knob_fill(
+        &self,
+        variants: Option<ControlColorVariants>,
+        disabled: bool,
+        response: KnobResponse,
+    ) -> Color {
+        if let Some(variants) = variants {
+            if disabled {
+                return variants.disabled;
+            }
+            if response.active {
+                return variants.active;
+            }
+            if response.hovered {
+                return variants.hover;
+            }
+            return variants.base;
+        }
         if response.active {
             self.theme.knob_active
         } else if response.hovered {
@@ -58,6 +78,42 @@ impl<'a> Ui<'a> {
         } else {
             self.theme.knob_fill
         }
+    }
+
+    /// Resolve knob outline color, including focused ring styling.
+    fn resolve_knob_outline(
+        &self,
+        variants: Option<ControlColorVariants>,
+        focused: bool,
+    ) -> Color {
+        if focused {
+            return variants
+                .map(|variants| variants.focus_ring)
+                .unwrap_or(self.theme.knob_active);
+        }
+        self.theme.knob_outline
+    }
+
+    /// Resolve knob indicator color for role-driven state variants.
+    fn resolve_knob_indicator(
+        &self,
+        variants: Option<ControlColorVariants>,
+        disabled: bool,
+        response: KnobResponse,
+    ) -> Color {
+        if let Some(variants) = variants {
+            if disabled {
+                return variants.disabled;
+            }
+            if response.active {
+                return variants.active;
+            }
+            if response.hovered {
+                return variants.hover;
+            }
+            return variants.base;
+        }
+        self.theme.knob_indicator
     }
 
     /// Draw the normalized name label above the knob.

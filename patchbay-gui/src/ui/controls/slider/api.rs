@@ -23,32 +23,71 @@ impl<'a> Ui<'a> {
         config: SliderConfig,
         default_value: f32,
     ) -> SliderResponse {
+        self.slider_with_default_styled(
+            id,
+            label,
+            value,
+            config,
+            default_value,
+            ControlVisualState::default(),
+        )
+    }
+
+    /// Draw a horizontal slider with optional role-driven style overrides.
+    fn slider_with_default_styled(
+        &mut self,
+        id: WidgetId,
+        label: &str,
+        value: &mut f32,
+        config: SliderConfig,
+        default_value: f32,
+        style: ControlVisualState,
+    ) -> SliderResponse {
         let width = config.size.width.max(1) as i32;
         let height = config.size.height.max(1) as i32;
         let layout = self.resolve_slider_layout(label, width, height);
         let hovered = self.pointer_inside_clipped_rect(layout.rect);
-        if hovered {
+        if hovered && !style.disabled {
             self.state.hot = Some(id);
         }
-        if hovered && self.input.mouse_double_clicked {
+        if !style.disabled && hovered && self.input.mouse_double_clicked {
             let changed = self.apply_slider_double_click_reset(id, config.range, default_value, value);
             let response = SliderResponse {
                 changed,
                 hovered,
                 active: false,
             };
-            let visuals =
-                self.resolve_slider_visuals(layout.rect, layout.height, config.range, *value, response);
+            let visuals = self.resolve_slider_visuals(
+                layout.rect,
+                layout.height,
+                config.range,
+                *value,
+                response,
+                style,
+            );
             self.draw_slider_visuals(visuals);
             self.advance_slider_cursor(layout.rect, layout.block_size);
             return response;
         }
-        let mut response = self.begin_slider_interaction(id, layout.rect);
+        let mut response = if style.disabled {
+            SliderResponse::default()
+        } else {
+            self.begin_slider_interaction(id, layout.rect)
+        };
 
-        response.changed |= self.apply_slider_drag(id, layout.rect, config.range, value);
-        response.changed |= self.apply_slider_wheel(response.hovered, config.range, value);
+        if !style.disabled {
+            response.changed |= self.apply_slider_drag(id, layout.rect, config.range, value);
+            response.changed |= self.apply_slider_wheel(response.hovered, config.range, value);
+        }
 
-        let visuals = self.resolve_slider_visuals(layout.rect, layout.height, config.range, *value, response);
+        let visuals = self.resolve_slider_visuals(
+            layout.rect,
+            layout.height,
+            config.range,
+            *value,
+            response,
+            style,
+        );
         self.draw_slider_visuals(visuals);
         self.advance_slider_cursor(layout.rect, layout.block_size);
         response
@@ -92,7 +131,7 @@ impl<'a> Ui<'a> {
         let response = {
             let mut response = SliderResponse::default();
             self.with_clip(request.rect, |ui| {
-                response = ui.slider_with_default(
+                response = ui.slider_with_default_styled(
                     request.id,
                     request.label,
                     value,
@@ -104,6 +143,11 @@ impl<'a> Ui<'a> {
                         },
                     },
                     request.default_value,
+                    ControlVisualState {
+                        variants: request.color_variants,
+                        disabled: request.disabled,
+                        focused: request.focused,
+                    },
                 );
             });
             response

@@ -100,6 +100,12 @@ struct KnobRenderSpec<'a> {
     range: KnobRange,
     /// Value restored when the knob is double-clicked.
     default_value: f32,
+    /// Optional color variants for role-driven styling.
+    color_variants: Option<ControlColorVariants>,
+    /// Disable pointer interaction and render disabled visuals.
+    disabled: bool,
+    /// Render focus affordances.
+    focused: bool,
 }
 
 impl<'a> KnobRenderSpec<'a> {
@@ -116,6 +122,9 @@ impl<'a> KnobRenderSpec<'a> {
             labels: KnobLabels::new(name_label, value_label),
             range: KnobRange::from_tuple(range),
             default_value,
+            color_variants: None,
+            disabled: false,
+            focused: false,
         }
     }
 }
@@ -156,6 +165,12 @@ pub(crate) struct KnobRectRenderRequest<'a> {
     rect: Rect,
     /// Explicit text scale override for this knob.
     text_scale: u32,
+    /// Optional color variants for role-driven styling.
+    color_variants: Option<ControlColorVariants>,
+    /// Disable pointer interaction and render disabled visuals.
+    disabled: bool,
+    /// Render focus affordances.
+    focused: bool,
 }
 
 impl<'a> KnobRectRenderRequest<'a> {
@@ -176,6 +191,9 @@ impl<'a> KnobRectRenderRequest<'a> {
             desired_diameter,
             rect,
             text_scale: 1,
+            color_variants: None,
+            disabled: false,
+            focused: false,
         }
     }
 
@@ -188,6 +206,24 @@ impl<'a> KnobRectRenderRequest<'a> {
     /// Override the value restored by knob double-click interactions.
     pub(crate) fn with_default_value(mut self, default_value: f32) -> Self {
         self.default_value = default_value;
+        self
+    }
+
+    /// Override state variants used for role-driven knob rendering.
+    pub(crate) fn with_color_variants(mut self, variants: ControlColorVariants) -> Self {
+        self.color_variants = Some(variants);
+        self
+    }
+
+    /// Disable pointer interaction and render disabled styling.
+    pub(crate) fn with_disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    /// Render focus affordances for the knob.
+    pub(crate) fn with_focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
         self
     }
 }

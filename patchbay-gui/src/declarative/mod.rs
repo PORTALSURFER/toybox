@@ -37,6 +37,7 @@ include!("specs/knob_slider.rs");
 include!("specs/curve_editor_spec.rs");
 include!("specs/toggle_button_dropdown_region_indicator.rs");
 include!("theme/core_tokens.rs");
+include!("theme/widget_colors.rs");
 include!("render/entry/theme_tokens.rs");
 include!("render/entry/root_render_plan.rs");
 include!("render/entry/debug_border_candidates.rs");

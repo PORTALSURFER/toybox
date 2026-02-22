@@ -13,6 +13,12 @@ pub(crate) struct SliderRectRenderRequest<'a> {
     rect: Rect,
     /// Explicit text scale override for the label.
     text_scale: u32,
+    /// Optional color variants for role-driven styling.
+    color_variants: Option<ControlColorVariants>,
+    /// Disable pointer interaction and render disabled visuals.
+    disabled: bool,
+    /// Render focus affordances.
+    focused: bool,
 }
 
 impl<'a> SliderRectRenderRequest<'a> {
@@ -30,6 +36,9 @@ impl<'a> SliderRectRenderRequest<'a> {
             default_value: slider_default_value(range),
             rect,
             text_scale: 1,
+            color_variants: None,
+            disabled: false,
+            focused: false,
         }
     }
 
@@ -42,6 +51,24 @@ impl<'a> SliderRectRenderRequest<'a> {
     /// Override the value restored by slider double-click interactions.
     pub(crate) fn with_default_value(mut self, default_value: f32) -> Self {
         self.default_value = default_value;
+        self
+    }
+
+    /// Override state variants used for role-driven slider rendering.
+    pub(crate) fn with_color_variants(mut self, variants: ControlColorVariants) -> Self {
+        self.color_variants = Some(variants);
+        self
+    }
+
+    /// Disable pointer interaction and render disabled styling.
+    pub(crate) fn with_disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    /// Render focus affordances for this slider.
+    pub(crate) fn with_focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
         self
     }
 }
@@ -69,7 +96,13 @@ pub(crate) struct SliderVisualState {
     /// Handle radius in pixels.
     pub(crate) handle_radius: i32,
     /// Track fill color based on interaction state.
-    pub(crate) fill: Color,
+    pub(crate) track_fill: Color,
+    /// Value fill color.
+    pub(crate) value_fill: Color,
+    /// Handle fill color.
+    pub(crate) handle_fill: Color,
+    /// Outline/focus ring color.
+    pub(crate) outline: Color,
 }
 
 /// Public slider configuration shared across keyed and non-keyed slider APIs.

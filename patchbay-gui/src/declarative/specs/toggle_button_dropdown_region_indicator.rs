@@ -7,6 +7,12 @@ pub struct ToggleSpec {
     pub value: bool,
     /// Optional explicit control size.
     pub control_size: Option<Size>,
+    /// Optional role used to resolve interaction-state colors.
+    pub color_role: Option<WidgetColorRole>,
+    /// Disable pointer interaction and render disabled visuals.
+    pub disabled: bool,
+    /// Render focus affordances for keyboard/selection focus.
+    pub focused: bool,
     /// Layout constraints.
     pub layout: LayoutBox,
 }
@@ -18,6 +24,9 @@ impl ToggleSpec {
             key: key.into(),
             value,
             control_size: None,
+            color_role: None,
+            disabled: false,
+            focused: false,
             layout: LayoutBox::auto(),
         }
     }
@@ -25,6 +34,24 @@ impl ToggleSpec {
     /// Override control size.
     pub fn control_size(mut self, size: Size) -> Self {
         self.control_size = Some(size);
+        self
+    }
+
+    /// Resolve this toggle's colors from a widget color role.
+    pub fn color_role(mut self, role: WidgetColorRole) -> Self {
+        self.color_role = Some(role);
+        self
+    }
+
+    /// Disable this toggle's interactions and render disabled styling.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    /// Toggle focused styling for this toggle.
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
         self
     }
 
@@ -47,6 +74,12 @@ pub struct ButtonSpec {
     pub label: Option<String>,
     /// Optional explicit control size.
     pub control_size: Option<Size>,
+    /// Optional role used to resolve interaction-state colors.
+    pub color_role: Option<WidgetColorRole>,
+    /// Disable pointer interaction and render disabled visuals.
+    pub disabled: bool,
+    /// Render focus affordances for keyboard/selection focus.
+    pub focused: bool,
     /// Layout constraints.
     pub layout: LayoutBox,
 }
@@ -58,6 +91,9 @@ impl ButtonSpec {
             key: key.into(),
             label: None,
             control_size: None,
+            color_role: None,
+            disabled: false,
+            focused: false,
             layout: LayoutBox::auto(),
         }
     }
@@ -71,6 +107,24 @@ impl ButtonSpec {
     /// Override control size.
     pub fn control_size(mut self, size: Size) -> Self {
         self.control_size = Some(size);
+        self
+    }
+
+    /// Resolve this button's colors from a widget color role.
+    pub fn color_role(mut self, role: WidgetColorRole) -> Self {
+        self.color_role = Some(role);
+        self
+    }
+
+    /// Disable this button's interactions and render disabled styling.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    /// Toggle focused styling for this button.
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
         self
     }
 

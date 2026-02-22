@@ -83,7 +83,24 @@ impl<'a> Ui<'a> {
     }
 
     /// Resolve slider track fill color from interaction state.
-    pub(crate) fn resolve_slider_fill_color(&self, response: SliderResponse) -> Color {
+    pub(crate) fn resolve_slider_fill_color(
+        &self,
+        variants: Option<ControlColorVariants>,
+        disabled: bool,
+        response: SliderResponse,
+    ) -> Color {
+        if let Some(variants) = variants {
+            if disabled {
+                return variants.disabled;
+            }
+            if response.active {
+                return variants.active;
+            }
+            if response.hovered {
+                return variants.hover;
+            }
+            return variants.base;
+        }
         if response.active {
             self.theme.knob_active
         } else if response.hovered {

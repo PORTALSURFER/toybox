@@ -120,6 +120,48 @@ impl Node {
         self
     }
 
+    /// Set color role for knob/slider/toggle/button control nodes.
+    ///
+    /// Non-target node kinds are returned unchanged.
+    pub fn color_role(mut self, role: WidgetColorRole) -> Self {
+        match &mut self {
+            Self::Knob(knob) => knob.color_role = Some(role),
+            Self::Slider(slider) => slider.color_role = Some(role),
+            Self::Toggle(toggle) => toggle.color_role = Some(role),
+            Self::Button(button) => button.color_role = Some(role),
+            _ => {}
+        }
+        self
+    }
+
+    /// Set disabled state for knob/slider/toggle/button control nodes.
+    ///
+    /// Non-target node kinds are returned unchanged.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        match &mut self {
+            Self::Knob(knob) => knob.disabled = disabled,
+            Self::Slider(slider) => slider.disabled = disabled,
+            Self::Toggle(toggle) => toggle.disabled = disabled,
+            Self::Button(button) => button.disabled = disabled,
+            _ => {}
+        }
+        self
+    }
+
+    /// Set focused state for knob/slider/toggle/button control nodes.
+    ///
+    /// Non-target node kinds are returned unchanged.
+    pub fn focused(mut self, focused: bool) -> Self {
+        match &mut self {
+            Self::Knob(knob) => knob.focused = focused,
+            Self::Slider(slider) => slider.focused = focused,
+            Self::Toggle(toggle) => toggle.focused = focused,
+            Self::Button(button) => button.focused = focused,
+            _ => {}
+        }
+        self
+    }
+
     /// Override curve-editor model for curve-editor nodes.
     ///
     /// Non-curve-editor node kinds are returned unchanged.

@@ -165,6 +165,9 @@ impl<'a> Ui<'a> {
             labels: request.labels,
             range: KnobRange::from_tuple(request.range),
             default_value: request.default_value,
+            color_variants: request.color_variants,
+            disabled: request.disabled,
+            focused: request.focused,
         };
         let rect_spec = KnobRectSpec::new(request.rect, request.desired_diameter);
         let previous_text_scale = self.theme.text_scale;

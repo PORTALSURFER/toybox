@@ -7,6 +7,7 @@ impl<'a> Ui<'a> {
         range: (f32, f32),
         value: f32,
         response: SliderResponse,
+        style: ControlVisualState,
     ) -> SliderVisualState {
         let span = (range.1 - range.0).max(1.0e-6);
         let t = ((value - range.0) / span).clamp(0.0, 1.0);
@@ -36,19 +37,64 @@ impl<'a> Ui<'a> {
                 y: rect.origin.y + height / 2,
             },
             handle_radius: (height / 2).max(3),
-            fill: self.resolve_slider_fill_color(response),
+            track_fill: self.resolve_slider_fill_color(style.variants, style.disabled, response),
+            value_fill: if style.disabled {
+                style
+                    .variants
+                    .map(|variants| variants.disabled)
+                    .unwrap_or(self.theme.knob_indicator)
+            } else if response.active {
+                style
+                    .variants
+                    .map(|variants| variants.active)
+                    .unwrap_or(self.theme.knob_indicator)
+            } else {
+                style
+                    .variants
+                    .map(|variants| variants.base)
+                    .unwrap_or(self.theme.knob_indicator)
+            },
+            handle_fill: if style.disabled {
+                style
+                    .variants
+                    .map(|variants| variants.disabled)
+                    .unwrap_or(self.theme.knob_indicator)
+            } else if response.active {
+                style
+                    .variants
+                    .map(|variants| variants.active)
+                    .unwrap_or(self.theme.knob_indicator)
+            } else if response.hovered {
+                style
+                    .variants
+                    .map(|variants| variants.hover)
+                    .unwrap_or(self.theme.knob_indicator)
+            } else {
+                style
+                    .variants
+                    .map(|variants| variants.base)
+                    .unwrap_or(self.theme.knob_indicator)
+            },
+            outline: if style.focused {
+                style
+                    .variants
+                    .map(|variants| variants.focus_ring)
+                    .unwrap_or(self.theme.knob_active)
+            } else {
+                self.theme.knob_outline
+            },
         }
     }
 
     /// Draw slider visuals from precomputed geometry.
     pub(crate) fn draw_slider_visuals(&mut self, visuals: SliderVisualState) {
-        self.fill_rect_clipped(visuals.track_rect, visuals.fill);
-        self.stroke_rect_clipped(visuals.track_rect, 1, self.theme.knob_outline);
-        self.fill_rect_clipped(visuals.fill_rect, self.theme.knob_indicator);
+        self.fill_rect_clipped(visuals.track_rect, visuals.track_fill);
+        self.stroke_rect_clipped(visuals.track_rect, 1, visuals.outline);
+        self.fill_rect_clipped(visuals.fill_rect, visuals.value_fill);
         self.canvas.fill_circle(
             visuals.handle_center,
             visuals.handle_radius,
-            self.theme.knob_indicator,
+            visuals.handle_fill,
         );
     }
 }

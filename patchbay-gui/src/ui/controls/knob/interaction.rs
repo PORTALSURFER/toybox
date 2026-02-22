@@ -6,6 +6,9 @@ impl<'a> Ui<'a> {
         geometry: KnobGeometry,
         value: &mut f32,
     ) -> KnobResponse {
+        if spec.disabled {
+            return KnobResponse::default();
+        }
         let hovered = self.pointer_inside_clipped_rect(geometry.hit_rect);
         if hovered {
             self.state.hot = Some(spec.id);

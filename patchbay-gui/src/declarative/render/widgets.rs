@@ -8,16 +8,23 @@ fn render_knob(
 ) {
     let id = WidgetId::from_label(&knob.key);
     let mut value = knob.value;
+    let color_variants =
+        resolve_control_color_variants(knob.color_role, tokens, knob.disabled, knob.focused);
     let knob_diameter = knob
         .control_size
         .map(|size| size.width.min(size.height).max(1))
         .unwrap_or(tokens.controls.knob_diameter);
-    let knob_request =
+    let mut knob_request =
         KnobRectRenderRequest::new(id, "", "", knob.range, knob_diameter, rect)
             .with_text_scale(tokens.typography.text_scale)
-            .with_default_value(knob.default_value);
+            .with_default_value(knob.default_value)
+            .with_disabled(knob.disabled)
+            .with_focused(knob.focused);
+    if let Some(variants) = color_variants {
+        knob_request = knob_request.with_color_variants(variants);
+    }
     let response = ui.knob_with_labels_in_rect_scaled(&mut value, knob_request);
-    if response.changed {
+    if !knob.disabled && response.changed {
         actions.push(UiAction::KnobChanged {
             key: knob.key.clone(),
             value,
@@ -35,12 +42,19 @@ fn render_slider(
 ) {
     let id = WidgetId::from_label(&slider.key);
     let mut value = slider.value;
-    let slider_request =
+    let color_variants =
+        resolve_control_color_variants(slider.color_role, tokens, slider.disabled, slider.focused);
+    let mut slider_request =
         SliderRectRenderRequest::new(id, "", slider.range, rect)
             .with_text_scale(tokens.typography.text_scale)
-            .with_default_value(slider.default_value);
+            .with_default_value(slider.default_value)
+            .with_disabled(slider.disabled)
+            .with_focused(slider.focused);
+    if let Some(variants) = color_variants {
+        slider_request = slider_request.with_color_variants(variants);
+    }
     let response = ui.slider_in_rect_scaled(&mut value, slider_request);
-    if response.changed {
+    if !slider.disabled && response.changed {
         actions.push(UiAction::SliderChanged {
             key: slider.key.clone(),
             value,
@@ -58,19 +72,27 @@ fn render_toggle(
 ) {
     let id = WidgetId::from_label(&toggle.key);
     let mut value = toggle.value;
+    let color_variants =
+        resolve_control_color_variants(toggle.color_role, tokens, toggle.disabled, toggle.focused);
     let control_size = toggle.control_size.unwrap_or(Size {
         width: tokens.controls.toggle_width,
         height: tokens.controls.toggle_height,
     });
-    let response = ui.toggle_in_rect_scaled(
+    let mut toggle_request = crate::ui::ToggleRectRenderRequest::new(
         id,
         "",
         &mut value,
         control_size,
         rect,
-        tokens.typography.text_scale,
-    );
-    if response.changed {
+    )
+    .with_text_scale(tokens.typography.text_scale)
+    .with_disabled(toggle.disabled)
+    .with_focused(toggle.focused);
+    if let Some(variants) = color_variants {
+        toggle_request = toggle_request.with_color_variants(variants);
+    }
+    let response = ui.toggle_in_rect_styled(toggle_request);
+    if !toggle.disabled && response.changed {
         actions.push(UiAction::ToggleChanged {
             key: toggle.key.clone(),
             value,
@@ -88,18 +110,26 @@ fn render_button(
 ) {
     let id = WidgetId::from_label(&button.key);
     let label = button.label.as_deref().unwrap_or("");
+    let color_variants =
+        resolve_control_color_variants(button.color_role, tokens, button.disabled, button.focused);
     let control_size = button.control_size.unwrap_or(Size {
         width: tokens.controls.button_width,
         height: tokens.controls.button_height,
     });
-    let response = ui.button_in_rect_scaled(
+    let mut button_request = crate::ui::ButtonRectRenderRequest::new(
         id,
         label,
         control_size,
         rect,
-        tokens.typography.text_scale,
-    );
-    if response.clicked {
+    )
+    .with_text_scale(tokens.typography.text_scale)
+    .with_disabled(button.disabled)
+    .with_focused(button.focused);
+    if let Some(variants) = color_variants {
+        button_request = button_request.with_color_variants(variants);
+    }
+    let response = ui.button_in_rect_styled(button_request);
+    if !button.disabled && response.clicked {
         actions.push(UiAction::ButtonPressed {
             key: button.key.clone(),
         });
@@ -169,6 +199,32 @@ fn resolve_dropdown_option_labels(dropdown: &DropdownSpec) -> Vec<String> {
 /// Render an indicator node.
 fn render_indicator(indicator: &IndicatorSpec, rect: Rect, ui: &mut Ui<'_>) {
     ui.indicator(rect, indicator.active);
+}
+
+/// Resolve optional UI control color variants for a declarative widget role.
+fn resolve_control_color_variants(
+    role: Option<WidgetColorRole>,
+    tokens: &ThemeTokens,
+    disabled: bool,
+    focused: bool,
+) -> Option<crate::ui::ControlColorVariants> {
+    let role = role?;
+    let resolver = DefaultWidgetColorResolver::new();
+    let variants = resolver.resolve(
+        role,
+        WidgetColorContext {
+            tokens: *tokens,
+            disabled,
+            focused,
+        },
+    );
+    Some(crate::ui::ControlColorVariants {
+        base: variants.base,
+        hover: variants.hover,
+        active: variants.active,
+        disabled: variants.disabled,
+        focus_ring: variants.focus_ring,
+    })
 }
 
 /// Render a curve-editor node and emit model change actions.
