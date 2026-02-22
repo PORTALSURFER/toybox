@@ -10,7 +10,14 @@ pub(super) fn vertical_grid_lines(mode: WaveformGridMode, width: i32) -> Vec<(i3
             beats_visible,
             beats_per_bar,
             subdivisions_per_beat,
-        } => tempo_locked_grid_lines(beats_visible, beats_per_bar, subdivisions_per_beat, width),
+            start_beat,
+        } => tempo_locked_grid_lines(
+            beats_visible,
+            beats_per_bar,
+            subdivisions_per_beat,
+            start_beat,
+            width,
+        ),
     }
 }
 
@@ -35,27 +42,36 @@ fn tempo_locked_grid_lines(
     beats_visible: f64,
     beats_per_bar: f64,
     subdivisions_per_beat: u32,
+    start_beat: f64,
     width: i32,
 ) -> Vec<(i32, GridTone)> {
-    if !beats_visible.is_finite() || beats_visible <= 0.0 {
+    if !beats_visible.is_finite() || beats_visible <= 0.0 || !start_beat.is_finite() {
         return vec![(0, GridTone::Bar), (width, GridTone::Bar)];
     }
 
     let subdivisions = subdivisions_per_beat.max(1) as f64;
     let step_beats = 1.0 / subdivisions;
-    let last_step = (beats_visible / step_beats).ceil() as i64 + 1;
+    let end_beat = start_beat + beats_visible;
+    let first_step = (start_beat / step_beats).floor() as i64 - 1;
+    let last_step = (end_beat / step_beats).ceil() as i64 + 1;
+    let bar_period = if beats_per_bar.is_finite() && beats_per_bar > 0.0 {
+        Some(beats_per_bar)
+    } else {
+        None
+    };
     let mut lines = Vec::new();
+    const EPSILON: f64 = 1.0e-6;
 
-    for step in 0..=last_step {
+    for step in first_step..=last_step {
         let beat = step as f64 * step_beats;
-        if beat < 0.0 || beat > beats_visible {
+        let x_norm = (beat - start_beat) / beats_visible;
+        if !(-EPSILON..=1.0 + EPSILON).contains(&x_norm) {
             continue;
         }
-        let x_norm = (beat / beats_visible).clamp(0.0, 1.0);
         let x = (x_norm * width as f64).round() as i32;
-        let tone = if is_multiple(beat, beats_per_bar.max(1.0), 1.0e-6) {
+        let tone = if bar_period.is_some_and(|period| is_multiple(beat, period, EPSILON)) {
             GridTone::Bar
-        } else if is_multiple(beat, 1.0, 1.0e-6) {
+        } else if is_multiple(beat, 1.0, EPSILON) {
             GridTone::Beat
         } else {
             GridTone::Subdivision
@@ -66,9 +82,23 @@ fn tempo_locked_grid_lines(
     if lines.is_empty() {
         return vec![(0, GridTone::Bar), (width, GridTone::Bar)];
     }
-    lines.sort_by_key(|(x, _)| *x);
+
+    lines.sort_by(|left, right| {
+        left.0
+            .cmp(&right.0)
+            .then_with(|| tone_priority(right.1).cmp(&tone_priority(left.1)))
+    });
     lines.dedup_by(|left, right| left.0 == right.0);
     lines
+}
+
+/// Return a stable precedence rank for tone deduplication.
+fn tone_priority(tone: GridTone) -> u8 {
+    match tone {
+        GridTone::Bar => 3,
+        GridTone::Beat => 2,
+        GridTone::Subdivision => 1,
+    }
 }
 
 /// Return true when `value` lies on one periodic boundary.

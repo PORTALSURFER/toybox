@@ -74,6 +74,12 @@ pub enum WaveformGridMode {
         beats_per_bar: f64,
         /// Number of subdivisions within one beat.
         subdivisions_per_beat: u32,
+        /// Absolute beat position at the left edge (`x = 0`).
+        ///
+        /// Pass the host-resolved transport beat for the visible window start
+        /// so grid placement stays phase-locked across long sessions, loop
+        /// wraps, and tempo changes.
+        start_beat: f64,
     },
 }
 
