@@ -1,6 +1,11 @@
 //! Mode-specific waveform channel rendering helpers.
 
-use super::sampling::{clamp_sample, for_each_envelope_min_max_column, resample_channel_linear};
+use super::context::WaveformRenderScratch;
+use super::sampling::{
+    EnvelopeMinMaxTree, clamp_sample, for_each_envelope_min_max_column,
+    for_each_envelope_min_max_column_cached, for_each_envelope_min_max_column_from_slice,
+    resample_channel_linear_from_slice_into, resample_channel_linear_into,
+};
 use super::{
     Color, LaneBounds, Point, SurfaceCommand, WaveformGeometry, WaveformRenderQuality,
     WaveformSamplingMode, WaveformViewStyle,
@@ -13,7 +18,9 @@ pub(super) fn draw_waveform_channel<SampleAt>(
     geometry: &WaveformGeometry,
     sample_count: usize,
     channel: usize,
+    channel_samples: Option<&[f32]>,
     sample_at: &SampleAt,
+    envelope_tree: Option<&EnvelopeMinMaxTree>,
     sampling_mode: WaveformSamplingMode,
     render_quality: WaveformRenderQuality,
     style: WaveformViewStyle,
@@ -22,6 +29,7 @@ pub(super) fn draw_waveform_channel<SampleAt>(
     color: Color,
     channel_command_budget: usize,
     glow_point_budget: usize,
+    scratch: &mut WaveformRenderScratch,
 ) where
     SampleAt: Fn(usize, usize) -> f32,
 {
@@ -36,11 +44,13 @@ pub(super) fn draw_waveform_channel<SampleAt>(
                 geometry,
                 sample_count,
                 channel,
+                channel_samples,
                 sample_at,
                 lane,
                 color,
                 center_y,
                 scale_y,
+                scratch,
             )
         }
         (WaveformSamplingMode::EnvelopeMinMax, WaveformRenderQuality::LegacyCpuOnly) => {
@@ -49,7 +59,9 @@ pub(super) fn draw_waveform_channel<SampleAt>(
                 geometry,
                 sample_count,
                 channel,
+                channel_samples,
                 sample_at,
+                envelope_tree,
                 lane,
                 color,
                 center_y,
@@ -62,6 +74,7 @@ pub(super) fn draw_waveform_channel<SampleAt>(
                 geometry,
                 sample_count,
                 channel,
+                channel_samples,
                 sample_at,
                 lane,
                 color,
@@ -70,6 +83,7 @@ pub(super) fn draw_waveform_channel<SampleAt>(
                 scale_y,
                 channel_command_budget,
                 glow_point_budget,
+                scratch,
             )
         }
         (WaveformSamplingMode::EnvelopeMinMax, WaveformRenderQuality::AutoVectorPreferred) => {
@@ -78,7 +92,9 @@ pub(super) fn draw_waveform_channel<SampleAt>(
                 geometry,
                 sample_count,
                 channel,
+                channel_samples,
                 sample_at,
+                envelope_tree,
                 lane,
                 color,
                 style,
@@ -86,6 +102,7 @@ pub(super) fn draw_waveform_channel<SampleAt>(
                 scale_y,
                 channel_command_budget,
                 glow_point_budget,
+                scratch,
             )
         }
     }
@@ -98,31 +115,37 @@ fn draw_waveform_channel_linear_legacy<SampleAt>(
     geometry: &WaveformGeometry,
     sample_count: usize,
     channel: usize,
+    channel_samples: Option<&[f32]>,
     sample_at: &SampleAt,
     lane: LaneBounds,
     color: Color,
     center_y: i32,
     scale_y: f32,
+    scratch: &mut WaveformRenderScratch,
 ) where
     SampleAt: Fn(usize, usize) -> f32,
 {
-    let samples = linear_samples(
+    let points = geometry.width_i32.max(2) as usize;
+    linear_samples_into(
         sample_count,
         channel,
+        channel_samples,
         sample_at,
-        geometry.width_i32.max(2) as usize,
+        points,
+        &mut scratch.linear_samples,
     );
-    if samples.len() < 2 {
+    if scratch.linear_samples.len() < 2 {
         return;
     }
-    let points = samples_to_points(
-        &samples,
+    samples_to_points(
+        &scratch.linear_samples,
         geometry.width_i32.max(2) - 1,
         lane,
         center_y,
         scale_y,
+        &mut scratch.contour,
     );
-    emit_polyline(commands, &points, color);
+    emit_polyline(commands, &scratch.contour, color);
 }
 
 /// Draw one channel using deterministic per-column min/max envelope segments.
@@ -132,7 +155,9 @@ fn draw_waveform_channel_envelope_legacy<SampleAt>(
     geometry: &WaveformGeometry,
     sample_count: usize,
     channel: usize,
+    channel_samples: Option<&[f32]>,
     sample_at: &SampleAt,
+    envelope_tree: Option<&EnvelopeMinMaxTree>,
     lane: LaneBounds,
     color: Color,
     center_y: i32,
@@ -142,11 +167,13 @@ fn draw_waveform_channel_envelope_legacy<SampleAt>(
 {
     let columns = geometry.width_i32.max(2) as usize;
     let x_max = geometry.width_i32.max(2) - 1;
-    for_each_envelope_min_max_column(
+    for_each_channel_envelope_column(
         sample_count,
         channel,
         columns,
+        channel_samples,
         sample_at,
+        envelope_tree,
         |column_index, min_sample, max_sample| {
             let x = point_x(column_index, columns, x_max);
             let y_top = sample_to_lane_y(max_sample, center_y, scale_y, lane);
@@ -167,6 +194,7 @@ fn draw_waveform_channel_linear_styled<SampleAt>(
     geometry: &WaveformGeometry,
     sample_count: usize,
     channel: usize,
+    channel_samples: Option<&[f32]>,
     sample_at: &SampleAt,
     lane: LaneBounds,
     color: Color,
@@ -175,31 +203,50 @@ fn draw_waveform_channel_linear_styled<SampleAt>(
     scale_y: f32,
     channel_command_budget: usize,
     glow_point_budget: usize,
+    scratch: &mut WaveformRenderScratch,
 ) where
     SampleAt: Fn(usize, usize) -> f32,
 {
-    let samples = linear_samples(
+    let points = geometry.width_i32.max(2) as usize;
+    linear_samples_into(
         sample_count,
         channel,
+        channel_samples,
         sample_at,
-        geometry.width_i32.max(2) as usize,
+        points,
+        &mut scratch.linear_samples,
     );
-    if samples.len() < 2 {
+    if scratch.linear_samples.len() < 2 {
         return;
     }
 
-    let contour = samples_to_points(
-        &samples,
+    samples_to_points(
+        &scratch.linear_samples,
         geometry.width_i32.max(2) - 1,
         lane,
         center_y,
         scale_y,
+        &mut scratch.contour,
     );
     let core_color = with_alpha(color, style.waveform_outline_alpha_inner);
     let glow_budget = channel_command_budget.saturating_sub(1);
-    let glow_plan = resolve_glow_plan(contour.len(), style, glow_budget, glow_point_budget, 2);
-    emit_glow_symmetric(commands, &contour, lane, color, style, glow_plan);
-    emit_polyline_batched(commands, &contour, core_color, 1.0);
+    let glow_plan = resolve_glow_plan(
+        scratch.contour.len(),
+        style,
+        glow_budget,
+        glow_point_budget,
+        2,
+    );
+    emit_glow_symmetric(
+        commands,
+        &scratch.contour,
+        lane,
+        color,
+        style,
+        glow_plan,
+        &mut scratch.shifted,
+    );
+    emit_polyline_batched(commands, &scratch.contour, core_color, 1.0);
 }
 
 /// Draw one min/max envelope channel with body fill and gradient-like outlines.
@@ -209,7 +256,9 @@ fn draw_waveform_channel_envelope_styled<SampleAt>(
     geometry: &WaveformGeometry,
     sample_count: usize,
     channel: usize,
+    channel_samples: Option<&[f32]>,
     sample_at: &SampleAt,
+    envelope_tree: Option<&EnvelopeMinMaxTree>,
     lane: LaneBounds,
     color: Color,
     style: WaveformViewStyle,
@@ -217,21 +266,26 @@ fn draw_waveform_channel_envelope_styled<SampleAt>(
     scale_y: f32,
     channel_command_budget: usize,
     glow_point_budget: usize,
+    scratch: &mut WaveformRenderScratch,
 ) where
     SampleAt: Fn(usize, usize) -> f32,
 {
     let columns = geometry.width_i32.max(2) as usize;
     let x_max = geometry.width_i32.max(2) - 1;
     let body_color = with_alpha(color, style.waveform_body_alpha);
-    let mut top_contour = Vec::with_capacity(columns);
-    let mut bottom_contour = Vec::with_capacity(columns);
-    let mut body_commands_emitted = 0usize;
+    scratch.top_contour.clear();
+    scratch.bottom_contour.clear();
+    scratch.top_contour.reserve(columns);
+    scratch.bottom_contour.reserve(columns);
 
-    for_each_envelope_min_max_column(
+    let mut body_commands_emitted = 0usize;
+    for_each_channel_envelope_column(
         sample_count,
         channel,
         columns,
+        channel_samples,
         sample_at,
+        envelope_tree,
         |column_index, min_sample, max_sample| {
             let x = point_x(column_index, columns, x_max);
             let y_top = sample_to_lane_y(max_sample, center_y, scale_y, lane);
@@ -244,12 +298,12 @@ fn draw_waveform_channel_envelope_styled<SampleAt>(
                 });
                 body_commands_emitted += 1;
             }
-            top_contour.push(Point { x, y: y_top });
-            bottom_contour.push(Point { x, y: y_bottom });
+            scratch.top_contour.push(Point { x, y: y_top });
+            scratch.bottom_contour.push(Point { x, y: y_bottom });
         },
     );
 
-    if top_contour.len() < 2 || bottom_contour.len() < 2 {
+    if scratch.top_contour.len() < 2 || scratch.bottom_contour.len() < 2 {
         return;
     }
 
@@ -257,30 +311,79 @@ fn draw_waveform_channel_envelope_styled<SampleAt>(
     let glow_budget = channel_command_budget.saturating_sub(body_commands_emitted + core_commands);
     let per_contour_glow_points = glow_point_budget / 2;
     let glow_plan = resolve_glow_plan(
-        top_contour.len(),
+        scratch.top_contour.len(),
         style,
         glow_budget,
         per_contour_glow_points.max(1),
         2,
     );
-    emit_glow_outward(commands, &top_contour, lane, color, style, -1, glow_plan);
-    emit_glow_outward(commands, &bottom_contour, lane, color, style, 1, glow_plan);
+    emit_glow_outward(
+        commands,
+        &scratch.top_contour,
+        lane,
+        color,
+        style,
+        -1,
+        glow_plan,
+        &mut scratch.shifted,
+    );
+    emit_glow_outward(
+        commands,
+        &scratch.bottom_contour,
+        lane,
+        color,
+        style,
+        1,
+        glow_plan,
+        &mut scratch.shifted,
+    );
     let core_color = with_alpha(color, style.waveform_outline_alpha_inner);
-    emit_polyline_batched(commands, &top_contour, core_color, 1.0);
-    emit_polyline_batched(commands, &bottom_contour, core_color, 1.0);
+    emit_polyline_batched(commands, &scratch.top_contour, core_color, 1.0);
+    emit_polyline_batched(commands, &scratch.bottom_contour, core_color, 1.0);
 }
 
-/// Build linearly sampled values for one channel.
-fn linear_samples<SampleAt>(
+/// Fill linear resample output for one channel.
+fn linear_samples_into<SampleAt>(
     sample_count: usize,
     channel: usize,
+    channel_samples: Option<&[f32]>,
     sample_at: &SampleAt,
     points: usize,
-) -> Vec<f32>
-where
+    out: &mut Vec<f32>,
+) where
     SampleAt: Fn(usize, usize) -> f32,
 {
-    resample_channel_linear(sample_count, channel, points, sample_at)
+    if let Some(samples) = channel_samples {
+        let bounded = &samples[..sample_count.min(samples.len())];
+        resample_channel_linear_from_slice_into(bounded, points, out);
+    } else {
+        resample_channel_linear_into(sample_count, channel, points, sample_at, out);
+    }
+}
+
+/// Iterate min/max envelopes for one channel using the best available source.
+fn for_each_channel_envelope_column<SampleAt, Visit>(
+    sample_count: usize,
+    channel: usize,
+    columns: usize,
+    channel_samples: Option<&[f32]>,
+    sample_at: &SampleAt,
+    envelope_tree: Option<&EnvelopeMinMaxTree>,
+    visit: Visit,
+) where
+    SampleAt: Fn(usize, usize) -> f32,
+    Visit: FnMut(usize, f32, f32),
+{
+    if let Some(tree) = envelope_tree {
+        for_each_envelope_min_max_column_cached(sample_count, columns, tree, visit);
+        return;
+    }
+    if let Some(samples) = channel_samples {
+        let bounded = &samples[..sample_count.min(samples.len())];
+        for_each_envelope_min_max_column_from_slice(bounded, columns, visit);
+        return;
+    }
+    for_each_envelope_min_max_column(sample_count, channel, columns, sample_at, visit);
 }
 
 /// Convert sampled values into x/y contour points.
@@ -290,19 +393,20 @@ fn samples_to_points(
     lane: LaneBounds,
     center_y: i32,
     scale_y: f32,
-) -> Vec<Point> {
+    out: &mut Vec<Point>,
+) {
+    out.clear();
     if samples.is_empty() {
-        return Vec::new();
+        return;
     }
 
     let points = samples.len();
-    let mut contour = Vec::with_capacity(points);
+    out.reserve(points);
     for (point_index, sample) in samples.iter().enumerate() {
         let x = point_x(point_index, points, x_max);
         let y = sample_to_lane_y(*sample, center_y, scale_y, lane);
-        contour.push(Point { x, y });
+        out.push(Point { x, y });
     }
-    contour
 }
 
 /// Emit a polyline as a deterministic sequence of line commands.
@@ -436,6 +540,7 @@ fn emit_glow_symmetric(
     color: Color,
     style: WaveformViewStyle,
     glow_plan: GlowPlan,
+    shifted_scratch: &mut Vec<Point>,
 ) {
     let layers = glow_plan.layers;
     for layer in 0..layers {
@@ -454,12 +559,22 @@ fn emit_glow_symmetric(
             layer_color,
             -offset,
             segment_stride,
+            shifted_scratch,
         );
-        emit_shifted_polyline(commands, contour, lane, layer_color, offset, segment_stride);
+        emit_shifted_polyline(
+            commands,
+            contour,
+            lane,
+            layer_color,
+            offset,
+            segment_stride,
+            shifted_scratch,
+        );
     }
 }
 
 /// Emit a directional glow for one contour by layering offsets away from waveform body.
+#[allow(clippy::too_many_arguments)]
 fn emit_glow_outward(
     commands: &mut Vec<SurfaceCommand>,
     contour: &[Point],
@@ -468,6 +583,7 @@ fn emit_glow_outward(
     style: WaveformViewStyle,
     direction: i32,
     glow_plan: GlowPlan,
+    shifted_scratch: &mut Vec<Point>,
 ) {
     let layers = glow_plan.layers;
     for layer in 0..layers {
@@ -486,6 +602,7 @@ fn emit_glow_outward(
             layer_color,
             signed_offset,
             segment_stride,
+            shifted_scratch,
         );
     }
 }
@@ -498,13 +615,16 @@ fn emit_shifted_polyline(
     color: Color,
     offset: i32,
     segment_stride: usize,
+    shifted_scratch: &mut Vec<Point>,
 ) {
     if points.len() < 2 || color.a == 0 {
         return;
     }
 
     let stride = segment_stride.max(1);
-    let mut shifted = Vec::with_capacity(sampled_polyline_point_count(points.len(), stride));
+    shifted_scratch.clear();
+    shifted_scratch.reserve(sampled_polyline_point_count(points.len(), stride));
+
     let mut index = 0usize;
     loop {
         let source = points[index];
@@ -512,15 +632,15 @@ fn emit_shifted_polyline(
             x: source.x,
             y: (source.y + offset).clamp(lane.top, lane.bottom),
         };
-        if shifted.last().copied() != Some(transformed) {
-            shifted.push(transformed);
+        if shifted_scratch.last().copied() != Some(transformed) {
+            shifted_scratch.push(transformed);
         }
         if index == points.len() - 1 {
             break;
         }
         index = (index + stride).min(points.len() - 1);
     }
-    emit_polyline_batched(commands, &shifted, color, 1.0);
+    emit_polyline_batched(commands, shifted_scratch, color, 1.0);
 }
 
 /// Resolve one alpha value for a glow layer index.

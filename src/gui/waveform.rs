@@ -6,6 +6,7 @@
 use super::declarative::SurfaceCommand;
 use super::{Color, Point, Rect, Size};
 
+mod context;
 mod grid;
 mod render;
 mod sampling;
@@ -13,6 +14,7 @@ mod sampling;
 #[cfg(test)]
 mod tests;
 
+pub use self::context::WaveformRenderContext;
 use self::grid::vertical_grid_lines;
 use self::render::draw_waveform_channel;
 
@@ -202,6 +204,138 @@ pub fn build_waveform_surface_commands<SampleAt>(
 where
     SampleAt: Fn(usize, usize) -> f32,
 {
+    let mut context = WaveformRenderContext::default();
+    build_waveform_surface_commands_with_context(
+        width,
+        height,
+        sample_count,
+        channel_count,
+        sample_at,
+        0,
+        config,
+        &mut context,
+    )
+}
+
+/// Generate waveform surface commands using a reusable render context.
+///
+/// Pass a monotonic `sample_revision` that changes whenever source samples
+/// change. Stable revisions let the renderer reuse cached envelope trees and
+/// callback materialization buffers across frames.
+#[allow(clippy::too_many_arguments)]
+pub fn build_waveform_surface_commands_with_context<SampleAt>(
+    width: u32,
+    height: u32,
+    sample_count: usize,
+    channel_count: usize,
+    sample_at: SampleAt,
+    sample_revision: u64,
+    config: &WaveformViewConfig<'_>,
+    context: &mut WaveformRenderContext,
+) -> Vec<SurfaceCommand>
+where
+    SampleAt: Fn(usize, usize) -> f32,
+{
+    context.ensure_callback_samples(sample_revision, sample_count, channel_count, &sample_at);
+    if matches!(config.sampling_mode, WaveformSamplingMode::EnvelopeMinMax) {
+        context.ensure_envelope_cache_from_callback(sample_revision, sample_count, channel_count);
+    }
+
+    let mut scratch = context.take_scratch();
+    let mut channel_samples = Vec::with_capacity(channel_count);
+    for channel in 0..channel_count {
+        channel_samples.push(context.callback_channel_samples(channel).unwrap_or(&[]));
+    }
+    let commands = build_waveform_surface_commands_from_channel_slices(
+        width,
+        height,
+        sample_count,
+        channel_count,
+        &channel_samples,
+        &sample_at,
+        config,
+        context,
+        &mut scratch,
+    );
+    context.restore_scratch(scratch);
+    commands
+}
+
+/// Generate waveform surface commands from channel sample slices.
+///
+/// This avoids callback dispatch in the hot render loop. The function uses one
+/// temporary context and does not persist cache state across calls.
+pub fn build_waveform_surface_commands_from_slices(
+    width: u32,
+    height: u32,
+    channel_samples: &[&[f32]],
+    config: &WaveformViewConfig<'_>,
+) -> Vec<SurfaceCommand> {
+    let mut context = WaveformRenderContext::default();
+    build_waveform_surface_commands_from_slices_with_context(
+        width,
+        height,
+        channel_samples,
+        0,
+        config,
+        &mut context,
+    )
+}
+
+/// Generate waveform surface commands from slices with reusable cache context.
+///
+/// Pass a stable `sample_revision` to skip multiresolution envelope rebuilds
+/// when sample content is unchanged.
+pub fn build_waveform_surface_commands_from_slices_with_context(
+    width: u32,
+    height: u32,
+    channel_samples: &[&[f32]],
+    sample_revision: u64,
+    config: &WaveformViewConfig<'_>,
+    context: &mut WaveformRenderContext,
+) -> Vec<SurfaceCommand> {
+    let sample_count = min_channel_sample_count(channel_samples);
+    let channel_count = channel_samples.len();
+    if matches!(config.sampling_mode, WaveformSamplingMode::EnvelopeMinMax) {
+        context.ensure_envelope_cache_from_slices(
+            sample_revision,
+            sample_count,
+            channel_samples,
+            channel_count,
+        );
+    }
+    let mut scratch = context.take_scratch();
+    let commands = build_waveform_surface_commands_from_channel_slices(
+        width,
+        height,
+        sample_count,
+        channel_count,
+        channel_samples,
+        &|_, _| 0.0,
+        config,
+        context,
+        &mut scratch,
+    );
+    context.restore_scratch(scratch);
+    commands
+}
+
+/// Shared waveform command builder using channel sample slices.
+#[allow(clippy::too_many_arguments)]
+fn build_waveform_surface_commands_from_channel_slices<SampleAt>(
+    width: u32,
+    height: u32,
+    sample_count: usize,
+    channel_count: usize,
+    channel_samples: &[&[f32]],
+    sample_at: &SampleAt,
+    config: &WaveformViewConfig<'_>,
+    context: &WaveformRenderContext,
+    scratch: &mut context::WaveformRenderScratch,
+) -> Vec<SurfaceCommand>
+where
+    SampleAt: Fn(usize, usize) -> f32,
+{
     let geometry = WaveformGeometry::new(width, height);
     let mut commands = Vec::new();
 
@@ -242,7 +376,9 @@ where
                     &geometry,
                     sample_count,
                     channel,
-                    &sample_at,
+                    channel_samples.get(channel).copied(),
+                    sample_at,
+                    context.envelope_tree(channel),
                     config.sampling_mode,
                     config.render_quality,
                     config.style,
@@ -251,6 +387,7 @@ where
                     config.channels[channel].color,
                     channel_budget,
                     config.max_glow_points_per_channel.max(1),
+                    scratch,
                 );
                 waveform_command_count =
                     waveform_command_count.saturating_add(commands.len().saturating_sub(before));
@@ -273,7 +410,9 @@ where
                     &geometry,
                     sample_count,
                     *channel,
-                    &sample_at,
+                    channel_samples.get(*channel).copied(),
+                    sample_at,
+                    context.envelope_tree(*channel),
                     config.sampling_mode,
                     config.render_quality,
                     config.style,
@@ -282,6 +421,7 @@ where
                     config.channels[*channel].color,
                     channel_budget,
                     config.max_glow_points_per_channel.max(1),
+                    scratch,
                 );
                 waveform_command_count =
                     waveform_command_count.saturating_add(commands.len().saturating_sub(before));
@@ -300,6 +440,15 @@ where
     }
 
     commands
+}
+
+/// Return the minimum shared sample length across all channel slices.
+fn min_channel_sample_count(channel_samples: &[&[f32]]) -> usize {
+    channel_samples
+        .iter()
+        .map(|samples| samples.len())
+        .min()
+        .unwrap_or(0)
 }
 
 /// Return visible channel indices in ascending order.
