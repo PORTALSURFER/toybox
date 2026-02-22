@@ -6,9 +6,9 @@ mod widget_color_role_tests {
     use crate::vector::scene::{KnobVisual, VectorCommand};
 
     #[test]
-    fn knob_color_role_uses_resolved_base_variant() {
+    fn knob_color_role_keeps_legacy_fill_and_adds_small_indicator_delta() {
         let role = WidgetColorRole::Accent(AccentKey::Entity(17));
-        let spec = UiSpec::new(RootFrameSpec::new(
+        let role_spec = UiSpec::new(RootFrameSpec::new(
             "root",
             Node::Absolute(
                 AbsoluteSpec::new(vec![AbsoluteChild::new(
@@ -18,26 +18,30 @@ mod widget_color_role_tests {
                 .layout(ContainerLayout::fill()),
             ),
         ));
+        let plain_spec = UiSpec::new(RootFrameSpec::new(
+            "root",
+            Node::Absolute(
+                AbsoluteSpec::new(vec![AbsoluteChild::new(
+                    Point { x: 0, y: 0 },
+                    Node::Knob(KnobSpec::new("k", 0.5, (0.0, 1.0))),
+                )])
+                .layout(ContainerLayout::fill()),
+            ),
+        ));
 
-        let mut canvas = Canvas::new(220, 160);
-        let mut layout = Layout::default();
-        let mut ui_state = UiState::default();
         let theme = Theme::default();
-        let input = InputState::default();
-        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
-        let _ = render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+        let (role_visual, role_pixels) = render_and_capture_knob(&role_spec, &theme);
+        let (plain_visual, plain_pixels) = render_and_capture_knob(&plain_spec, &theme);
 
-        let visual = take_first_knob_visual(&mut ui);
-        let resolver = DefaultWidgetColorResolver::new();
-        let variants = resolver.resolve(
-            role,
-            WidgetColorContext {
-                tokens: ThemeTokens::default(),
-                disabled: false,
-                focused: false,
-            },
+        assert_eq!(role_visual.fill, theme.knob_fill);
+        assert_eq!(plain_visual.fill, theme.knob_fill);
+
+        let differing_pixels = count_differing_pixels(&role_pixels, &plain_pixels);
+        assert!(differing_pixels > 0, "expected role indicator dot to alter pixels");
+        assert!(
+            differing_pixels < 200,
+            "expected only a compact indicator delta, got {differing_pixels} differing pixels"
         );
-        assert_eq!(visual.fill, variants.base);
     }
 
     #[test]
@@ -66,7 +70,7 @@ mod widget_color_role_tests {
     }
 
     #[test]
-    fn focused_knob_uses_resolved_focus_ring_color() {
+    fn focused_knob_with_role_uses_theme_focus_outline() {
         let role = WidgetColorRole::Accent(AccentKey::Entity(3));
         let spec = UiSpec::new(RootFrameSpec::new(
             "root",
@@ -92,16 +96,7 @@ mod widget_color_role_tests {
         let _ = render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
 
         let visual = take_first_knob_visual(&mut ui);
-        let resolver = DefaultWidgetColorResolver::new();
-        let variants = resolver.resolve(
-            role,
-            WidgetColorContext {
-                tokens: ThemeTokens::default(),
-                disabled: false,
-                focused: true,
-            },
-        );
-        assert_eq!(visual.outline, variants.focus_ring);
+        assert_eq!(visual.outline, theme.knob_active);
     }
 
     #[test]
@@ -176,6 +171,23 @@ mod widget_color_role_tests {
         let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
         let _ = render_checked(spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
         format!("{:?}", ui.take_vector_commands())
+    }
+
+    fn render_and_capture_knob(spec: &UiSpec, theme: &Theme) -> (KnobVisual, Vec<u8>) {
+        let mut canvas = Canvas::new(220, 160);
+        let mut layout = Layout::default();
+        let mut ui_state = UiState::default();
+        let input = InputState::default();
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, theme);
+        let _ = render_checked(spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+        let visual = take_first_knob_visual(&mut ui);
+        (visual, canvas.pixels().to_vec())
+    }
+
+    fn count_differing_pixels(a: &[u8], b: &[u8]) -> usize {
+        let px_a = a.chunks_exact(4);
+        let px_b = b.chunks_exact(4);
+        px_a.zip(px_b).filter(|(lhs, rhs)| lhs != rhs).count()
     }
 
     fn take_first_knob_visual(ui: &mut Ui<'_>) -> KnobVisual {

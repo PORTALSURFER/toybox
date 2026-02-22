@@ -8,6 +8,7 @@ fn render_knob(
 ) {
     let id = WidgetId::from_label(&knob.key);
     let mut value = knob.value;
+    let dot_color = resolve_widget_role_dot_color(knob.color_role, tokens, knob.disabled, knob.focused);
     let color_variants =
         resolve_control_color_variants(knob.color_role, tokens, knob.disabled, knob.focused);
     let knob_diameter = knob
@@ -24,6 +25,7 @@ fn render_knob(
         knob_request = knob_request.with_color_variants(variants);
     }
     let response = ui.knob_with_labels_in_rect_scaled(&mut value, knob_request);
+    draw_widget_role_dot(ui, rect, tokens, dot_color, knob.disabled);
     if !knob.disabled && response.changed {
         actions.push(UiAction::KnobChanged {
             key: knob.key.clone(),
@@ -42,6 +44,8 @@ fn render_slider(
 ) {
     let id = WidgetId::from_label(&slider.key);
     let mut value = slider.value;
+    let dot_color =
+        resolve_widget_role_dot_color(slider.color_role, tokens, slider.disabled, slider.focused);
     let color_variants =
         resolve_control_color_variants(slider.color_role, tokens, slider.disabled, slider.focused);
     let mut slider_request =
@@ -54,6 +58,7 @@ fn render_slider(
         slider_request = slider_request.with_color_variants(variants);
     }
     let response = ui.slider_in_rect_scaled(&mut value, slider_request);
+    draw_widget_role_dot(ui, rect, tokens, dot_color, slider.disabled);
     if !slider.disabled && response.changed {
         actions.push(UiAction::SliderChanged {
             key: slider.key.clone(),
@@ -72,6 +77,8 @@ fn render_toggle(
 ) {
     let id = WidgetId::from_label(&toggle.key);
     let mut value = toggle.value;
+    let dot_color =
+        resolve_widget_role_dot_color(toggle.color_role, tokens, toggle.disabled, toggle.focused);
     let color_variants =
         resolve_control_color_variants(toggle.color_role, tokens, toggle.disabled, toggle.focused);
     let control_size = toggle.control_size.unwrap_or(Size {
@@ -92,6 +99,7 @@ fn render_toggle(
         toggle_request = toggle_request.with_color_variants(variants);
     }
     let response = ui.toggle_in_rect_styled(toggle_request);
+    draw_widget_role_dot(ui, rect, tokens, dot_color, toggle.disabled);
     if !toggle.disabled && response.changed {
         actions.push(UiAction::ToggleChanged {
             key: toggle.key.clone(),
@@ -110,6 +118,8 @@ fn render_button(
 ) {
     let id = WidgetId::from_label(&button.key);
     let label = button.label.as_deref().unwrap_or("");
+    let dot_color =
+        resolve_widget_role_dot_color(button.color_role, tokens, button.disabled, button.focused);
     let color_variants =
         resolve_control_color_variants(button.color_role, tokens, button.disabled, button.focused);
     let control_size = button.control_size.unwrap_or(Size {
@@ -129,6 +139,7 @@ fn render_button(
         button_request = button_request.with_color_variants(variants);
     }
     let response = ui.button_in_rect_styled(button_request);
+    draw_widget_role_dot(ui, rect, tokens, dot_color, button.disabled);
     if !button.disabled && response.clicked {
         actions.push(UiAction::ButtonPressed {
             key: button.key.clone(),
@@ -201,6 +212,36 @@ fn render_indicator(indicator: &IndicatorSpec, rect: Rect, ui: &mut Ui<'_>) {
     ui.indicator(rect, indicator.active);
 }
 
+/// Draw a compact color-role indicator dot in the widget corner.
+fn draw_widget_role_dot(
+    ui: &mut Ui<'_>,
+    rect: Rect,
+    tokens: &ThemeTokens,
+    dot_color: Option<Color>,
+    disabled: bool,
+) {
+    let Some(dot_color) = dot_color else {
+        return;
+    };
+    if rect.size.width < 10 || rect.size.height < 10 {
+        return;
+    }
+
+    let radius = ((rect.size.width.min(rect.size.height) as i32) / 7).clamp(2, 4);
+    let center = Point {
+        x: rect.origin.x + rect.size.width as i32 - radius - 2,
+        y: rect.origin.y + radius + 2,
+    };
+    let fill = if disabled {
+        scale_alpha(dot_color, 140)
+    } else {
+        scale_alpha(dot_color, 220)
+    };
+    ui.canvas().fill_circle(center, radius, fill);
+    ui.canvas()
+        .stroke_circle(center, radius, 1, tokens.colors.border);
+}
+
 /// Resolve optional UI control color variants for a declarative widget role.
 fn resolve_control_color_variants(
     role: Option<WidgetColorRole>,
@@ -225,6 +266,32 @@ fn resolve_control_color_variants(
         disabled: variants.disabled,
         focus_ring: variants.focus_ring,
     })
+}
+
+/// Resolve a single indicator-dot color for one widget color role.
+fn resolve_widget_role_dot_color(
+    role: Option<WidgetColorRole>,
+    tokens: &ThemeTokens,
+    disabled: bool,
+    focused: bool,
+) -> Option<Color> {
+    let role = role?;
+    let resolver = DefaultWidgetColorResolver::new();
+    let variants = resolver.resolve(
+        role,
+        WidgetColorContext {
+            tokens: *tokens,
+            disabled,
+            focused,
+        },
+    );
+    Some(if disabled { variants.disabled } else { variants.base })
+}
+
+/// Return `color` with alpha multiplied by `alpha` in `0..=255`.
+fn scale_alpha(color: Color, alpha: u8) -> Color {
+    let scaled = (u16::from(color.a) * u16::from(alpha) + 127) / 255;
+    Color::rgba(color.r, color.g, color.b, scaled as u8)
 }
 
 /// Render a curve-editor node and emit model change actions.

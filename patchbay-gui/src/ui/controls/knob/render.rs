@@ -24,7 +24,7 @@ impl<'a> Ui<'a> {
         let value_angle = Self::resolve_knob_value_angle(value, range);
         let fill = self.resolve_knob_fill(spec.color_variants, spec.disabled, response);
         let outline = self.resolve_knob_outline(spec.color_variants, spec.focused);
-        let indicator = self.resolve_knob_indicator(spec.color_variants, spec.disabled, response);
+        let indicator = self.resolve_knob_indicator(spec.color_variants, spec.disabled);
         self.vector_commands.push(VectorCommand::Knob(KnobVisual {
             center: geometry.center,
             radius: geometry.radius,
@@ -55,21 +55,12 @@ impl<'a> Ui<'a> {
     /// Resolve dial fill color from current interaction response.
     fn resolve_knob_fill(
         &self,
-        variants: Option<ControlColorVariants>,
+        _variants: Option<ControlColorVariants>,
         disabled: bool,
         response: KnobResponse,
     ) -> Color {
-        if let Some(variants) = variants {
-            if disabled {
-                return variants.disabled;
-            }
-            if response.active {
-                return variants.active;
-            }
-            if response.hovered {
-                return variants.hover;
-            }
-            return variants.base;
+        if disabled {
+            return self.theme.knob_fill;
         }
         if response.active {
             self.theme.knob_active
@@ -83,13 +74,11 @@ impl<'a> Ui<'a> {
     /// Resolve knob outline color, including focused ring styling.
     fn resolve_knob_outline(
         &self,
-        variants: Option<ControlColorVariants>,
+        _variants: Option<ControlColorVariants>,
         focused: bool,
     ) -> Color {
         if focused {
-            return variants
-                .map(|variants| variants.focus_ring)
-                .unwrap_or(self.theme.knob_active);
+            return self.theme.knob_active;
         }
         self.theme.knob_outline
     }
@@ -97,21 +86,11 @@ impl<'a> Ui<'a> {
     /// Resolve knob indicator color for role-driven state variants.
     fn resolve_knob_indicator(
         &self,
-        variants: Option<ControlColorVariants>,
+        _variants: Option<ControlColorVariants>,
         disabled: bool,
-        response: KnobResponse,
     ) -> Color {
-        if let Some(variants) = variants {
-            if disabled {
-                return variants.disabled;
-            }
-            if response.active {
-                return variants.active;
-            }
-            if response.hovered {
-                return variants.hover;
-            }
-            return variants.base;
+        if disabled {
+            return self.theme.knob_indicator;
         }
         self.theme.knob_indicator
     }

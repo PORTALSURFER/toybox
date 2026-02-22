@@ -38,48 +38,10 @@ impl<'a> Ui<'a> {
             },
             handle_radius: (height / 2).max(3),
             track_fill: self.resolve_slider_fill_color(style.variants, style.disabled, response),
-            value_fill: if style.disabled {
-                style
-                    .variants
-                    .map(|variants| variants.disabled)
-                    .unwrap_or(self.theme.knob_indicator)
-            } else if response.active {
-                style
-                    .variants
-                    .map(|variants| variants.active)
-                    .unwrap_or(self.theme.knob_indicator)
-            } else {
-                style
-                    .variants
-                    .map(|variants| variants.base)
-                    .unwrap_or(self.theme.knob_indicator)
-            },
-            handle_fill: if style.disabled {
-                style
-                    .variants
-                    .map(|variants| variants.disabled)
-                    .unwrap_or(self.theme.knob_indicator)
-            } else if response.active {
-                style
-                    .variants
-                    .map(|variants| variants.active)
-                    .unwrap_or(self.theme.knob_indicator)
-            } else if response.hovered {
-                style
-                    .variants
-                    .map(|variants| variants.hover)
-                    .unwrap_or(self.theme.knob_indicator)
-            } else {
-                style
-                    .variants
-                    .map(|variants| variants.base)
-                    .unwrap_or(self.theme.knob_indicator)
-            },
+            value_fill: self.theme.knob_indicator,
+            handle_fill: self.theme.knob_indicator,
             outline: if style.focused {
-                style
-                    .variants
-                    .map(|variants| variants.focus_ring)
-                    .unwrap_or(self.theme.knob_active)
+                self.theme.knob_active
             } else {
                 self.theme.knob_outline
             },

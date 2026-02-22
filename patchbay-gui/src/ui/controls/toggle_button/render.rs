@@ -4,20 +4,11 @@ impl<'a> Ui<'a> {
         &self,
         value: bool,
         hovered: bool,
-        variants: Option<ControlColorVariants>,
+        _variants: Option<ControlColorVariants>,
         disabled: bool,
     ) -> Color {
-        if let Some(variants) = variants {
-            if disabled {
-                return variants.disabled;
-            }
-            if value {
-                return variants.active;
-            }
-            if hovered {
-                return variants.hover;
-            }
-            return variants.base;
+        if disabled {
+            return self.theme.knob_fill;
         }
         if value {
             self.theme.knob_indicator
@@ -34,14 +25,12 @@ impl<'a> Ui<'a> {
         rect: Rect,
         fill: Color,
         value: bool,
-        variants: Option<ControlColorVariants>,
+        _variants: Option<ControlColorVariants>,
         focused: bool,
     ) {
         self.fill_rect_clipped(rect, fill);
         let outline = if focused {
-            variants
-                .map(|variants| variants.focus_ring)
-                .unwrap_or(self.theme.knob_active)
+            self.theme.knob_active
         } else {
             self.theme.knob_outline
         };
@@ -58,10 +47,8 @@ impl<'a> Ui<'a> {
             x: thumb_x,
             y: rect.origin.y + height / 2,
         };
-        let thumb_fill = variants
-            .map(|variants| variants.base)
-            .unwrap_or(self.theme.knob_outline);
-        self.canvas.fill_circle(thumb_center, thumb_radius, thumb_fill);
+        self.canvas
+            .fill_circle(thumb_center, thumb_radius, self.theme.knob_outline);
     }
 
     /// Draw button body, outline, and clamped label text.
@@ -73,16 +60,10 @@ impl<'a> Ui<'a> {
         active: bool,
         style: ControlVisualState,
     ) {
-        let fill = if let Some(variants) = style.variants {
-            if style.disabled {
-                variants.disabled
-            } else if active {
-                variants.active
-            } else if hovered {
-                variants.hover
-            } else {
-                variants.base
-            }
+        let fill = if style.disabled {
+            self.theme.knob_fill
+        } else if active {
+            self.theme.knob_active
         } else if hovered {
             self.theme.knob_hover
         } else {
@@ -90,10 +71,7 @@ impl<'a> Ui<'a> {
         };
         self.fill_rect_clipped(rect, fill);
         let outline = if style.focused {
-            style
-                .variants
-                .map(|variants| variants.focus_ring)
-                .unwrap_or(self.theme.knob_active)
+            self.theme.knob_active
         } else {
             self.theme.knob_outline
         };
@@ -104,16 +82,7 @@ impl<'a> Ui<'a> {
             x: rect.origin.x,
             y: rect.origin.y + (rect.size.height as i32 - (7 * self.theme.text_scale as i32)) / 2,
         };
-        let text_color = style
-            .variants
-            .map(|variants| {
-                if style.disabled {
-                    variants.disabled
-                } else {
-                    variants.base
-                }
-            })
-            .unwrap_or(self.theme.text);
+        let text_color = self.theme.text;
         let _ = self.draw_text_single_line_hard_clamped_centered_on_char_size(
             text_pos,
             center_x,
