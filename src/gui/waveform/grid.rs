@@ -1,6 +1,17 @@
 //! Grid generation helpers for waveform rendering.
 
-use super::{GridTone, WaveformGridMode};
+use super::WaveformGridMode;
+
+/// Classifies vertical grid line emphasis.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum GridTone {
+    /// Bar boundary line.
+    Bar,
+    /// Beat boundary line.
+    Beat,
+    /// Beat subdivision line.
+    Subdivision,
+}
 
 /// Build vertical grid lines for fixed or tempo-locked modes.
 pub(super) fn vertical_grid_lines(mode: WaveformGridMode, width: i32) -> Vec<(i32, GridTone)> {
