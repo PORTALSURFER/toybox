@@ -223,9 +223,10 @@ fn phase_aligned_column_bounds(
     }
     let n = sample_count as u128;
     let c = columns as u128;
-    let phase = (start_sample % sample_count as u64) as u128;
-    let base = phase / c;
-    let start = (((column as u128) * n + phase) / c).saturating_sub(base) as usize;
-    let end = ((((column as u128) + 1) * n + phase) / c).saturating_sub(base) as usize;
+    // Phase-lock the remainder distribution to output-column cadence so
+    // column-bin boundaries advance consistently with transport phase.
+    let phase = (start_sample % columns as u64) as u128;
+    let start = (((column as u128) * n + phase) / c) as usize;
+    let end = ((((column as u128) + 1) * n + phase) / c) as usize;
     (start, end)
 }

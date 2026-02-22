@@ -410,6 +410,34 @@ fn envelope_mode_phase_repeats_when_start_sample_shifts_by_columns() {
 }
 
 #[test]
+fn envelope_mode_phase_repeats_when_start_sample_shifts_by_columns_across_sample_wrap() {
+    let styles = [WaveformChannelStyle {
+        visible: true,
+        color: Color::rgb(200, 160, 96),
+    }];
+    let mut config = WaveformViewConfig::new(&styles);
+    config.sampling_mode = WaveformSamplingMode::EnvelopeMinMax;
+    config.render_quality = WaveformRenderQuality::LegacyCpuOnly;
+
+    let sample_count = 97usize;
+    let width = 53u32;
+    let columns = width.max(2) as u64;
+    let samples: Vec<f32> = (0..sample_count)
+        .map(|index| ((index as f32 * 0.123).sin() * 0.9).clamp(-1.0, 1.0))
+        .collect();
+
+    config.start_sample = 60;
+    let a = build_waveform_surface_commands(width, 80, sample_count, 1, |_, i| samples[i], &config);
+    config.start_sample = 60 + columns;
+    let b = build_waveform_surface_commands(width, 80, sample_count, 1, |_, i| samples[i], &config);
+
+    assert_eq!(
+        a, b,
+        "phase alignment should depend on start_sample modulo output columns"
+    );
+}
+
+#[test]
 fn envelope_mode_preserves_sharp_transients() {
     let styles = [WaveformChannelStyle {
         visible: true,
