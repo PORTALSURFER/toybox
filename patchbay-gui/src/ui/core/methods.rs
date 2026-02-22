@@ -152,6 +152,34 @@ impl<'a> Ui<'a> {
         self.canvas
     }
 
+    /// Draw a line with vector antialiasing when available.
+    ///
+    /// Falls back to CPU raster line drawing when vector shapes are disabled.
+    pub(crate) fn draw_line_visual(
+        &mut self,
+        start: Point,
+        end: Point,
+        thickness: f32,
+        color: Color,
+    ) {
+        if self.vector_shapes_enabled {
+            self.vector_commands.push(VectorCommand::Line(LineVisual {
+                start: PointF {
+                    x: start.x as f32,
+                    y: start.y as f32,
+                },
+                end: PointF {
+                    x: end.x as f32,
+                    y: end.y as f32,
+                },
+                thickness: thickness.max(1.0),
+                color,
+            }));
+            return;
+        }
+        self.canvas.draw_line(start, end, color);
+    }
+
     /// Return or initialize editable textbox runtime state for one stable key.
     pub(crate) fn begin_text_edit_runtime(
         &mut self,

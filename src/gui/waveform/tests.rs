@@ -14,6 +14,25 @@ fn collect_lines_by_color(commands: &[SurfaceCommand], color: Color) -> Vec<(Poi
         .collect()
 }
 
+fn collect_lines_by_rgb(commands: &[SurfaceCommand], color: Color) -> Vec<(Point, Point, Color)> {
+    commands
+        .iter()
+        .filter_map(|command| match command {
+            SurfaceCommand::Line {
+                start,
+                end,
+                color: command_color,
+            } if command_color.r == color.r
+                && command_color.g == color.g
+                && command_color.b == color.b =>
+            {
+                Some((*start, *end, *command_color))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 #[test]
 fn tempo_locked_grid_lines_are_phase_stable() {
     let one_bar = WaveformGridMode::TempoLocked {
@@ -73,7 +92,7 @@ fn envelope_mode_preserves_sharp_transients() {
 
     let commands =
         build_waveform_surface_commands(width, height, sample_count, 1, |_, i| samples[i], &config);
-    let waveform_lines = collect_lines_by_color(&commands, styles[0].color);
+    let waveform_lines = collect_lines_by_rgb(&commands, styles[0].color);
     let columns = width.max(2) as usize;
     let transient_column = (transient_index * columns) / sample_count;
     let x_max = width.max(2) as i32 - 1;
@@ -81,7 +100,7 @@ fn envelope_mode_preserves_sharp_transients() {
         ((transient_column as f32 / (columns - 1) as f32) * x_max as f32).round() as i32;
 
     let mut column_top: Option<i32> = None;
-    for (start, end) in waveform_lines {
+    for (start, end, _) in waveform_lines {
         if start.x == expected_x && end.x == expected_x {
             let top_y = start.y.min(end.y);
             column_top = Some(column_top.map_or(top_y, |existing| existing.min(top_y)));
@@ -106,6 +125,7 @@ fn linear_mode_retains_polyline_invariants() {
     }];
     let mut config = WaveformViewConfig::new(&styles);
     config.sampling_mode = WaveformSamplingMode::Linear;
+    config.render_quality = WaveformRenderQuality::LegacyCpuOnly;
 
     let sample_count = 64usize;
     let width = 24u32;
@@ -155,6 +175,7 @@ fn envelope_mode_renders_in_overlay_and_split_layouts() {
     let mut overlay_config = WaveformViewConfig::new(&styles);
     overlay_config.display_mode = WaveformDisplayMode::Overlay;
     overlay_config.sampling_mode = WaveformSamplingMode::EnvelopeMinMax;
+    overlay_config.render_quality = WaveformRenderQuality::LegacyCpuOnly;
 
     let width = 20u32;
     let height = 100u32;
@@ -222,4 +243,48 @@ fn envelope_mode_renders_in_overlay_and_split_layouts() {
         )
     });
     assert!(lane_divider_present, "expected split lane divider at y=50");
+}
+
+#[test]
+fn styled_envelope_mode_emits_body_and_glow_alpha_layers() {
+    let styles = [WaveformChannelStyle {
+        visible: true,
+        color: Color::rgb(180, 220, 250),
+    }];
+    let mut config = WaveformViewConfig::new(&styles);
+    config.sampling_mode = WaveformSamplingMode::EnvelopeMinMax;
+    config.render_quality = WaveformRenderQuality::AutoVectorPreferred;
+
+    let samples: Vec<f32> = (0..512)
+        .map(|index| ((index as f32 * 0.041).sin() * 0.8).clamp(-1.0, 1.0))
+        .collect();
+    let commands =
+        build_waveform_surface_commands(96, 48, samples.len(), 1, |_, i| samples[i], &config);
+    let waveform_lines = collect_lines_by_rgb(&commands, styles[0].color);
+    assert!(
+        !waveform_lines.is_empty(),
+        "styled envelope mode should emit waveform lines"
+    );
+
+    let mut saw_body_alpha = false;
+    let mut saw_outline_inner_alpha = false;
+    let mut saw_faded_alpha = false;
+    for (_, _, color) in waveform_lines {
+        if color.a == config.style.waveform_body_alpha {
+            saw_body_alpha = true;
+        }
+        if color.a == config.style.waveform_outline_alpha_inner {
+            saw_outline_inner_alpha = true;
+        }
+        if color.a > 0 && color.a < config.style.waveform_outline_alpha_inner {
+            saw_faded_alpha = true;
+        }
+    }
+
+    assert!(saw_body_alpha, "expected envelope body alpha layer");
+    assert!(
+        saw_outline_inner_alpha,
+        "expected inner outline alpha layer"
+    );
+    assert!(saw_faded_alpha, "expected at least one faded glow layer");
 }

@@ -49,6 +49,15 @@ pub enum WaveformSamplingMode {
     EnvelopeMinMax,
 }
 
+/// Rendering quality policy for waveform command generation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WaveformRenderQuality {
+    /// Emit enhanced outline/glow commands intended for vector-backed rendering.
+    AutoVectorPreferred,
+    /// Emit legacy line-only commands for strict CPU compatibility.
+    LegacyCpuOnly,
+}
+
 /// Grid configuration for waveform rendering.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum WaveformGridMode {
@@ -94,6 +103,14 @@ pub struct WaveformViewStyle {
     pub grid_horizontal_center: Color,
     /// Split-lane divider color.
     pub lane_divider: Color,
+    /// Alpha used for the waveform body fill.
+    pub waveform_body_alpha: u8,
+    /// Alpha used at the inner edge of the waveform outline glow.
+    pub waveform_outline_alpha_inner: u8,
+    /// Alpha used at the outer edge of the waveform outline glow.
+    pub waveform_outline_alpha_outer: u8,
+    /// Number of glow layers emitted around each contour.
+    pub waveform_outline_layers: u8,
 }
 
 impl Default for WaveformViewStyle {
@@ -106,6 +123,10 @@ impl Default for WaveformViewStyle {
             grid_horizontal: Color::rgb(27, 31, 37),
             grid_horizontal_center: Color::rgb(53, 61, 69),
             lane_divider: Color::rgb(42, 48, 54),
+            waveform_body_alpha: 72,
+            waveform_outline_alpha_inner: 210,
+            waveform_outline_alpha_outer: 0,
+            waveform_outline_layers: 4,
         }
     }
 }
@@ -117,6 +138,8 @@ pub struct WaveformViewConfig<'a> {
     pub display_mode: WaveformDisplayMode,
     /// Sample-to-column mapping mode.
     pub sampling_mode: WaveformSamplingMode,
+    /// Rendering quality policy for contour command generation.
+    pub render_quality: WaveformRenderQuality,
     /// Vertical zoom multiplier applied to sample amplitude.
     pub zoom_y: f32,
     /// Per-channel visibility and color styles.
@@ -135,6 +158,7 @@ impl<'a> WaveformViewConfig<'a> {
         Self {
             display_mode: WaveformDisplayMode::Overlay,
             sampling_mode: WaveformSamplingMode::EnvelopeMinMax,
+            render_quality: WaveformRenderQuality::AutoVectorPreferred,
             zoom_y: 1.0,
             channels,
             grid_mode: WaveformGridMode::Fixed { line_count: 8 },
@@ -185,6 +209,8 @@ where
                     channel,
                     &sample_at,
                     config.sampling_mode,
+                    config.render_quality,
+                    config.style,
                     config.zoom_y,
                     LaneBounds::full(&geometry),
                     config.channels[channel].color,
@@ -202,6 +228,8 @@ where
                     *channel,
                     &sample_at,
                     config.sampling_mode,
+                    config.render_quality,
+                    config.style,
                     config.zoom_y,
                     lane,
                     config.channels[*channel].color,

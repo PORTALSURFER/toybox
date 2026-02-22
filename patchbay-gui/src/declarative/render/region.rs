@@ -111,8 +111,7 @@ fn circle_bounds(center: Point, radius: i32) -> Rect {
 
 /// Render a line command in absolute coordinates.
 fn render_line_command(start: Point, end: Point, color: Color, origin: Point, ui: &mut Ui<'_>) {
-    ui.canvas()
-        .draw_line(offset_point(start, origin), offset_point(end, origin), color);
+    ui.draw_line_visual(offset_point(start, origin), offset_point(end, origin), 1.0, color);
 }
 
 /// Render a text command in absolute coordinates.

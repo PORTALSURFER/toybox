@@ -1,7 +1,10 @@
 //! Mode-specific waveform channel rendering helpers.
 
 use super::sampling::{clamp_sample, resample_channel_linear, sample_envelope_min_max_for_columns};
-use super::{Color, LaneBounds, Point, SurfaceCommand, WaveformGeometry, WaveformSamplingMode};
+use super::{
+    Color, LaneBounds, Point, SurfaceCommand, WaveformGeometry, WaveformRenderQuality,
+    WaveformSamplingMode, WaveformViewStyle,
+};
 
 /// Draw one waveform channel using the requested sampling mode.
 #[allow(clippy::too_many_arguments)]
@@ -12,6 +15,8 @@ pub(super) fn draw_waveform_channel<SampleAt>(
     channel: usize,
     sample_at: &SampleAt,
     sampling_mode: WaveformSamplingMode,
+    render_quality: WaveformRenderQuality,
+    style: WaveformViewStyle,
     zoom_y: f32,
     lane: LaneBounds,
     color: Color,
@@ -22,35 +27,67 @@ pub(super) fn draw_waveform_channel<SampleAt>(
     let center_y = lane.top + lane_height / 2;
     let scale_y = (lane_height as f32 * 0.45) / zoom_y.max(0.05);
 
-    match sampling_mode {
-        WaveformSamplingMode::Linear => draw_waveform_channel_linear(
-            commands,
-            geometry,
-            sample_count,
-            channel,
-            sample_at,
-            lane,
-            color,
-            center_y,
-            scale_y,
-        ),
-        WaveformSamplingMode::EnvelopeMinMax => draw_waveform_channel_envelope_min_max(
-            commands,
-            geometry,
-            sample_count,
-            channel,
-            sample_at,
-            lane,
-            color,
-            center_y,
-            scale_y,
-        ),
+    match (sampling_mode, render_quality) {
+        (WaveformSamplingMode::Linear, WaveformRenderQuality::LegacyCpuOnly) => {
+            draw_waveform_channel_linear_legacy(
+                commands,
+                geometry,
+                sample_count,
+                channel,
+                sample_at,
+                lane,
+                color,
+                center_y,
+                scale_y,
+            )
+        }
+        (WaveformSamplingMode::EnvelopeMinMax, WaveformRenderQuality::LegacyCpuOnly) => {
+            draw_waveform_channel_envelope_legacy(
+                commands,
+                geometry,
+                sample_count,
+                channel,
+                sample_at,
+                lane,
+                color,
+                center_y,
+                scale_y,
+            )
+        }
+        (WaveformSamplingMode::Linear, WaveformRenderQuality::AutoVectorPreferred) => {
+            draw_waveform_channel_linear_styled(
+                commands,
+                geometry,
+                sample_count,
+                channel,
+                sample_at,
+                lane,
+                color,
+                style,
+                center_y,
+                scale_y,
+            )
+        }
+        (WaveformSamplingMode::EnvelopeMinMax, WaveformRenderQuality::AutoVectorPreferred) => {
+            draw_waveform_channel_envelope_styled(
+                commands,
+                geometry,
+                sample_count,
+                channel,
+                sample_at,
+                lane,
+                color,
+                style,
+                center_y,
+                scale_y,
+            )
+        }
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 /// Draw one channel with linearly interpolated polyline sampling.
-fn draw_waveform_channel_linear<SampleAt>(
+#[allow(clippy::too_many_arguments)]
+fn draw_waveform_channel_linear_legacy<SampleAt>(
     commands: &mut Vec<SurfaceCommand>,
     geometry: &WaveformGeometry,
     sample_count: usize,
@@ -63,34 +100,28 @@ fn draw_waveform_channel_linear<SampleAt>(
 ) where
     SampleAt: Fn(usize, usize) -> f32,
 {
-    let points = geometry.width_i32.max(2) as usize;
-    let samples = resample_channel_linear(sample_count, channel, points, sample_at);
+    let samples = linear_samples(
+        sample_count,
+        channel,
+        sample_at,
+        geometry.width_i32.max(2) as usize,
+    );
     if samples.len() < 2 {
         return;
     }
-
-    let x_max = geometry.width_i32.max(2) - 1;
-    let mut prev = None;
-
-    for (point_index, sample) in samples.iter().enumerate() {
-        let x = point_x(point_index, points, x_max);
-        let y = sample_to_lane_y(*sample, center_y, scale_y, lane);
-        let current = Point { x, y };
-
-        if let Some(previous) = prev {
-            commands.push(SurfaceCommand::Line {
-                start: previous,
-                end: current,
-                color,
-            });
-        }
-        prev = Some(current);
-    }
+    let points = samples_to_points(
+        &samples,
+        geometry.width_i32.max(2) - 1,
+        lane,
+        center_y,
+        scale_y,
+    );
+    emit_polyline(commands, &points, color);
 }
 
-#[allow(clippy::too_many_arguments)]
 /// Draw one channel using deterministic per-column min/max envelope segments.
-fn draw_waveform_channel_envelope_min_max<SampleAt>(
+#[allow(clippy::too_many_arguments)]
+fn draw_waveform_channel_envelope_legacy<SampleAt>(
     commands: &mut Vec<SurfaceCommand>,
     geometry: &WaveformGeometry,
     sample_count: usize,
@@ -120,6 +151,229 @@ fn draw_waveform_channel_envelope_min_max<SampleAt>(
             color,
         });
     }
+}
+
+/// Draw one linearly sampled channel with an outline glow treatment.
+#[allow(clippy::too_many_arguments)]
+fn draw_waveform_channel_linear_styled<SampleAt>(
+    commands: &mut Vec<SurfaceCommand>,
+    geometry: &WaveformGeometry,
+    sample_count: usize,
+    channel: usize,
+    sample_at: &SampleAt,
+    lane: LaneBounds,
+    color: Color,
+    style: WaveformViewStyle,
+    center_y: i32,
+    scale_y: f32,
+) where
+    SampleAt: Fn(usize, usize) -> f32,
+{
+    let samples = linear_samples(
+        sample_count,
+        channel,
+        sample_at,
+        geometry.width_i32.max(2) as usize,
+    );
+    if samples.len() < 2 {
+        return;
+    }
+
+    let contour = samples_to_points(
+        &samples,
+        geometry.width_i32.max(2) - 1,
+        lane,
+        center_y,
+        scale_y,
+    );
+    emit_glow_symmetric(commands, &contour, lane, color, style);
+    emit_polyline(
+        commands,
+        &contour,
+        with_alpha(color, style.waveform_outline_alpha_inner),
+    );
+}
+
+/// Draw one min/max envelope channel with body fill and gradient-like outlines.
+#[allow(clippy::too_many_arguments)]
+fn draw_waveform_channel_envelope_styled<SampleAt>(
+    commands: &mut Vec<SurfaceCommand>,
+    geometry: &WaveformGeometry,
+    sample_count: usize,
+    channel: usize,
+    sample_at: &SampleAt,
+    lane: LaneBounds,
+    color: Color,
+    style: WaveformViewStyle,
+    center_y: i32,
+    scale_y: f32,
+) where
+    SampleAt: Fn(usize, usize) -> f32,
+{
+    let columns = geometry.width_i32.max(2) as usize;
+    let bins = sample_envelope_min_max_for_columns(sample_count, channel, columns, sample_at);
+    if bins.is_empty() {
+        return;
+    }
+
+    let x_max = geometry.width_i32.max(2) - 1;
+    let body_color = with_alpha(color, style.waveform_body_alpha);
+    let mut top_contour = Vec::with_capacity(columns);
+    let mut bottom_contour = Vec::with_capacity(columns);
+
+    for (column_index, (min_sample, max_sample)) in bins.iter().enumerate() {
+        let x = point_x(column_index, columns, x_max);
+        let y_top = sample_to_lane_y(*max_sample, center_y, scale_y, lane);
+        let y_bottom = sample_to_lane_y(*min_sample, center_y, scale_y, lane);
+        commands.push(SurfaceCommand::Line {
+            start: Point { x, y: y_top },
+            end: Point { x, y: y_bottom },
+            color: body_color,
+        });
+        top_contour.push(Point { x, y: y_top });
+        bottom_contour.push(Point { x, y: y_bottom });
+    }
+
+    emit_glow_outward(commands, &top_contour, lane, color, style, -1);
+    emit_glow_outward(commands, &bottom_contour, lane, color, style, 1);
+    let core_color = with_alpha(color, style.waveform_outline_alpha_inner);
+    emit_polyline(commands, &top_contour, core_color);
+    emit_polyline(commands, &bottom_contour, core_color);
+}
+
+/// Build linearly sampled values for one channel.
+fn linear_samples<SampleAt>(
+    sample_count: usize,
+    channel: usize,
+    sample_at: &SampleAt,
+    points: usize,
+) -> Vec<f32>
+where
+    SampleAt: Fn(usize, usize) -> f32,
+{
+    resample_channel_linear(sample_count, channel, points, sample_at)
+}
+
+/// Convert sampled values into x/y contour points.
+fn samples_to_points(
+    samples: &[f32],
+    x_max: i32,
+    lane: LaneBounds,
+    center_y: i32,
+    scale_y: f32,
+) -> Vec<Point> {
+    if samples.is_empty() {
+        return Vec::new();
+    }
+
+    let points = samples.len();
+    let mut contour = Vec::with_capacity(points);
+    for (point_index, sample) in samples.iter().enumerate() {
+        let x = point_x(point_index, points, x_max);
+        let y = sample_to_lane_y(*sample, center_y, scale_y, lane);
+        contour.push(Point { x, y });
+    }
+    contour
+}
+
+/// Emit a polyline as a deterministic sequence of line commands.
+fn emit_polyline(commands: &mut Vec<SurfaceCommand>, points: &[Point], color: Color) {
+    if points.len() < 2 || color.a == 0 {
+        return;
+    }
+
+    for segment in points.windows(2) {
+        if let [start, end] = segment {
+            commands.push(SurfaceCommand::Line {
+                start: *start,
+                end: *end,
+                color,
+            });
+        }
+    }
+}
+
+/// Emit a symmetric glow around one contour by layering upward and downward offsets.
+fn emit_glow_symmetric(
+    commands: &mut Vec<SurfaceCommand>,
+    contour: &[Point],
+    lane: LaneBounds,
+    color: Color,
+    style: WaveformViewStyle,
+) {
+    let layers = style.waveform_outline_layers.max(1);
+    for layer in 0..layers {
+        let alpha = outline_layer_alpha(style, layer, layers);
+        if alpha == 0 {
+            continue;
+        }
+        let layer_color = with_alpha(color, alpha);
+        let offset = (layer as i32) + 1;
+        emit_shifted_polyline(commands, contour, lane, layer_color, -offset);
+        emit_shifted_polyline(commands, contour, lane, layer_color, offset);
+    }
+}
+
+/// Emit a directional glow for one contour by layering offsets away from waveform body.
+fn emit_glow_outward(
+    commands: &mut Vec<SurfaceCommand>,
+    contour: &[Point],
+    lane: LaneBounds,
+    color: Color,
+    style: WaveformViewStyle,
+    direction: i32,
+) {
+    let layers = style.waveform_outline_layers.max(1);
+    for layer in 0..layers {
+        let alpha = outline_layer_alpha(style, layer, layers);
+        if alpha == 0 {
+            continue;
+        }
+        let layer_color = with_alpha(color, alpha);
+        let signed_offset = ((layer as i32) + 1) * direction;
+        emit_shifted_polyline(commands, contour, lane, layer_color, signed_offset);
+    }
+}
+
+/// Emit one polyline shifted in Y by `offset` pixels.
+fn emit_shifted_polyline(
+    commands: &mut Vec<SurfaceCommand>,
+    points: &[Point],
+    lane: LaneBounds,
+    color: Color,
+    offset: i32,
+) {
+    if points.len() < 2 {
+        return;
+    }
+
+    let mut shifted = Vec::with_capacity(points.len());
+    for point in points {
+        shifted.push(Point {
+            x: point.x,
+            y: (point.y + offset).clamp(lane.top, lane.bottom),
+        });
+    }
+    emit_polyline(commands, &shifted, color);
+}
+
+/// Resolve one alpha value for a glow layer index.
+fn outline_layer_alpha(style: WaveformViewStyle, layer: u8, layers: u8) -> u8 {
+    let inner = i32::from(style.waveform_outline_alpha_inner);
+    let outer = i32::from(style.waveform_outline_alpha_outer);
+    if layers <= 1 {
+        return style.waveform_outline_alpha_inner;
+    }
+
+    let numerator = (outer - inner) * i32::from(layer);
+    let denominator = i32::from(layers - 1);
+    (inner + numerator / denominator).clamp(0, 255) as u8
+}
+
+/// Return `color` with alpha multiplied by `alpha` in `0..=255`.
+fn with_alpha(color: Color, alpha: u8) -> Color {
+    let scaled = (u16::from(color.a) * u16::from(alpha) + 127) / 255;
+    Color::rgba(color.r, color.g, color.b, scaled as u8)
 }
 
 /// Map one point index to a rounded pixel-space x coordinate.
