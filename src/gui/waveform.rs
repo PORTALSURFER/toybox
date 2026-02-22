@@ -154,6 +154,11 @@ pub struct WaveformViewConfig<'a> {
     pub channels: &'a [WaveformChannelStyle],
     /// Vertical grid behavior.
     pub grid_mode: WaveformGridMode,
+    /// Absolute sample index at the left edge (`x = 0`).
+    ///
+    /// Envelope-mode bin boundaries are phase-aligned against this index so
+    /// high-density scrolling remains visually stable across frames.
+    pub start_sample: u64,
     /// Number of horizontal divisions including top and bottom lines.
     pub horizontal_grid_lines: u32,
     /// Global waveform surface style.
@@ -169,6 +174,10 @@ pub struct WaveformViewConfig<'a> {
     /// Larger values preserve smoother halos but increase vector path cost.
     /// Lower values increase polyline stride for outer glow layers.
     pub max_glow_points_per_channel: usize,
+    /// Enable temporal smoothing for envelope contour motion.
+    pub envelope_temporal_smoothing: bool,
+    /// Inward release speed (pixels per frame) for envelope smoothing.
+    pub envelope_release_px_per_frame: u8,
 }
 
 impl<'a> WaveformViewConfig<'a> {
@@ -181,10 +190,13 @@ impl<'a> WaveformViewConfig<'a> {
             zoom_y: 1.0,
             channels,
             grid_mode: WaveformGridMode::Fixed { line_count: 8 },
+            start_sample: 0,
             horizontal_grid_lines: 8,
             style: WaveformViewStyle::default(),
             max_waveform_commands: 32_768,
             max_glow_points_per_channel: 16_384,
+            envelope_temporal_smoothing: true,
+            envelope_release_px_per_frame: 1,
         }
     }
 }
@@ -379,10 +391,13 @@ where
                     config.render_quality,
                     config.style,
                     config.zoom_y,
+                    config.start_sample,
                     LaneBounds::full(&geometry),
                     config.channels[channel].color,
                     channel_budget,
                     config.max_glow_points_per_channel.max(1),
+                    config.envelope_temporal_smoothing,
+                    config.envelope_release_px_per_frame,
                     scratch,
                 );
             }
@@ -408,10 +423,13 @@ where
                     config.render_quality,
                     config.style,
                     config.zoom_y,
+                    config.start_sample,
                     lane,
                     config.channels[*channel].color,
                     channel_budget,
                     config.max_glow_points_per_channel.max(1),
+                    config.envelope_temporal_smoothing,
+                    config.envelope_release_px_per_frame,
                     scratch,
                 );
                 if lane_index > 0 {

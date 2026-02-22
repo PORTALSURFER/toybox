@@ -78,6 +78,24 @@ fn count_polyline_commands_by_rgb(commands: &[SurfaceCommand], color: Color) -> 
         .count()
 }
 
+fn collect_fill_rects_by_rgb(commands: &[SurfaceCommand], color: Color) -> Vec<(Rect, Color)> {
+    commands
+        .iter()
+        .filter_map(|command| match command {
+            SurfaceCommand::FillRect {
+                rect,
+                color: command_color,
+            } if command_color.r == color.r
+                && command_color.g == color.g
+                && command_color.b == color.b =>
+            {
+                Some((*rect, *command_color))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 fn assert_grid_invariants(lines: &[(i32, GridTone)], width: i32) {
     let mut previous_x = i32::MIN;
     for (x, _) in lines {
@@ -327,6 +345,43 @@ fn envelope_mode_is_deterministic_for_identical_inputs() {
 }
 
 #[test]
+fn envelope_mode_start_sample_phase_is_deterministic_and_affects_column_assignment() {
+    let styles = [WaveformChannelStyle {
+        visible: true,
+        color: Color::rgb(220, 120, 90),
+    }];
+    let mut config = WaveformViewConfig::new(&styles);
+    config.sampling_mode = WaveformSamplingMode::EnvelopeMinMax;
+    config.render_quality = WaveformRenderQuality::LegacyCpuOnly;
+
+    let sample_count = 257usize;
+    let width = 37u32;
+    // Choose an index near a phase-sensitive column boundary so `start_sample`
+    // shifts envelope bin assignment.
+    let impulse_index = 131usize;
+    let mut samples = vec![0.0f32; sample_count];
+    samples[impulse_index] = 1.0;
+
+    config.start_sample = 0;
+    let a0 =
+        build_waveform_surface_commands(width, 72, sample_count, 1, |_, i| samples[i], &config);
+    let b0 =
+        build_waveform_surface_commands(width, 72, sample_count, 1, |_, i| samples[i], &config);
+    assert_eq!(a0, b0, "start_sample=0 should be deterministic");
+
+    config.start_sample = 1;
+    let a1 =
+        build_waveform_surface_commands(width, 72, sample_count, 1, |_, i| samples[i], &config);
+    let b1 =
+        build_waveform_surface_commands(width, 72, sample_count, 1, |_, i| samples[i], &config);
+    assert_eq!(a1, b1, "start_sample=1 should be deterministic");
+    assert_ne!(
+        a0, a1,
+        "phase-aligned start_sample should affect envelope column assignment"
+    );
+}
+
+#[test]
 fn envelope_mode_preserves_sharp_transients() {
     let styles = [WaveformChannelStyle {
         visible: true,
@@ -543,6 +598,29 @@ fn styled_envelope_mode_emits_body_and_glow_alpha_layers() {
 }
 
 #[test]
+fn styled_envelope_flat_signal_emits_single_pixel_body_marks() {
+    let styles = [WaveformChannelStyle {
+        visible: true,
+        color: Color::rgb(180, 220, 250),
+    }];
+    let mut config = WaveformViewConfig::new(&styles);
+    config.sampling_mode = WaveformSamplingMode::EnvelopeMinMax;
+    config.render_quality = WaveformRenderQuality::AutoVectorPreferred;
+
+    let samples = vec![0.0f32; 1024];
+    let commands =
+        build_waveform_surface_commands(96, 48, samples.len(), 1, |_, i| samples[i], &config);
+    let body_rects = collect_fill_rects_by_rgb(&commands, styles[0].color)
+        .into_iter()
+        .filter(|(_, color)| color.a == config.style.waveform_body_alpha)
+        .collect::<Vec<_>>();
+    assert!(
+        !body_rects.is_empty(),
+        "flat envelope should emit 1px body marks instead of dropping columns"
+    );
+}
+
+#[test]
 fn styled_envelope_mode_budget_reduces_glow_polyline_count() {
     let styles = [WaveformChannelStyle {
         visible: true,
@@ -746,5 +824,80 @@ fn callback_context_reuses_samples_for_identical_revision() {
         callback_count.get(),
         first_count + sample_count,
         "expected changed revision to trigger rematerialization"
+    );
+}
+
+#[test]
+fn envelope_temporal_smoothing_limits_inward_release_per_frame() {
+    let styles = [WaveformChannelStyle {
+        visible: true,
+        color: Color::rgb(255, 80, 80),
+    }];
+    let mut config = WaveformViewConfig::new(&styles);
+    config.sampling_mode = WaveformSamplingMode::EnvelopeMinMax;
+    config.render_quality = WaveformRenderQuality::LegacyCpuOnly;
+    config.envelope_temporal_smoothing = true;
+    config.envelope_release_px_per_frame = 1;
+
+    let sample_count = 256usize;
+    let width = 64u32;
+    let height = 64u32;
+    let impulse_index = 100usize;
+
+    let mut active = vec![0.0f32; sample_count];
+    active[impulse_index] = 1.0;
+    let flat = vec![0.0f32; sample_count];
+    let columns = width.max(2) as usize;
+    let transient_column = (impulse_index * columns) / sample_count;
+    let x_max = width.max(2) as i32 - 1;
+    let expected_x =
+        ((transient_column as f32 / (columns - 1) as f32) * x_max as f32).round() as i32;
+
+    let mut context = WaveformRenderContext::new();
+    let frame_a = build_waveform_surface_commands_with_context(
+        width,
+        height,
+        sample_count,
+        1,
+        |_, i| active[i],
+        10,
+        &config,
+        &mut context,
+    );
+    let frame_b = build_waveform_surface_commands_with_context(
+        width,
+        height,
+        sample_count,
+        1,
+        |_, i| flat[i],
+        11,
+        &config,
+        &mut context,
+    );
+
+    let mut frame_a_top = None;
+    for (start, end) in collect_lines_by_color(&frame_a, styles[0].color) {
+        if start.x == expected_x && end.x == expected_x {
+            frame_a_top =
+                Some(frame_a_top.map_or(start.y.min(end.y), |v: i32| v.min(start.y.min(end.y))));
+        }
+    }
+    let mut frame_b_top = None;
+    for (start, end) in collect_lines_by_color(&frame_b, styles[0].color) {
+        if start.x == expected_x && end.x == expected_x {
+            frame_b_top =
+                Some(frame_b_top.map_or(start.y.min(end.y), |v: i32| v.min(start.y.min(end.y))));
+        }
+    }
+
+    let top_a = frame_a_top.expect("expected transient line in first frame");
+    let top_b = frame_b_top.expect("expected aligned line in second frame");
+    assert!(
+        top_b > top_a,
+        "second frame should begin releasing inward from transient top"
+    );
+    assert!(
+        top_b - top_a <= 1,
+        "inward release should be limited to configured per-frame pixel step"
     );
 }

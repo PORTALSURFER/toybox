@@ -186,6 +186,7 @@ pub(super) fn for_each_envelope_min_max_column<SampleAt, Visit>(
     sample_count: usize,
     channel: usize,
     columns: usize,
+    start_sample: u64,
     sample_at: &SampleAt,
     mut visit: Visit,
 ) where
@@ -197,8 +198,8 @@ pub(super) fn for_each_envelope_min_max_column<SampleAt, Visit>(
     }
 
     for column in 0..columns {
-        let mut start = (column * sample_count) / columns;
-        let mut end = ((column + 1) * sample_count) / columns;
+        let (mut start, mut end) =
+            phase_aligned_column_bounds(sample_count, columns, start_sample, column);
 
         if start >= sample_count {
             start = sample_count - 1;
@@ -234,6 +235,7 @@ pub(super) fn for_each_envelope_min_max_column<SampleAt, Visit>(
 pub(super) fn for_each_envelope_min_max_column_from_slice<Visit>(
     samples: &[f32],
     columns: usize,
+    start_sample: u64,
     mut visit: Visit,
 ) where
     Visit: FnMut(usize, f32, f32),
@@ -244,8 +246,8 @@ pub(super) fn for_each_envelope_min_max_column_from_slice<Visit>(
     }
 
     for column in 0..columns {
-        let mut start = (column * sample_count) / columns;
-        let mut end = ((column + 1) * sample_count) / columns;
+        let (mut start, mut end) =
+            phase_aligned_column_bounds(sample_count, columns, start_sample, column);
 
         if start >= sample_count {
             start = sample_count - 1;
@@ -281,6 +283,7 @@ pub(super) fn for_each_envelope_min_max_column_from_slice<Visit>(
 pub(super) fn for_each_envelope_min_max_column_cached<Visit>(
     sample_count: usize,
     columns: usize,
+    start_sample: u64,
     tree: &EnvelopeMinMaxTree,
     mut visit: Visit,
 ) where
@@ -291,8 +294,8 @@ pub(super) fn for_each_envelope_min_max_column_cached<Visit>(
     }
 
     for column in 0..columns {
-        let mut start = (column * sample_count) / columns;
-        let mut end = ((column + 1) * sample_count) / columns;
+        let (mut start, mut end) =
+            phase_aligned_column_bounds(sample_count, columns, start_sample, column);
         if start >= sample_count {
             start = sample_count - 1;
         }
@@ -307,4 +310,23 @@ pub(super) fn for_each_envelope_min_max_column_cached<Visit>(
 /// Clamp one source sample to renderer-safe bounds.
 pub(super) fn clamp_sample(sample: f32) -> f32 {
     sample.clamp(-SAMPLE_CLAMP_LIMIT, SAMPLE_CLAMP_LIMIT)
+}
+
+/// Compute one phase-aligned source range for an envelope column.
+fn phase_aligned_column_bounds(
+    sample_count: usize,
+    columns: usize,
+    start_sample: u64,
+    column: usize,
+) -> (usize, usize) {
+    if sample_count == 0 || columns == 0 {
+        return (0, 0);
+    }
+    let n = sample_count as u128;
+    let c = columns as u128;
+    let phase = (start_sample % sample_count as u64) as u128;
+    let base = phase / c;
+    let start = (((column as u128) * n + phase) / c).saturating_sub(base) as usize;
+    let end = ((((column as u128) + 1) * n + phase) / c).saturating_sub(base) as usize;
+    (start, end)
 }

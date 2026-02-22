@@ -142,6 +142,8 @@ pub(super) struct WaveformRenderScratch {
     pub(super) bottom_contour: Vec<Point>,
     /// Shifted contour scratch for glow layer polylines.
     pub(super) shifted: Vec<Point>,
+    /// Persistent envelope-motion smoothing state per channel.
+    envelope_motion_states: Vec<WaveformEnvelopeMotionState>,
 }
 
 impl WaveformRenderScratch {
@@ -152,7 +154,59 @@ impl WaveformRenderScratch {
         self.top_contour.clear();
         self.bottom_contour.clear();
         self.shifted.clear();
+        self.envelope_motion_states.clear();
     }
+
+    /// Take one channel's envelope-motion smoothing state out of scratch.
+    pub(super) fn take_envelope_motion_state(
+        &mut self,
+        channel: usize,
+    ) -> WaveformEnvelopeMotionState {
+        if self.envelope_motion_states.len() <= channel {
+            self.envelope_motion_states
+                .resize_with(channel + 1, WaveformEnvelopeMotionState::default);
+        }
+        std::mem::take(&mut self.envelope_motion_states[channel])
+    }
+
+    /// Restore one channel's envelope-motion smoothing state into scratch.
+    pub(super) fn restore_envelope_motion_state(
+        &mut self,
+        channel: usize,
+        state: WaveformEnvelopeMotionState,
+    ) {
+        if self.envelope_motion_states.len() <= channel {
+            self.envelope_motion_states
+                .resize_with(channel + 1, WaveformEnvelopeMotionState::default);
+        }
+        self.envelope_motion_states[channel] = state;
+    }
+}
+
+/// Per-channel temporal smoothing state for envelope top/bottom contours.
+#[derive(Clone, Debug, Default)]
+pub(super) struct WaveformEnvelopeMotionState {
+    /// Last smoothing signature; changes reset smoothing history.
+    pub(super) signature: Option<EnvelopeMotionSignature>,
+    /// Previous-frame top contour Y values.
+    pub(super) top_y: Vec<i32>,
+    /// Previous-frame bottom contour Y values.
+    pub(super) bottom_y: Vec<i32>,
+}
+
+/// Parameters that define one compatible smoothing domain.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct EnvelopeMotionSignature {
+    /// Number of envelope columns.
+    pub(super) columns: usize,
+    /// Lane top clamp.
+    pub(super) lane_top: i32,
+    /// Lane bottom clamp.
+    pub(super) lane_bottom: i32,
+    /// Lane center reference.
+    pub(super) center_y: i32,
+    /// Quantized vertical scale factor.
+    pub(super) scale_key: i32,
 }
 
 /// Per-channel hierarchical envelope cache.
