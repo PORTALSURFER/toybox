@@ -278,7 +278,6 @@ fn draw_waveform_channel_envelope_styled<SampleAt>(
     scratch.top_contour.reserve(columns);
     scratch.bottom_contour.reserve(columns);
 
-    let mut body_commands_emitted = 0usize;
     for_each_channel_envelope_column(
         sample_count,
         channel,
@@ -296,7 +295,6 @@ fn draw_waveform_channel_envelope_styled<SampleAt>(
                     end: Point { x, y: y_bottom },
                     color: body_color,
                 });
-                body_commands_emitted += 1;
             }
             scratch.top_contour.push(Point { x, y: y_top });
             scratch.bottom_contour.push(Point { x, y: y_bottom });
@@ -308,7 +306,9 @@ fn draw_waveform_channel_envelope_styled<SampleAt>(
     }
 
     let core_commands = 2usize;
-    let glow_budget = channel_command_budget.saturating_sub(body_commands_emitted + core_commands);
+    // Keep glow quality stable for fixed geometry/config by budgeting against
+    // deterministic envelope column count instead of frame-varying body draws.
+    let glow_budget = channel_command_budget.saturating_sub(columns + core_commands);
     let per_contour_glow_points = glow_point_budget / 2;
     let glow_plan = resolve_glow_plan(
         scratch.top_contour.len(),

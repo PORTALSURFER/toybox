@@ -589,6 +589,51 @@ fn styled_envelope_mode_budget_reduces_glow_polyline_count() {
 }
 
 #[test]
+fn channel_budget_distribution_is_index_stable() {
+    let budgets: Vec<usize> = (0..3)
+        .map(|index| channel_waveform_budget(100, 3, index))
+        .collect();
+    assert_eq!(budgets, vec![34, 33, 33]);
+
+    let zero_channel_budget = channel_waveform_budget(100, 0, 0);
+    assert_eq!(zero_channel_budget, 0);
+}
+
+#[test]
+fn styled_envelope_glow_polyline_count_is_content_invariant_for_fixed_geometry_budget() {
+    let styles = [WaveformChannelStyle {
+        visible: true,
+        color: Color::rgb(140, 210, 250),
+    }];
+    let mut config = WaveformViewConfig::new(&styles);
+    config.sampling_mode = WaveformSamplingMode::EnvelopeMinMax;
+    config.render_quality = WaveformRenderQuality::AutoVectorPreferred;
+    config.style.waveform_outline_layers = 6;
+    config.max_waveform_commands = 144;
+    config.max_glow_points_per_channel = 2048;
+
+    let width = 128u32;
+    let height = 96u32;
+    let sample_count = 4096usize;
+    let flat = vec![0.0f32; sample_count];
+    let dense: Vec<f32> = (0..sample_count)
+        .map(|index| ((index as f32 * 0.019).sin() * 0.95).clamp(-1.0, 1.0))
+        .collect();
+
+    let flat_commands =
+        build_waveform_surface_commands(width, height, sample_count, 1, |_, i| flat[i], &config);
+    let dense_commands =
+        build_waveform_surface_commands(width, height, sample_count, 1, |_, i| dense[i], &config);
+
+    let flat_glow_polylines = count_polyline_commands_by_rgb(&flat_commands, styles[0].color);
+    let dense_glow_polylines = count_polyline_commands_by_rgb(&dense_commands, styles[0].color);
+    assert_eq!(
+        flat_glow_polylines, dense_glow_polylines,
+        "glow polyline command count should remain stable for fixed geometry/config"
+    );
+}
+
+#[test]
 fn horizontal_grid_deduplicates_center_line_to_single_pixel_row() {
     let styles = [WaveformChannelStyle {
         visible: false,

@@ -361,16 +361,12 @@ where
 
     match config.display_mode {
         WaveformDisplayMode::Overlay => {
-            let mut waveform_command_count = 0usize;
             for (channel_index, channel) in visible_channels.iter().copied().enumerate() {
-                let remaining_channels =
-                    visible_channels.len().saturating_sub(channel_index).max(1);
-                let remaining_budget = config
-                    .max_waveform_commands
-                    .saturating_sub(waveform_command_count)
-                    .max(1);
-                let channel_budget = (remaining_budget / remaining_channels).max(1);
-                let before = commands.len();
+                let channel_budget = channel_waveform_budget(
+                    config.max_waveform_commands,
+                    visible_channels.len(),
+                    channel_index,
+                );
                 draw_waveform_channel(
                     &mut commands,
                     &geometry,
@@ -389,22 +385,17 @@ where
                     config.max_glow_points_per_channel.max(1),
                     scratch,
                 );
-                waveform_command_count =
-                    waveform_command_count.saturating_add(commands.len().saturating_sub(before));
             }
         }
         WaveformDisplayMode::Split => {
             let lane_count = visible_channels.len().max(1) as i32;
-            let mut waveform_command_count = 0usize;
             for (lane_index, channel) in visible_channels.iter().enumerate() {
-                let remaining_channels = visible_channels.len().saturating_sub(lane_index).max(1);
-                let remaining_budget = config
-                    .max_waveform_commands
-                    .saturating_sub(waveform_command_count)
-                    .max(1);
-                let channel_budget = (remaining_budget / remaining_channels).max(1);
+                let channel_budget = channel_waveform_budget(
+                    config.max_waveform_commands,
+                    visible_channels.len(),
+                    lane_index,
+                );
                 let lane = LaneBounds::for_split_lane(&geometry, lane_index as i32, lane_count);
-                let before = commands.len();
                 draw_waveform_channel(
                     &mut commands,
                     &geometry,
@@ -423,8 +414,6 @@ where
                     config.max_glow_points_per_channel.max(1),
                     scratch,
                 );
-                waveform_command_count =
-                    waveform_command_count.saturating_add(commands.len().saturating_sub(before));
                 if lane_index > 0 {
                     commands.push(SurfaceCommand::Line {
                         start: Point { x: 0, y: lane.top },
@@ -440,6 +429,24 @@ where
     }
 
     commands
+}
+
+/// Return a deterministic per-channel waveform command budget.
+///
+/// Budget distribution is index-stable and does not depend on prior channels'
+/// emitted command counts, which avoids per-frame quality flicker.
+fn channel_waveform_budget(
+    max_waveform_commands: usize,
+    visible_channels: usize,
+    channel_index: usize,
+) -> usize {
+    if visible_channels == 0 {
+        return 0;
+    }
+    let base = max_waveform_commands / visible_channels;
+    let remainder = max_waveform_commands % visible_channels;
+    base.saturating_add(usize::from(channel_index < remainder))
+        .max(1)
 }
 
 /// Return the minimum shared sample length across all channel slices.
