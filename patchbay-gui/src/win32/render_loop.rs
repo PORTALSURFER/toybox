@@ -282,6 +282,7 @@ fn action_source_key(action: &UiAction) -> &str {
         UiAction::ToggleChanged { key, .. } => key,
         UiAction::ButtonPressed { key } => key,
         UiAction::DropdownSelected { key, .. } => key,
+        UiAction::TabSelected { key, .. } => key,
         UiAction::DropdownDoubleClicked { key } => key,
         UiAction::CurveEditorChanged { key, .. } => key,
         UiAction::TextBoxEditRequested { key } => key,
