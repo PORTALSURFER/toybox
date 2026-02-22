@@ -51,6 +51,7 @@ include!("controls/curve_editor/geometry.rs");
 include!("controls/curve_editor/interaction.rs");
 include!("controls/curve_editor/render.rs");
 include!("controls/curve_editor/api.rs");
+include!("controls/eq_attractor_surface/runtime.rs");
 include!("input/pointer.rs");
 #[cfg(test)]
 mod tests;

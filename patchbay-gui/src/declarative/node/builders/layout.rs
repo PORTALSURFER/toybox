@@ -28,6 +28,7 @@ impl Node {
             Self::Dropdown(dropdown) => dropdown.layout = layout,
             Self::TabBar(tab_bar) => tab_bar.layout = layout,
             Self::CurveEditor(curve_editor) => curve_editor.layout = layout,
+            Self::EqAttractorSurface(surface) => surface.layout = layout,
             Self::Spacer(spacer) => spacer.layout = layout,
             Self::Region(region) => region.layout = layout,
             Self::Indicator(indicator) => indicator.layout = layout,
@@ -93,6 +94,7 @@ impl Node {
             Self::Dropdown(dropdown) => dropdown.layout = LayoutBox::fill(),
             Self::TabBar(tab_bar) => tab_bar.layout = LayoutBox::fill(),
             Self::CurveEditor(curve_editor) => curve_editor.layout = LayoutBox::fill(),
+            Self::EqAttractorSurface(surface) => surface.layout = LayoutBox::fill(),
             Self::Spacer(spacer) => spacer.layout = LayoutBox::fill(),
             Self::Region(region) => region.layout = LayoutBox::fill(),
             Self::Indicator(indicator) => indicator.layout = LayoutBox::fill(),
@@ -126,6 +128,9 @@ impl Node {
             Self::TabBar(tab_bar) => tab_bar.layout = LayoutBox::auto().fill_width(),
             Self::CurveEditor(curve_editor) => {
                 curve_editor.layout = LayoutBox::auto().fill_width()
+            }
+            Self::EqAttractorSurface(surface) => {
+                surface.layout = LayoutBox::auto().fill_width()
             }
             Self::Spacer(spacer) => spacer.layout = LayoutBox::auto().fill_width(),
             Self::Region(region) => region.layout = LayoutBox::auto().fill_width(),
@@ -164,6 +169,9 @@ impl Node {
             Self::TabBar(tab_bar) => tab_bar.layout = LayoutBox::auto().fill_height(),
             Self::CurveEditor(curve_editor) => {
                 curve_editor.layout = LayoutBox::auto().fill_height()
+            }
+            Self::EqAttractorSurface(surface) => {
+                surface.layout = LayoutBox::auto().fill_height()
             }
             Self::Spacer(spacer) => spacer.layout = LayoutBox::auto().fill_height(),
             Self::Region(region) => region.layout = LayoutBox::auto().fill_height(),

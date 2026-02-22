@@ -23,6 +23,7 @@ fn node_layout(node: &Node) -> LayoutBox {
         Node::Dropdown(dropdown) => dropdown.layout,
         Node::TabBar(tab_bar) => tab_bar.layout,
         Node::CurveEditor(curve_editor) => curve_editor.layout,
+        Node::EqAttractorSurface(surface) => surface.layout,
         Node::Region(region) => region.layout,
         Node::Indicator(indicator) => indicator.layout,
     }

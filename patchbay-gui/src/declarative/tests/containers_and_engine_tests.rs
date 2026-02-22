@@ -131,6 +131,14 @@ fn ui_action_invalidation_scope_matches_variant_contract() {
         .invalidation_scope(),
         UiInvalidationScope::LayoutSubtree
     );
+    assert_eq!(
+        UiAction::EqAttractorSurfaceChanged {
+            key: "eq".to_string(),
+            action: EqAttractorSurfaceAction::Select { id: 1 },
+        }
+        .invalidation_scope(),
+        UiInvalidationScope::LayoutSubtree
+    );
 }
 
 #[test]

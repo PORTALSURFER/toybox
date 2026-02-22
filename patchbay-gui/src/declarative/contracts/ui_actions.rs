@@ -53,6 +53,13 @@ pub enum UiAction {
         /// Updated curve model.
         model: CurveModel,
     },
+    /// EQ attractor surface interaction update.
+    EqAttractorSurfaceChanged {
+        /// Stable widget key.
+        key: String,
+        /// Typed interaction payload.
+        action: EqAttractorSurfaceAction,
+    },
     /// Text-box edit-mode entry request.
     TextBoxEditRequested {
         /// Stable widget key.
@@ -127,7 +134,8 @@ impl UiAction {
             | UiAction::TextBoxEditCanceled { .. } => UiInvalidationScope::MeasureSubtree,
             UiAction::RegionHover { .. }
             | UiAction::RegionInteracted { .. }
-            | UiAction::CurveEditorChanged { .. } => {
+            | UiAction::CurveEditorChanged { .. }
+            | UiAction::EqAttractorSurfaceChanged { .. } => {
                 UiInvalidationScope::LayoutSubtree
             }
         }

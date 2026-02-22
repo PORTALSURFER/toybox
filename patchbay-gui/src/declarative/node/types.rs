@@ -66,6 +66,8 @@ pub enum Node {
     TabBar(TabBarSpec),
     /// Curve editor widget.
     CurveEditor(CurveEditorSpec),
+    /// EQ attractor curve-and-handle editor surface.
+    EqAttractorSurface(EqAttractorSurfaceSpec),
     /// Interactive region.
     Region(RegionSpec),
     /// Indicator node.
@@ -137,6 +139,7 @@ impl Node {
             | Node::Dropdown(_)
             | Node::TabBar(_)
             | Node::CurveEditor(_)
+            | Node::EqAttractorSurface(_)
             | Node::Region(_)
             | Node::Indicator(_) => {}
         }

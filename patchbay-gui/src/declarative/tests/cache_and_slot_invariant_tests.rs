@@ -139,6 +139,7 @@ fn assert_slot_tree_node(node: &Node) {
         | Node::Dropdown(_)
         | Node::TabBar(_)
         | Node::CurveEditor(_)
+        | Node::EqAttractorSurface(_)
         | Node::Region(_)
         | Node::Indicator(_) => {}
     }

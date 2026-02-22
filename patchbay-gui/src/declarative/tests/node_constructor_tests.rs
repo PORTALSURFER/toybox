@@ -326,3 +326,19 @@ fn measure_tab_bar_uses_explicit_control_size() {
         }
     );
 }
+
+#[test]
+fn eq_attractor_surface_constructor_sets_key_model_and_style() {
+    let model = EqAttractorSurfaceModel::new(vec![EqAttractor::new(9, 0.25, 0.75)]);
+    let style = EqAttractorSurfaceStyle::default();
+    let node = eq_attractor_surface("eq", model.clone(), style);
+
+    match node {
+        Node::EqAttractorSurface(surface) => {
+            assert_eq!(surface.key, "eq");
+            assert_eq!(surface.model, model);
+            assert_eq!(surface.style, style);
+        }
+        other => panic!("unexpected node: {other:?}"),
+    }
+}

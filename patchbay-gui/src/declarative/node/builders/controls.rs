@@ -217,4 +217,24 @@ impl Node {
         }
         self
     }
+
+    /// Override EQ attractor surface model for EQ attractor surface nodes.
+    ///
+    /// Non-EQ-attractor-surface node kinds are returned unchanged.
+    pub fn eq_attractor_model(mut self, model: EqAttractorSurfaceModel) -> Self {
+        if let Self::EqAttractorSurface(surface) = &mut self {
+            surface.model = model;
+        }
+        self
+    }
+
+    /// Override EQ attractor surface style for EQ attractor surface nodes.
+    ///
+    /// Non-EQ-attractor-surface node kinds are returned unchanged.
+    pub fn eq_attractor_style(mut self, style: EqAttractorSurfaceStyle) -> Self {
+        if let Self::EqAttractorSurface(surface) = &mut self {
+            surface.style = style;
+        }
+        self
+    }
 }

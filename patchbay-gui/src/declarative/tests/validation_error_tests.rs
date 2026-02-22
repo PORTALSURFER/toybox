@@ -146,6 +146,26 @@ fn rejects_tab_bar_with_empty_key() {
 }
 
 #[test]
+fn rejects_eq_attractor_surface_with_empty_key() {
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        panel(
+            "panel",
+            Node::EqAttractorSurface(EqAttractorSurfaceSpec::new(
+                "",
+                EqAttractorSurfaceModel::new(vec![EqAttractor::new(1, 0.5, 0.5)]),
+                EqAttractorSurfaceStyle::default(),
+            )),
+        ),
+    ));
+    let error = measure_checked(&spec).expect_err("expected invalid EQ attractor surface key");
+    assert!(matches!(
+        error,
+        DeclarativeError::EmptyNodeKey { node_kind } if node_kind == "EqAttractorSurface"
+    ));
+}
+
+#[test]
 fn rejects_zero_control_size() {
     let spec = UiSpec::new(RootFrameSpec::new(
         "root",

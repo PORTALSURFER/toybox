@@ -29,6 +29,7 @@ fn measure_node(node: &Node, tokens: &ThemeTokens) -> Size {
         Node::Dropdown(dropdown) => measure_dropdown(dropdown, tokens),
         Node::TabBar(tab_bar) => measure_tab_bar(tab_bar, tokens),
         Node::CurveEditor(curve_editor) => measure_curve_editor(curve_editor, tokens),
+        Node::EqAttractorSurface(surface) => measure_eq_attractor_surface(surface, tokens),
         Node::Region(region) => {
             let measured = Size {
                 width: 1,

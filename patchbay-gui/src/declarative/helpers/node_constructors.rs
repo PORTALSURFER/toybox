@@ -71,6 +71,26 @@ pub fn curve_editor(key: impl Into<String>, model: CurveModel) -> Node {
     Node::CurveEditor(CurveEditorSpec::new(key, model))
 }
 
+/// Create an EQ attractor editing surface widget node.
+///
+/// # Examples
+/// ```
+/// use patchbay_gui::declarative::{
+///     EqAttractor, EqAttractorSurfaceModel, EqAttractorSurfaceStyle, eq_attractor_surface,
+/// };
+///
+/// let model = EqAttractorSurfaceModel::new(vec![EqAttractor::new(1, 0.4, 0.6)]);
+/// let style = EqAttractorSurfaceStyle::default();
+/// let _node = eq_attractor_surface("eq-surface", model, style);
+/// ```
+pub fn eq_attractor_surface(
+    key: impl Into<String>,
+    model: EqAttractorSurfaceModel,
+    style: EqAttractorSurfaceStyle,
+) -> Node {
+    Node::EqAttractorSurface(EqAttractorSurfaceSpec::new(key, model, style))
+}
+
 /// Create an interactive region node.
 pub fn region(key: impl Into<String>, size: Size) -> Node {
     Node::Region(

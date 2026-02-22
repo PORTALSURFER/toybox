@@ -101,6 +101,7 @@ fn validate_node(
         Node::Dropdown(dropdown) => validate_dropdown_node(dropdown, seen_keys),
         Node::TabBar(tab_bar) => validate_tab_bar_node(tab_bar, seen_keys),
         Node::CurveEditor(curve_editor) => validate_curve_editor_node(curve_editor, seen_keys),
+        Node::EqAttractorSurface(surface) => validate_eq_attractor_surface_node(surface, seen_keys),
         Node::Region(region) => validate_region_node(region, seen_keys),
         Node::Indicator(indicator) => validate_indicator_node(indicator),
     }
@@ -309,6 +310,16 @@ fn validate_curve_editor_node(
     validate_layout_bounds("CurveEditor", curve_editor.layout)
 }
 
+/// Validate EQ attractor surface constraints.
+fn validate_eq_attractor_surface_node(
+    surface: &EqAttractorSurfaceSpec,
+    seen_keys: &mut std::collections::HashSet<String>,
+) -> Result<(), DeclarativeError> {
+    validate_non_empty_key(&surface.key, "EqAttractorSurface")?;
+    validate_unique_key(&surface.key, seen_keys)?;
+    validate_layout_bounds("EqAttractorSurface", surface.layout)
+}
+
 /// Validate region constraints.
 fn validate_region_node(
     region: &RegionSpec,
@@ -373,6 +384,7 @@ fn is_widget_node(node: &Node) -> bool {
             | Node::Dropdown(_)
             | Node::TabBar(_)
             | Node::CurveEditor(_)
+            | Node::EqAttractorSurface(_)
             | Node::Region(_)
             | Node::Indicator(_)
     )
@@ -403,6 +415,7 @@ fn node_kind_name(node: &Node) -> &'static str {
         Node::Dropdown(_) => "Dropdown",
         Node::TabBar(_) => "TabBar",
         Node::CurveEditor(_) => "CurveEditor",
+        Node::EqAttractorSurface(_) => "EqAttractorSurface",
         Node::Region(_) => "Region",
         Node::Indicator(_) => "Indicator",
     }

@@ -129,6 +129,8 @@ pub enum LayoutNodeKind {
     TabBar,
     /// Curve-editor widget.
     CurveEditor,
+    /// EQ attractor surface widget.
+    EqAttractorSurface,
     /// Region widget.
     Region,
     /// Indicator widget.

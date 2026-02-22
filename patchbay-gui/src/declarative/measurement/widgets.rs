@@ -69,3 +69,12 @@ fn measure_curve_editor(curve_editor: &CurveEditorSpec, _tokens: &ThemeTokens) -
     };
     resolve_size(curve_editor.layout, measured, measured)
 }
+
+/// Measure an EQ attractor surface node.
+fn measure_eq_attractor_surface(surface: &EqAttractorSurfaceSpec, _tokens: &ThemeTokens) -> Size {
+    let measured = Size {
+        width: 1,
+        height: 1,
+    };
+    resolve_size(surface.layout, measured, measured)
+}

@@ -30,6 +30,8 @@ pub struct UiState {
     text_edit_runtime: HashMap<WidgetId, TextEditRuntimeState>,
     /// Per-curve-editor runtime keyed by curve-editor widget id.
     curve_editor_runtime: HashMap<WidgetId, CurveEditorRuntimeState>,
+    /// Per-EQ-attractor-surface runtime keyed by widget id.
+    eq_attractor_surface_runtime: HashMap<WidgetId, EqAttractorSurfaceRuntimeState>,
 }
 
 /// Cached container sizes for auto layout.

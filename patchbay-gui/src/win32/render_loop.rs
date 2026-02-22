@@ -285,6 +285,7 @@ fn action_source_key(action: &UiAction) -> &str {
         UiAction::TabSelected { key, .. } => key,
         UiAction::DropdownDoubleClicked { key } => key,
         UiAction::CurveEditorChanged { key, .. } => key,
+        UiAction::EqAttractorSurfaceChanged { key, .. } => key,
         UiAction::TextBoxEditRequested { key } => key,
         UiAction::TextBoxEdited { key, .. } => key,
         UiAction::TextBoxEditCommitted { key, .. } => key,

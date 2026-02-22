@@ -97,6 +97,7 @@ impl LayoutEngineState {
             | Node::Dropdown(_)
             | Node::TabBar(_)
             | Node::CurveEditor(_)
+            | Node::EqAttractorSurface(_)
             | Node::Region(_)
             | Node::Indicator(_) => {}
         }
@@ -115,6 +116,7 @@ fn node_key(node: &Node) -> Option<&str> {
         Node::Dropdown(dropdown) => Some(&dropdown.key),
         Node::TabBar(tab_bar) => Some(&tab_bar.key),
         Node::CurveEditor(curve_editor) => Some(&curve_editor.key),
+        Node::EqAttractorSurface(surface) => Some(&surface.key),
         Node::Region(region) => Some(&region.key),
         _ => None,
     }
