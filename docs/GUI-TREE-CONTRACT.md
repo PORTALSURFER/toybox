@@ -29,6 +29,7 @@ Widget node kinds:
 - `Toggle`
 - `Button`
 - `Dropdown`
+- `TabBar`
 - `Region`
 - `Indicator`
 

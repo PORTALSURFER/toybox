@@ -26,6 +26,7 @@ impl Node {
             Self::Toggle(toggle) => toggle.layout = layout,
             Self::Button(button) => button.layout = layout,
             Self::Dropdown(dropdown) => dropdown.layout = layout,
+            Self::TabBar(tab_bar) => tab_bar.layout = layout,
             Self::CurveEditor(curve_editor) => curve_editor.layout = layout,
             Self::Spacer(spacer) => spacer.layout = layout,
             Self::Region(region) => region.layout = layout,
@@ -90,6 +91,7 @@ impl Node {
             Self::Toggle(toggle) => toggle.layout = LayoutBox::fill(),
             Self::Button(button) => button.layout = LayoutBox::fill(),
             Self::Dropdown(dropdown) => dropdown.layout = LayoutBox::fill(),
+            Self::TabBar(tab_bar) => tab_bar.layout = LayoutBox::fill(),
             Self::CurveEditor(curve_editor) => curve_editor.layout = LayoutBox::fill(),
             Self::Spacer(spacer) => spacer.layout = LayoutBox::fill(),
             Self::Region(region) => region.layout = LayoutBox::fill(),
@@ -121,6 +123,7 @@ impl Node {
             Self::Toggle(toggle) => toggle.layout = LayoutBox::auto().fill_width(),
             Self::Button(button) => button.layout = LayoutBox::auto().fill_width(),
             Self::Dropdown(dropdown) => dropdown.layout = LayoutBox::auto().fill_width(),
+            Self::TabBar(tab_bar) => tab_bar.layout = LayoutBox::auto().fill_width(),
             Self::CurveEditor(curve_editor) => {
                 curve_editor.layout = LayoutBox::auto().fill_width()
             }
@@ -158,6 +161,7 @@ impl Node {
             Self::Toggle(toggle) => toggle.layout = LayoutBox::auto().fill_height(),
             Self::Button(button) => button.layout = LayoutBox::auto().fill_height(),
             Self::Dropdown(dropdown) => dropdown.layout = LayoutBox::auto().fill_height(),
+            Self::TabBar(tab_bar) => tab_bar.layout = LayoutBox::auto().fill_height(),
             Self::CurveEditor(curve_editor) => {
                 curve_editor.layout = LayoutBox::auto().fill_height()
             }

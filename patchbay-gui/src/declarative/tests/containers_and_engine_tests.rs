@@ -115,6 +115,14 @@ fn ui_action_invalidation_scope_matches_variant_contract() {
         UiInvalidationScope::MeasureSubtree
     );
     assert_eq!(
+        UiAction::TabSelected {
+            key: "tabs".to_string(),
+            index: 1,
+        }
+        .invalidation_scope(),
+        UiInvalidationScope::MeasureSubtree
+    );
+    assert_eq!(
         UiAction::RegionHover {
             key: "r".to_string(),
             hovered: true,

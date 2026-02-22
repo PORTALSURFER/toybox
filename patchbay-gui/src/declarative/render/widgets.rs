@@ -195,6 +195,110 @@ fn render_dropdown(
     }
 }
 
+/// Render a tab-bar node and emit actions.
+fn render_tab_bar(
+    tab_bar: &TabBarSpec,
+    rect: Rect,
+    ui: &mut Ui<'_>,
+    tokens: &ThemeTokens,
+    actions: &mut Vec<UiAction>,
+) {
+    if tab_bar.tab_count == 0 {
+        return;
+    }
+
+    let labels = resolve_tab_bar_labels(tab_bar);
+    let variants =
+        resolve_control_color_variants(tab_bar.color_role, tokens, tab_bar.disabled, tab_bar.focused);
+    let base_fill = variants.map(|v| v.base).unwrap_or(tokens.colors.surface);
+    let hover_fill = variants
+        .map(|v| v.hover)
+        .unwrap_or(scale_alpha(tokens.colors.accent, 96));
+    let active_fill = variants
+        .map(|v| v.active)
+        .unwrap_or(scale_alpha(tokens.colors.accent, 140));
+    let disabled_fill = variants
+        .map(|v| v.disabled)
+        .unwrap_or(scale_alpha(tokens.colors.surface, 180));
+    let border = if tab_bar.focused {
+        variants.map(|v| v.focus_ring).unwrap_or(tokens.colors.accent)
+    } else {
+        tokens.colors.border
+    };
+    let text_color = if tab_bar.disabled {
+        scale_alpha(tokens.colors.text, 170)
+    } else {
+        tokens.colors.text
+    };
+
+    let mut pointer_selection: Option<usize> = None;
+    for index in 0..tab_bar.tab_count {
+        let segment_rect = tab_bar_segment_rect(rect, index, tab_bar.tab_count);
+        let label = labels.get(index).map(String::as_str).unwrap_or("-");
+        let selected = index == tab_bar.selected;
+        let (hovered, active, pressed) = if tab_bar.disabled {
+            (false, false, false)
+        } else {
+            let response = ui.region_with_key(
+                &format!("{}::tab[{index}]", tab_bar.key),
+                segment_rect,
+            );
+            (
+                response.hovered,
+                response.active && ui.input().mouse_down,
+                response.pressed,
+            )
+        };
+        let fill = if tab_bar.disabled {
+            disabled_fill
+        } else if selected && active {
+            active_fill
+        } else if selected {
+            hover_fill
+        } else if active {
+            active_fill
+        } else if hovered {
+            hover_fill
+        } else {
+            base_fill
+        };
+        ui.fill_rect_visual(segment_rect, fill);
+        ui.stroke_rect_visual(segment_rect, 1.0, border);
+        let _ = ui.text_single_line_hard_clamped_centered_in_rect_scaled(
+            segment_rect,
+            label,
+            text_color,
+            tokens.typography.text_scale,
+        );
+
+        if !tab_bar.disabled && pressed && !selected {
+            pointer_selection = Some(index);
+        }
+    }
+
+    if let Some(index) = pointer_selection {
+        actions.push(UiAction::TabSelected {
+            key: tab_bar.key.clone(),
+            index,
+        });
+        return;
+    }
+
+    if tab_bar.disabled || !tab_bar.focused {
+        return;
+    }
+    let Some(index) = tab_bar_selection_from_key(tab_bar.selected, tab_bar.tab_count, ui.key_pressed())
+    else {
+        return;
+    };
+    if index != tab_bar.selected {
+        actions.push(UiAction::TabSelected {
+            key: tab_bar.key.clone(),
+            index,
+        });
+    }
+}
+
 /// Resolve the rendered option labels for a dropdown.
 fn resolve_dropdown_option_labels(dropdown: &DropdownSpec) -> Vec<String> {
     let numeric_fallback = || (0..dropdown.option_count).map(|index| (index + 1).to_string());
@@ -204,6 +308,62 @@ fn resolve_dropdown_option_labels(dropdown: &DropdownSpec) -> Vec<String> {
             .enumerate()
             .map(|(index, fallback)| labels.get(index).cloned().unwrap_or(fallback))
             .collect(),
+    }
+}
+
+/// Resolve the rendered labels for a tab bar.
+fn resolve_tab_bar_labels(tab_bar: &TabBarSpec) -> Vec<String> {
+    let numeric_fallback = || (0..tab_bar.tab_count).map(|index| (index + 1).to_string());
+    match tab_bar.tab_labels.as_ref() {
+        None => numeric_fallback().collect(),
+        Some(labels) => numeric_fallback()
+            .enumerate()
+            .map(|(index, fallback)| labels.get(index).cloned().unwrap_or(fallback))
+            .collect(),
+    }
+}
+
+/// Resolve a new tab selection from one keypress.
+fn tab_bar_selection_from_key(
+    selected: usize,
+    tab_count: usize,
+    key_pressed: Option<char>,
+) -> Option<usize> {
+    let key = key_pressed?;
+    if tab_count == 0 {
+        return None;
+    }
+    match key {
+        '\u{1c}' => selected.checked_sub(1),
+        '\u{1d}' => (selected + 1 < tab_count).then_some(selected + 1),
+        '\u{1e}' => Some(0),
+        '\u{1f}' => Some(tab_count - 1),
+        _ => None,
+    }
+}
+
+/// Return one equal-width tab segment rect.
+fn tab_bar_segment_rect(rect: Rect, index: usize, tab_count: usize) -> Rect {
+    let total_width = rect.size.width;
+    let count = tab_count.max(1) as u32;
+    let base = total_width / count;
+    let remainder = total_width % count;
+    let index_u32 = index as u32;
+    let extra_before = index_u32.min(remainder);
+    let offset = index_u32
+        .saturating_mul(base)
+        .saturating_add(extra_before);
+    let width = base + u32::from(index_u32 < remainder);
+
+    Rect {
+        origin: Point {
+            x: rect.origin.x + offset as i32,
+            y: rect.origin.y,
+        },
+        size: Size {
+            width,
+            height: rect.size.height,
+        },
     }
 }
 
@@ -320,8 +480,12 @@ fn render_curve_editor(
 
 #[cfg(test)]
 mod dropdown_label_tests {
-    use super::resolve_dropdown_option_labels;
-    use crate::declarative::DropdownSpec;
+    use super::{
+        resolve_dropdown_option_labels, resolve_tab_bar_labels, tab_bar_segment_rect,
+        tab_bar_selection_from_key,
+    };
+    use crate::canvas::{Point, Rect, Size};
+    use crate::declarative::{DropdownSpec, TabBarSpec};
 
     #[test]
     fn dropdown_labels_default_to_numeric_indices() {
@@ -345,5 +509,59 @@ mod dropdown_label_tests {
                 "4".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn tab_labels_default_to_numeric_indices() {
+        let tab_bar = TabBarSpec::new("family", 3, 0);
+        assert_eq!(
+            resolve_tab_bar_labels(&tab_bar),
+            vec!["1".to_string(), "2".to_string(), "3".to_string()]
+        );
+    }
+
+    #[test]
+    fn tab_labels_use_custom_entries_with_numeric_fallback() {
+        let tab_bar = TabBarSpec::new("family", 4, 0)
+            .tab_labels(vec!["Kick".into(), "Ride".into()]);
+        assert_eq!(
+            resolve_tab_bar_labels(&tab_bar),
+            vec![
+                "Kick".to_string(),
+                "Ride".to_string(),
+                "3".to_string(),
+                "4".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn tab_selection_key_rules_do_not_wrap() {
+        assert_eq!(tab_bar_selection_from_key(0, 3, Some('\u{1c}')), None);
+        assert_eq!(tab_bar_selection_from_key(0, 3, Some('\u{1d}')), Some(1));
+        assert_eq!(tab_bar_selection_from_key(2, 3, Some('\u{1d}')), None);
+        assert_eq!(tab_bar_selection_from_key(1, 3, Some('\u{1e}')), Some(0));
+        assert_eq!(tab_bar_selection_from_key(1, 3, Some('\u{1f}')), Some(2));
+    }
+
+    #[test]
+    fn tab_segment_distribution_is_equal_width_with_deterministic_remainder() {
+        let rect = Rect {
+            origin: Point { x: 5, y: 8 },
+            size: Size {
+                width: 10,
+                height: 20,
+            },
+        };
+        let first = tab_bar_segment_rect(rect, 0, 3);
+        let second = tab_bar_segment_rect(rect, 1, 3);
+        let third = tab_bar_segment_rect(rect, 2, 3);
+
+        assert_eq!(first.size.width, 4);
+        assert_eq!(second.size.width, 3);
+        assert_eq!(third.size.width, 3);
+        assert_eq!(first.origin.x, 5);
+        assert_eq!(second.origin.x, 9);
+        assert_eq!(third.origin.x, 12);
     }
 }

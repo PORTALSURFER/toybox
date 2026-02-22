@@ -215,6 +215,185 @@ fn dropdown_emits_double_click_action() {
 }
 
 #[test]
+fn tab_bar_click_changes_selection_and_selected_click_is_noop() {
+    let theme = Theme::default();
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        panel(
+            "panel",
+            tabbar("family", 2, 0)
+                .tab_labels(vec!["Kick".into(), "Ride".into()])
+                .control_size(Size {
+                    width: 120,
+                    height: 24,
+                }),
+        )
+        .pad_all(0),
+    ));
+
+    let mut ui_state = UiState::default();
+    let mut canvas = Canvas::new(200, 120);
+    let mut layout = Layout::default();
+    let input_select = InputState {
+        pointer_pos: Point { x: 90, y: 12 },
+        mouse_pressed: true,
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &input_select, &mut ui_state, &mut layout, &theme);
+    let result =
+        render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    assert!(
+        result.actions.iter().any(
+            |action| matches!(
+                action,
+                UiAction::TabSelected { key, index } if key == "family" && *index == 1
+            )
+        ),
+        "clicking a non-selected tab should emit a selection action"
+    );
+
+    let spec_selected = UiSpec::new(RootFrameSpec::new(
+        "root",
+        panel(
+            "panel",
+            tabbar("family", 2, 1)
+                .tab_labels(vec!["Kick".into(), "Ride".into()])
+                .control_size(Size {
+                    width: 120,
+                    height: 24,
+                }),
+        )
+        .pad_all(0),
+    ));
+    let mut canvas = Canvas::new(200, 120);
+    let mut layout = Layout::default();
+    let mut ui = Ui::new(&mut canvas, &input_select, &mut ui_state, &mut layout, &theme);
+    let result = render_checked(&spec_selected, &mut ui, Point { x: 0, y: 0 })
+        .expect("render should succeed");
+    assert!(
+        !result
+            .actions
+            .iter()
+            .any(|action| matches!(action, UiAction::TabSelected { key, .. } if key == "family")),
+        "clicking an already selected tab should not emit an action"
+    );
+}
+
+#[test]
+fn tab_bar_keyboard_navigation_emits_expected_actions() {
+    let theme = Theme::default();
+    let build_spec = |selected: usize| {
+        UiSpec::new(RootFrameSpec::new(
+            "root",
+            panel(
+                "panel",
+                tabbar("family", 3, selected)
+                    .focused(true)
+                    .tab_labels(vec!["Kick".into(), "Ride".into(), "Snare".into()])
+                    .control_size(Size {
+                        width: 180,
+                        height: 24,
+                    }),
+            )
+            .pad_all(0),
+        ))
+    };
+
+    let assert_selected_action = |input: InputState, selected: usize, expected: usize| {
+        let mut ui_state = UiState::default();
+        let mut canvas = Canvas::new(220, 120);
+        let mut layout = Layout::default();
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+        let result = render_checked(&build_spec(selected), &mut ui, Point { x: 0, y: 0 })
+            .expect("render should succeed");
+        assert!(result.actions.iter().any(|action| matches!(
+            action,
+            UiAction::TabSelected { key, index } if key == "family" && *index == expected
+        )));
+    };
+
+    assert_selected_action(
+        InputState {
+            key_pressed: Some('\u{1d}'),
+            ..InputState::default()
+        },
+        0,
+        1,
+    );
+    assert_selected_action(
+        InputState {
+            key_pressed: Some('\u{1e}'),
+            ..InputState::default()
+        },
+        2,
+        0,
+    );
+    assert_selected_action(
+        InputState {
+            key_pressed: Some('\u{1f}'),
+            ..InputState::default()
+        },
+        0,
+        2,
+    );
+
+    let mut ui_state = UiState::default();
+    let mut canvas = Canvas::new(220, 120);
+    let mut layout = Layout::default();
+    let input_no_wrap = InputState {
+        key_pressed: Some('\u{1c}'),
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(
+        &mut canvas,
+        &input_no_wrap,
+        &mut ui_state,
+        &mut layout,
+        &theme,
+    );
+    let result =
+        render_checked(&build_spec(0), &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    assert!(
+        result.actions.is_empty(),
+        "left at first tab should not wrap and should emit no action"
+    );
+}
+
+#[test]
+fn tab_bar_disabled_suppresses_pointer_and_keyboard_actions() {
+    let theme = Theme::default();
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        panel(
+            "panel",
+            tabbar("family", 2, 0)
+                .focused(true)
+                .disabled(true)
+                .tab_labels(vec!["Kick".into(), "Ride".into()])
+                .control_size(Size {
+                    width: 120,
+                    height: 24,
+                }),
+        )
+        .pad_all(0),
+    ));
+
+    let mut ui_state = UiState::default();
+    let mut canvas = Canvas::new(200, 120);
+    let mut layout = Layout::default();
+    let input = InputState {
+        pointer_pos: Point { x: 90, y: 12 },
+        mouse_pressed: true,
+        key_pressed: Some('\u{1d}'),
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+    let result =
+        render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    assert!(result.actions.is_empty(), "disabled tab bar should emit no actions");
+}
+
+#[test]
 fn curve_editor_double_click_deletes_interior_point_when_press_is_also_set() {
     let mut canvas = Canvas::new(220, 160);
     let mut layout = Layout::default();

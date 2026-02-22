@@ -42,6 +42,18 @@ pub enum DeclarativeError {
         /// Number of options provided.
         options_len: usize,
     },
+    /// A tab-bar selected index is out of bounds or tab count is zero.
+    #[error(
+        "declarative node `TabBar` key `{key}` selected index {selected} is invalid for tab_count {tab_count}"
+    )]
+    InvalidTabBarSelection {
+        /// Stable tab-bar key.
+        key: String,
+        /// Requested selected index.
+        selected: usize,
+        /// Number of tabs provided.
+        tab_count: usize,
+    },
     /// A control was given a zero-sized explicit control box.
     #[error(
         "declarative node `{node_kind}` key `{key}` control_size must be non-zero (got {width}x{height})"

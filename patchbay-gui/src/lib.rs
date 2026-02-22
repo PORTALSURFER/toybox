@@ -42,13 +42,13 @@ pub use crate::declarative::{
     NodeId, OverflowPolicy, PaddingBoxSpec, PanelSpec, RegionInteractionKind, RenderResult,
     RootFrameSpec, RootScaleMode, ScrollViewSpec, SemanticColorToken, SliderSpec, Slot, SlotAlign,
     SlotCrossSize, SlotMainSize, SlotParams, SlotSpec, SpacingTokens, StackSpec, SurfaceCommand,
-    SwitchCase, SwitchLayoutSpec, SwitchWidthRange, TextBoxSpec, ThemeTokens, ToggleSpec,
-    TrackSize, TypographyTokens, UiAction, UiInvalidationScope, UiSpec, WeightedSlot,
+    SwitchCase, SwitchLayoutSpec, SwitchWidthRange, TabBarSpec, TextBoxSpec, ThemeTokens,
+    ToggleSpec, TrackSize, TypographyTokens, UiAction, UiInvalidationScope, UiSpec, WeightedSlot,
     WidgetColorContext, WidgetColorResolver, WidgetColorRole, WidgetColorToken, WrapSpec,
     align_box, aspect_box, button, column, column_slots, curve_editor, dropdown, fill_slot,
     fraction_slot, grid, indicator, knob, measure_checked, padding_box, panel, region,
     render_checked, render_checked_with_engine, root_frame_sized, row, row_slots, scroll_view,
-    slider, slot, spacer, stack, surface, switch_layout, textbox, toggle, weighted_slot,
+    slider, slot, spacer, stack, surface, switch_layout, tabbar, textbox, toggle, weighted_slot,
     weighted_slot_lengths, when_width_between, when_width_ge, when_width_lt, wrap,
 };
 #[cfg(feature = "frame-capture")]

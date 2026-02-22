@@ -17,7 +17,7 @@ The API is strict and data-only:
 - `Node`: typed tree node.
 - `SlotSpec`: single-child slot node used as the required direct child type for containers.
 - Container nodes: `Panel`, `PaddingBox`, `AlignBox`, `AspectBox`, `Row`, `Column`, `Grid`, `Absolute`, `Stack`, `ScrollView`, `Wrap`, `SwitchLayout`.
-- Widget nodes: `Label`, `Spacer`, `Knob`, `Slider`, `Toggle`, `Button`, `Dropdown`, `Region`, `Indicator`.
+- Widget nodes: `Label`, `Spacer`, `Knob`, `Slider`, `Toggle`, `Button`, `Dropdown`, `TabBar`, `Region`, `Indicator`.
 
 Canonical grammar:
 - Root is a special container with exactly one slot.
@@ -31,7 +31,7 @@ See `GUI-TREE-CONTRACT.md` for the full contract and failure cases.
 - Containers: `row(children)`, `column(children)`, `grid(template, children)`, `panel(key, content)`, `padding_box(content)`, `align_box(content)`, `aspect_box(content, ratio)`, `stack(children)`, `scroll_view(content)`, `wrap(children)`, `switch_layout(cases, fallback)`, `root_frame_sized(...)`
 - Switch cases: `when_width_lt(max, child)`, `when_width_between(min, max, child)`, `when_width_ge(min, child)`
 - Slots/helpers: `slot(child)`, `weighted_slot(node, weight)`, `fraction_slot(node, percent)`, `fill_slot(node)`, `column_slots(...)`, `row_slots(...)`, `SlotParams`, `SlotMainSize`, `SlotCrossSize`
-- Widgets: `label`, `knob`, `slider`, `toggle`, `button`, `dropdown`, `region`, `indicator`, `spacer`, `surface`
+- Widgets: `label`, `knob`, `slider`, `toggle`, `button`, `dropdown`, `tabbar`, `region`, `indicator`, `spacer`, `surface`
 - Math helper: `weighted_slot_lengths(total, weights)`
 - Engine API: `LayoutEngineState`, `render_checked_with_engine(...)`
 - Engine invalidation API: `NodeId`, `node_id_for_key(...)`, `invalidate_layout_subtree(...)`, `invalidate_measure_subtree(...)`, `invalidate_all_layout(...)`, `invalidate_all_measure(...)`, `measure_cache_stats(...)`
@@ -50,7 +50,7 @@ Dropdown runtime behavior:
 - Aspect-box ratio updates: `.aspect_ratio(width, height)`
 - Flex alignment: `.align_*()`, `.justify_*()`
 - Panel styling: `.title(...)`, `.background(...)`, `.outline(...)`
-- Widget tuning: `.control_size(...)`, `.value_label(...)`, `.selected(...)`
+- Widget tuning: `.control_size(...)`, `.value_label(...)`, `.selected(...)`, `.tab_labels(...)`
 
 ## Validation Guarantees
 `measure_checked` and `render_checked` hard-fail with `DeclarativeError` when invalid:
@@ -64,6 +64,7 @@ Dropdown runtime behavior:
 - non-root containers must use host-derived `Auto`/`Fill` sizing only (no pixel/min/max constraints)
 - root and widget layout bounds (including slot-derived widget bounds) must satisfy `min <= max` on both axes
 - widget semantic checks (ranges, selected index, control size, key uniqueness)
+- tab-bar checks (`tab_count > 0`, `selected < tab_count`)
 - runtime layout diagnostics no longer normalize invalid bounds; checked APIs reject those specs before render
 
 `RenderResult` includes:
@@ -129,4 +130,47 @@ fn build(_input: &toybox::clap::gui::InputState) -> UiSpec {
 }
 
 fn reduce(_action: UiAction) {}
+```
+
+## TabBar Example
+```rust
+use toybox::gui::declarative::{tabbar, panel, column, UiAction, UiSpec, RootFrameSpec};
+
+#[derive(Clone, Copy)]
+enum SoundTab {
+    Kick = 0,
+    Ride = 1,
+    Hats = 2,
+}
+
+fn build(selected: SoundTab) -> UiSpec {
+    UiSpec::new(RootFrameSpec::new(
+        "root",
+        panel(
+            "main",
+            column(vec![
+                tabbar("sound-family", 2, selected as usize)
+                    .tab_labels(vec!["Kick".into(), "Ride".into()]),
+                tabbar("osc-mode", 3, 0).tab_labels(vec![
+                    "Sine".into(),
+                    "Saw".into(),
+                    "Noise".into(),
+                ]),
+            ]),
+        )
+        .fill(),
+    ))
+}
+
+fn reduce(selected: &mut SoundTab, action: UiAction) {
+    if let UiAction::TabSelected { key, index } = action
+        && key == "sound-family"
+    {
+        *selected = match index {
+            0 => SoundTab::Kick,
+            1 => SoundTab::Ride,
+            _ => *selected,
+        };
+    }
+}
 ```

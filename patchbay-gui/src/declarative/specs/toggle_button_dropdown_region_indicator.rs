@@ -245,6 +245,89 @@ impl DropdownSpec {
     }
 }
 
+/// Tab-bar widget specification.
+#[derive(Clone, Debug)]
+pub struct TabBarSpec {
+    /// Stable widget key.
+    pub key: String,
+    /// Number of available tabs.
+    pub tab_count: usize,
+    /// Optional per-tab labels shown in segment order.
+    ///
+    /// When present, labels are mapped by index. Any missing trailing labels
+    /// fall back to 1-based numeric labels.
+    pub tab_labels: Option<Vec<String>>,
+    /// Selected tab index.
+    pub selected: usize,
+    /// Optional explicit control size.
+    pub control_size: Option<Size>,
+    /// Optional role used to resolve interaction-state colors.
+    pub color_role: Option<WidgetColorRole>,
+    /// Disable pointer/keyboard interaction and render disabled visuals.
+    pub disabled: bool,
+    /// Render focus affordances for keyboard/selection focus.
+    pub focused: bool,
+    /// Layout constraints.
+    pub layout: LayoutBox,
+}
+
+impl TabBarSpec {
+    /// Create a tab bar.
+    pub fn new(
+        key: impl Into<String>,
+        tab_count: usize,
+        selected: usize,
+    ) -> Self {
+        Self {
+            key: key.into(),
+            tab_count,
+            tab_labels: None,
+            selected,
+            control_size: None,
+            color_role: None,
+            disabled: false,
+            focused: false,
+            layout: LayoutBox::auto(),
+        }
+    }
+
+    /// Override tab labels.
+    pub fn tab_labels(mut self, labels: Vec<String>) -> Self {
+        self.tab_labels = Some(labels);
+        self
+    }
+
+    /// Override control size.
+    pub fn control_size(mut self, size: Size) -> Self {
+        self.control_size = Some(size);
+        self
+    }
+
+    /// Resolve this tab-bar's colors from a widget color role.
+    pub fn color_role(mut self, role: WidgetColorRole) -> Self {
+        self.color_role = Some(role);
+        self
+    }
+
+    /// Disable this tab-bar's interactions and render disabled styling.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    /// Toggle focused styling for this tab-bar.
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
+        self
+    }
+
+    /// Override layout constraints.
+    pub fn layout(mut self, layout: LayoutBox) -> Self {
+        self.layout = layout;
+        self
+    }
+}
+
 /// Interactive region specification.
 #[derive(Clone, Debug)]
 pub struct RegionSpec {

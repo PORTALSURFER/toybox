@@ -178,6 +178,18 @@ fn validate_dropdown_selection(dropdown: &DropdownSpec) -> Result<(), Declarativ
     Ok(())
 }
 
+/// Validate that tab-bar selection references an existing tab.
+fn validate_tab_bar_selection(tab_bar: &TabBarSpec) -> Result<(), DeclarativeError> {
+    if tab_bar.tab_count == 0 || tab_bar.selected >= tab_bar.tab_count {
+        return Err(DeclarativeError::InvalidTabBarSelection {
+            key: tab_bar.key.clone(),
+            selected: tab_bar.selected,
+            tab_count: tab_bar.tab_count,
+        });
+    }
+    Ok(())
+}
+
 /// Validate control value finiteness and in-range constraints.
 fn validate_control_value(
     node_kind: &'static str,

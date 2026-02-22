@@ -52,6 +52,15 @@ fn measure_dropdown(dropdown: &DropdownSpec, tokens: &ThemeTokens) -> Size {
     resolve_size(dropdown.layout, measured, measured)
 }
 
+/// Measure a tab-bar node.
+fn measure_tab_bar(tab_bar: &TabBarSpec, tokens: &ThemeTokens) -> Size {
+    let measured = tab_bar.control_size.unwrap_or(Size {
+        width: tokens.controls.dropdown_width,
+        height: tokens.controls.dropdown_height,
+    });
+    resolve_size(tab_bar.layout, measured, measured)
+}
+
 /// Measure a curve-editor node.
 fn measure_curve_editor(curve_editor: &CurveEditorSpec, _tokens: &ThemeTokens) -> Size {
     let measured = Size {

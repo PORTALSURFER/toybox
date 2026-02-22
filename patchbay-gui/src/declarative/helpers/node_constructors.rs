@@ -57,6 +57,15 @@ pub fn dropdown(
     Node::Dropdown(DropdownSpec::new(key, option_count, selected))
 }
 
+/// Create a tab-bar control node.
+pub fn tabbar(
+    key: impl Into<String>,
+    tab_count: usize,
+    selected: usize,
+) -> Node {
+    Node::TabBar(TabBarSpec::new(key, tab_count, selected))
+}
+
 /// Create a curve-editor widget node.
 pub fn curve_editor(key: impl Into<String>, model: CurveModel) -> Node {
     Node::CurveEditor(CurveEditorSpec::new(key, model))

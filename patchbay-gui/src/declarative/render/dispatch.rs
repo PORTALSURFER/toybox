@@ -129,6 +129,7 @@ fn node_layout_kind(node: &Node) -> LayoutNodeKind {
         Node::Toggle(_) => LayoutNodeKind::Toggle,
         Node::Button(_) => LayoutNodeKind::Button,
         Node::Dropdown(_) => LayoutNodeKind::Dropdown,
+        Node::TabBar(_) => LayoutNodeKind::TabBar,
         Node::CurveEditor(_) => LayoutNodeKind::CurveEditor,
         Node::Region(_) => LayoutNodeKind::Region,
         Node::Indicator(_) => LayoutNodeKind::Indicator,
@@ -177,6 +178,7 @@ fn node_path_segment(node: &Node, sequence: usize) -> String {
         Node::Toggle(toggle) => format!("toggle:{}", sanitize_path_segment(&toggle.key)),
         Node::Button(button) => format!("button:{}", sanitize_path_segment(&button.key)),
         Node::Dropdown(dropdown) => format!("dropdown:{}", sanitize_path_segment(&dropdown.key)),
+        Node::TabBar(tab_bar) => format!("tab-bar:{}", sanitize_path_segment(&tab_bar.key)),
         Node::CurveEditor(curve_editor) => {
             format!("curve-editor:{}", sanitize_path_segment(&curve_editor.key))
         }
@@ -234,6 +236,7 @@ fn render_node(node: &Node, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx<'_>
         Node::Toggle(toggle) => render_toggle(toggle, rect, ui, ctx.tokens, ctx.actions),
         Node::Button(button) => render_button(button, rect, ui, ctx.tokens, ctx.actions),
         Node::Dropdown(dropdown) => render_dropdown(dropdown, rect, ui, ctx.tokens, ctx.actions),
+        Node::TabBar(tab_bar) => render_tab_bar(tab_bar, rect, ui, ctx.tokens, ctx.actions),
         Node::CurveEditor(curve_editor) => render_curve_editor(curve_editor, rect, ui, ctx.actions),
         Node::Region(region) => render_region(region, rect, ui, ctx.actions),
         Node::Indicator(indicator) => render_indicator(indicator, rect, ui),

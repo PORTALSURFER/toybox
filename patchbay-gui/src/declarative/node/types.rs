@@ -62,6 +62,8 @@ pub enum Node {
     Button(ButtonSpec),
     /// Dropdown control.
     Dropdown(DropdownSpec),
+    /// Tab-bar control.
+    TabBar(TabBarSpec),
     /// Curve editor widget.
     CurveEditor(CurveEditorSpec),
     /// Interactive region.
@@ -133,6 +135,7 @@ impl Node {
             | Node::Toggle(_)
             | Node::Button(_)
             | Node::Dropdown(_)
+            | Node::TabBar(_)
             | Node::CurveEditor(_)
             | Node::Region(_)
             | Node::Indicator(_) => {}

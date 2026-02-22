@@ -169,6 +169,7 @@ Widgets may expose:
 - `min_intrinsic(constraints)`
 - `preferred(constraints)`
 - optional baseline
+- deterministic segment layout for multi-choice controls (for example, tab bars use equal-width column binning per assigned rect)
 
 Text widgets should define:
 

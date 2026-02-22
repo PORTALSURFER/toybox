@@ -34,6 +34,13 @@ pub enum UiAction {
         /// Selected option index.
         index: usize,
     },
+    /// Tab-bar selection event.
+    TabSelected {
+        /// Stable widget key.
+        key: String,
+        /// Selected tab index.
+        index: usize,
+    },
     /// Dropdown double-click event.
     DropdownDoubleClicked {
         /// Stable widget key.
@@ -112,6 +119,7 @@ impl UiAction {
             | UiAction::ToggleChanged { .. }
             | UiAction::ButtonPressed { .. }
             | UiAction::DropdownSelected { .. }
+            | UiAction::TabSelected { .. }
             | UiAction::DropdownDoubleClicked { .. }
             | UiAction::TextBoxEditRequested { .. }
             | UiAction::TextBoxEdited { .. }

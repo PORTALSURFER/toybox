@@ -1,7 +1,7 @@
 impl Node {
     /// Set explicit control size for control-widget nodes.
     ///
-    /// Applies to knob/slider/toggle/button/dropdown; other node kinds are
+    /// Applies to knob/slider/toggle/button/dropdown/tab-bar; other node kinds are
     /// returned unchanged.
     pub fn control_size(mut self, size: Size) -> Self {
         match &mut self {
@@ -10,6 +10,7 @@ impl Node {
             Self::Toggle(toggle) => toggle.control_size = Some(size),
             Self::Button(button) => button.control_size = Some(size),
             Self::Dropdown(dropdown) => dropdown.control_size = Some(size),
+            Self::TabBar(tab_bar) => tab_bar.control_size = Some(size),
             _ => {}
         }
         self
@@ -25,12 +26,14 @@ impl Node {
         self
     }
 
-    /// Set selected option index for dropdown nodes.
+    /// Set selected option/tab index for dropdown and tab-bar nodes.
     ///
-    /// Non-dropdown node kinds are returned unchanged.
+    /// Non-dropdown/tab-bar node kinds are returned unchanged.
     pub fn selected(mut self, selected: usize) -> Self {
-        if let Self::Dropdown(dropdown) = &mut self {
-            dropdown.selected = selected;
+        match &mut self {
+            Self::Dropdown(dropdown) => dropdown.selected = selected,
+            Self::TabBar(tab_bar) => tab_bar.selected = selected,
+            _ => {}
         }
         self
     }
@@ -41,6 +44,16 @@ impl Node {
     pub fn dropdown_option_labels(mut self, labels: Vec<String>) -> Self {
         if let Self::Dropdown(dropdown) = &mut self {
             dropdown.option_labels = Some(labels);
+        }
+        self
+    }
+
+    /// Set tab labels for tab-bar nodes.
+    ///
+    /// Non-tab-bar node kinds are returned unchanged.
+    pub fn tab_labels(mut self, labels: Vec<String>) -> Self {
+        if let Self::TabBar(tab_bar) = &mut self {
+            tab_bar.tab_labels = Some(labels);
         }
         self
     }
@@ -120,7 +133,7 @@ impl Node {
         self
     }
 
-    /// Set color role for knob/slider/toggle/button control nodes.
+    /// Set color role for knob/slider/toggle/button/tab-bar control nodes.
     ///
     /// Non-target node kinds are returned unchanged.
     pub fn color_role(mut self, role: WidgetColorRole) -> Self {
@@ -129,12 +142,13 @@ impl Node {
             Self::Slider(slider) => slider.color_role = Some(role),
             Self::Toggle(toggle) => toggle.color_role = Some(role),
             Self::Button(button) => button.color_role = Some(role),
+            Self::TabBar(tab_bar) => tab_bar.color_role = Some(role),
             _ => {}
         }
         self
     }
 
-    /// Set disabled state for knob/slider/toggle/button control nodes.
+    /// Set disabled state for knob/slider/toggle/button/tab-bar control nodes.
     ///
     /// Non-target node kinds are returned unchanged.
     pub fn disabled(mut self, disabled: bool) -> Self {
@@ -143,12 +157,13 @@ impl Node {
             Self::Slider(slider) => slider.disabled = disabled,
             Self::Toggle(toggle) => toggle.disabled = disabled,
             Self::Button(button) => button.disabled = disabled,
+            Self::TabBar(tab_bar) => tab_bar.disabled = disabled,
             _ => {}
         }
         self
     }
 
-    /// Set focused state for knob/slider/toggle/button control nodes.
+    /// Set focused state for knob/slider/toggle/button/tab-bar control nodes.
     ///
     /// Non-target node kinds are returned unchanged.
     pub fn focused(mut self, focused: bool) -> Self {
@@ -157,6 +172,7 @@ impl Node {
             Self::Slider(slider) => slider.focused = focused,
             Self::Toggle(toggle) => toggle.focused = focused,
             Self::Button(button) => button.focused = focused,
+            Self::TabBar(tab_bar) => tab_bar.focused = focused,
             _ => {}
         }
         self

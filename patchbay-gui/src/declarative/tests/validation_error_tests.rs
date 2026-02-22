@@ -90,6 +90,62 @@ fn rejects_dropdown_selection_out_of_bounds() {
 }
 
 #[test]
+fn rejects_tab_bar_selection_out_of_bounds() {
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        panel(
+            "panel",
+            Node::TabBar(TabBarSpec::new("family", 2, 2)),
+        ),
+    ));
+    let error = measure_checked(&spec).expect_err("expected invalid tab-bar selection");
+    assert!(matches!(
+        error,
+        DeclarativeError::InvalidTabBarSelection {
+            key,
+            selected,
+            tab_count
+        } if key == "family" && selected == 2 && tab_count == 2
+    ));
+}
+
+#[test]
+fn rejects_tab_bar_with_zero_tabs() {
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        panel(
+            "panel",
+            Node::TabBar(TabBarSpec::new("family", 0, 0)),
+        ),
+    ));
+    let error = measure_checked(&spec).expect_err("expected invalid empty tab-bar");
+    assert!(matches!(
+        error,
+        DeclarativeError::InvalidTabBarSelection {
+            key,
+            selected,
+            tab_count
+        } if key == "family" && selected == 0 && tab_count == 0
+    ));
+}
+
+#[test]
+fn rejects_tab_bar_with_empty_key() {
+    let spec = UiSpec::new(RootFrameSpec::new(
+        "root",
+        panel(
+            "panel",
+            Node::TabBar(TabBarSpec::new("", 2, 0)),
+        ),
+    ));
+    let error = measure_checked(&spec).expect_err("expected invalid tab-bar key");
+    assert!(matches!(
+        error,
+        DeclarativeError::EmptyNodeKey { node_kind } if node_kind == "TabBar"
+    ));
+}
+
+#[test]
 fn rejects_zero_control_size() {
     let spec = UiSpec::new(RootFrameSpec::new(
         "root",

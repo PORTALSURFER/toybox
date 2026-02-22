@@ -95,6 +95,7 @@ impl LayoutEngineState {
             | Node::Toggle(_)
             | Node::Button(_)
             | Node::Dropdown(_)
+            | Node::TabBar(_)
             | Node::CurveEditor(_)
             | Node::Region(_)
             | Node::Indicator(_) => {}
@@ -112,6 +113,7 @@ fn node_key(node: &Node) -> Option<&str> {
         Node::Toggle(toggle) => Some(&toggle.key),
         Node::Button(button) => Some(&button.key),
         Node::Dropdown(dropdown) => Some(&dropdown.key),
+        Node::TabBar(tab_bar) => Some(&tab_bar.key),
         Node::CurveEditor(curve_editor) => Some(&curve_editor.key),
         Node::Region(region) => Some(&region.key),
         _ => None,

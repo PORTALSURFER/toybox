@@ -144,6 +144,40 @@ fn node_fluent_helpers_apply_container_and_style_fields() {
         _ => panic!("expected dropdown node"),
     }
 
+    let tab_bar_node = tabbar("sound", 2, 0)
+        .tab_labels(vec!["Kick".into(), "Ride".into()])
+        .control_size(Size {
+            width: 180,
+            height: 28,
+        })
+        .color_role(WidgetColorRole::Accent(AccentKey::Entity(11)))
+        .disabled(true)
+        .focused(true);
+    match tab_bar_node {
+        Node::TabBar(tab_bar) => {
+            assert_eq!(tab_bar.tab_count, 2);
+            assert_eq!(tab_bar.selected, 0);
+            assert_eq!(
+                tab_bar.tab_labels,
+                Some(vec!["Kick".to_string(), "Ride".to_string()])
+            );
+            assert_eq!(
+                tab_bar.control_size,
+                Some(Size {
+                    width: 180,
+                    height: 28
+                })
+            );
+            assert_eq!(
+                tab_bar.color_role,
+                Some(WidgetColorRole::Accent(AccentKey::Entity(11)))
+            );
+            assert!(tab_bar.disabled);
+            assert!(tab_bar.focused);
+        }
+        _ => panic!("expected tab bar node"),
+    }
+
     let focused_toggle = toggle("sync", true)
         .color_role(WidgetColorRole::Accent(AccentKey::Entity(7)))
         .disabled(true)
@@ -169,6 +203,7 @@ fn helper_node_constructors_build_valid_spec() {
         toggle("sync", false),
         button("ping"),
         dropdown("mode", 2, 1),
+        tabbar("family", 2, 0),
     ]);
     let content = column(vec![
         textbox("Header"),
@@ -257,4 +292,37 @@ fn knob_constructor_defaults_to_auto_width_layout() {
     let knob = KnobSpec::new("k", 0.5, (0.0, 1.0));
 
     assert_eq!(knob.layout.width, Length::Auto);
+}
+
+#[test]
+fn measure_tab_bar_is_deterministic_with_or_without_labels() {
+    let tokens = ThemeTokens::default();
+    let without_labels = TabBarSpec::new("family", 3, 0);
+    let with_labels = TabBarSpec::new("family", 3, 0).tab_labels(vec![
+        "Kick".into(),
+        "Ride".into(),
+        "Snare".into(),
+    ]);
+
+    assert_eq!(
+        measure_tab_bar(&without_labels, &tokens),
+        measure_tab_bar(&with_labels, &tokens)
+    );
+}
+
+#[test]
+fn measure_tab_bar_uses_explicit_control_size() {
+    let tokens = ThemeTokens::default();
+    let tab_bar = TabBarSpec::new("family", 2, 0).control_size(Size {
+        width: 222,
+        height: 31,
+    });
+
+    assert_eq!(
+        measure_tab_bar(&tab_bar, &tokens),
+        Size {
+            width: 222,
+            height: 31
+        }
+    );
 }
