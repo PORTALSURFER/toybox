@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::canvas::{Canvas, Color, Point, Rect, Size};
+use crate::canvas::{Canvas, Color, Point, PointF, Rect, Size};
 use crate::host::InputState;
 use crate::vector::scene::{
     CircleStrokeVisual, CircleVisual, KnobVisual, LineVisual, PolylineVisual, RectStrokeVisual,

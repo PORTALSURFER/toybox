@@ -12,11 +12,21 @@ fn curve_point_from_local(local: Point, rect: Rect) -> crate::declarative::Curve
 
 /// Return one rectangle-local point from normalized curve coordinates.
 fn local_from_curve_point(point: crate::declarative::CurvePoint, rect: Rect) -> Point {
+    let local = local_from_curve_point_f32(point, rect);
+    Point {
+        x: local.x.round() as i32,
+        y: local.y.round() as i32,
+    }
+}
+
+/// Return one rectangle-local subpixel point from normalized curve coordinates.
+fn local_from_curve_point_f32(point: crate::declarative::CurvePoint, rect: Rect) -> PointF {
     let width = rect.size.width.max(1) as f32 - 1.0;
     let height = rect.size.height.max(1) as f32 - 1.0;
-    let x = (point.x.clamp(0.0, 1.0) * width).round() as i32;
-    let y = ((1.0 - point.y.clamp(0.0, 1.0)) * height).round() as i32;
-    Point { x, y }
+    PointF {
+        x: point.x.clamp(0.0, 1.0) * width,
+        y: (1.0 - point.y.clamp(0.0, 1.0)) * height,
+    }
 }
 
 /// Return the squared distance between two points.

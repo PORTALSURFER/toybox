@@ -342,5 +342,10 @@ impl<'a> Ui<'a> {
 
 /// Scale one integer curve metric by current editor rectangle size.
 fn scaled_curve_i32(base: i32, rect: Rect) -> i32 {
-    (base as f32 * curve_scale_for_rect(rect)).round().max(1.0) as i32
+    scaled_curve_f32(base as f32, rect).round() as i32
+}
+
+/// Scale one floating-point curve metric by current editor rectangle size.
+fn scaled_curve_f32(base: f32, rect: Rect) -> f32 {
+    (base * curve_scale_for_rect(rect)).max(1.0)
 }

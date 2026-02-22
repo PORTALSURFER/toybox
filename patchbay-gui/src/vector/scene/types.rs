@@ -1,6 +1,6 @@
 //! Core public types and top-level painter orchestration.
 
-use crate::canvas::{Color, Point, Rect};
+use crate::canvas::{Color, Point, PointF, Rect};
 use vello::Scene;
 use vello::kurbo::Affine;
 use vello::peniko::FontData;
@@ -110,9 +110,9 @@ pub(crate) struct RectStrokeVisual {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct LineVisual {
     /// Start point in canvas-space pixels.
-    pub start: Point,
+    pub start: PointF,
     /// End point in canvas-space pixels.
-    pub end: Point,
+    pub end: PointF,
     /// Stroke thickness in pixels.
     pub thickness: f32,
     /// Stroke color.
@@ -123,7 +123,7 @@ pub(crate) struct LineVisual {
 #[derive(Clone, Debug)]
 pub(crate) struct PolylineVisual {
     /// Polyline points in canvas-space pixels.
-    pub points: Vec<Point>,
+    pub points: Vec<PointF>,
     /// Stroke thickness in pixels.
     pub thickness: f32,
     /// Stroke color.
@@ -134,7 +134,7 @@ pub(crate) struct PolylineVisual {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct CircleVisual {
     /// Circle center in canvas-space pixels.
-    pub center: Point,
+    pub center: PointF,
     /// Radius in pixels.
     pub radius: f32,
     /// Fill color.
@@ -145,7 +145,7 @@ pub(crate) struct CircleVisual {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct CircleStrokeVisual {
     /// Circle center in canvas-space pixels.
-    pub center: Point,
+    pub center: PointF,
     /// Radius in pixels.
     pub radius: f32,
     /// Stroke thickness in pixels.

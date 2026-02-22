@@ -5,6 +5,22 @@ const PLAYHEAD_DOT_CORE_RADIUS: i32 = 4;
 /// Base playhead ring radius in design pixels.
 const PLAYHEAD_DOT_RING_RADIUS: i32 = 6;
 
+/// Return one subpixel point from integer pixel coordinates.
+fn pointf_from_i32(point: Point) -> PointF {
+    PointF {
+        x: point.x as f32,
+        y: point.y as f32,
+    }
+}
+
+/// Return one integer pixel point from subpixel coordinates.
+fn pointf_to_i32(point: PointF) -> Point {
+    Point {
+        x: point.x.round() as i32,
+        y: point.y.round() as i32,
+    }
+}
+
 impl<'a> Ui<'a> {
     /// Render one curve-editor visual frame.
     fn render_curve_editor_visuals(
@@ -30,11 +46,11 @@ impl<'a> Ui<'a> {
         for step in 1..16 {
             let x = rect.origin.x + ((rect.size.width as i32 - 1) * step) / 16;
             self.curve_stroke_line(
-                Point { x, y: rect.origin.y },
-                Point {
+                pointf_from_i32(Point { x, y: rect.origin.y }),
+                pointf_from_i32(Point {
                     x,
                     y: rect.origin.y + rect.size.height as i32 - 1,
-                },
+                }),
                 1.0,
                 style.grid_vertical,
             );
@@ -42,11 +58,11 @@ impl<'a> Ui<'a> {
         for step in 1..4 {
             let y = rect.origin.y + ((rect.size.height as i32 - 1) * step) / 4;
             self.curve_stroke_line(
-                Point { x: rect.origin.x, y },
-                Point {
+                pointf_from_i32(Point { x: rect.origin.x, y }),
+                pointf_from_i32(Point {
                     x: rect.origin.x + rect.size.width as i32 - 1,
                     y,
-                },
+                }),
                 1.0,
                 style.grid_horizontal,
             );
@@ -64,20 +80,21 @@ impl<'a> Ui<'a> {
         for segment_index in 0..model.segments.len() {
             let left = model.points[segment_index];
             let right = model.points[(segment_index + 1).min(model.points.len().saturating_sub(1))];
-            let left_x = local_from_curve_point(crate::declarative::CurvePoint { x: left.x, y: 0.0 }, rect).x;
+            let left_x =
+                local_from_curve_point_f32(crate::declarative::CurvePoint { x: left.x, y: 0.0 }, rect).x;
             let right_x =
-                local_from_curve_point(crate::declarative::CurvePoint { x: right.x, y: 0.0 }, rect).x;
-            let segment_width = (right_x - left_x).abs().max(2);
-            let steps = segment_width.clamp(2, 128) as usize;
+                local_from_curve_point_f32(crate::declarative::CurvePoint { x: right.x, y: 0.0 }, rect).x;
+            let segment_width = (right_x - left_x).abs().max(2.0);
+            let steps = segment_width.ceil().clamp(2.0, 128.0) as usize;
             let mut points = Vec::with_capacity(steps + 1);
             for step in 0..=steps {
                 let t = step as f32 / steps as f32;
                 let x = left.x + (right.x - left.x) * t;
                 let y = sample_curve_model(model, x);
-                let local = local_from_curve_point(crate::declarative::CurvePoint { x, y }, rect);
-                points.push(Point {
-                    x: rect.origin.x + local.x,
-                    y: rect.origin.y + local.y,
+                let local = local_from_curve_point_f32(crate::declarative::CurvePoint { x, y }, rect);
+                points.push(PointF {
+                    x: rect.origin.x as f32 + local.x,
+                    y: rect.origin.y as f32 + local.y,
                 });
             }
             let highlighted = state.preview_point.is_none() && state.hovered_segment == Some(segment_index);
@@ -91,7 +108,7 @@ impl<'a> Ui<'a> {
                 && matches!(style.highlight_mode, crate::declarative::CurveHighlightMode::BrightCircle)
             {
                 let mid = points[points.len() / 2];
-                self.curve_fill_circle(mid, scaled_curve_i32(5, rect) as f32, style.line_highlight);
+                self.curve_fill_circle(mid, scaled_curve_f32(5.0, rect), style.line_highlight);
             }
         }
     }
@@ -106,15 +123,19 @@ impl<'a> Ui<'a> {
         let Some(preview) = state.preview_point else {
             return;
         };
-        let local = local_from_curve_point(preview, rect);
-        let center = Point {
-            x: rect.origin.x + local.x,
-            y: rect.origin.y + local.y,
+        let local = local_from_curve_point_f32(preview, rect);
+        let center = PointF {
+            x: rect.origin.x as f32 + local.x,
+            y: rect.origin.y as f32 + local.y,
         };
-        self.curve_fill_circle(center, scaled_curve_i32(NODE_DRAW_RADIUS + 1, rect) as f32, style.preview_fill);
+        self.curve_fill_circle(
+            center,
+            scaled_curve_f32((NODE_DRAW_RADIUS + 1) as f32, rect),
+            style.preview_fill,
+        );
         self.curve_stroke_circle(
             center,
-            scaled_curve_i32(NODE_DRAW_RADIUS + 2, rect) as f32,
+            scaled_curve_f32((NODE_DRAW_RADIUS + 2) as f32, rect),
             1.0,
             style.preview_stroke,
         );
@@ -129,10 +150,10 @@ impl<'a> Ui<'a> {
         style: crate::declarative::CurveEditorStyle,
     ) {
         for (index, point) in model.points.iter().copied().enumerate() {
-            let local = local_from_curve_point(point, rect);
-            let center = Point {
-                x: rect.origin.x + local.x,
-                y: rect.origin.y + local.y,
+            let local = local_from_curve_point_f32(point, rect);
+            let center = PointF {
+                x: rect.origin.x as f32 + local.x,
+                y: rect.origin.y as f32 + local.y,
             };
             let selected = state.selected_point == Some(index);
             let hovered = state.hovered_point == Some(index);
@@ -151,14 +172,14 @@ impl<'a> Ui<'a> {
                 style.node_stroke
             };
             let radius = if selected || hovered {
-                scaled_curve_i32(NODE_DRAW_RADIUS + 1, rect) as f32
+                scaled_curve_f32((NODE_DRAW_RADIUS + 1) as f32, rect)
             } else {
-                scaled_curve_i32(NODE_DRAW_RADIUS, rect) as f32
+                scaled_curve_f32(NODE_DRAW_RADIUS as f32, rect)
             };
             self.curve_fill_circle(center, radius, fill);
             self.curve_stroke_circle(
                 center,
-                scaled_curve_i32(NODE_DRAW_RADIUS, rect) as f32,
+                scaled_curve_f32(NODE_DRAW_RADIUS as f32, rect),
                 1.0,
                 stroke,
             );
@@ -167,7 +188,7 @@ impl<'a> Ui<'a> {
             {
                 self.curve_stroke_circle(
                     center,
-                    scaled_curve_i32(NODE_DRAW_RADIUS + 3, rect) as f32,
+                    scaled_curve_f32((NODE_DRAW_RADIUS + 3) as f32, rect),
                     1.0,
                     style.line_highlight,
                 );
@@ -188,15 +209,19 @@ impl<'a> Ui<'a> {
         };
         let x = playhead_x.clamp(0.0, 1.0);
         let y = sample_curve_model(model, x);
-        let local = local_from_curve_point(crate::declarative::CurvePoint { x, y }, rect);
-        let center = Point {
-            x: rect.origin.x + local.x,
-            y: rect.origin.y + local.y,
+        let local = local_from_curve_point_f32(crate::declarative::CurvePoint { x, y }, rect);
+        let center = PointF {
+            x: rect.origin.x as f32 + local.x,
+            y: rect.origin.y as f32 + local.y,
         };
-        self.curve_fill_circle(center, scaled_curve_i32(PLAYHEAD_DOT_CORE_RADIUS, rect) as f32, style.playhead_core);
+        self.curve_fill_circle(
+            center,
+            scaled_curve_f32(PLAYHEAD_DOT_CORE_RADIUS as f32, rect),
+            style.playhead_core,
+        );
         self.curve_stroke_circle(
             center,
-            scaled_curve_i32(PLAYHEAD_DOT_RING_RADIUS, rect) as f32,
+            scaled_curve_f32(PLAYHEAD_DOT_RING_RADIUS as f32, rect),
             1.0,
             style.playhead_stroke,
         );
@@ -231,7 +256,7 @@ impl<'a> Ui<'a> {
     }
 
     /// Draw a line using vector path when enabled, else CPU canvas.
-    fn curve_stroke_line(&mut self, start: Point, end: Point, thickness: f32, color: Color) {
+    fn curve_stroke_line(&mut self, start: PointF, end: PointF, thickness: f32, color: Color) {
         if self.vector_shapes_enabled {
             self.vector_commands.push(VectorCommand::Line(LineVisual {
                 start,
@@ -241,11 +266,12 @@ impl<'a> Ui<'a> {
             }));
             return;
         }
-        self.canvas.draw_line(start, end, color);
+        self.canvas
+            .draw_line(pointf_to_i32(start), pointf_to_i32(end), color);
     }
 
     /// Draw a polyline using vector path when enabled, else CPU canvas.
-    fn curve_stroke_polyline(&mut self, points: &[Point], thickness: f32, color: Color) {
+    fn curve_stroke_polyline(&mut self, points: &[PointF], thickness: f32, color: Color) {
         if points.len() < 2 {
             return;
         }
@@ -260,13 +286,14 @@ impl<'a> Ui<'a> {
         }
         for pair in points.windows(2) {
             if let [start, end] = pair {
-                self.canvas.draw_line(*start, *end, color);
+                self.canvas
+                    .draw_line(pointf_to_i32(*start), pointf_to_i32(*end), color);
             }
         }
     }
 
     /// Draw a filled circle using vector path when enabled, else CPU canvas.
-    fn curve_fill_circle(&mut self, center: Point, radius: f32, color: Color) {
+    fn curve_fill_circle(&mut self, center: PointF, radius: f32, color: Color) {
         if self.vector_shapes_enabled {
             self.vector_commands
                 .push(VectorCommand::CircleFill(CircleVisual {
@@ -276,11 +303,12 @@ impl<'a> Ui<'a> {
                 }));
             return;
         }
-        self.canvas.fill_circle(center, radius.round().max(1.0) as i32, color);
+        self.canvas
+            .fill_circle(pointf_to_i32(center), radius.round().max(1.0) as i32, color);
     }
 
     /// Draw a stroked circle using vector path when enabled, else CPU canvas.
-    fn curve_stroke_circle(&mut self, center: Point, radius: f32, thickness: f32, color: Color) {
+    fn curve_stroke_circle(&mut self, center: PointF, radius: f32, thickness: f32, color: Color) {
         if self.vector_shapes_enabled {
             self.vector_commands
                 .push(VectorCommand::CircleStroke(CircleStrokeVisual {
@@ -292,7 +320,7 @@ impl<'a> Ui<'a> {
             return;
         }
         self.canvas.stroke_circle(
-            center,
+            pointf_to_i32(center),
             radius.round().max(1.0) as i32,
             thickness.round().max(1.0) as i32,
             color,

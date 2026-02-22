@@ -15,3 +15,7 @@ mod button_reports_click_tests {
 mod dropdown_interaction_tests {
     include!("03_dropdown_interaction_tests.rs");
 }
+
+mod curve_editor_vector_quality_tests {
+    include!("04_curve_editor_vector_quality_tests.rs");
+}

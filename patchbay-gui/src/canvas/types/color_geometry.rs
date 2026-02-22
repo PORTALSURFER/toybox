@@ -32,6 +32,15 @@ pub struct Point {
     pub y: i32,
 }
 
+/// 2D subpixel coordinate used by vector-rendered geometry.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PointF {
+    /// X coordinate in pixels.
+    pub x: f32,
+    /// Y coordinate in pixels.
+    pub y: f32,
+}
+
 /// 2D size in pixels.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Size {
