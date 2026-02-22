@@ -85,9 +85,8 @@ impl<'a> Ui<'a> {
                 } else {
                     overlay.fill_color
                 };
-                self.canvas.fill_rect(visible_rect, option_fill);
-                self.canvas
-                    .stroke_rect(visible_rect, 1, overlay.outline_color);
+                self.fill_rect_visual(visible_rect, option_fill);
+                self.stroke_rect_visual(visible_rect, 1.0, overlay.outline_color);
                 let option_text_max_width = option_rect
                     .size
                     .width
@@ -109,12 +108,10 @@ impl<'a> Ui<'a> {
                 });
             }
             if let Some(scrollbar) = overlay.scrollbar {
-                self.canvas.fill_rect(scrollbar.track_rect, overlay.fill_color);
-                self.canvas
-                    .stroke_rect(scrollbar.track_rect, 1, overlay.outline_color);
-                self.canvas.fill_rect(scrollbar.thumb_rect, self.theme.knob_active);
-                self.canvas
-                    .stroke_rect(scrollbar.thumb_rect, 1, overlay.outline_color);
+                self.fill_rect_visual(scrollbar.track_rect, overlay.fill_color);
+                self.stroke_rect_visual(scrollbar.track_rect, 1.0, overlay.outline_color);
+                self.fill_rect_visual(scrollbar.thumb_rect, self.theme.knob_active);
+                self.stroke_rect_visual(scrollbar.thumb_rect, 1.0, overlay.outline_color);
             }
         }
         self.state.overlays = overlays;

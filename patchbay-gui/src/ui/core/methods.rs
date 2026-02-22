@@ -85,6 +85,46 @@ impl<'a> Ui<'a> {
         }
     }
 
+    /// Fill a rectangle using vector antialiasing when available.
+    ///
+    /// Falls back to CPU raster fill and always respects the current clip stack.
+    pub(crate) fn fill_rect_visual(&mut self, rect: Rect, color: Color) {
+        let Some(clipped) = self.clipped_rect(rect) else {
+            return;
+        };
+        if self.vector_shapes_enabled {
+            self.vector_commands
+                .push(VectorCommand::RectFill(RectVisual { rect: clipped, color }));
+            return;
+        }
+        self.canvas.fill_rect(clipped, color);
+    }
+
+    /// Stroke a rectangle using vector antialiasing when available.
+    ///
+    /// Falls back to CPU raster stroke and always respects the current clip stack.
+    pub(crate) fn stroke_rect_visual(
+        &mut self,
+        rect: Rect,
+        thickness: f32,
+        color: Color,
+    ) {
+        let Some(clipped) = self.clipped_rect(rect) else {
+            return;
+        };
+        let thickness = thickness.max(1.0);
+        if self.vector_shapes_enabled {
+            self.vector_commands.push(VectorCommand::RectStroke(RectStrokeVisual {
+                rect: clipped,
+                thickness,
+                color,
+            }));
+            return;
+        }
+        self.canvas
+            .stroke_rect(clipped, thickness.round().max(1.0) as u32, color);
+    }
+
     /// Access the input snapshot for this frame.
     pub fn input(&self) -> &InputState {
         self.input

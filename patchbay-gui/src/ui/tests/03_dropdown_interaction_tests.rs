@@ -374,6 +374,129 @@ fn dropdown_overlay_text_scrolls_with_option_rows_in_vector_mode() {
 }
 
 #[test]
+fn dropdown_overlay_emits_vector_rects_when_vector_shapes_enabled() {
+    let mut canvas = Canvas::new(120, 90);
+    let mut layout = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let options = ["Init", "Verse", "Hook"];
+    let mut selected = 0;
+    let id = WidgetId::new(29);
+    let open_input = InputState {
+        pointer_pos: Point { x: 20, y: 36 },
+        mouse_pressed: true,
+        ..InputState::default()
+    };
+
+    let mut ui = Ui::new(&mut canvas, &open_input, &mut ui_state, &mut layout, &theme);
+    ui.set_vector_shapes_enabled(true);
+    let response = ui.dropdown(id, "Preset", &options, &mut selected, 80, 16);
+    assert!(response.open);
+    let menu_rect = ui
+        .state
+        .overlays
+        .last()
+        .expect("dropdown overlay should be queued")
+        .menu_rect;
+    ui.draw_overlays();
+    let commands = ui.take_vector_commands();
+    let menu_right = menu_rect.origin.x + menu_rect.size.width as i32;
+    let menu_bottom = menu_rect.origin.y + menu_rect.size.height as i32;
+    let has_menu_fill = commands.iter().any(|command| match command {
+        VectorCommand::RectFill(fill) => {
+            let right = fill.rect.origin.x + fill.rect.size.width as i32;
+            let bottom = fill.rect.origin.y + fill.rect.size.height as i32;
+            fill.rect.origin.x >= menu_rect.origin.x
+                && fill.rect.origin.y >= menu_rect.origin.y
+                && right <= menu_right
+                && bottom <= menu_bottom
+        }
+        _ => false,
+    });
+    let has_menu_stroke = commands.iter().any(|command| match command {
+        VectorCommand::RectStroke(stroke) => {
+            let right = stroke.rect.origin.x + stroke.rect.size.width as i32;
+            let bottom = stroke.rect.origin.y + stroke.rect.size.height as i32;
+            stroke.rect.origin.x >= menu_rect.origin.x
+                && stroke.rect.origin.y >= menu_rect.origin.y
+                && right <= menu_right
+                && bottom <= menu_bottom
+        }
+        _ => false,
+    });
+    assert!(has_menu_fill, "expected dropdown menu fill in vector commands");
+    assert!(has_menu_stroke, "expected dropdown menu stroke in vector commands");
+}
+
+#[test]
+fn dropdown_overlay_vector_commands_append_after_existing_vector_content() {
+    let mut canvas = Canvas::new(120, 90);
+    let mut layout = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let options = ["Init", "Verse", "Hook"];
+    let mut selected = 0;
+    let id = WidgetId::new(30);
+    let marker_color = Color::rgb(2, 199, 233);
+    let open_input = InputState {
+        pointer_pos: Point { x: 20, y: 36 },
+        mouse_pressed: true,
+        ..InputState::default()
+    };
+
+    let mut ui = Ui::new(&mut canvas, &open_input, &mut ui_state, &mut layout, &theme);
+    ui.set_vector_shapes_enabled(true);
+    ui.draw_line_visual(
+        Point { x: 5, y: 5 },
+        Point { x: 35, y: 11 },
+        1.0,
+        marker_color,
+    );
+    let response = ui.dropdown(id, "Preset", &options, &mut selected, 80, 16);
+    assert!(response.open);
+    let menu_rect = ui
+        .state
+        .overlays
+        .last()
+        .expect("dropdown overlay should be queued")
+        .menu_rect;
+    ui.draw_overlays();
+    let commands = ui.take_vector_commands();
+    let marker_index = commands
+        .iter()
+        .position(|command| matches!(command, VectorCommand::Line(line) if line.color == marker_color))
+        .expect("expected marker line command");
+    let menu_right = menu_rect.origin.x + menu_rect.size.width as i32;
+    let menu_bottom = menu_rect.origin.y + menu_rect.size.height as i32;
+    let first_overlay_index = commands
+        .iter()
+        .position(|command| match command {
+            VectorCommand::RectFill(fill) => {
+                let right = fill.rect.origin.x + fill.rect.size.width as i32;
+                let bottom = fill.rect.origin.y + fill.rect.size.height as i32;
+                fill.rect.origin.x >= menu_rect.origin.x
+                    && fill.rect.origin.y >= menu_rect.origin.y
+                    && right <= menu_right
+                    && bottom <= menu_bottom
+            }
+            VectorCommand::RectStroke(stroke) => {
+                let right = stroke.rect.origin.x + stroke.rect.size.width as i32;
+                let bottom = stroke.rect.origin.y + stroke.rect.size.height as i32;
+                stroke.rect.origin.x >= menu_rect.origin.x
+                    && stroke.rect.origin.y >= menu_rect.origin.y
+                    && right <= menu_right
+                    && bottom <= menu_bottom
+            }
+            _ => false,
+        })
+        .expect("expected dropdown overlay vector command");
+    assert!(
+        first_overlay_index > marker_index,
+        "dropdown overlay vector commands must be appended after regular vector content"
+    );
+}
+
+#[test]
 fn dropdown_clamped_menu_uses_whole_row_viewport_height() {
     let mut canvas = Canvas::new(120, 69);
     let mut layout = Layout {
