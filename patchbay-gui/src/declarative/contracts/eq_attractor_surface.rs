@@ -276,3 +276,61 @@ pub enum EqAttractorSurfaceAction {
         id: u64,
     },
 }
+
+#[cfg(test)]
+mod eq_attractor_surface_contract_tests {
+    use super::*;
+
+    #[test]
+    fn model_normalized_clamps_and_pads_vectors() {
+        let model = EqAttractorSurfaceModel {
+            attractors: vec![EqAttractor::new(1, -1.0, 2.0), EqAttractor::new(2, 0.2, 0.8)],
+            warp: 4.0,
+            pull_force: -3.0,
+            depths: vec![2.0],
+            cycles: vec![f32::NAN],
+            rates_hz: vec![f32::INFINITY],
+            reverse_global: true,
+            freq_min_hz: f32::INFINITY,
+            freq_max_hz: f32::NEG_INFINITY,
+            eq_bands: 0,
+            eq_depth_db: -2.0,
+        };
+
+        let normalized = model.normalized();
+        assert_eq!(normalized.attractors.len(), 2);
+        assert_eq!(normalized.attractors[0].x, 0.0);
+        assert_eq!(normalized.attractors[0].y, 1.0);
+        assert_eq!(normalized.depths, vec![1.0, 1.0]);
+        assert_eq!(normalized.cycles, vec![1.0, 1.0]);
+        assert_eq!(normalized.rates_hz, vec![0.0, 0.0]);
+        assert_eq!(normalized.warp, 1.0);
+        assert_eq!(normalized.pull_force, 0.0);
+        assert_eq!(normalized.eq_bands, 1);
+        assert_eq!(normalized.eq_depth_db, 2.0);
+        assert!(normalized.freq_max_hz > normalized.freq_min_hz);
+    }
+
+    #[test]
+    fn style_normalized_clamps_invalid_ranges() {
+        let style = EqAttractorSurfaceStyle {
+            show_grid: true,
+            show_nodes: false,
+            db_range: -0.001,
+            curve_samples: 1,
+            padding_px: -50,
+            color_policy: EqAttractorColorPolicy::PerAttractorAccent,
+            motion_smoothing_seconds: f32::INFINITY,
+            attractor_smoothing_seconds: 0.0,
+            band_gain_smoothing_seconds: 99.0,
+        };
+
+        let normalized = style.normalized();
+        assert_eq!(normalized.db_range, 0.1);
+        assert_eq!(normalized.curve_samples, 16);
+        assert_eq!(normalized.padding_px, 0);
+        assert_eq!(normalized.motion_smoothing_seconds, 0.02);
+        assert_eq!(normalized.attractor_smoothing_seconds, 0.001);
+        assert_eq!(normalized.band_gain_smoothing_seconds, 2.0);
+    }
+}

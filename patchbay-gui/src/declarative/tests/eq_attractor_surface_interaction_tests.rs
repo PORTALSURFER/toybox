@@ -1,7 +1,7 @@
 use super::super::*;
 use crate::canvas::Canvas;
 use crate::host::InputState;
-use crate::ui::{Layout, Theme, UiState};
+use crate::ui::{Layout, Theme, Ui, UiState};
 
 fn eq_test_model() -> EqAttractorSurfaceModel {
     EqAttractorSurfaceModel {
@@ -49,6 +49,16 @@ fn render_actions(spec: &UiSpec, input: InputState, ui_state: &mut UiState) -> V
     let result = render_checked(spec, &mut ui, Point { x: 0, y: 0 })
         .expect("render should succeed");
     result.actions
+}
+
+fn render_pixels_and_actions(spec: &UiSpec, input: InputState) -> (Vec<u8>, Vec<UiAction>) {
+    let mut canvas = Canvas::new(input.window_size.width.max(1), input.window_size.height.max(1));
+    let mut layout = Layout::default();
+    let mut ui_state = UiState::default();
+    let theme = Theme::default();
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+    let result = render_checked(spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    (canvas.pixels().to_vec(), result.actions)
 }
 
 #[test]
@@ -184,4 +194,21 @@ fn eq_surface_secondary_click_emits_remove_action() {
         )),
         "secondary clicking a handle should emit Remove"
     );
+}
+
+#[test]
+fn eq_surface_identical_inputs_are_deterministic() {
+    let spec = eq_test_spec(eq_test_model());
+    let input = InputState {
+        window_size: Size {
+            width: 200,
+            height: 120,
+        },
+        ..InputState::default()
+    };
+    let (pixels_a, actions_a) = render_pixels_and_actions(&spec, input.clone());
+    let (pixels_b, actions_b) = render_pixels_and_actions(&spec, input);
+
+    assert_eq!(actions_a, actions_b);
+    assert_eq!(pixels_a, pixels_b);
 }

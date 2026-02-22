@@ -191,11 +191,6 @@ fn eq_target_band_values(
     runtime: &crate::ui::EqAttractorSurfaceRuntimeState,
 ) -> Vec<f32> {
     let mut values = Vec::with_capacity(model.eq_bands);
-    let centers = model
-        .attractors
-        .iter()
-        .map(|attractor| runtime.smoothed_attractors.get(&attractor.id).copied())
-        .collect::<Vec<_>>();
 
     for band in 0..model.eq_bands {
         let band_pos = if model.eq_bands > 1 {
@@ -206,7 +201,10 @@ fn eq_target_band_values(
         let mut warped = band_pos;
         let mut weighted_sum = 0.0;
         let mut weight_sum = 0.0;
-        for state in centers.iter().flatten() {
+        for attractor in &model.attractors {
+            let Some(state) = runtime.smoothed_attractors.get(&attractor.id) else {
+                continue;
+            };
             let strength = eq_gravity_strength(state.y, runtime.smoothed_warp, runtime.smoothed_pull_force);
             if strength <= f32::EPSILON {
                 continue;
@@ -231,7 +229,10 @@ fn eq_target_band_values(
 
         let mut wave_sum = 0.0;
         let mut wave_count = 0.0;
-        for state in centers.iter().flatten() {
+        for attractor in &model.attractors {
+            let Some(state) = runtime.smoothed_attractors.get(&attractor.id) else {
+                continue;
+            };
             let spread = state.cycles.max(0.0) * std::f32::consts::TAU;
             let phase = spread * warped + state.rate_hz.max(0.0) * 0.25;
             wave_sum += phase.sin() * state.depth.clamp(0.0, 1.0);
