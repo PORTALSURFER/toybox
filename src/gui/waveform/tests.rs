@@ -490,3 +490,31 @@ fn styled_envelope_mode_emits_body_and_glow_alpha_layers() {
     );
     assert!(saw_faded_alpha, "expected at least one faded glow layer");
 }
+
+#[test]
+fn horizontal_grid_deduplicates_center_line_to_single_pixel_row() {
+    let styles = [WaveformChannelStyle {
+        visible: false,
+        color: Color::rgb(0, 0, 0),
+    }];
+    let mut config = WaveformViewConfig::new(&styles);
+    config.horizontal_grid_lines = 128;
+
+    let commands = build_waveform_surface_commands(64, 8, 0, 1, |_, _| 0.0, &config);
+    let center_lines = collect_lines_by_color(&commands, config.style.grid_horizontal_center);
+    assert_eq!(
+        center_lines.len(),
+        1,
+        "center horizontal line should be emitted once even when grid steps collapse to repeated y rows"
+    );
+    let (start, end) = center_lines[0];
+    assert_eq!(start.y, end.y);
+}
+
+#[test]
+fn default_center_line_color_is_subtle_gray() {
+    assert_eq!(
+        WaveformViewStyle::default().grid_horizontal_center,
+        Color::rgb(36, 40, 45)
+    );
+}

@@ -127,7 +127,7 @@ impl Default for WaveformViewStyle {
             grid_beat: Color::rgb(36, 41, 47),
             grid_subdivision: Color::rgb(30, 35, 41),
             grid_horizontal: Color::rgb(27, 31, 37),
-            grid_horizontal_center: Color::rgb(53, 61, 69),
+            grid_horizontal_center: Color::rgb(36, 40, 45),
             lane_divider: Color::rgb(42, 48, 54),
             waveform_body_alpha: 72,
             waveform_outline_alpha_inner: 210,
@@ -190,7 +190,7 @@ where
     SampleAt: Fn(usize, usize) -> f32,
 {
     let geometry = WaveformGeometry::new(width, height);
-    let mut commands = Vec::with_capacity(2048);
+    let mut commands = Vec::new();
 
     push_background(&mut commands, &geometry, config.style);
     push_vertical_grid(&mut commands, &geometry, config);
@@ -204,6 +204,13 @@ where
     if visible_channels.is_empty() {
         return commands;
     }
+
+    commands.reserve(estimate_waveform_command_capacity(
+        &geometry,
+        sample_count,
+        visible_channels.len(),
+        config,
+    ));
 
     match config.display_mode {
         WaveformDisplayMode::Overlay => {
@@ -312,16 +319,27 @@ fn push_horizontal_grid(
     config: &WaveformViewConfig<'_>,
 ) {
     let horizontal_count = config.horizontal_grid_lines.max(1);
+    let mut y_lines = Vec::with_capacity((horizontal_count + 1) as usize);
     for step in 0..=horizontal_count {
-        let y =
-            ((step as f32 / horizontal_count as f32) * geometry.height_i32 as f32).round() as i32;
+        let y = ((step as i64 * geometry.height_i32 as i64 + i64::from(horizontal_count / 2))
+            / i64::from(horizontal_count)) as i32;
+        let is_center = step == horizontal_count / 2;
+        match y_lines.last_mut() {
+            Some((last_y, last_is_center)) if *last_y == y => {
+                *last_is_center |= is_center;
+            }
+            _ => y_lines.push((y, is_center)),
+        }
+    }
+
+    for (y, is_center) in y_lines {
         commands.push(SurfaceCommand::Line {
             start: Point { x: 0, y },
             end: Point {
                 x: geometry.width_i32,
                 y,
             },
-            color: if step == horizontal_count / 2 {
+            color: if is_center {
                 config.style.grid_horizontal_center
             } else {
                 config.style.grid_horizontal
@@ -389,4 +407,41 @@ impl LaneBounds {
             .clamp(top + 1, geometry.height_i32);
         Self { top, bottom }
     }
+}
+
+/// Estimate command count for one frame to minimize command-vector reallocations.
+fn estimate_waveform_command_capacity(
+    geometry: &WaveformGeometry,
+    sample_count: usize,
+    visible_channels: usize,
+    config: &WaveformViewConfig<'_>,
+) -> usize {
+    let width = geometry.width_i32.max(2) as usize;
+    let base_grid = 1
+        + vertical_grid_lines(config.grid_mode, geometry.width_i32).len()
+        + (config.horizontal_grid_lines.max(1) as usize + 1);
+    if sample_count < 2 || visible_channels == 0 {
+        return base_grid + 8;
+    }
+
+    let segments = width.saturating_sub(1);
+    let lane_dividers = if matches!(config.display_mode, WaveformDisplayMode::Split) {
+        visible_channels.saturating_sub(1)
+    } else {
+        0
+    };
+    let layers = config.style.waveform_outline_layers.max(1) as usize;
+    let per_channel = match (config.sampling_mode, config.render_quality) {
+        (WaveformSamplingMode::Linear, WaveformRenderQuality::LegacyCpuOnly) => segments,
+        (WaveformSamplingMode::EnvelopeMinMax, WaveformRenderQuality::LegacyCpuOnly) => width,
+        (WaveformSamplingMode::Linear, WaveformRenderQuality::AutoVectorPreferred) => {
+            // Core contour + glow above/below.
+            segments + (segments * 2 * layers)
+        }
+        (WaveformSamplingMode::EnvelopeMinMax, WaveformRenderQuality::AutoVectorPreferred) => {
+            // Body columns + top/bottom core + top/bottom glow.
+            width + (segments * 2) + (segments * 2 * layers)
+        }
+    };
+    base_grid + lane_dividers + per_channel.saturating_mul(visible_channels)
 }

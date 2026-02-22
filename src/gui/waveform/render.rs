@@ -1,6 +1,6 @@
 //! Mode-specific waveform channel rendering helpers.
 
-use super::sampling::{clamp_sample, resample_channel_linear, sample_envelope_min_max_for_columns};
+use super::sampling::{clamp_sample, for_each_envelope_min_max_column, resample_channel_linear};
 use super::{
     Color, LaneBounds, Point, SurfaceCommand, WaveformGeometry, WaveformRenderQuality,
     WaveformSamplingMode, WaveformViewStyle,
@@ -135,22 +135,23 @@ fn draw_waveform_channel_envelope_legacy<SampleAt>(
     SampleAt: Fn(usize, usize) -> f32,
 {
     let columns = geometry.width_i32.max(2) as usize;
-    let bins = sample_envelope_min_max_for_columns(sample_count, channel, columns, sample_at);
-    if bins.is_empty() {
-        return;
-    }
-
     let x_max = geometry.width_i32.max(2) - 1;
-    for (column_index, (min_sample, max_sample)) in bins.iter().enumerate() {
-        let x = point_x(column_index, columns, x_max);
-        let y_top = sample_to_lane_y(*max_sample, center_y, scale_y, lane);
-        let y_bottom = sample_to_lane_y(*min_sample, center_y, scale_y, lane);
-        commands.push(SurfaceCommand::Line {
-            start: Point { x, y: y_top },
-            end: Point { x, y: y_bottom },
-            color,
-        });
-    }
+    for_each_envelope_min_max_column(
+        sample_count,
+        channel,
+        columns,
+        sample_at,
+        |column_index, min_sample, max_sample| {
+            let x = point_x(column_index, columns, x_max);
+            let y_top = sample_to_lane_y(max_sample, center_y, scale_y, lane);
+            let y_bottom = sample_to_lane_y(min_sample, center_y, scale_y, lane);
+            commands.push(SurfaceCommand::Line {
+                start: Point { x, y: y_top },
+                end: Point { x, y: y_bottom },
+                color,
+            });
+        },
+    );
 }
 
 /// Draw one linearly sampled channel with an outline glow treatment.
@@ -211,27 +212,34 @@ fn draw_waveform_channel_envelope_styled<SampleAt>(
     SampleAt: Fn(usize, usize) -> f32,
 {
     let columns = geometry.width_i32.max(2) as usize;
-    let bins = sample_envelope_min_max_for_columns(sample_count, channel, columns, sample_at);
-    if bins.is_empty() {
-        return;
-    }
-
     let x_max = geometry.width_i32.max(2) - 1;
     let body_color = with_alpha(color, style.waveform_body_alpha);
     let mut top_contour = Vec::with_capacity(columns);
     let mut bottom_contour = Vec::with_capacity(columns);
 
-    for (column_index, (min_sample, max_sample)) in bins.iter().enumerate() {
-        let x = point_x(column_index, columns, x_max);
-        let y_top = sample_to_lane_y(*max_sample, center_y, scale_y, lane);
-        let y_bottom = sample_to_lane_y(*min_sample, center_y, scale_y, lane);
-        commands.push(SurfaceCommand::Line {
-            start: Point { x, y: y_top },
-            end: Point { x, y: y_bottom },
-            color: body_color,
-        });
-        top_contour.push(Point { x, y: y_top });
-        bottom_contour.push(Point { x, y: y_bottom });
+    for_each_envelope_min_max_column(
+        sample_count,
+        channel,
+        columns,
+        sample_at,
+        |column_index, min_sample, max_sample| {
+            let x = point_x(column_index, columns, x_max);
+            let y_top = sample_to_lane_y(max_sample, center_y, scale_y, lane);
+            let y_bottom = sample_to_lane_y(min_sample, center_y, scale_y, lane);
+            if y_top != y_bottom && body_color.a > 0 {
+                commands.push(SurfaceCommand::Line {
+                    start: Point { x, y: y_top },
+                    end: Point { x, y: y_bottom },
+                    color: body_color,
+                });
+            }
+            top_contour.push(Point { x, y: y_top });
+            bottom_contour.push(Point { x, y: y_bottom });
+        },
+    );
+
+    if top_contour.len() < 2 || bottom_contour.len() < 2 {
+        return;
     }
 
     emit_glow_outward(commands, &top_contour, lane, color, style, -1);
@@ -284,6 +292,9 @@ fn emit_polyline(commands: &mut Vec<SurfaceCommand>, points: &[Point], color: Co
 
     for segment in points.windows(2) {
         if let [start, end] = segment {
+            if start.x == end.x && start.y == end.y {
+                continue;
+            }
             commands.push(SurfaceCommand::Line {
                 start: *start,
                 end: *end,
@@ -309,8 +320,16 @@ fn emit_glow_symmetric(
         }
         let layer_color = with_alpha(color, alpha);
         let offset = (layer as i32) + 1;
-        emit_shifted_polyline(commands, contour, lane, layer_color, -offset);
-        emit_shifted_polyline(commands, contour, lane, layer_color, offset);
+        let segment_stride = outline_layer_segment_stride(layer);
+        emit_shifted_polyline(
+            commands,
+            contour,
+            lane,
+            layer_color,
+            -offset,
+            segment_stride,
+        );
+        emit_shifted_polyline(commands, contour, lane, layer_color, offset, segment_stride);
     }
 }
 
@@ -331,7 +350,15 @@ fn emit_glow_outward(
         }
         let layer_color = with_alpha(color, alpha);
         let signed_offset = ((layer as i32) + 1) * direction;
-        emit_shifted_polyline(commands, contour, lane, layer_color, signed_offset);
+        let segment_stride = outline_layer_segment_stride(layer);
+        emit_shifted_polyline(
+            commands,
+            contour,
+            lane,
+            layer_color,
+            signed_offset,
+            segment_stride,
+        );
     }
 }
 
@@ -342,19 +369,31 @@ fn emit_shifted_polyline(
     lane: LaneBounds,
     color: Color,
     offset: i32,
+    segment_stride: usize,
 ) {
-    if points.len() < 2 {
+    if points.len() < 2 || color.a == 0 {
         return;
     }
 
-    let mut shifted = Vec::with_capacity(points.len());
-    for point in points {
-        shifted.push(Point {
-            x: point.x,
-            y: (point.y + offset).clamp(lane.top, lane.bottom),
-        });
+    let stride = segment_stride.max(1);
+    let mut index = 0usize;
+    while index + 1 < points.len() {
+        let next_index = (index + stride).min(points.len() - 1);
+        let start_point = points[index];
+        let end_point = points[next_index];
+        let start = Point {
+            x: start_point.x,
+            y: (start_point.y + offset).clamp(lane.top, lane.bottom),
+        };
+        let end = Point {
+            x: end_point.x,
+            y: (end_point.y + offset).clamp(lane.top, lane.bottom),
+        };
+        if start.x != end.x || start.y != end.y {
+            commands.push(SurfaceCommand::Line { start, end, color });
+        }
+        index = next_index;
     }
-    emit_polyline(commands, &shifted, color);
 }
 
 /// Resolve one alpha value for a glow layer index.
@@ -370,6 +409,14 @@ fn outline_layer_alpha(style: WaveformViewStyle, layer: u8, layers: u8) -> u8 {
     (inner + numerator / denominator).clamp(0, 255) as u8
 }
 
+/// Resolve polyline segment stride for one glow layer.
+///
+/// Outer glow layers use progressively coarser segment strides. This preserves
+/// the perceived gradient halo while reducing command count on dense waveforms.
+fn outline_layer_segment_stride(layer: u8) -> usize {
+    usize::from(layer) + 1
+}
+
 /// Return `color` with alpha multiplied by `alpha` in `0..=255`.
 fn with_alpha(color: Color, alpha: u8) -> Color {
     let scaled = (u16::from(color.a) * u16::from(alpha) + 127) / 255;
@@ -378,8 +425,15 @@ fn with_alpha(color: Color, alpha: u8) -> Color {
 
 /// Map one point index to a rounded pixel-space x coordinate.
 fn point_x(point_index: usize, points: usize, x_max: i32) -> i32 {
-    let normalized = point_index as f32 / (points - 1) as f32;
-    (normalized * x_max as f32).round() as i32
+    if points <= 1 || x_max <= 0 {
+        return 0;
+    }
+    if points == (x_max + 1) as usize {
+        return point_index as i32;
+    }
+    let denominator = (points - 1) as i64;
+    let numerator = point_index as i64 * x_max as i64;
+    ((numerator + denominator / 2) / denominator) as i32
 }
 
 /// Convert one normalized sample value into lane Y coordinates.

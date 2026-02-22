@@ -38,21 +38,24 @@ where
     values
 }
 
-/// Build deterministic min/max bins for each output column.
-pub(super) fn sample_envelope_min_max_for_columns<SampleAt>(
+/// Iterate deterministic min/max bins for each output column.
+///
+/// This callback form avoids temporary allocation in hot rendering paths where
+/// callers only need one pass over generated min/max values.
+pub(super) fn for_each_envelope_min_max_column<SampleAt, Visit>(
     sample_count: usize,
     channel: usize,
     columns: usize,
     sample_at: &SampleAt,
-) -> Vec<(f32, f32)>
-where
+    mut visit: Visit,
+) where
     SampleAt: Fn(usize, usize) -> f32,
+    Visit: FnMut(usize, f32, f32),
 {
     if sample_count == 0 || columns == 0 {
-        return Vec::new();
+        return;
     }
 
-    let mut bins = Vec::with_capacity(columns);
     for column in 0..columns {
         let mut start = (column * sample_count) / columns;
         let mut end = ((column + 1) * sample_count) / columns;
@@ -82,10 +85,8 @@ where
             max_sample = fallback;
         }
 
-        bins.push((min_sample, max_sample));
+        visit(column, min_sample, max_sample);
     }
-
-    bins
 }
 
 /// Clamp one source sample to renderer-safe bounds.
