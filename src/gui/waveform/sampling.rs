@@ -178,121 +178,21 @@ pub(super) fn resample_channel_linear_from_slice_into(
     }
 }
 
-/// Iterate deterministic min/max bins for each output column.
+/// Fill one reusable vector with clamped phase-aligned source ranges.
 ///
-/// This callback form avoids temporary allocation in hot rendering paths where
-/// callers only need one pass over generated min/max values.
-pub(super) fn for_each_envelope_min_max_column<SampleAt, Visit>(
-    sample_count: usize,
-    channel: usize,
-    columns: usize,
-    start_sample: u64,
-    sample_at: &SampleAt,
-    mut visit: Visit,
-) where
-    SampleAt: Fn(usize, usize) -> f32,
-    Visit: FnMut(usize, f32, f32),
-{
-    if sample_count == 0 || columns == 0 {
-        return;
-    }
-
-    for column in 0..columns {
-        let (mut start, mut end) =
-            phase_aligned_column_bounds(sample_count, columns, start_sample, column);
-
-        if start >= sample_count {
-            start = sample_count - 1;
-        }
-        if end <= start {
-            end = (start + 1).min(sample_count);
-        }
-
-        let mut min_sample = SAMPLE_CLAMP_LIMIT;
-        let mut max_sample = -SAMPLE_CLAMP_LIMIT;
-        for source_index in start..end {
-            let sample = clamp_sample(sample_at(channel, source_index));
-            if sample < min_sample {
-                min_sample = sample;
-            }
-            if sample > max_sample {
-                max_sample = sample;
-            }
-        }
-
-        if min_sample > max_sample {
-            let fallback = clamp_sample(sample_at(channel, start));
-            min_sample = fallback;
-            max_sample = fallback;
-        }
-
-        visit(column, min_sample, max_sample);
-    }
-}
-
-/// Iterate deterministic min/max bins for each output column from a sample
-/// slice without callback indirection.
-pub(super) fn for_each_envelope_min_max_column_from_slice<Visit>(
-    samples: &[f32],
-    columns: usize,
-    start_sample: u64,
-    mut visit: Visit,
-) where
-    Visit: FnMut(usize, f32, f32),
-{
-    let sample_count = samples.len();
-    if sample_count == 0 || columns == 0 {
-        return;
-    }
-
-    for column in 0..columns {
-        let (mut start, mut end) =
-            phase_aligned_column_bounds(sample_count, columns, start_sample, column);
-
-        if start >= sample_count {
-            start = sample_count - 1;
-        }
-        if end <= start {
-            end = (start + 1).min(sample_count);
-        }
-
-        let mut min_sample = SAMPLE_CLAMP_LIMIT;
-        let mut max_sample = -SAMPLE_CLAMP_LIMIT;
-        for sample in &samples[start..end] {
-            let sample = clamp_sample(*sample);
-            if sample < min_sample {
-                min_sample = sample;
-            }
-            if sample > max_sample {
-                max_sample = sample;
-            }
-        }
-
-        if min_sample > max_sample {
-            let fallback = clamp_sample(samples[start]);
-            min_sample = fallback;
-            max_sample = fallback;
-        }
-
-        visit(column, min_sample, max_sample);
-    }
-}
-
-/// Iterate deterministic min/max bins for each output column using one cached
-/// segment tree for source range queries.
-pub(super) fn for_each_envelope_min_max_column_cached<Visit>(
+/// Ranges are half-open (`[start, end)`) and contain at least one sample when
+/// `sample_count > 0` and `columns > 0`.
+pub(super) fn fill_phase_aligned_column_bounds_into(
     sample_count: usize,
     columns: usize,
     start_sample: u64,
-    tree: &EnvelopeMinMaxTree,
-    mut visit: Visit,
-) where
-    Visit: FnMut(usize, f32, f32),
-{
+    out: &mut Vec<(usize, usize)>,
+) {
+    out.clear();
     if sample_count == 0 || columns == 0 {
         return;
     }
-
+    out.reserve(columns);
     for column in 0..columns {
         let (mut start, mut end) =
             phase_aligned_column_bounds(sample_count, columns, start_sample, column);
@@ -302,8 +202,7 @@ pub(super) fn for_each_envelope_min_max_column_cached<Visit>(
         if end <= start {
             end = (start + 1).min(sample_count);
         }
-        let bin = tree.query_range(start, end);
-        visit(column, bin.min, bin.max);
+        out.push((start, end));
     }
 }
 

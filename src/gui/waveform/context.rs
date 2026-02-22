@@ -1,7 +1,7 @@
 //! Reusable state for cached waveform rendering.
 
 use super::Point;
-use super::sampling::EnvelopeMinMaxTree;
+use super::sampling::{EnvelopeMinMaxTree, fill_phase_aligned_column_bounds_into};
 
 /// Reusable context for high-frequency waveform rendering.
 ///
@@ -142,6 +142,8 @@ pub(super) struct WaveformRenderScratch {
     pub(super) bottom_contour: Vec<Point>,
     /// Shifted contour scratch for glow layer polylines.
     pub(super) shifted: Vec<Point>,
+    /// Cached phase-aligned envelope column bounds reused across channels.
+    pub(super) phase_bounds_cache: PhaseAlignedBoundsCache,
     /// Persistent envelope-motion smoothing state per channel.
     envelope_motion_states: Vec<WaveformEnvelopeMotionState>,
 }
@@ -154,6 +156,7 @@ impl WaveformRenderScratch {
         self.top_contour.clear();
         self.bottom_contour.clear();
         self.shifted.clear();
+        self.phase_bounds_cache.clear();
         self.envelope_motion_states.clear();
     }
 
@@ -183,15 +186,68 @@ impl WaveformRenderScratch {
     }
 }
 
+/// Reusable cache for phase-aligned envelope column bounds.
+#[derive(Clone, Debug, Default)]
+pub(super) struct PhaseAlignedBoundsCache {
+    /// Last source sample count used to build bounds.
+    sample_count: usize,
+    /// Last output column count used to build bounds.
+    columns: usize,
+    /// Last `start_sample % columns` phase key.
+    phase_mod_columns: u64,
+    /// Cached half-open `[start, end)` ranges per output column.
+    bounds: Vec<(usize, usize)>,
+}
+
+impl PhaseAlignedBoundsCache {
+    /// Drop cached key metadata while retaining allocated range storage.
+    fn clear(&mut self) {
+        self.sample_count = 0;
+        self.columns = 0;
+        self.phase_mod_columns = 0;
+        self.bounds.clear();
+    }
+
+    /// Return cached bounds for one envelope column configuration.
+    pub(super) fn bounds(
+        &mut self,
+        sample_count: usize,
+        columns: usize,
+        start_sample: u64,
+    ) -> &[(usize, usize)] {
+        let phase_mod_columns = if columns > 0 {
+            start_sample % columns as u64
+        } else {
+            0
+        };
+        let cache_hit = self.sample_count == sample_count
+            && self.columns == columns
+            && self.phase_mod_columns == phase_mod_columns
+            && self.bounds.len() == columns;
+        if !cache_hit {
+            fill_phase_aligned_column_bounds_into(
+                sample_count,
+                columns,
+                start_sample,
+                &mut self.bounds,
+            );
+            self.sample_count = sample_count;
+            self.columns = columns;
+            self.phase_mod_columns = phase_mod_columns;
+        }
+        &self.bounds
+    }
+}
+
 /// Per-channel temporal smoothing state for envelope top/bottom contours.
 #[derive(Clone, Debug, Default)]
 pub(super) struct WaveformEnvelopeMotionState {
     /// Last smoothing signature; changes reset smoothing history.
     pub(super) signature: Option<EnvelopeMotionSignature>,
     /// Previous-frame top contour Y values.
-    pub(super) top_y: Vec<i32>,
+    pub(super) top_y: Vec<f32>,
     /// Previous-frame bottom contour Y values.
-    pub(super) bottom_y: Vec<i32>,
+    pub(super) bottom_y: Vec<f32>,
 }
 
 /// Parameters that define one compatible smoothing domain.
@@ -207,6 +263,10 @@ pub(super) struct EnvelopeMotionSignature {
     pub(super) center_y: i32,
     /// Quantized vertical scale factor.
     pub(super) scale_key: i32,
+    /// Quantized inward release timing in milliseconds per pixel.
+    pub(super) release_ms_per_pixel_key: i32,
+    /// Quantized render frame delta in milliseconds.
+    pub(super) frame_delta_ms_key: i32,
 }
 
 /// Per-channel hierarchical envelope cache.

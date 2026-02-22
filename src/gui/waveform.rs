@@ -176,8 +176,17 @@ pub struct WaveformViewConfig<'a> {
     pub max_glow_points_per_channel: usize,
     /// Enable temporal smoothing for envelope contour motion.
     pub envelope_temporal_smoothing: bool,
-    /// Inward release speed (pixels per frame) for envelope smoothing.
-    pub envelope_release_px_per_frame: u8,
+    /// Milliseconds required for one inward release pixel in envelope smoothing.
+    ///
+    /// Lower values release toward the center faster; higher values retain
+    /// transients longer. This only affects inward motion. Outward expansion
+    /// remains immediate to preserve attack peaks.
+    pub envelope_release_ms_per_pixel: f32,
+    /// Frame time in milliseconds used by envelope temporal smoothing.
+    ///
+    /// Callers should update this from UI frame timing so smoothing speed
+    /// remains stable across variable refresh rates.
+    pub envelope_frame_delta_ms: f32,
 }
 
 impl<'a> WaveformViewConfig<'a> {
@@ -196,7 +205,8 @@ impl<'a> WaveformViewConfig<'a> {
             max_waveform_commands: 32_768,
             max_glow_points_per_channel: 16_384,
             envelope_temporal_smoothing: true,
-            envelope_release_px_per_frame: 1,
+            envelope_release_ms_per_pixel: 16.0,
+            envelope_frame_delta_ms: 16.0,
         }
     }
 }
@@ -397,7 +407,8 @@ where
                     channel_budget,
                     config.max_glow_points_per_channel.max(1),
                     config.envelope_temporal_smoothing,
-                    config.envelope_release_px_per_frame,
+                    config.envelope_release_ms_per_pixel,
+                    config.envelope_frame_delta_ms,
                     scratch,
                 );
             }
@@ -429,7 +440,8 @@ where
                     channel_budget,
                     config.max_glow_points_per_channel.max(1),
                     config.envelope_temporal_smoothing,
-                    config.envelope_release_px_per_frame,
+                    config.envelope_release_ms_per_pixel,
+                    config.envelope_frame_delta_ms,
                     scratch,
                 );
                 if lane_index > 0 {

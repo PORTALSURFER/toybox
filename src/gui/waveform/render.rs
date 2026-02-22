@@ -2,9 +2,8 @@
 
 use super::context::{EnvelopeMotionSignature, WaveformEnvelopeMotionState, WaveformRenderScratch};
 use super::sampling::{
-    EnvelopeMinMaxTree, clamp_sample, for_each_envelope_min_max_column,
-    for_each_envelope_min_max_column_cached, for_each_envelope_min_max_column_from_slice,
-    resample_channel_linear_from_slice_into, resample_channel_linear_into,
+    EnvelopeMinMaxTree, SAMPLE_CLAMP_LIMIT, clamp_sample, resample_channel_linear_from_slice_into,
+    resample_channel_linear_into,
 };
 use super::{
     Color, LaneBounds, Point, SurfaceCommand, WaveformGeometry, WaveformRenderQuality,
@@ -31,7 +30,8 @@ pub(super) fn draw_waveform_channel<SampleAt>(
     channel_command_budget: usize,
     glow_point_budget: usize,
     envelope_temporal_smoothing: bool,
-    envelope_release_px_per_frame: u8,
+    envelope_release_ms_per_pixel: f32,
+    envelope_frame_delta_ms: f32,
     scratch: &mut WaveformRenderScratch,
 ) where
     SampleAt: Fn(usize, usize) -> f32,
@@ -72,7 +72,8 @@ pub(super) fn draw_waveform_channel<SampleAt>(
                 scale_y,
                 start_sample,
                 envelope_temporal_smoothing,
-                envelope_release_px_per_frame,
+                envelope_release_ms_per_pixel,
+                envelope_frame_delta_ms,
                 scratch,
             )
         }
@@ -113,7 +114,8 @@ pub(super) fn draw_waveform_channel<SampleAt>(
                 channel_command_budget,
                 glow_point_budget,
                 envelope_temporal_smoothing,
-                envelope_release_px_per_frame,
+                envelope_release_ms_per_pixel,
+                envelope_frame_delta_ms,
                 scratch,
             )
         }
@@ -178,34 +180,41 @@ fn draw_waveform_channel_envelope_legacy<SampleAt>(
     scale_y: f32,
     start_sample: u64,
     envelope_temporal_smoothing: bool,
-    envelope_release_px_per_frame: u8,
+    envelope_release_ms_per_pixel: f32,
+    envelope_frame_delta_ms: f32,
     scratch: &mut WaveformRenderScratch,
 ) where
     SampleAt: Fn(usize, usize) -> f32,
 {
     let columns = geometry.width_i32.max(2) as usize;
     let x_max = geometry.width_i32.max(2) - 1;
-    scratch.top_contour.clear();
-    scratch.bottom_contour.clear();
-    scratch.top_contour.reserve(columns);
-    scratch.bottom_contour.reserve(columns);
+    {
+        let (top_contour, bottom_contour, phase_bounds_cache) = (
+            &mut scratch.top_contour,
+            &mut scratch.bottom_contour,
+            &mut scratch.phase_bounds_cache,
+        );
+        top_contour.clear();
+        bottom_contour.clear();
+        top_contour.reserve(columns);
+        bottom_contour.reserve(columns);
 
-    for_each_channel_envelope_column(
-        sample_count,
-        channel,
-        columns,
-        start_sample,
-        channel_samples,
-        sample_at,
-        envelope_tree,
-        |column_index, min_sample, max_sample| {
-            let x = point_x(column_index, columns, x_max);
-            let y_top = sample_to_lane_y(max_sample, center_y, scale_y, lane);
-            let y_bottom = sample_to_lane_y(min_sample, center_y, scale_y, lane);
-            scratch.top_contour.push(Point { x, y: y_top });
-            scratch.bottom_contour.push(Point { x, y: y_bottom });
-        },
-    );
+        let column_bounds = phase_bounds_cache.bounds(sample_count, columns, start_sample);
+        for_each_channel_envelope_column(
+            channel,
+            column_bounds,
+            channel_samples,
+            sample_at,
+            envelope_tree,
+            |column_index, min_sample, max_sample| {
+                let x = point_x(column_index, columns, x_max);
+                let y_top = sample_to_lane_y(max_sample, center_y, scale_y, lane);
+                let y_bottom = sample_to_lane_y(min_sample, center_y, scale_y, lane);
+                top_contour.push(Point { x, y: y_top });
+                bottom_contour.push(Point { x, y: y_bottom });
+            },
+        );
+    }
 
     if envelope_temporal_smoothing {
         let mut motion_state = scratch.take_envelope_motion_state(channel);
@@ -215,7 +224,8 @@ fn draw_waveform_channel_envelope_legacy<SampleAt>(
             lane,
             center_y,
             scale_y,
-            envelope_release_px_per_frame,
+            envelope_release_ms_per_pixel,
+            envelope_frame_delta_ms,
             &mut motion_state,
         );
         scratch.restore_envelope_motion_state(channel, motion_state);
@@ -224,11 +234,24 @@ fn draw_waveform_channel_envelope_legacy<SampleAt>(
     }
 
     for (top, bottom) in scratch.top_contour.iter().zip(&scratch.bottom_contour) {
-        commands.push(SurfaceCommand::Line {
-            start: *top,
-            end: *bottom,
-            color,
-        });
+        if top.y == bottom.y {
+            commands.push(SurfaceCommand::FillRect {
+                rect: super::Rect {
+                    origin: *top,
+                    size: super::Size {
+                        width: 1,
+                        height: 1,
+                    },
+                },
+                color,
+            });
+        } else {
+            commands.push(SurfaceCommand::Line {
+                start: *top,
+                end: *bottom,
+                color,
+            });
+        }
     }
 }
 
@@ -315,7 +338,8 @@ fn draw_waveform_channel_envelope_styled<SampleAt>(
     channel_command_budget: usize,
     glow_point_budget: usize,
     envelope_temporal_smoothing: bool,
-    envelope_release_px_per_frame: u8,
+    envelope_release_ms_per_pixel: f32,
+    envelope_frame_delta_ms: f32,
     scratch: &mut WaveformRenderScratch,
 ) where
     SampleAt: Fn(usize, usize) -> f32,
@@ -323,47 +347,53 @@ fn draw_waveform_channel_envelope_styled<SampleAt>(
     let columns = geometry.width_i32.max(2) as usize;
     let x_max = geometry.width_i32.max(2) - 1;
     let body_color = with_alpha(color, style.waveform_body_alpha);
-    scratch.top_contour.clear();
-    scratch.bottom_contour.clear();
-    scratch.top_contour.reserve(columns);
-    scratch.bottom_contour.reserve(columns);
+    {
+        let (top_contour, bottom_contour, phase_bounds_cache) = (
+            &mut scratch.top_contour,
+            &mut scratch.bottom_contour,
+            &mut scratch.phase_bounds_cache,
+        );
+        top_contour.clear();
+        bottom_contour.clear();
+        top_contour.reserve(columns);
+        bottom_contour.reserve(columns);
 
-    for_each_channel_envelope_column(
-        sample_count,
-        channel,
-        columns,
-        start_sample,
-        channel_samples,
-        sample_at,
-        envelope_tree,
-        |column_index, min_sample, max_sample| {
-            let x = point_x(column_index, columns, x_max);
-            let y_top = sample_to_lane_y(max_sample, center_y, scale_y, lane);
-            let y_bottom = sample_to_lane_y(min_sample, center_y, scale_y, lane);
-            if body_color.a > 0 {
-                if y_top != y_bottom {
-                    commands.push(SurfaceCommand::Line {
-                        start: Point { x, y: y_top },
-                        end: Point { x, y: y_bottom },
-                        color: body_color,
-                    });
-                } else {
-                    commands.push(SurfaceCommand::FillRect {
-                        rect: super::Rect {
-                            origin: Point { x, y: y_top },
-                            size: super::Size {
-                                width: 1,
-                                height: 1,
+        let column_bounds = phase_bounds_cache.bounds(sample_count, columns, start_sample);
+        for_each_channel_envelope_column(
+            channel,
+            column_bounds,
+            channel_samples,
+            sample_at,
+            envelope_tree,
+            |column_index, min_sample, max_sample| {
+                let x = point_x(column_index, columns, x_max);
+                let y_top = sample_to_lane_y(max_sample, center_y, scale_y, lane);
+                let y_bottom = sample_to_lane_y(min_sample, center_y, scale_y, lane);
+                if body_color.a > 0 {
+                    if y_top != y_bottom {
+                        commands.push(SurfaceCommand::Line {
+                            start: Point { x, y: y_top },
+                            end: Point { x, y: y_bottom },
+                            color: body_color,
+                        });
+                    } else {
+                        commands.push(SurfaceCommand::FillRect {
+                            rect: super::Rect {
+                                origin: Point { x, y: y_top },
+                                size: super::Size {
+                                    width: 1,
+                                    height: 1,
+                                },
                             },
-                        },
-                        color: body_color,
-                    });
+                            color: body_color,
+                        });
+                    }
                 }
-            }
-            scratch.top_contour.push(Point { x, y: y_top });
-            scratch.bottom_contour.push(Point { x, y: y_bottom });
-        },
-    );
+                top_contour.push(Point { x, y: y_top });
+                bottom_contour.push(Point { x, y: y_bottom });
+            },
+        );
+    }
 
     if scratch.top_contour.len() < 2 || scratch.bottom_contour.len() < 2 {
         return;
@@ -377,7 +407,8 @@ fn draw_waveform_channel_envelope_styled<SampleAt>(
             lane,
             center_y,
             scale_y,
-            envelope_release_px_per_frame,
+            envelope_release_ms_per_pixel,
+            envelope_frame_delta_ms,
             &mut motion_state,
         );
         scratch.restore_envelope_motion_state(channel, motion_state);
@@ -445,35 +476,64 @@ fn linear_samples_into<SampleAt>(
 /// Iterate min/max envelopes for one channel using the best available source.
 #[allow(clippy::too_many_arguments)]
 fn for_each_channel_envelope_column<SampleAt, Visit>(
-    sample_count: usize,
     channel: usize,
-    columns: usize,
-    start_sample: u64,
+    column_bounds: &[(usize, usize)],
     channel_samples: Option<&[f32]>,
     sample_at: &SampleAt,
     envelope_tree: Option<&EnvelopeMinMaxTree>,
-    visit: Visit,
+    mut visit: Visit,
 ) where
     SampleAt: Fn(usize, usize) -> f32,
     Visit: FnMut(usize, f32, f32),
 {
     if let Some(tree) = envelope_tree {
-        for_each_envelope_min_max_column_cached(sample_count, columns, start_sample, tree, visit);
+        for (column, (start, end)) in column_bounds.iter().copied().enumerate() {
+            let bin = tree.query_range(start, end);
+            visit(column, bin.min, bin.max);
+        }
         return;
     }
     if let Some(samples) = channel_samples {
-        let bounded = &samples[..sample_count.min(samples.len())];
-        for_each_envelope_min_max_column_from_slice(bounded, columns, start_sample, visit);
+        for (column, (start, end)) in column_bounds.iter().copied().enumerate() {
+            let mut min_sample = SAMPLE_CLAMP_LIMIT;
+            let mut max_sample = -SAMPLE_CLAMP_LIMIT;
+            for sample in &samples[start..end] {
+                let sample = clamp_sample(*sample);
+                if sample < min_sample {
+                    min_sample = sample;
+                }
+                if sample > max_sample {
+                    max_sample = sample;
+                }
+            }
+            if min_sample > max_sample {
+                let fallback = clamp_sample(samples[start]);
+                min_sample = fallback;
+                max_sample = fallback;
+            }
+            visit(column, min_sample, max_sample);
+        }
         return;
     }
-    for_each_envelope_min_max_column(
-        sample_count,
-        channel,
-        columns,
-        start_sample,
-        sample_at,
-        visit,
-    );
+    for (column, (start, end)) in column_bounds.iter().copied().enumerate() {
+        let mut min_sample = SAMPLE_CLAMP_LIMIT;
+        let mut max_sample = -SAMPLE_CLAMP_LIMIT;
+        for source_index in start..end {
+            let sample = clamp_sample(sample_at(channel, source_index));
+            if sample < min_sample {
+                min_sample = sample;
+            }
+            if sample > max_sample {
+                max_sample = sample;
+            }
+        }
+        if min_sample > max_sample {
+            let fallback = clamp_sample(sample_at(channel, start));
+            min_sample = fallback;
+            max_sample = fallback;
+        }
+        visit(column, min_sample, max_sample);
+    }
 }
 
 /// Convert sampled values into x/y contour points.
@@ -500,13 +560,15 @@ fn samples_to_points(
 }
 
 /// Apply temporal smoothing to top/bottom envelope contours.
+#[allow(clippy::too_many_arguments)]
 fn smooth_envelope_contours(
     top_contour: &mut [Point],
     bottom_contour: &mut [Point],
     lane: LaneBounds,
     center_y: i32,
     scale_y: f32,
-    release_px_per_frame: u8,
+    release_ms_per_pixel: f32,
+    frame_delta_ms: f32,
     state: &mut WaveformEnvelopeMotionState,
 ) {
     if top_contour.len() != bottom_contour.len() || top_contour.is_empty() {
@@ -519,6 +581,8 @@ fn smooth_envelope_contours(
         lane_bottom: lane.bottom,
         center_y,
         scale_key: (scale_y * 1024.0).round() as i32,
+        release_ms_per_pixel_key: (release_ms_per_pixel * 256.0).round() as i32,
+        frame_delta_ms_key: (frame_delta_ms * 256.0).round() as i32,
     };
     let requires_reset = state.signature != Some(signature)
         || state.top_y.len() != top_contour.len()
@@ -530,38 +594,45 @@ fn smooth_envelope_contours(
         state.top_y.reserve(top_contour.len());
         state.bottom_y.reserve(bottom_contour.len());
         for (top, bottom) in top_contour.iter().zip(bottom_contour.iter()) {
-            state.top_y.push(top.y);
-            state.bottom_y.push(bottom.y);
+            state.top_y.push(top.y as f32);
+            state.bottom_y.push(bottom.y as f32);
         }
         return;
     }
 
-    let release_step = i32::from(release_px_per_frame.max(1));
+    let release_step = if release_ms_per_pixel <= 0.0 {
+        f32::MAX
+    } else {
+        (frame_delta_ms.max(0.0) / release_ms_per_pixel).max(0.0)
+    };
     for index in 0..top_contour.len() {
         let smoothed_top = smooth_edge(
             state.top_y[index],
-            top_contour[index].y,
+            top_contour[index].y as f32,
             false,
             release_step,
-        )
-        .clamp(lane.top, lane.bottom);
+        );
         let smoothed_bottom = smooth_edge(
             state.bottom_y[index],
-            bottom_contour[index].y,
+            bottom_contour[index].y as f32,
             true,
             release_step,
-        )
-        .clamp(lane.top, lane.bottom);
+        );
 
-        top_contour[index].y = smoothed_top;
-        bottom_contour[index].y = smoothed_bottom;
-        state.top_y[index] = smoothed_top;
-        state.bottom_y[index] = smoothed_bottom;
+        let clamped_top = smoothed_top.clamp(lane.top as f32, lane.bottom as f32);
+        let clamped_bottom = smoothed_bottom.clamp(lane.top as f32, lane.bottom as f32);
+        let rendered_top = clamped_top.round() as i32;
+        let rendered_bottom = clamped_bottom.round() as i32;
+
+        top_contour[index].y = rendered_top;
+        bottom_contour[index].y = rendered_bottom;
+        state.top_y[index] = clamped_top;
+        state.bottom_y[index] = clamped_bottom;
     }
 }
 
 /// Smooth one envelope edge with fast outward attack and limited inward release.
-fn smooth_edge(prev: i32, target: i32, outward_positive: bool, release_step: i32) -> i32 {
+fn smooth_edge(prev: f32, target: f32, outward_positive: bool, release_step: f32) -> f32 {
     if prev == target {
         return target;
     }
@@ -573,10 +644,14 @@ fn smooth_edge(prev: i32, target: i32, outward_positive: bool, release_step: i32
     if moving_outward {
         return target;
     }
+    if release_step.is_infinite() {
+        return target;
+    }
+    let bounded_step = release_step.max(0.0);
     if target > prev {
-        (prev + release_step).min(target)
+        (prev + bounded_step).min(target)
     } else {
-        (prev - release_step).max(target)
+        (prev - bounded_step).max(target)
     }
 }
 

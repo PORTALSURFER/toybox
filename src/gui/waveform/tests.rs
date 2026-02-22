@@ -382,6 +382,34 @@ fn envelope_mode_start_sample_phase_is_deterministic_and_affects_column_assignme
 }
 
 #[test]
+fn envelope_mode_phase_repeats_when_start_sample_shifts_by_columns() {
+    let styles = [WaveformChannelStyle {
+        visible: true,
+        color: Color::rgb(210, 150, 100),
+    }];
+    let mut config = WaveformViewConfig::new(&styles);
+    config.sampling_mode = WaveformSamplingMode::EnvelopeMinMax;
+    config.render_quality = WaveformRenderQuality::LegacyCpuOnly;
+
+    let sample_count = 409usize;
+    let width = 53u32;
+    let columns = width.max(2) as u64;
+    let samples: Vec<f32> = (0..sample_count)
+        .map(|index| ((index as f32 * 0.037).sin() * 0.95).clamp(-1.0, 1.0))
+        .collect();
+
+    config.start_sample = 7;
+    let a = build_waveform_surface_commands(width, 80, sample_count, 1, |_, i| samples[i], &config);
+    config.start_sample = 7 + columns;
+    let b = build_waveform_surface_commands(width, 80, sample_count, 1, |_, i| samples[i], &config);
+
+    assert_eq!(
+        a, b,
+        "phase-aligned envelope binning should repeat every output-column shift"
+    );
+}
+
+#[test]
 fn envelope_mode_preserves_sharp_transients() {
     let styles = [WaveformChannelStyle {
         visible: true,
@@ -503,10 +531,18 @@ fn envelope_mode_renders_in_overlay_and_split_layouts() {
         &overlay_config,
     );
 
-    let left_overlay = collect_lines_by_color(&overlay_commands, styles[0].color);
-    let right_overlay = collect_lines_by_color(&overlay_commands, styles[1].color);
-    assert_eq!(left_overlay.len(), width as usize);
-    assert_eq!(right_overlay.len(), width as usize);
+    let left_overlay_lines = collect_lines_by_color(&overlay_commands, styles[0].color);
+    let right_overlay_lines = collect_lines_by_color(&overlay_commands, styles[1].color);
+    let left_overlay_rects = collect_fill_rects_by_rgb(&overlay_commands, styles[0].color);
+    let right_overlay_rects = collect_fill_rects_by_rgb(&overlay_commands, styles[1].color);
+    assert_eq!(
+        left_overlay_lines.len() + left_overlay_rects.len(),
+        width as usize
+    );
+    assert_eq!(
+        right_overlay_lines.len() + right_overlay_rects.len(),
+        width as usize
+    );
 
     let mut split_config = overlay_config.clone();
     split_config.display_mode = WaveformDisplayMode::Split;
@@ -526,18 +562,32 @@ fn envelope_mode_renders_in_overlay_and_split_layouts() {
         &split_config,
     );
 
-    let left_split = collect_lines_by_color(&split_commands, styles[0].color);
-    let right_split = collect_lines_by_color(&split_commands, styles[1].color);
-    assert_eq!(left_split.len(), width as usize);
-    assert_eq!(right_split.len(), width as usize);
+    let left_split_lines = collect_lines_by_color(&split_commands, styles[0].color);
+    let right_split_lines = collect_lines_by_color(&split_commands, styles[1].color);
+    let left_split_rects = collect_fill_rects_by_rgb(&split_commands, styles[0].color);
+    let right_split_rects = collect_fill_rects_by_rgb(&split_commands, styles[1].color);
+    assert_eq!(
+        left_split_lines.len() + left_split_rects.len(),
+        width as usize
+    );
+    assert_eq!(
+        right_split_lines.len() + right_split_rects.len(),
+        width as usize
+    );
 
-    for (start, end) in left_split {
+    for (start, end) in left_split_lines {
         assert!((0..=50).contains(&start.y));
         assert!((0..=50).contains(&end.y));
     }
-    for (start, end) in right_split {
+    for (rect, _) in left_split_rects {
+        assert!((0..=50).contains(&rect.origin.y));
+    }
+    for (start, end) in right_split_lines {
         assert!((50..=100).contains(&start.y));
         assert!((50..=100).contains(&end.y));
+    }
+    for (rect, _) in right_split_rects {
+        assert!((50..=100).contains(&rect.origin.y));
     }
 
     let lane_divider_present = split_commands.iter().any(|command| {
@@ -617,6 +667,26 @@ fn styled_envelope_flat_signal_emits_single_pixel_body_marks() {
     assert!(
         !body_rects.is_empty(),
         "flat envelope should emit 1px body marks instead of dropping columns"
+    );
+}
+
+#[test]
+fn legacy_envelope_flat_signal_emits_single_pixel_body_marks() {
+    let styles = [WaveformChannelStyle {
+        visible: true,
+        color: Color::rgb(180, 220, 250),
+    }];
+    let mut config = WaveformViewConfig::new(&styles);
+    config.sampling_mode = WaveformSamplingMode::EnvelopeMinMax;
+    config.render_quality = WaveformRenderQuality::LegacyCpuOnly;
+
+    let samples = vec![0.0f32; 1024];
+    let commands =
+        build_waveform_surface_commands(96, 48, samples.len(), 1, |_, i| samples[i], &config);
+    let body_rects = collect_fill_rects_by_rgb(&commands, styles[0].color);
+    assert!(
+        !body_rects.is_empty(),
+        "legacy flat envelope should emit 1px body marks instead of zero-length lines"
     );
 }
 
@@ -828,7 +898,7 @@ fn callback_context_reuses_samples_for_identical_revision() {
 }
 
 #[test]
-fn envelope_temporal_smoothing_limits_inward_release_per_frame() {
+fn envelope_temporal_smoothing_limits_inward_release_per_timed_step() {
     let styles = [WaveformChannelStyle {
         visible: true,
         color: Color::rgb(255, 80, 80),
@@ -837,7 +907,8 @@ fn envelope_temporal_smoothing_limits_inward_release_per_frame() {
     config.sampling_mode = WaveformSamplingMode::EnvelopeMinMax;
     config.render_quality = WaveformRenderQuality::LegacyCpuOnly;
     config.envelope_temporal_smoothing = true;
-    config.envelope_release_px_per_frame = 1;
+    config.envelope_release_ms_per_pixel = 16.0;
+    config.envelope_frame_delta_ms = 16.0;
 
     let sample_count = 256usize;
     let width = 64u32;
@@ -898,6 +969,6 @@ fn envelope_temporal_smoothing_limits_inward_release_per_frame() {
     );
     assert!(
         top_b - top_a <= 1,
-        "inward release should be limited to configured per-frame pixel step"
+        "inward release should be limited to configured timed pixel step"
     );
 }
