@@ -215,6 +215,66 @@ fn dropdown_emits_double_click_action() {
 }
 
 #[test]
+fn curve_editor_double_click_deletes_interior_point_when_press_is_also_set() {
+    let mut canvas = Canvas::new(220, 160);
+    let mut layout = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let model = CurveModel::new(
+        vec![
+            CurvePoint::new(0.0, 1.0),
+            CurvePoint::new(0.25, 0.2),
+            CurvePoint::new(0.7, 0.8),
+            CurvePoint::new(1.0, 1.0),
+        ],
+        vec![CurveSegment::new(0.0); 3],
+    );
+    let target = model.points[1];
+    let input = InputState {
+        window_size: Size {
+            width: 220,
+            height: 160,
+        },
+        pointer_pos: Point {
+            x: (target.x * 219.0).round() as i32,
+            y: ((1.0 - target.y) * 159.0).round() as i32,
+        },
+        mouse_down: true,
+        mouse_pressed: true,
+        mouse_double_clicked: true,
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+
+    let spec = UiSpec::new(
+        RootFrameSpec::new(
+            "root",
+            Node::Absolute(
+                AbsoluteSpec::new(vec![AbsoluteChild::new(
+                    Point { x: 0, y: 0 },
+                    curve_editor("curve", model.clone())
+                        .widget_layout(LayoutBox::fixed(220, 160).max(220, 160)),
+                )])
+                .layout(ContainerLayout::fill()),
+            ),
+        )
+        .padding(0)
+        .layout(LayoutBox::fixed(220, 160)),
+    );
+    let result = render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    let changed_model = result
+        .actions
+        .iter()
+        .find_map(|action| match action {
+            UiAction::CurveEditorChanged { key, model } if key == "curve" => Some(model),
+            _ => None,
+        })
+        .expect("double-click should emit one changed model action");
+    assert_eq!(changed_model.points.len() + 1, model.points.len());
+    assert_eq!(changed_model.segments.len() + 1, model.segments.len());
+}
+
+#[test]
 fn knob_double_click_emits_changed_action_at_default_value() {
     let mut canvas = Canvas::new(220, 180);
     let mut layout = Layout::default();

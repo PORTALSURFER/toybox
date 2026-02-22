@@ -85,6 +85,22 @@ impl<'a> Ui<'a> {
         let normalized_pointer = curve_point_from_local(local_pointer, rect);
         let raw_normalized_pointer = curve_point_from_local(raw_local_pointer, rect);
 
+        // Windows reports a double click as a press + double-click in the same frame.
+        // Handle deletion first so the press path cannot swallow the action.
+        if region.double_clicked && interaction.double_click_delete_interior {
+            let node_hit_radius = scaled_curve_i32(NODE_HIT_RADIUS, rect);
+            if let Some(index) = find_point_hit_within(model, local_pointer, node_hit_radius, rect)
+                && index > 0
+                && index + 1 < model.points.len()
+            {
+                remove_interior_point(model, index);
+                runtime.selected_point = None;
+                runtime.drag_mode = None;
+                enforce_endpoint_mode(model, interaction.endpoint_mode);
+                return true;
+            }
+        }
+
         if region.pressed {
             let node_hit_radius = scaled_curve_i32(NODE_HIT_RADIUS, rect);
             let segment_near_radius = scaled_curve_i32(SEGMENT_NEAR_HIT_RADIUS, rect);
@@ -318,20 +334,6 @@ impl<'a> Ui<'a> {
 
         if region.released {
             runtime.drag_mode = None;
-        }
-
-        if region.double_clicked && interaction.double_click_delete_interior {
-            let node_hit_radius = scaled_curve_i32(NODE_HIT_RADIUS, rect);
-            if let Some(index) = find_point_hit_within(model, local_pointer, node_hit_radius, rect)
-                && index > 0
-                && index + 1 < model.points.len()
-            {
-                remove_interior_point(model, index);
-                runtime.selected_point = None;
-                runtime.drag_mode = None;
-                enforce_endpoint_mode(model, interaction.endpoint_mode);
-                changed = true;
-            }
         }
 
         changed
