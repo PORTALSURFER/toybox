@@ -20,6 +20,8 @@ pub(super) fn draw_waveform_channel<SampleAt>(
     zoom_y: f32,
     lane: LaneBounds,
     color: Color,
+    channel_command_budget: usize,
+    glow_point_budget: usize,
 ) where
     SampleAt: Fn(usize, usize) -> f32,
 {
@@ -66,6 +68,8 @@ pub(super) fn draw_waveform_channel<SampleAt>(
                 style,
                 center_y,
                 scale_y,
+                channel_command_budget,
+                glow_point_budget,
             )
         }
         (WaveformSamplingMode::EnvelopeMinMax, WaveformRenderQuality::AutoVectorPreferred) => {
@@ -80,6 +84,8 @@ pub(super) fn draw_waveform_channel<SampleAt>(
                 style,
                 center_y,
                 scale_y,
+                channel_command_budget,
+                glow_point_budget,
             )
         }
     }
@@ -167,6 +173,8 @@ fn draw_waveform_channel_linear_styled<SampleAt>(
     style: WaveformViewStyle,
     center_y: i32,
     scale_y: f32,
+    channel_command_budget: usize,
+    glow_point_budget: usize,
 ) where
     SampleAt: Fn(usize, usize) -> f32,
 {
@@ -187,12 +195,11 @@ fn draw_waveform_channel_linear_styled<SampleAt>(
         center_y,
         scale_y,
     );
-    emit_glow_symmetric(commands, &contour, lane, color, style);
-    emit_polyline(
-        commands,
-        &contour,
-        with_alpha(color, style.waveform_outline_alpha_inner),
-    );
+    let core_color = with_alpha(color, style.waveform_outline_alpha_inner);
+    let glow_budget = channel_command_budget.saturating_sub(1);
+    let glow_plan = resolve_glow_plan(contour.len(), style, glow_budget, glow_point_budget, 2);
+    emit_glow_symmetric(commands, &contour, lane, color, style, glow_plan);
+    emit_polyline_batched(commands, &contour, core_color, 1.0);
 }
 
 /// Draw one min/max envelope channel with body fill and gradient-like outlines.
@@ -208,6 +215,8 @@ fn draw_waveform_channel_envelope_styled<SampleAt>(
     style: WaveformViewStyle,
     center_y: i32,
     scale_y: f32,
+    channel_command_budget: usize,
+    glow_point_budget: usize,
 ) where
     SampleAt: Fn(usize, usize) -> f32,
 {
@@ -216,6 +225,7 @@ fn draw_waveform_channel_envelope_styled<SampleAt>(
     let body_color = with_alpha(color, style.waveform_body_alpha);
     let mut top_contour = Vec::with_capacity(columns);
     let mut bottom_contour = Vec::with_capacity(columns);
+    let mut body_commands_emitted = 0usize;
 
     for_each_envelope_min_max_column(
         sample_count,
@@ -232,6 +242,7 @@ fn draw_waveform_channel_envelope_styled<SampleAt>(
                     end: Point { x, y: y_bottom },
                     color: body_color,
                 });
+                body_commands_emitted += 1;
             }
             top_contour.push(Point { x, y: y_top });
             bottom_contour.push(Point { x, y: y_bottom });
@@ -242,11 +253,21 @@ fn draw_waveform_channel_envelope_styled<SampleAt>(
         return;
     }
 
-    emit_glow_outward(commands, &top_contour, lane, color, style, -1);
-    emit_glow_outward(commands, &bottom_contour, lane, color, style, 1);
+    let core_commands = 2usize;
+    let glow_budget = channel_command_budget.saturating_sub(body_commands_emitted + core_commands);
+    let per_contour_glow_points = glow_point_budget / 2;
+    let glow_plan = resolve_glow_plan(
+        top_contour.len(),
+        style,
+        glow_budget,
+        per_contour_glow_points.max(1),
+        2,
+    );
+    emit_glow_outward(commands, &top_contour, lane, color, style, -1, glow_plan);
+    emit_glow_outward(commands, &bottom_contour, lane, color, style, 1, glow_plan);
     let core_color = with_alpha(color, style.waveform_outline_alpha_inner);
-    emit_polyline(commands, &top_contour, core_color);
-    emit_polyline(commands, &bottom_contour, core_color);
+    emit_polyline_batched(commands, &top_contour, core_color, 1.0);
+    emit_polyline_batched(commands, &bottom_contour, core_color, 1.0);
 }
 
 /// Build linearly sampled values for one channel.
@@ -304,6 +325,109 @@ fn emit_polyline(commands: &mut Vec<SurfaceCommand>, points: &[Point], color: Co
     }
 }
 
+/// Emit one batched polyline command.
+fn emit_polyline_batched(
+    commands: &mut Vec<SurfaceCommand>,
+    points: &[Point],
+    color: Color,
+    thickness: f32,
+) {
+    if points.len() < 2 || color.a == 0 {
+        return;
+    }
+    let compact = compact_polyline_points(points);
+    if compact.len() < 2 {
+        return;
+    }
+    commands.push(SurfaceCommand::Polyline {
+        points: compact,
+        thickness: thickness.max(1.0),
+        color,
+    });
+}
+
+/// Deterministic adaptive glow quality settings for one channel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct GlowPlan {
+    /// Number of glow layers to emit.
+    layers: u8,
+    /// Global stride multiplier applied to all glow layers.
+    stride_scale: usize,
+}
+
+/// Resolve adaptive glow layers and point stride from command/point budgets.
+fn resolve_glow_plan(
+    contour_points: usize,
+    style: WaveformViewStyle,
+    max_glow_commands: usize,
+    max_glow_points: usize,
+    commands_per_layer: usize,
+) -> GlowPlan {
+    let configured_layers = usize::from(style.waveform_outline_layers);
+    if configured_layers == 0
+        || contour_points < 2
+        || max_glow_commands == 0
+        || max_glow_points == 0
+    {
+        return GlowPlan {
+            layers: 0,
+            stride_scale: 1,
+        };
+    }
+
+    let commands_per_layer = commands_per_layer.max(1);
+    let mut layers = configured_layers.min(max_glow_commands / commands_per_layer);
+    if layers == 0 {
+        return GlowPlan {
+            layers: 0,
+            stride_scale: 1,
+        };
+    }
+
+    let mut stride_scale = 1usize;
+    loop {
+        let estimated_points =
+            estimate_glow_points(contour_points, layers, stride_scale, commands_per_layer);
+        if estimated_points <= max_glow_points {
+            break;
+        }
+        if layers > 1 {
+            layers -= 1;
+            stride_scale = 1;
+            continue;
+        }
+        if stride_scale >= contour_points {
+            break;
+        }
+        stride_scale += 1;
+    }
+
+    GlowPlan {
+        layers: layers as u8,
+        stride_scale,
+    }
+}
+
+/// Estimate emitted glow-polyline points for one contour size and plan.
+fn estimate_glow_points(
+    contour_points: usize,
+    layers: usize,
+    stride_scale: usize,
+    commands_per_layer: usize,
+) -> usize {
+    if contour_points < 2 || layers == 0 {
+        return 0;
+    }
+    let stride_scale = stride_scale.max(1);
+    let mut total = 0usize;
+    for layer in 0..layers {
+        let layer_stride = outline_layer_segment_stride(layer as u8).saturating_mul(stride_scale);
+        let sampled_points = sampled_polyline_point_count(contour_points, layer_stride);
+        total = total.saturating_add(sampled_points.saturating_mul(commands_per_layer));
+    }
+    total
+}
+
 /// Emit a symmetric glow around one contour by layering upward and downward offsets.
 fn emit_glow_symmetric(
     commands: &mut Vec<SurfaceCommand>,
@@ -311,8 +435,9 @@ fn emit_glow_symmetric(
     lane: LaneBounds,
     color: Color,
     style: WaveformViewStyle,
+    glow_plan: GlowPlan,
 ) {
-    let layers = style.waveform_outline_layers.max(1);
+    let layers = glow_plan.layers;
     for layer in 0..layers {
         let alpha = outline_layer_alpha(style, layer, layers);
         if alpha == 0 {
@@ -320,7 +445,8 @@ fn emit_glow_symmetric(
         }
         let layer_color = with_alpha(color, alpha);
         let offset = (layer as i32) + 1;
-        let segment_stride = outline_layer_segment_stride(layer);
+        let segment_stride =
+            outline_layer_segment_stride(layer).saturating_mul(glow_plan.stride_scale);
         emit_shifted_polyline(
             commands,
             contour,
@@ -341,8 +467,9 @@ fn emit_glow_outward(
     color: Color,
     style: WaveformViewStyle,
     direction: i32,
+    glow_plan: GlowPlan,
 ) {
-    let layers = style.waveform_outline_layers.max(1);
+    let layers = glow_plan.layers;
     for layer in 0..layers {
         let alpha = outline_layer_alpha(style, layer, layers);
         if alpha == 0 {
@@ -350,7 +477,8 @@ fn emit_glow_outward(
         }
         let layer_color = with_alpha(color, alpha);
         let signed_offset = ((layer as i32) + 1) * direction;
-        let segment_stride = outline_layer_segment_stride(layer);
+        let segment_stride =
+            outline_layer_segment_stride(layer).saturating_mul(glow_plan.stride_scale);
         emit_shifted_polyline(
             commands,
             contour,
@@ -376,24 +504,23 @@ fn emit_shifted_polyline(
     }
 
     let stride = segment_stride.max(1);
+    let mut shifted = Vec::with_capacity(sampled_polyline_point_count(points.len(), stride));
     let mut index = 0usize;
-    while index + 1 < points.len() {
-        let next_index = (index + stride).min(points.len() - 1);
-        let start_point = points[index];
-        let end_point = points[next_index];
-        let start = Point {
-            x: start_point.x,
-            y: (start_point.y + offset).clamp(lane.top, lane.bottom),
+    loop {
+        let source = points[index];
+        let transformed = Point {
+            x: source.x,
+            y: (source.y + offset).clamp(lane.top, lane.bottom),
         };
-        let end = Point {
-            x: end_point.x,
-            y: (end_point.y + offset).clamp(lane.top, lane.bottom),
-        };
-        if start.x != end.x || start.y != end.y {
-            commands.push(SurfaceCommand::Line { start, end, color });
+        if shifted.last().copied() != Some(transformed) {
+            shifted.push(transformed);
         }
-        index = next_index;
+        if index == points.len() - 1 {
+            break;
+        }
+        index = (index + stride).min(points.len() - 1);
     }
+    emit_polyline_batched(commands, &shifted, color, 1.0);
 }
 
 /// Resolve one alpha value for a glow layer index.
@@ -412,9 +539,29 @@ fn outline_layer_alpha(style: WaveformViewStyle, layer: u8, layers: u8) -> u8 {
 /// Resolve polyline segment stride for one glow layer.
 ///
 /// Outer glow layers use progressively coarser segment strides. This preserves
-/// the perceived gradient halo while reducing command count on dense waveforms.
+/// the perceived gradient halo while reducing path complexity on dense waveforms.
 fn outline_layer_segment_stride(layer: u8) -> usize {
     usize::from(layer) + 1
+}
+
+/// Return sampled point count for one stride over a polyline.
+fn sampled_polyline_point_count(points: usize, stride: usize) -> usize {
+    if points <= 1 {
+        return points;
+    }
+    let stride = stride.max(1);
+    ((points - 1) / stride) + 1
+}
+
+/// Remove consecutive duplicate points while preserving deterministic order.
+fn compact_polyline_points(points: &[Point]) -> Vec<Point> {
+    let mut compact = Vec::with_capacity(points.len());
+    for point in points {
+        if compact.last().copied() != Some(*point) {
+            compact.push(*point);
+        }
+    }
+    compact
 }
 
 /// Return `color` with alpha multiplied by `alpha` in `0..=255`.

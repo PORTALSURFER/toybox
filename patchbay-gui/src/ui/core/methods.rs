@@ -220,6 +220,36 @@ impl<'a> Ui<'a> {
         self.canvas.draw_line(start, end, color);
     }
 
+    /// Draw a polyline with vector antialiasing when available.
+    ///
+    /// Falls back to CPU raster line segments when vector shapes are disabled.
+    pub(crate) fn draw_polyline_visual(&mut self, points: &[Point], thickness: f32, color: Color) {
+        if points.len() < 2 {
+            return;
+        }
+        if self.vector_shapes_enabled {
+            let mut vector_points = Vec::with_capacity(points.len());
+            for point in points {
+                vector_points.push(PointF {
+                    x: point.x as f32,
+                    y: point.y as f32,
+                });
+            }
+            self.vector_commands
+                .push(VectorCommand::Polyline(PolylineVisual {
+                    points: vector_points,
+                    thickness: thickness.max(1.0),
+                    color,
+                }));
+            return;
+        }
+        for segment in points.windows(2) {
+            if let [start, end] = segment {
+                self.canvas.draw_line(*start, *end, color);
+            }
+        }
+    }
+
     /// Return or initialize editable textbox runtime state for one stable key.
     pub(crate) fn begin_text_edit_runtime(
         &mut self,

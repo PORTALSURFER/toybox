@@ -156,6 +156,17 @@ pub struct WaveformViewConfig<'a> {
     pub horizontal_grid_lines: u32,
     /// Global waveform surface style.
     pub style: WaveformViewStyle,
+    /// Upper bound on waveform draw commands emitted per surface.
+    ///
+    /// The renderer uses this as a deterministic quality budget. When command
+    /// pressure is high, glow layers are reduced first while preserving core
+    /// contours and envelope body segments.
+    pub max_waveform_commands: usize,
+    /// Upper bound on glow polyline points emitted per channel.
+    ///
+    /// Larger values preserve smoother halos but increase vector path cost.
+    /// Lower values increase polyline stride for outer glow layers.
+    pub max_glow_points_per_channel: usize,
 }
 
 impl<'a> WaveformViewConfig<'a> {
@@ -170,6 +181,8 @@ impl<'a> WaveformViewConfig<'a> {
             grid_mode: WaveformGridMode::Fixed { line_count: 8 },
             horizontal_grid_lines: 8,
             style: WaveformViewStyle::default(),
+            max_waveform_commands: 32_768,
+            max_glow_points_per_channel: 16_384,
         }
     }
 }
@@ -214,7 +227,16 @@ where
 
     match config.display_mode {
         WaveformDisplayMode::Overlay => {
-            for channel in visible_channels {
+            let mut waveform_command_count = 0usize;
+            for (channel_index, channel) in visible_channels.iter().copied().enumerate() {
+                let remaining_channels =
+                    visible_channels.len().saturating_sub(channel_index).max(1);
+                let remaining_budget = config
+                    .max_waveform_commands
+                    .saturating_sub(waveform_command_count)
+                    .max(1);
+                let channel_budget = (remaining_budget / remaining_channels).max(1);
+                let before = commands.len();
                 draw_waveform_channel(
                     &mut commands,
                     &geometry,
@@ -227,13 +249,25 @@ where
                     config.zoom_y,
                     LaneBounds::full(&geometry),
                     config.channels[channel].color,
+                    channel_budget,
+                    config.max_glow_points_per_channel.max(1),
                 );
+                waveform_command_count =
+                    waveform_command_count.saturating_add(commands.len().saturating_sub(before));
             }
         }
         WaveformDisplayMode::Split => {
             let lane_count = visible_channels.len().max(1) as i32;
+            let mut waveform_command_count = 0usize;
             for (lane_index, channel) in visible_channels.iter().enumerate() {
+                let remaining_channels = visible_channels.len().saturating_sub(lane_index).max(1);
+                let remaining_budget = config
+                    .max_waveform_commands
+                    .saturating_sub(waveform_command_count)
+                    .max(1);
+                let channel_budget = (remaining_budget / remaining_channels).max(1);
                 let lane = LaneBounds::for_split_lane(&geometry, lane_index as i32, lane_count);
+                let before = commands.len();
                 draw_waveform_channel(
                     &mut commands,
                     &geometry,
@@ -246,7 +280,11 @@ where
                     config.zoom_y,
                     lane,
                     config.channels[*channel].color,
+                    channel_budget,
+                    config.max_glow_points_per_channel.max(1),
                 );
+                waveform_command_count =
+                    waveform_command_count.saturating_add(commands.len().saturating_sub(before));
                 if lane_index > 0 {
                     commands.push(SurfaceCommand::Line {
                         start: Point { x: 0, y: lane.top },
@@ -435,13 +473,15 @@ fn estimate_waveform_command_capacity(
         (WaveformSamplingMode::Linear, WaveformRenderQuality::LegacyCpuOnly) => segments,
         (WaveformSamplingMode::EnvelopeMinMax, WaveformRenderQuality::LegacyCpuOnly) => width,
         (WaveformSamplingMode::Linear, WaveformRenderQuality::AutoVectorPreferred) => {
-            // Core contour + glow above/below.
-            segments + (segments * 2 * layers)
+            // Core contour polyline + glow above/below polylines.
+            1 + (2 * layers)
         }
         (WaveformSamplingMode::EnvelopeMinMax, WaveformRenderQuality::AutoVectorPreferred) => {
-            // Body columns + top/bottom core + top/bottom glow.
-            width + (segments * 2) + (segments * 2 * layers)
+            // Body columns + top/bottom core polylines + top/bottom glow polylines.
+            width + 2 + (2 * layers)
         }
     };
-    base_grid + lane_dividers + per_channel.saturating_mul(visible_channels)
+    let waveform_estimate = per_channel.saturating_mul(visible_channels);
+    let budget_cap = config.max_waveform_commands.max(1).saturating_add(8);
+    base_grid + lane_dividers + waveform_estimate.min(budget_cap)
 }

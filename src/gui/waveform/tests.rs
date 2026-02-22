@@ -1,23 +1,35 @@
 use super::*;
 
 fn collect_lines_by_color(commands: &[SurfaceCommand], color: Color) -> Vec<(Point, Point)> {
-    commands
-        .iter()
-        .filter_map(|command| match command {
+    let mut lines = Vec::new();
+    for command in commands {
+        match command {
             SurfaceCommand::Line {
                 start,
                 end,
                 color: command_color,
-            } if *command_color == color => Some((*start, *end)),
-            _ => None,
-        })
-        .collect()
+            } if *command_color == color => lines.push((*start, *end)),
+            SurfaceCommand::Polyline {
+                points,
+                color: command_color,
+                ..
+            } if *command_color == color => {
+                for segment in points.windows(2) {
+                    if let [start, end] = segment {
+                        lines.push((*start, *end));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    lines
 }
 
 fn collect_lines_by_rgb(commands: &[SurfaceCommand], color: Color) -> Vec<(Point, Point, Color)> {
-    commands
-        .iter()
-        .filter_map(|command| match command {
+    let mut lines = Vec::new();
+    for command in commands {
+        match command {
             SurfaceCommand::Line {
                 start,
                 end,
@@ -26,11 +38,43 @@ fn collect_lines_by_rgb(commands: &[SurfaceCommand], color: Color) -> Vec<(Point
                 && command_color.g == color.g
                 && command_color.b == color.b =>
             {
-                Some((*start, *end, *command_color))
+                lines.push((*start, *end, *command_color));
             }
-            _ => None,
+            SurfaceCommand::Polyline {
+                points,
+                color: command_color,
+                ..
+            } if command_color.r == color.r
+                && command_color.g == color.g
+                && command_color.b == color.b =>
+            {
+                for segment in points.windows(2) {
+                    if let [start, end] = segment {
+                        lines.push((*start, *end, *command_color));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    lines
+}
+
+fn count_polyline_commands_by_rgb(commands: &[SurfaceCommand], color: Color) -> usize {
+    commands
+        .iter()
+        .filter(|command| match command {
+            SurfaceCommand::Polyline {
+                color: command_color,
+                ..
+            } => {
+                command_color.r == color.r
+                    && command_color.g == color.g
+                    && command_color.b == color.b
+            }
+            _ => false,
         })
-        .collect()
+        .count()
 }
 
 fn assert_grid_invariants(lines: &[(i32, GridTone)], width: i32) {
@@ -489,6 +533,52 @@ fn styled_envelope_mode_emits_body_and_glow_alpha_layers() {
         "expected inner outline alpha layer"
     );
     assert!(saw_faded_alpha, "expected at least one faded glow layer");
+}
+
+#[test]
+fn styled_envelope_mode_budget_reduces_glow_polyline_count() {
+    let styles = [WaveformChannelStyle {
+        visible: true,
+        color: Color::rgb(120, 190, 250),
+    }];
+    let mut high_budget = WaveformViewConfig::new(&styles);
+    high_budget.sampling_mode = WaveformSamplingMode::EnvelopeMinMax;
+    high_budget.render_quality = WaveformRenderQuality::AutoVectorPreferred;
+    high_budget.style.waveform_outline_layers = 8;
+    high_budget.max_waveform_commands = usize::MAX;
+    high_budget.max_glow_points_per_channel = usize::MAX;
+
+    let mut low_budget = high_budget.clone();
+    low_budget.max_waveform_commands = 64;
+    low_budget.max_glow_points_per_channel = 96;
+
+    let samples: Vec<f32> = (0..4096)
+        .map(|index| ((index as f32 * 0.017).sin() * 0.9).clamp(-1.0, 1.0))
+        .collect();
+
+    let high = build_waveform_surface_commands(
+        512,
+        140,
+        samples.len(),
+        1,
+        |_, i| samples[i],
+        &high_budget,
+    );
+    let low_a =
+        build_waveform_surface_commands(512, 140, samples.len(), 1, |_, i| samples[i], &low_budget);
+    let low_b =
+        build_waveform_surface_commands(512, 140, samples.len(), 1, |_, i| samples[i], &low_budget);
+    assert_eq!(
+        low_a, low_b,
+        "budgeted glow planning must stay deterministic"
+    );
+
+    let high_count = count_polyline_commands_by_rgb(&high, styles[0].color);
+    let low_count = count_polyline_commands_by_rgb(&low_a, styles[0].color);
+    assert!(
+        low_count < high_count,
+        "expected reduced polyline glow count under constrained budget ({low_count} !< {high_count})"
+    );
 }
 
 #[test]

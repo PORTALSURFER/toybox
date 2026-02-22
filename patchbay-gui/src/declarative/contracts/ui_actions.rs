@@ -174,6 +174,15 @@ pub enum DrawCommand {
         /// Line color.
         color: Color,
     },
+    /// Draw a stroked polyline through region-relative points.
+    Polyline {
+        /// Region-relative polyline points.
+        points: Vec<Point>,
+        /// Stroke thickness in pixels.
+        thickness: f32,
+        /// Polyline color.
+        color: Color,
+    },
     /// Draw text at a region-relative origin.
     Text {
         /// Region-relative text origin.

@@ -35,6 +35,11 @@ fn render_region_draw_command(command: &DrawCommand, origin: Point, ui: &mut Ui<
         DrawCommand::Line { start, end, color } => {
             render_line_command(*start, *end, *color, origin, ui)
         }
+        DrawCommand::Polyline {
+            points,
+            thickness,
+            color,
+        } => render_polyline_command(points, *thickness, *color, origin, ui),
         DrawCommand::Text {
             origin: text_origin,
             text,
@@ -112,6 +117,21 @@ fn circle_bounds(center: Point, radius: i32) -> Rect {
 /// Render a line command in absolute coordinates.
 fn render_line_command(start: Point, end: Point, color: Color, origin: Point, ui: &mut Ui<'_>) {
     ui.draw_line_visual(offset_point(start, origin), offset_point(end, origin), 1.0, color);
+}
+
+/// Render a polyline command in absolute coordinates.
+fn render_polyline_command(
+    points: &[Point],
+    thickness: f32,
+    color: Color,
+    origin: Point,
+    ui: &mut Ui<'_>,
+) {
+    if points.len() < 2 {
+        return;
+    }
+    let transformed: Vec<Point> = points.iter().map(|point| offset_point(*point, origin)).collect();
+    ui.draw_polyline_visual(&transformed, thickness.max(1.0), color);
 }
 
 /// Render a text command in absolute coordinates.
