@@ -136,13 +136,14 @@ fn render_eq_surface_nodes(
                 focused: attractor.selected,
             },
         );
-        let stroke = variants.active;
-        // Keep attractors high-contrast and larger so they remain readable over the curve fill.
+        let stroke = eq_scale_alpha(variants.active, 255);
+        // Use a bright core and fully opaque outline so attractors remain clear on dark surfaces.
         ui.canvas()
-            .fill_circle(center, 6, eq_scale_alpha(tokens.colors.background, 255));
-        ui.canvas().stroke_circle(center, 8, 3, stroke);
+            .fill_circle(center, 7, eq_scale_alpha(tokens.colors.text, 255));
+        ui.canvas().stroke_circle(center, 10, 4, stroke);
         if attractor.selected {
-            ui.canvas().stroke_circle(center, 11, 2, variants.focus_ring);
+            ui.canvas()
+                .stroke_circle(center, 13, 3, eq_scale_alpha(variants.focus_ring, 255));
         }
     }
 }
