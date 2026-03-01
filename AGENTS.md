@@ -23,4 +23,4 @@ This file is a stateless wake-up portal. Keep it short and explicit.
 - Keep this file as a portal, not a knowledge base.
 - Put detailed plans and implementation notes under `docs/`.
 - Remove stale instructions instead of appending exceptions.
-- Do not change code outside `/home/uhx/dev/audiodev/toybox`; cross-workspace code edits are forbidden.
+- Do not change code outside this repository root (`toybox/`); cross-workspace code edits are forbidden.
