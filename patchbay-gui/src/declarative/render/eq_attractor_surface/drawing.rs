@@ -136,16 +136,13 @@ fn render_eq_surface_nodes(
                 focused: attractor.selected,
             },
         );
-        let stroke = if attractor.selected {
-            variants.active
-        } else {
-            variants.base
-        };
+        let stroke = variants.active;
+        // Keep attractors high-contrast and larger so they remain readable over the curve fill.
         ui.canvas()
-            .fill_circle(center, 4, eq_scale_alpha(tokens.colors.surface, 235));
-        ui.canvas().stroke_circle(center, 6, 2, stroke);
+            .fill_circle(center, 6, eq_scale_alpha(tokens.colors.background, 255));
+        ui.canvas().stroke_circle(center, 8, 3, stroke);
         if attractor.selected {
-            ui.canvas().stroke_circle(center, 9, 1, variants.focus_ring);
+            ui.canvas().stroke_circle(center, 11, 2, variants.focus_ring);
         }
     }
 }
