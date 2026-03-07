@@ -198,48 +198,41 @@ fn eq_target_band_values(
         } else {
             0.0
         };
-        let mut warped = band_pos;
-        let mut weighted_sum = 0.0;
-        let mut weight_sum = 0.0;
+        let mut centers = Vec::with_capacity(model.attractors.len());
+        let mut strengths = Vec::with_capacity(model.attractors.len());
+        let mut depths = Vec::with_capacity(model.attractors.len());
+        let mut cycles = Vec::with_capacity(model.attractors.len());
+        let mut phases = Vec::with_capacity(model.attractors.len());
         for attractor in &model.attractors {
             let Some(state) = runtime.smoothed_attractors.get(&attractor.id) else {
                 continue;
             };
-            let strength = eq_gravity_strength(state.y, runtime.smoothed_warp, runtime.smoothed_pull_force);
+            let strength =
+                eq_gravity_strength(state.y, runtime.smoothed_warp, runtime.smoothed_pull_force);
             if strength <= f32::EPSILON {
                 continue;
             }
-            let local_weight = eq_gravity_weight(band_pos, state.x, EQ_SURFACE_GRAVITY_SIGMA) * strength;
-            if local_weight <= f32::EPSILON {
-                continue;
-            }
-            let warped_local = eq_gravity_warp_position(
-                band_pos,
-                state.x,
-                strength,
-                EQ_SURFACE_GRAVITY_SIGMA,
-            );
-            weighted_sum += warped_local * local_weight;
-            weight_sum += local_weight;
+            centers.push(state.x);
+            strengths.push(strength);
+            depths.push(state.depth.clamp(0.0, 1.0));
+            cycles.push(state.cycles.max(0.0));
+            phases.push(state.rate_hz.max(0.0) * 0.25);
         }
-        if weight_sum > f32::EPSILON {
-            warped = (weighted_sum / weight_sum).clamp(0.0, 1.0);
-        }
-        let warped = if model.reverse_global { 1.0 - warped } else { warped };
-
-        let mut wave_sum = 0.0;
-        let mut wave_count = 0.0;
-        for attractor in &model.attractors {
-            let Some(state) = runtime.smoothed_attractors.get(&attractor.id) else {
-                continue;
-            };
-            let spread = state.cycles.max(0.0) * std::f32::consts::TAU;
-            let phase = spread * warped + state.rate_hz.max(0.0) * 0.25;
-            wave_sum += phase.sin() * state.depth.clamp(0.0, 1.0);
-            wave_count += 1.0;
-        }
-
-        let wave = if wave_count > 0.0 { wave_sum / wave_count } else { 0.0 };
+        let sample_pos = if model.reverse_global {
+            1.0 - band_pos
+        } else {
+            band_pos
+        };
+        let wave = eq_gravity_wave_sample(
+            sample_pos,
+            0.0,
+            &centers,
+            &strengths,
+            &depths,
+            &cycles,
+            &phases,
+            EQ_SURFACE_GRAVITY_SIGMA,
+        );
         let gain_db = (wave * model.eq_depth_db).clamp(-model.eq_depth_db, model.eq_depth_db);
         let normalized = ((gain_db + style.db_range) / (2.0 * style.db_range)).clamp(0.0, 1.0);
         values.push(normalized);

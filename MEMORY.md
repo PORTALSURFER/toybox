@@ -1,6 +1,6 @@
 # MEMORY
 
-Last Updated (UTC): 2026-03-07 11:06:00Z
+Last Updated (UTC): 2026-03-07 11:32:00Z
 
 ## Current State
 
@@ -8,12 +8,13 @@ Last Updated (UTC): 2026-03-07 11:06:00Z
 - Local validation runs through `bash scripts/ci_local.sh`.
 - The EQ attractor surface now renders each attractor as a single filled color circle on the visual/vector draw path.
 - The EQ attractor curve now emits a filled polygon plus joined vector polylines, removing the old comb-like fill lines and preserving smoother subpixel rendering.
+- The EQ attractor surface now uses a shared gravity-field wave model, so attractors bend and locally slow one curve instead of layering separate local sine waves.
 - Regression tests cover both node ordering and the curve command shape emitted in vector mode.
 - Local cargo validation is currently blocked by the private `mts-esp-rs` fetch failing during workspace dependency resolution.
 
 ## Active Mission
 
-- Keep toybox ready for framework iteration while preserving simple, readable attractor styling, smooth EQ curve rendering, and correct vector/canvas layering.
+- Keep toybox ready for framework iteration while preserving simple, readable attractor styling, gravity-like EQ surface motion, smooth curve rendering, and correct vector/canvas layering.
 
 ## Immediate Next Actions
 

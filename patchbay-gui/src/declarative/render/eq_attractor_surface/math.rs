@@ -157,12 +157,134 @@ fn eq_gravity_warp_position(position: f32, center_x: f32, strength: f32, sigma: 
     (position + (raw - correction)).clamp(0.0, 1.0)
 }
 
+/// Blend multiple attractor gravity pulls into one warped band position.
+fn eq_blended_gravity_warp_position(
+    position: f32,
+    centers: &[f32],
+    strengths: &[f32],
+    sigma: f32,
+) -> f32 {
+    if centers.is_empty() || strengths.is_empty() {
+        return position.clamp(0.0, 1.0);
+    }
+    let count = centers.len().min(strengths.len());
+    let mut weighted_sum = 0.0;
+    let mut weight_sum = 0.0;
+    for index in 0..count {
+        let strength = strengths[index].max(0.0);
+        if strength <= f32::EPSILON {
+            continue;
+        }
+        let warped = eq_gravity_warp_position(position, centers[index], strength, sigma);
+        let local_weight = eq_gravity_weight(position, centers[index], sigma) * strength;
+        if local_weight <= f32::EPSILON {
+            continue;
+        }
+        weighted_sum += warped * local_weight;
+        weight_sum += local_weight;
+    }
+    if weight_sum <= f32::EPSILON {
+        position.clamp(0.0, 1.0)
+    } else {
+        (weighted_sum / weight_sum).clamp(0.0, 1.0)
+    }
+}
+
+/// Sample one gravity-deformed EQ wave from shared attractor state.
+fn eq_gravity_wave_sample(
+    position: f32,
+    phase_token: f32,
+    centers: &[f32],
+    strengths: &[f32],
+    depths: &[f32],
+    cycles: &[f32],
+    phases: &[f32],
+    sigma: f32,
+) -> f32 {
+    let count = centers
+        .len()
+        .min(strengths.len())
+        .min(depths.len())
+        .min(cycles.len())
+        .min(phases.len());
+    let position = position.clamp(0.0, 1.0);
+    if count == 0 {
+        return (phase_token + std::f32::consts::TAU * position).sin();
+    }
+
+    let mut weights = Vec::with_capacity(count);
+    let mut weight_sum = 0.0;
+    for index in 0..count {
+        let weight = eq_gravity_weight(position, centers[index], sigma) * strengths[index].max(0.0);
+        weights.push(weight);
+        weight_sum += weight;
+    }
+
+    let warped =
+        eq_blended_gravity_warp_position(position, &centers[..count], &strengths[..count], sigma);
+    let anchor = eq_weighted_average(&centers[..count], &weights, position);
+    let influence = eq_gravity_local_influence(weight_sum);
+    let slowed = eq_gravity_slowed_position(warped, anchor, influence);
+    let local_cycles = eq_weighted_average(&cycles[..count], &weights, 1.0).max(0.0);
+    let local_depth = eq_weighted_average(&depths[..count], &weights, 1.0).clamp(0.0, 1.0);
+    let local_phase = eq_weighted_phase(phase_token, &phases[..count], &weights);
+
+    (local_phase + std::f32::consts::TAU * local_cycles * slowed).sin() * local_depth
+}
+
 /// Compute raw gravity displacement before endpoint correction.
 fn eq_gravity_raw_displacement(position: f32, center_x: f32, strength: f32, sigma: f32) -> f32 {
     let sigma = sigma.max(0.001);
     let distance = position - center_x;
     let pull = (center_x - position) * strength;
     pull * (-0.5 * (distance / sigma).powi(2)).exp()
+}
+
+/// Collapse one local gravity weight sum into a stable `0..=1` influence value.
+fn eq_gravity_local_influence(weight_sum: f32) -> f32 {
+    (1.0 - (-weight_sum.max(0.0)).exp()).clamp(0.0, 1.0)
+}
+
+/// Compress a warped position toward one local gravity anchor.
+fn eq_gravity_slowed_position(position: f32, anchor: f32, influence: f32) -> f32 {
+    let slowdown = (1.0 - influence.clamp(0.0, 1.0) * 0.65).clamp(0.2, 1.0);
+    (anchor + (position - anchor) * slowdown).clamp(0.0, 1.0)
+}
+
+/// Compute a weighted scalar average with fallback when all weights are zero.
+fn eq_weighted_average(values: &[f32], weights: &[f32], fallback: f32) -> f32 {
+    let count = values.len().min(weights.len());
+    let mut weighted_sum = 0.0;
+    let mut weight_total = 0.0;
+    for index in 0..count {
+        let weight = weights[index].max(0.0);
+        if weight <= f32::EPSILON {
+            continue;
+        }
+        weighted_sum += values[index] * weight;
+        weight_total += weight;
+    }
+    if weight_total <= f32::EPSILON {
+        fallback
+    } else {
+        weighted_sum / weight_total
+    }
+}
+
+/// Compute a weighted circular phase mean with the phase token as fallback.
+fn eq_weighted_phase(base_phase: f32, phases: &[f32], weights: &[f32]) -> f32 {
+    let count = phases.len().min(weights.len());
+    let mut sin_sum = base_phase.sin();
+    let mut cos_sum = base_phase.cos();
+    for index in 0..count {
+        let weight = weights[index].max(0.0);
+        if weight <= f32::EPSILON {
+            continue;
+        }
+        sin_sum += phases[index].sin() * weight;
+        cos_sum += phases[index].cos() * weight;
+    }
+    sin_sum.atan2(cos_sum)
 }
 
 /// Return `color` with alpha multiplied by `alpha` in `0..=255`.
@@ -226,5 +348,26 @@ mod eq_surface_tests {
         let values = vec![0.1, 0.4, 0.9];
         assert!((eq_sample_band_value(&values, 0.0) - 0.1).abs() < 1.0e-6);
         assert!((eq_sample_band_value(&values, 1.0) - 0.9).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn gravity_wave_without_attractors_matches_base_wave() {
+        let position = 0.3;
+        let phase = 0.8;
+
+        assert!(
+            (eq_gravity_wave_sample(
+                position,
+                phase,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                EQ_SURFACE_GRAVITY_SIGMA,
+            ) - (phase + std::f32::consts::TAU * position).sin())
+            .abs()
+                < 1.0e-6
+        );
     }
 }
