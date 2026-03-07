@@ -137,30 +137,14 @@ fn render_eq_surface_nodes(
                 focused: attractor.selected,
             },
         );
-        let glow = if attractor.selected {
-            eq_scale_alpha(variants.active, 224)
-        } else {
-            eq_scale_alpha(variants.base, 160)
-        };
         let fill = if attractor.selected {
             eq_scale_alpha(variants.active, 248)
         } else {
             eq_scale_alpha(variants.base, 232)
         };
-        let stroke = if attractor.selected {
-            variants.active
-        } else {
-            eq_scale_alpha(variants.base, 255)
-        };
         // Keep node circles on the same visual queue as the grid and curve so render order stays
         // stable when vector antialiasing is enabled.
-        ui.stroke_circle_visual(center, 12.0, 4.0, glow);
-        ui.fill_circle_visual(center, 8.0, fill);
-        ui.fill_circle_visual(center, 4.0, eq_scale_alpha(tokens.colors.text, 255));
-        ui.stroke_circle_visual(center, 9.0, 2.0, stroke);
-        if attractor.selected {
-            ui.stroke_circle_visual(center, 13.0, 2.0, variants.focus_ring);
-        }
+        ui.fill_circle_visual(center, 7.0, fill);
     }
 }
 
