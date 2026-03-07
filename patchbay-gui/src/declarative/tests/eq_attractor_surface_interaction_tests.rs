@@ -161,6 +161,62 @@ fn eq_surface_drag_emits_move_action_after_press() {
 }
 
 #[test]
+fn eq_surface_hold_after_offset_press_does_not_emit_move_without_drag_distance() {
+    let spec = eq_test_spec(eq_test_model());
+    let mut ui_state = UiState::default();
+
+    let press_actions = render_actions(
+        &spec,
+        InputState {
+            window_size: Size {
+                width: 200,
+                height: 120,
+            },
+            pointer_pos: Point { x: 106, y: 60 },
+            mouse_pressed: true,
+            ..InputState::default()
+        },
+        &mut ui_state,
+    );
+
+    assert!(
+        press_actions.iter().any(|action| matches!(
+            action,
+            UiAction::EqAttractorSurfaceChanged {
+                key,
+                action: EqAttractorSurfaceAction::Select { id }
+            } if key == "eq-surface" && *id == 7
+        )),
+        "offset press should still select the attractor"
+    );
+
+    let hold_actions = render_actions(
+        &spec,
+        InputState {
+            window_size: Size {
+                width: 200,
+                height: 120,
+            },
+            pointer_pos: Point { x: 106, y: 60 },
+            mouse_down: true,
+            ..InputState::default()
+        },
+        &mut ui_state,
+    );
+
+    assert!(
+        !hold_actions.iter().any(|action| matches!(
+            action,
+            UiAction::EqAttractorSurfaceChanged {
+                action: EqAttractorSurfaceAction::Move { .. },
+                ..
+            }
+        )),
+        "holding after an offset press should not move until the pointer actually drags"
+    );
+}
+
+#[test]
 fn eq_surface_double_click_empty_emits_add_action() {
     let spec = eq_test_spec(eq_test_model());
     let mut ui_state = UiState::default();

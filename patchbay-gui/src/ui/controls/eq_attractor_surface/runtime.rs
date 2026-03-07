@@ -18,6 +18,10 @@ pub(crate) struct EqAttractorSurfaceSmoothedAttractorState {
 pub(crate) struct EqAttractorSurfaceRuntimeState {
     /// Active attractor id while a pointer drag gesture is in progress.
     pub(crate) active_drag_id: Option<u64>,
+    /// Pointer-local press origin used to distinguish click selection from dragging.
+    pub(crate) drag_origin: Option<Point>,
+    /// True once pointer movement exceeded the drag threshold for the active attractor.
+    pub(crate) drag_started: bool,
     /// Smoothed global warp value.
     pub(crate) smoothed_warp: f32,
     /// Smoothed global pull-force value.

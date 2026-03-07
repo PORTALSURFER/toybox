@@ -4,6 +4,8 @@ const EQ_SURFACE_FRAME_DT_SECONDS: f32 = 1.0 / 60.0;
 const EQ_SURFACE_GRAVITY_SIGMA: f32 = 0.12;
 /// Pointer hit radius for attractor handles in pixels.
 const EQ_SURFACE_ATTRACTOR_HIT_RADIUS_PX: i32 = 10;
+/// Pointer travel required before a selected attractor starts moving.
+const EQ_SURFACE_DRAG_THRESHOLD_PX: i32 = 3;
 
 /// Local plotting geometry derived from the widget rectangle and padding.
 #[derive(Clone, Copy, Debug)]
@@ -97,8 +99,10 @@ fn reduce_eq_surface_interaction(
     if response.secondary_clicked {
         if let Some(id) = hit {
             emitted.push(EqAttractorSurfaceAction::Remove { id });
-            runtime.active_drag_id = None;
         }
+        runtime.active_drag_id = None;
+        runtime.drag_origin = None;
+        runtime.drag_started = false;
         return emitted;
     }
 
@@ -108,25 +112,43 @@ fn reduce_eq_surface_interaction(
             emitted.push(EqAttractorSurfaceAction::Add { x, y });
         }
         runtime.active_drag_id = None;
+        runtime.drag_origin = None;
+        runtime.drag_started = false;
         return emitted;
     }
 
     if response.pressed {
         runtime.active_drag_id = hit;
+        runtime.drag_origin = Some(response.raw_local_pointer);
+        runtime.drag_started = false;
         if let Some(id) = hit {
             emitted.push(EqAttractorSurfaceAction::Select { id });
         }
     }
 
-    if response.dragged
-        && let Some(id) = runtime.active_drag_id
-    {
-        let (x, y) = eq_pointer_to_normalized(response.raw_local_pointer, geometry);
-        emitted.push(EqAttractorSurfaceAction::Move { id, x, y });
+    if response.dragged {
+        if let Some(id) = runtime.active_drag_id {
+            if !runtime.drag_started
+                && let Some(origin) = runtime.drag_origin
+            {
+                let dx = response.raw_local_pointer.x - origin.x;
+                let dy = response.raw_local_pointer.y - origin.y;
+                let distance2 = dx * dx + dy * dy;
+                if distance2 >= EQ_SURFACE_DRAG_THRESHOLD_PX.pow(2) {
+                    runtime.drag_started = true;
+                }
+            }
+            if runtime.drag_started {
+                let (x, y) = eq_pointer_to_normalized(response.raw_local_pointer, geometry);
+                emitted.push(EqAttractorSurfaceAction::Move { id, x, y });
+            }
+        }
     }
 
     if response.released {
         runtime.active_drag_id = None;
+        runtime.drag_origin = None;
+        runtime.drag_started = false;
     }
 
     emitted
@@ -181,6 +203,8 @@ fn sync_eq_surface_runtime(
         && !model.attractors.iter().any(|attractor| attractor.id == active)
     {
         runtime.active_drag_id = None;
+        runtime.drag_origin = None;
+        runtime.drag_started = false;
     }
 }
 

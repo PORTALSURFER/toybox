@@ -1,6 +1,6 @@
 # MEMORY
 
-Last Updated (UTC): 2026-03-07 11:32:00Z
+Last Updated (UTC): 2026-03-07 11:41:00Z
 
 ## Current State
 
@@ -9,6 +9,7 @@ Last Updated (UTC): 2026-03-07 11:32:00Z
 - The EQ attractor surface now renders each attractor as a single filled color circle on the visual/vector draw path.
 - The EQ attractor curve now emits a filled polygon plus joined vector polylines, removing the old comb-like fill lines and preserving smoother subpixel rendering.
 - The EQ attractor surface now uses a shared gravity-field wave model, so attractors bend and locally slow one curve instead of layering separate local sine waves.
+- The EQ attractor surface now requires real pointer travel before emitting a move, so an off-center click selects a node without nudging it.
 - Regression tests cover both node ordering and the curve command shape emitted in vector mode.
 - Local cargo validation is currently blocked by the private `mts-esp-rs` fetch failing during workspace dependency resolution.
 
