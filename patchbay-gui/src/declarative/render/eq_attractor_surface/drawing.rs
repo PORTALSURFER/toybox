@@ -160,7 +160,6 @@ fn render_eq_surface_nodes(
         if attractor.selected {
             ui.canvas().stroke_circle(center, 13, 2, variants.focus_ring);
         }
-        }
     }
 }
 
@@ -190,5 +189,7 @@ fn eq_curve_points(
 
     points
 }
+
+
 
 
