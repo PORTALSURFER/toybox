@@ -136,16 +136,30 @@ fn render_eq_surface_nodes(
                 focused: attractor.selected,
             },
         );
+        let glow = if attractor.selected {
+            eq_scale_alpha(variants.active, 224)
+        } else {
+            eq_scale_alpha(variants.base, 160)
+        };
+        let fill = if attractor.selected {
+            eq_scale_alpha(variants.active, 248)
+        } else {
+            eq_scale_alpha(variants.base, 232)
+        };
         let stroke = if attractor.selected {
             variants.active
         } else {
-            variants.base
+            eq_scale_alpha(variants.base, 255)
         };
+        // Use a stronger accent body and halo so attractors stay readable over the animated curve.
+        ui.canvas().stroke_circle(center, 12, 4, glow);
+        ui.canvas().fill_circle(center, 8, fill);
         ui.canvas()
-            .fill_circle(center, 4, eq_scale_alpha(tokens.colors.surface, 235));
-        ui.canvas().stroke_circle(center, 6, 2, stroke);
+            .fill_circle(center, 4, eq_scale_alpha(tokens.colors.text, 255));
+        ui.canvas().stroke_circle(center, 9, 2, stroke);
         if attractor.selected {
-            ui.canvas().stroke_circle(center, 9, 1, variants.focus_ring);
+            ui.canvas().stroke_circle(center, 13, 2, variants.focus_ring);
+        }
         }
     }
 }
@@ -176,3 +190,5 @@ fn eq_curve_points(
 
     points
 }
+
+
