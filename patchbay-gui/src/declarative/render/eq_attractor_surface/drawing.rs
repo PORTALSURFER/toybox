@@ -15,8 +15,9 @@ fn render_eq_surface_background(
     }
 
     let grid_color = eq_scale_alpha(tokens.colors.border, 120);
-    for freq_hz in [20.0_f32, 50.0, 100.0, 200.0, 500.0, 1_000.0, 2_000.0, 5_000.0, 10_000.0, 20_000.0]
-    {
+    for freq_hz in [
+        20.0_f32, 50.0, 100.0, 200.0, 500.0, 1_000.0, 2_000.0, 5_000.0, 10_000.0, 20_000.0,
+    ] {
         if freq_hz < model.freq_min_hz || freq_hz > model.freq_max_hz {
             continue;
         }
@@ -151,14 +152,14 @@ fn render_eq_surface_nodes(
         } else {
             eq_scale_alpha(variants.base, 255)
         };
-        // Use a stronger accent body and halo so attractors stay readable over the animated curve.
-        ui.canvas().stroke_circle(center, 12, 4, glow);
-        ui.canvas().fill_circle(center, 8, fill);
-        ui.canvas()
-            .fill_circle(center, 4, eq_scale_alpha(tokens.colors.text, 255));
-        ui.canvas().stroke_circle(center, 9, 2, stroke);
+        // Keep node circles on the same visual queue as the grid and curve so render order stays
+        // stable when vector antialiasing is enabled.
+        ui.stroke_circle_visual(center, 12.0, 4.0, glow);
+        ui.fill_circle_visual(center, 8.0, fill);
+        ui.fill_circle_visual(center, 4.0, eq_scale_alpha(tokens.colors.text, 255));
+        ui.stroke_circle_visual(center, 9.0, 2.0, stroke);
         if attractor.selected {
-            ui.canvas().stroke_circle(center, 13, 2, variants.focus_ring);
+            ui.stroke_circle_visual(center, 13.0, 2.0, variants.focus_ring);
         }
     }
 }
@@ -189,7 +190,3 @@ fn eq_curve_points(
 
     points
 }
-
-
-
-

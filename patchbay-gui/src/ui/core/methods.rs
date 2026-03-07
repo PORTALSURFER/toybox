@@ -94,7 +94,10 @@ impl<'a> Ui<'a> {
         };
         if self.vector_shapes_enabled {
             self.vector_commands
-                .push(VectorCommand::RectFill(RectVisual { rect: clipped, color }));
+                .push(VectorCommand::RectFill(RectVisual {
+                    rect: clipped,
+                    color,
+                }));
             return;
         }
         self.canvas.fill_rect(clipped, color);
@@ -103,22 +106,18 @@ impl<'a> Ui<'a> {
     /// Stroke a rectangle using vector antialiasing when available.
     ///
     /// Falls back to CPU raster stroke and always respects the current clip stack.
-    pub(crate) fn stroke_rect_visual(
-        &mut self,
-        rect: Rect,
-        thickness: f32,
-        color: Color,
-    ) {
+    pub(crate) fn stroke_rect_visual(&mut self, rect: Rect, thickness: f32, color: Color) {
         let Some(clipped) = self.clipped_rect(rect) else {
             return;
         };
         let thickness = thickness.max(1.0);
         if self.vector_shapes_enabled {
-            self.vector_commands.push(VectorCommand::RectStroke(RectStrokeVisual {
-                rect: clipped,
-                thickness,
-                color,
-            }));
+            self.vector_commands
+                .push(VectorCommand::RectStroke(RectStrokeVisual {
+                    rect: clipped,
+                    thickness,
+                    color,
+                }));
             return;
         }
         self.canvas
@@ -250,6 +249,63 @@ impl<'a> Ui<'a> {
         }
     }
 
+    /// Draw a filled circle with vector antialiasing when available.
+    ///
+    /// Falls back to CPU raster circle drawing when vector shapes are disabled.
+    pub(crate) fn fill_circle_visual(&mut self, center: Point, radius: f32, color: Color) {
+        if radius <= 0.0 {
+            return;
+        }
+        if self.vector_shapes_enabled {
+            self.vector_commands
+                .push(VectorCommand::CircleFill(CircleVisual {
+                    center: PointF {
+                        x: center.x as f32,
+                        y: center.y as f32,
+                    },
+                    radius,
+                    color,
+                }));
+            return;
+        }
+        self.canvas
+            .fill_circle(center, radius.round().max(1.0) as i32, color);
+    }
+
+    /// Draw a stroked circle with vector antialiasing when available.
+    ///
+    /// Falls back to CPU raster circle stroke drawing when vector shapes are disabled.
+    pub(crate) fn stroke_circle_visual(
+        &mut self,
+        center: Point,
+        radius: f32,
+        thickness: f32,
+        color: Color,
+    ) {
+        if radius <= 0.0 || thickness <= 0.0 {
+            return;
+        }
+        if self.vector_shapes_enabled {
+            self.vector_commands
+                .push(VectorCommand::CircleStroke(CircleStrokeVisual {
+                    center: PointF {
+                        x: center.x as f32,
+                        y: center.y as f32,
+                    },
+                    radius,
+                    thickness,
+                    color,
+                }));
+            return;
+        }
+        self.canvas.stroke_circle(
+            center,
+            radius.round().max(1.0) as i32,
+            thickness.round().max(1.0) as i32,
+            color,
+        );
+    }
+
     /// Return or initialize editable textbox runtime state for one stable key.
     pub(crate) fn begin_text_edit_runtime(
         &mut self,
@@ -273,11 +329,7 @@ impl<'a> Ui<'a> {
     }
 
     /// Persist editable textbox runtime state for one stable key.
-    pub(crate) fn set_text_edit_runtime(
-        &mut self,
-        edit_key: &str,
-        runtime: TextEditRuntimeState,
-    ) {
+    pub(crate) fn set_text_edit_runtime(&mut self, edit_key: &str, runtime: TextEditRuntimeState) {
         let id = WidgetId::from_label(edit_key);
         self.state.text_edit_runtime.insert(id, runtime);
     }

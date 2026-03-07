@@ -2,6 +2,7 @@ use super::super::*;
 use crate::canvas::Canvas;
 use crate::host::InputState;
 use crate::ui::{Layout, Theme, Ui, UiState};
+use crate::vector::scene::VectorCommand;
 
 fn eq_test_model() -> EqAttractorSurfaceModel {
     EqAttractorSurfaceModel {
@@ -31,7 +32,9 @@ fn eq_test_spec(model: EqAttractorSurfaceModel) -> UiSpec {
                 AbsoluteSpec::new(vec![AbsoluteChild::new(
                     Point { x: 0, y: 0 },
                     eq_attractor_surface("eq-surface", model, EqAttractorSurfaceStyle::default())
-                        .widget_layout(LayoutBox::fixed(size.width, size.height).max(size.width, size.height)),
+                        .widget_layout(
+                            LayoutBox::fixed(size.width, size.height).max(size.width, size.height),
+                        ),
                 )])
                 .layout(ContainerLayout::fill()),
             ),
@@ -42,23 +45,44 @@ fn eq_test_spec(model: EqAttractorSurfaceModel) -> UiSpec {
 }
 
 fn render_actions(spec: &UiSpec, input: InputState, ui_state: &mut UiState) -> Vec<UiAction> {
-    let mut canvas = Canvas::new(input.window_size.width.max(1), input.window_size.height.max(1));
+    let mut canvas = Canvas::new(
+        input.window_size.width.max(1),
+        input.window_size.height.max(1),
+    );
     let mut layout = Layout::default();
     let theme = Theme::default();
     let mut ui = Ui::new(&mut canvas, &input, ui_state, &mut layout, &theme);
-    let result = render_checked(spec, &mut ui, Point { x: 0, y: 0 })
-        .expect("render should succeed");
+    let result =
+        render_checked(spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
     result.actions
 }
 
 fn render_pixels_and_actions(spec: &UiSpec, input: InputState) -> (Vec<u8>, Vec<UiAction>) {
-    let mut canvas = Canvas::new(input.window_size.width.max(1), input.window_size.height.max(1));
+    let mut canvas = Canvas::new(
+        input.window_size.width.max(1),
+        input.window_size.height.max(1),
+    );
     let mut layout = Layout::default();
     let mut ui_state = UiState::default();
     let theme = Theme::default();
     let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
-    let result = render_checked(spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    let result =
+        render_checked(spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
     (canvas.pixels().to_vec(), result.actions)
+}
+
+fn render_vector_commands(spec: &UiSpec, input: InputState) -> Vec<VectorCommand> {
+    let mut canvas = Canvas::new(
+        input.window_size.width.max(1),
+        input.window_size.height.max(1),
+    );
+    let mut layout = Layout::default();
+    let mut ui_state = UiState::default();
+    let theme = Theme::default();
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+    ui.set_vector_shapes_enabled(true);
+    let _ = render_checked(spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    ui.take_vector_commands()
 }
 
 #[test]
@@ -211,4 +235,38 @@ fn eq_surface_identical_inputs_are_deterministic() {
 
     assert_eq!(actions_a, actions_b);
     assert_eq!(pixels_a, pixels_b);
+}
+
+#[test]
+fn eq_surface_nodes_render_after_curve_commands_in_vector_mode() {
+    let spec = eq_test_spec(eq_test_model());
+    let commands = render_vector_commands(
+        &spec,
+        InputState {
+            window_size: Size {
+                width: 200,
+                height: 120,
+            },
+            ..InputState::default()
+        },
+    );
+
+    let last_curve_like_command = commands
+        .iter()
+        .rposition(|command| matches!(command, VectorCommand::Line(_) | VectorCommand::Polyline(_)))
+        .expect("expected line-based surface commands");
+    let first_circle_command = commands
+        .iter()
+        .position(|command| {
+            matches!(
+                command,
+                VectorCommand::CircleFill(_) | VectorCommand::CircleStroke(_)
+            )
+        })
+        .expect("expected circle node commands");
+
+    assert!(
+        first_circle_command > last_curve_like_command,
+        "attractor node circles should be appended after curve/grid vector commands"
+    );
 }

@@ -1,24 +1,24 @@
 # MEMORY
 
-Last Updated (UTC): 2026-02-22 09:10:57Z
+Last Updated (UTC): 2026-03-07 10:18:00Z
 
 ## Current State
 
 - Handoff preflight runs through `bash scripts/run_agent_request.sh`.
 - Local validation runs through `bash scripts/ci_local.sh`.
-- Active mission and immediate next actions live in `docs/plans/active/todo.md`.
-- Plan locations are indexed in `docs/plans/index.md`.
-- Project constraints and framework scope are defined in `docs/PROJECT.md`.
+- The EQ attractor surface now routes handle circles through the visual/vector draw path so node layering stays above the deferred curve/grid pass.
+- A regression test covers vector command ordering for EQ attractor node circles.
+- Local cargo validation is currently blocked by the private `mts-esp-rs` fetch failing during workspace dependency resolution.
 
 ## Active Mission
 
-- Keep toybox ready for framework iteration with clear, stateless handoff context and green local guardrails.
+- Keep toybox ready for framework iteration while preserving correct visual layering between CPU canvas content and deferred vector commands.
 
 ## Immediate Next Actions
 
 1. Keep `docs/plans/active/todo.md` as a short ordered queue for the next implementation cycle.
 2. Keep `AGENTS.md`, `MEMORY.md`, and `docs/plans/*` aligned whenever mission or queue changes.
-3. Run `bash scripts/ci_local.sh` before handoff and document any failures with direct remediation notes.
+3. Restore local Cargo access to the pinned `mts-esp-rs` dependency so `bash scripts/ci_local.sh` can run cleanly again.
 
 ## Constraints And Notes
 
