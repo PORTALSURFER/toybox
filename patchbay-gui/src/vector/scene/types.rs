@@ -1,15 +1,15 @@
 //! Core public types and top-level painter orchestration.
 
 use crate::canvas::{Color, Point, PointF, Rect};
-use vello::Scene;
 use vello::kurbo::Affine;
 use vello::peniko::FontData;
+use vello::Scene;
 
 use super::font_loading::load_default_font;
 use super::knob_rendering::draw_knob;
 use super::shapes_rendering::{
-    draw_circle_fill, draw_circle_stroke, draw_line_stroke, draw_polyline_stroke, draw_rect_fill,
-    draw_rect_stroke,
+    draw_circle_fill, draw_circle_stroke, draw_line_stroke, draw_polygon_fill,
+    draw_polyline_stroke, draw_rect_fill, draw_rect_stroke,
 };
 
 /// Vector command stream emitted by the UI layer.
@@ -55,6 +55,8 @@ pub(crate) enum VectorCommand {
     Line(LineVisual),
     /// Draw a stroked polyline path.
     Polyline(PolylineVisual),
+    /// Draw a filled polygon path.
+    PolygonFill(PolygonVisual),
     /// Draw a filled circle.
     CircleFill(CircleVisual),
     /// Draw a stroked circle.
@@ -127,6 +129,15 @@ pub(crate) struct PolylineVisual {
     /// Stroke thickness in pixels.
     pub thickness: f32,
     /// Stroke color.
+    pub color: Color,
+}
+
+/// Filled polygon payload emitted by [`crate::ui::Ui`].
+#[derive(Clone, Debug)]
+pub(crate) struct PolygonVisual {
+    /// Polygon points in canvas-space pixels.
+    pub points: Vec<PointF>,
+    /// Fill color.
     pub color: Color,
 }
 
@@ -239,6 +250,7 @@ impl VectorScenePainter {
                 VectorCommand::Polyline(polyline) => {
                     draw_polyline_stroke(scene, polyline, transform)
                 }
+                VectorCommand::PolygonFill(polygon) => draw_polygon_fill(scene, polygon, transform),
                 VectorCommand::CircleFill(circle) => draw_circle_fill(scene, *circle, transform),
                 VectorCommand::CircleStroke(circle) => {
                     draw_circle_stroke(scene, *circle, transform)

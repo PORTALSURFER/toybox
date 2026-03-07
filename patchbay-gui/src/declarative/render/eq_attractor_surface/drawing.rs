@@ -68,27 +68,30 @@ fn render_eq_surface_curve(
     }
 
     let fill_color = eq_scale_alpha(tokens.colors.accent, 46);
-    let bottom_y = rect.origin.y + geometry.bottom;
-    for point in &points {
-        ui.draw_line_visual(
-            Point {
-                x: point.x,
-                y: bottom_y,
-            },
-            *point,
-            1.0,
-            fill_color,
-        );
-    }
+    let bottom_y = rect.origin.y as f32 + geometry.bottom as f32;
+    let mut fill_points = points.clone();
+    let last_x = points
+        .last()
+        .map(|point| point.x)
+        .unwrap_or(rect.origin.x as f32);
+    let first_x = points
+        .first()
+        .map(|point| point.x)
+        .unwrap_or(rect.origin.x as f32);
+    fill_points.push(crate::canvas::PointF {
+        x: last_x,
+        y: bottom_y,
+    });
+    fill_points.push(crate::canvas::PointF {
+        x: first_x,
+        y: bottom_y,
+    });
+    ui.fill_polygon_visual(&fill_points, fill_color);
 
     let outline_glow = eq_scale_alpha(tokens.colors.accent, 112);
     let outline_core = eq_scale_alpha(tokens.colors.accent, 220);
-    for segment in points.windows(2) {
-        if let [start, end] = segment {
-            ui.draw_line_visual(*start, *end, 2.2, outline_glow);
-            ui.draw_line_visual(*start, *end, 1.1, outline_core);
-        }
-    }
+    ui.draw_polyline_visual_f(&points, 2.6, outline_glow);
+    ui.draw_polyline_visual_f(&points, 1.4, outline_core);
 }
 
 /// Render attractor handle circles.
@@ -155,7 +158,7 @@ fn eq_curve_points(
     model: &EqAttractorSurfaceModel,
     style: EqAttractorSurfaceStyle,
     band_values: &[f32],
-) -> Vec<Point> {
+) -> Vec<crate::canvas::PointF> {
     let mut points = Vec::with_capacity(style.curve_samples + 1);
     let log_min = model.freq_min_hz.ln();
     let log_span = (model.freq_max_hz.ln() - log_min).max(1.0e-6);
@@ -165,10 +168,10 @@ fn eq_curve_points(
         let freq = (log_min + log_span * t).exp();
         let band_t = eq_freq_to_t(freq, model.freq_min_hz, model.freq_max_hz);
         let y = eq_sample_band_value(band_values, band_t);
-        let local = eq_normalized_to_local(t, y, geometry);
-        points.push(Point {
-            x: rect.origin.x + local.x,
-            y: rect.origin.y + local.y,
+        let local = eq_normalized_to_local_f(t, y, geometry);
+        points.push(crate::canvas::PointF {
+            x: rect.origin.x as f32 + local.x,
+            y: rect.origin.y as f32 + local.y,
         });
     }
 

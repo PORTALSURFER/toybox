@@ -151,4 +151,54 @@ impl Canvas {
             }
         }
     }
+
+    /// Fill a simple polygon using a scanline raster pass.
+    pub fn fill_polygon(&mut self, points: &[Point], color: Color) {
+        if points.len() < 3 {
+            return;
+        }
+
+        let min_y = max(
+            points.iter().map(|point| point.y).min().unwrap_or_default(),
+            0,
+        );
+        let max_y = min(
+            points.iter().map(|point| point.y).max().unwrap_or_default(),
+            self.size.height.saturating_sub(1) as i32,
+        );
+        if min_y > max_y {
+            return;
+        }
+
+        let mut intersections = Vec::with_capacity(points.len());
+        for y in min_y..=max_y {
+            intersections.clear();
+            let scan_y = y as f32 + 0.5;
+            for (start, end) in points
+                .iter()
+                .copied()
+                .zip(points.iter().copied().cycle().skip(1))
+                .take(points.len())
+            {
+                let y0 = start.y as f32;
+                let y1 = end.y as f32;
+                if (y0 <= scan_y && y1 > scan_y) || (y1 <= scan_y && y0 > scan_y) {
+                    let t = (scan_y - y0) / (y1 - y0);
+                    intersections.push(start.x as f32 + (end.x - start.x) as f32 * t);
+                }
+            }
+
+            intersections.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            for pair in intersections.chunks_exact(2) {
+                let x0 = max(pair[0].ceil() as i32, 0);
+                let x1 = min(
+                    pair[1].floor() as i32,
+                    self.size.width.saturating_sub(1) as i32,
+                );
+                for x in x0..=x1 {
+                    self.blend_pixel(x as u32, y as u32, color);
+                }
+            }
+        }
+    }
 }

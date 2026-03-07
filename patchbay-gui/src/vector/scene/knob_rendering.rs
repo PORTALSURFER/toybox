@@ -1,9 +1,9 @@
 //! Knob vector primitive rendering helpers.
 
 use crate::canvas::{Color, Point};
-use vello::Scene;
 use vello::kurbo::{Affine, BezPath, Cap, Circle, Line, Point as KurboPoint, Stroke};
 use vello::peniko::Fill;
+use vello::Scene;
 
 use super::color_and_angle_helpers::{color_to_vello, normalize_angle};
 use super::types::KnobVisual;

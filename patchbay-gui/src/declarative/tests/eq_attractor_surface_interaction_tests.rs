@@ -253,7 +253,12 @@ fn eq_surface_nodes_render_after_curve_commands_in_vector_mode() {
 
     let last_curve_like_command = commands
         .iter()
-        .rposition(|command| matches!(command, VectorCommand::Line(_) | VectorCommand::Polyline(_)))
+        .rposition(|command| {
+            matches!(
+                command,
+                VectorCommand::Line(_) | VectorCommand::Polyline(_) | VectorCommand::PolygonFill(_)
+            )
+        })
         .expect("expected line-based surface commands");
     let first_circle_command = commands
         .iter()
@@ -268,5 +273,46 @@ fn eq_surface_nodes_render_after_curve_commands_in_vector_mode() {
     assert!(
         first_circle_command > last_curve_like_command,
         "attractor node circles should be appended after curve/grid vector commands"
+    );
+}
+
+#[test]
+fn eq_surface_curve_uses_polygon_fill_and_joined_polylines() {
+    let spec = eq_test_spec(eq_test_model());
+    let commands = render_vector_commands(
+        &spec,
+        InputState {
+            window_size: Size {
+                width: 200,
+                height: 120,
+            },
+            ..InputState::default()
+        },
+    );
+
+    let line_count = commands
+        .iter()
+        .filter(|command| matches!(command, VectorCommand::Line(_)))
+        .count();
+    let polyline_count = commands
+        .iter()
+        .filter(|command| matches!(command, VectorCommand::Polyline(_)))
+        .count();
+    let polygon_fill_count = commands
+        .iter()
+        .filter(|command| matches!(command, VectorCommand::PolygonFill(_)))
+        .count();
+
+    assert_eq!(
+        line_count, 13,
+        "only the background grid should emit line commands"
+    );
+    assert_eq!(
+        polyline_count, 2,
+        "curve glow and core should emit joined polylines"
+    );
+    assert_eq!(
+        polygon_fill_count, 1,
+        "curve fill should emit a single filled polygon"
     );
 }

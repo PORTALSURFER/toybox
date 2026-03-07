@@ -1,12 +1,13 @@
 //! Generic vector shape rendering helpers.
 
-use vello::Scene;
 use vello::kurbo::{Affine, BezPath, Circle, Line, Rect as KurboRect, Stroke};
 use vello::peniko::Fill;
+use vello::Scene;
 
 use super::color_and_angle_helpers::color_to_vello;
 use super::types::{
-    CircleStrokeVisual, CircleVisual, LineVisual, PolylineVisual, RectStrokeVisual, RectVisual,
+    CircleStrokeVisual, CircleVisual, LineVisual, PolygonVisual, PolylineVisual, RectStrokeVisual,
+    RectVisual,
 };
 
 /// Draw one filled rectangle.
@@ -81,6 +82,27 @@ pub(super) fn draw_polyline_stroke(
         &Stroke::new(polyline.thickness.max(1.0) as f64),
         transform,
         color_to_vello(polyline.color),
+        None,
+        &path,
+    );
+}
+
+/// Draw one filled polygon.
+pub(super) fn draw_polygon_fill(scene: &mut Scene, polygon: &PolygonVisual, transform: Affine) {
+    if polygon.points.len() < 3 {
+        return;
+    }
+    let mut path = BezPath::new();
+    let first = polygon.points[0];
+    path.move_to(vello::kurbo::Point::new(first.x as f64, first.y as f64));
+    for point in polygon.points.iter().skip(1) {
+        path.line_to(vello::kurbo::Point::new(point.x as f64, point.y as f64));
+    }
+    path.close_path();
+    scene.fill(
+        Fill::NonZero,
+        transform,
+        color_to_vello(polygon.color),
         None,
         &path,
     );

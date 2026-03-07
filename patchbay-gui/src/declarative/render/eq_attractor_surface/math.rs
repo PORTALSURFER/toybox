@@ -61,6 +61,14 @@ fn eq_normalized_to_local(x: f32, y: f32, geometry: EqSurfaceGeometry) -> Point 
     }
 }
 
+/// Convert normalized coordinates to local surface subpixel coordinates.
+fn eq_normalized_to_local_f(x: f32, y: f32, geometry: EqSurfaceGeometry) -> crate::canvas::PointF {
+    crate::canvas::PointF {
+        x: geometry.left as f32 + geometry.width * x.clamp(0.0, 1.0),
+        y: geometry.bottom as f32 - geometry.height * y.clamp(0.0, 1.0),
+    }
+}
+
 /// Compute a smoothing coefficient from a time constant.
 fn eq_smoothing_coeff(time_seconds: f32) -> f32 {
     (-EQ_SURFACE_FRAME_DT_SECONDS / time_seconds.max(0.001)).exp()
@@ -177,8 +185,14 @@ mod eq_surface_tests {
             width: 100.0,
             height: 200.0,
         };
-        assert_eq!(eq_pointer_to_normalized(Point { x: -100, y: 999 }, geometry), (0.0, 0.0));
-        assert_eq!(eq_pointer_to_normalized(Point { x: 999, y: -100 }, geometry), (1.0, 1.0));
+        assert_eq!(
+            eq_pointer_to_normalized(Point { x: -100, y: 999 }, geometry),
+            (0.0, 0.0)
+        );
+        assert_eq!(
+            eq_pointer_to_normalized(Point { x: 999, y: -100 }, geometry),
+            (1.0, 1.0)
+        );
     }
 
     #[test]

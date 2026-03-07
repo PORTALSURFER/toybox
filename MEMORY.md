@@ -1,18 +1,19 @@
 # MEMORY
 
-Last Updated (UTC): 2026-03-07 10:39:00Z
+Last Updated (UTC): 2026-03-07 11:06:00Z
 
 ## Current State
 
 - Handoff preflight runs through `bash scripts/run_agent_request.sh`.
 - Local validation runs through `bash scripts/ci_local.sh`.
 - The EQ attractor surface now renders each attractor as a single filled color circle on the visual/vector draw path.
-- A regression test covers vector command ordering for EQ attractor node circles.
+- The EQ attractor curve now emits a filled polygon plus joined vector polylines, removing the old comb-like fill lines and preserving smoother subpixel rendering.
+- Regression tests cover both node ordering and the curve command shape emitted in vector mode.
 - Local cargo validation is currently blocked by the private `mts-esp-rs` fetch failing during workspace dependency resolution.
 
 ## Active Mission
 
-- Keep toybox ready for framework iteration while preserving simple, readable attractor styling and correct vector/canvas layering.
+- Keep toybox ready for framework iteration while preserving simple, readable attractor styling, smooth EQ curve rendering, and correct vector/canvas layering.
 
 ## Immediate Next Actions
 

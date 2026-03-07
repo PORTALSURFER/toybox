@@ -47,6 +47,26 @@ fn stroke_arc_renders_top_semicircle() {
 }
 
 #[test]
+fn fill_polygon_fills_triangle_interior() {
+    let mut canvas = Canvas::new(16, 16);
+    let color = Color::rgb(20, 180, 220);
+    canvas.fill_polygon(
+        &[
+            Point { x: 2, y: 12 },
+            Point { x: 8, y: 2 },
+            Point { x: 13, y: 12 },
+        ],
+        color,
+    );
+
+    assert_eq!(
+        pixel_at(&canvas, 8, 8),
+        [color.r, color.g, color.b, color.a]
+    );
+    assert_eq!(pixel_at(&canvas, 1, 1), [0, 0, 0, 0]);
+}
+
+#[test]
 fn glyph_maps_lowercase_to_uppercase_for_letters() {
     assert_eq!(BitmapFont::glyph('a'), BitmapFont::glyph('A'));
     assert_eq!(BitmapFont::glyph('z'), BitmapFont::glyph('Z'));

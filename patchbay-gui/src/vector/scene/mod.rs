@@ -15,6 +15,6 @@ mod types;
 #[cfg(target_os = "windows")]
 pub(crate) use types::VectorScenePainter;
 pub(crate) use types::{
-    CircleStrokeVisual, CircleVisual, KnobVisual, LineVisual, PolylineVisual, RectStrokeVisual,
-    RectVisual, VectorCommand,
+    CircleStrokeVisual, CircleVisual, KnobVisual, LineVisual, PolygonVisual, PolylineVisual,
+    RectStrokeVisual, RectVisual, VectorCommand,
 };

@@ -226,17 +226,32 @@ impl<'a> Ui<'a> {
         if points.len() < 2 {
             return;
         }
+        let mut vector_points = Vec::with_capacity(points.len());
+        for point in points {
+            vector_points.push(PointF {
+                x: point.x as f32,
+                y: point.y as f32,
+            });
+        }
+        self.draw_polyline_visual_f(&vector_points, thickness, color);
+    }
+
+    /// Draw a polyline from subpixel points with vector antialiasing when available.
+    ///
+    /// Falls back to CPU raster line segments when vector shapes are disabled.
+    pub(crate) fn draw_polyline_visual_f(
+        &mut self,
+        points: &[PointF],
+        thickness: f32,
+        color: Color,
+    ) {
+        if points.len() < 2 {
+            return;
+        }
         if self.vector_shapes_enabled {
-            let mut vector_points = Vec::with_capacity(points.len());
-            for point in points {
-                vector_points.push(PointF {
-                    x: point.x as f32,
-                    y: point.y as f32,
-                });
-            }
             self.vector_commands
                 .push(VectorCommand::Polyline(PolylineVisual {
-                    points: vector_points,
+                    points: points.to_vec(),
                     thickness: thickness.max(1.0),
                     color,
                 }));
@@ -244,9 +259,44 @@ impl<'a> Ui<'a> {
         }
         for segment in points.windows(2) {
             if let [start, end] = segment {
-                self.canvas.draw_line(*start, *end, color);
+                self.canvas.draw_line(
+                    Point {
+                        x: start.x.round() as i32,
+                        y: start.y.round() as i32,
+                    },
+                    Point {
+                        x: end.x.round() as i32,
+                        y: end.y.round() as i32,
+                    },
+                    color,
+                );
             }
         }
+    }
+
+    /// Fill a polygon with vector antialiasing when available.
+    ///
+    /// Falls back to CPU raster polygon fill when vector shapes are disabled.
+    pub(crate) fn fill_polygon_visual(&mut self, points: &[PointF], color: Color) {
+        if points.len() < 3 {
+            return;
+        }
+        if self.vector_shapes_enabled {
+            self.vector_commands
+                .push(VectorCommand::PolygonFill(PolygonVisual {
+                    points: points.to_vec(),
+                    color,
+                }));
+            return;
+        }
+        let mut raster_points = Vec::with_capacity(points.len());
+        for point in points {
+            raster_points.push(Point {
+                x: point.x.round() as i32,
+                y: point.y.round() as i32,
+            });
+        }
+        self.canvas.fill_polygon(&raster_points, color);
     }
 
     /// Draw a filled circle with vector antialiasing when available.
