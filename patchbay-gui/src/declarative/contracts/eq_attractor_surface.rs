@@ -31,22 +31,26 @@ impl EqAttractor {
 
 /// Model payload consumed by [`EqAttractorSurfaceSpec`].
 ///
-/// This model carries attractor geometry and shaping parameters only; DSP,
-/// automation, and host transport policy remain plugin responsibilities.
+/// This model carries preview-only wave and attractor-well inputs. The host
+/// plugin remains responsible for the real DSP, automation, and transport
+/// policy; the surface only mirrors that behavior deterministically.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EqAttractorSurfaceModel {
     /// Interactive attractor handles.
     pub attractors: Vec<EqAttractor>,
-    /// Global warp amount in `[0, 1]`.
-    pub warp: f32,
-    /// Global pull-force multiplier.
-    pub pull_force: f32,
-    /// Per-attractor depth values.
-    pub depths: Vec<f32>,
-    /// Per-attractor cycles values.
-    pub cycles: Vec<f32>,
-    /// Per-attractor rates in Hz.
-    pub rates_hz: Vec<f32>,
+    /// Per-attractor pull strengths used by the static wells.
+    pub attractor_pulls: Vec<f32>,
+    /// Per-attractor influence radii in normalized x space.
+    pub attractor_radii: Vec<f32>,
+    /// Global moving-wave depth in `[0, 1]`.
+    pub wave_depth: f32,
+    /// Global moving-wave cycle multiplier.
+    pub wave_cycles: f32,
+    /// Global moving-wave phase token in radians.
+    ///
+    /// This lets the preview animate one shared wave without inventing
+    /// independent per-attractor motion.
+    pub wave_phase_token: f32,
     /// Global reverse toggle for curve animation direction.
     pub reverse_global: bool,
     /// Minimum displayed frequency in Hz.
@@ -64,11 +68,11 @@ impl EqAttractorSurfaceModel {
     pub fn new(attractors: Vec<EqAttractor>) -> Self {
         Self {
             attractors,
-            warp: 0.5,
-            pull_force: 1.0,
-            depths: Vec::new(),
-            cycles: Vec::new(),
-            rates_hz: Vec::new(),
+            attractor_pulls: Vec::new(),
+            attractor_radii: Vec::new(),
+            wave_depth: 1.0,
+            wave_cycles: 1.0,
+            wave_phase_token: 0.0,
             reverse_global: false,
             freq_min_hz: 20.0,
             freq_max_hz: 20_000.0,
@@ -80,7 +84,7 @@ impl EqAttractorSurfaceModel {
     /// Return a normalized copy safe for deterministic rendering.
     ///
     /// This clamps coordinates/ranges, repairs invalid frequency domains, and
-    /// pads per-attractor parameter vectors with defaults.
+    /// pads attractor control vectors with conservative defaults.
     pub(crate) fn normalized(&self) -> Self {
         let attractors = self
             .attractors
@@ -95,9 +99,10 @@ impl EqAttractorSurfaceModel {
             .collect::<Vec<_>>();
 
         let attractor_len = attractors.len();
-        let depths = sanitize_scalar_vec(&self.depths, attractor_len, 1.0, 0.0, Some(1.0));
-        let cycles = sanitize_scalar_vec(&self.cycles, attractor_len, 1.0, 0.0, None);
-        let rates_hz = sanitize_scalar_vec(&self.rates_hz, attractor_len, 0.0, 0.0, None);
+        let attractor_pulls =
+            sanitize_scalar_vec(&self.attractor_pulls, attractor_len, 1.0, 0.0, Some(4.0));
+        let attractor_radii =
+            sanitize_scalar_vec(&self.attractor_radii, attractor_len, 0.12, 0.01, Some(1.0));
 
         let mut min_hz = self.freq_min_hz;
         let mut max_hz = self.freq_max_hz;
@@ -112,15 +117,11 @@ impl EqAttractorSurfaceModel {
 
         Self {
             attractors,
-            warp: self.warp.clamp(0.0, 1.0),
-            pull_force: if self.pull_force.is_finite() {
-                self.pull_force.max(0.0)
-            } else {
-                0.0
-            },
-            depths,
-            cycles,
-            rates_hz,
+            attractor_pulls,
+            attractor_radii,
+            wave_depth: finite_scalar(self.wave_depth, 1.0).clamp(0.0, 1.0),
+            wave_cycles: finite_scalar(self.wave_cycles, 1.0).max(0.0),
+            wave_phase_token: finite_scalar(self.wave_phase_token, 0.0),
             reverse_global: self.reverse_global,
             freq_min_hz: min_hz,
             freq_max_hz: max_hz,
@@ -131,6 +132,15 @@ impl EqAttractorSurfaceModel {
                 12.0
             },
         }
+    }
+}
+
+/// Return a finite scalar value or the provided fallback.
+fn finite_scalar(value: f32, fallback: f32) -> f32 {
+    if value.is_finite() {
+        value
+    } else {
+        fallback
     }
 }
 
@@ -181,9 +191,9 @@ pub struct EqAttractorSurfaceStyle {
     pub padding_px: i32,
     /// Color policy for attractor handles.
     pub color_policy: EqAttractorColorPolicy,
-    /// Motion smoothing time constant for warp/pull in seconds.
+    /// Motion smoothing time constant for shared wave inputs in seconds.
     pub motion_smoothing_seconds: f32,
-    /// Smoothing time constant for attractor values in seconds.
+    /// Smoothing time constant for attractor-well values in seconds.
     pub attractor_smoothing_seconds: f32,
     /// Smoothing time constant for band gains in seconds.
     pub band_gain_smoothing_seconds: f32,
@@ -285,11 +295,11 @@ mod eq_attractor_surface_contract_tests {
     fn model_normalized_clamps_and_pads_vectors() {
         let model = EqAttractorSurfaceModel {
             attractors: vec![EqAttractor::new(1, -1.0, 2.0), EqAttractor::new(2, 0.2, 0.8)],
-            warp: 4.0,
-            pull_force: -3.0,
-            depths: vec![2.0],
-            cycles: vec![f32::NAN],
-            rates_hz: vec![f32::INFINITY],
+            attractor_pulls: vec![-3.0],
+            attractor_radii: vec![f32::INFINITY],
+            wave_depth: 2.0,
+            wave_cycles: f32::NAN,
+            wave_phase_token: f32::INFINITY,
             reverse_global: true,
             freq_min_hz: f32::INFINITY,
             freq_max_hz: f32::NEG_INFINITY,
@@ -301,11 +311,11 @@ mod eq_attractor_surface_contract_tests {
         assert_eq!(normalized.attractors.len(), 2);
         assert_eq!(normalized.attractors[0].x, 0.0);
         assert_eq!(normalized.attractors[0].y, 1.0);
-        assert_eq!(normalized.depths, vec![1.0, 1.0]);
-        assert_eq!(normalized.cycles, vec![1.0, 1.0]);
-        assert_eq!(normalized.rates_hz, vec![0.0, 0.0]);
-        assert_eq!(normalized.warp, 1.0);
-        assert_eq!(normalized.pull_force, 0.0);
+        assert_eq!(normalized.attractor_pulls, vec![0.0, 1.0]);
+        assert_eq!(normalized.attractor_radii, vec![0.12, 0.12]);
+        assert_eq!(normalized.wave_depth, 1.0);
+        assert_eq!(normalized.wave_cycles, 1.0);
+        assert_eq!(normalized.wave_phase_token, 0.0);
         assert_eq!(normalized.eq_bands, 1);
         assert_eq!(normalized.eq_depth_db, 2.0);
         assert!(normalized.freq_max_hz > normalized.freq_min_hz);

@@ -129,54 +129,49 @@ fn eq_catmull_rom(p0: f32, p1: f32, p2: f32, p3: f32, t: f32) -> f32 {
         + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3)
 }
 
-/// Resolve effective gravity strength from attractor y, warp, and pull-force.
-fn eq_gravity_strength(attractor_y: f32, warp: f32, pull_force: f32) -> f32 {
-    let warp_scale = (1.0 + (warp.clamp(0.0, 1.0) - 0.5) * 2.0).clamp(0.0, 2.0);
-    (attractor_y.clamp(0.0, 1.0) * warp_scale * pull_force.max(0.0)).clamp(0.0, 4.0)
-}
-
 /// Compute one local Gaussian attractor weight.
-fn eq_gravity_weight(position: f32, center_x: f32, sigma: f32) -> f32 {
-    let sigma = sigma.max(0.001);
+fn eq_attractor_weight(position: f32, center_x: f32, radius: f32) -> f32 {
+    let sigma = radius.max(0.001);
     let distance = position.clamp(0.0, 1.0) - center_x.clamp(0.0, 1.0);
     (-0.5 * (distance / sigma).powi(2)).exp()
 }
 
 /// Warp one normalized band position toward an attractor center.
-fn eq_gravity_warp_position(position: f32, center_x: f32, strength: f32, sigma: f32) -> f32 {
+fn eq_gravity_warp_position(position: f32, center_x: f32, strength: f32, radius: f32) -> f32 {
     let position = position.clamp(0.0, 1.0);
     let center = center_x.clamp(0.0, 1.0);
     let strength = strength.max(0.0);
     if strength <= f32::EPSILON {
         return position;
     }
-    let raw = eq_gravity_raw_displacement(position, center, strength, sigma);
-    let edge_lo = eq_gravity_raw_displacement(0.0, center, strength, sigma);
-    let edge_hi = eq_gravity_raw_displacement(1.0, center, strength, sigma);
+    let raw = eq_gravity_raw_displacement(position, center, strength, radius);
+    let edge_lo = eq_gravity_raw_displacement(0.0, center, strength, radius);
+    let edge_hi = eq_gravity_raw_displacement(1.0, center, strength, radius);
     let correction = edge_lo + (edge_hi - edge_lo) * position;
     (position + (raw - correction)).clamp(0.0, 1.0)
 }
 
-/// Blend multiple attractor gravity pulls into one warped band position.
+/// Blend multiple attractor pulls into one warped band position.
 fn eq_blended_gravity_warp_position(
     position: f32,
     centers: &[f32],
-    strengths: &[f32],
-    sigma: f32,
+    pulls: &[f32],
+    radii: &[f32],
 ) -> f32 {
-    if centers.is_empty() || strengths.is_empty() {
+    if centers.is_empty() || pulls.is_empty() || radii.is_empty() {
         return position.clamp(0.0, 1.0);
     }
-    let count = centers.len().min(strengths.len());
+    let count = centers.len().min(pulls.len()).min(radii.len());
     let mut weighted_sum = 0.0;
     let mut weight_sum = 0.0;
     for index in 0..count {
-        let strength = strengths[index].max(0.0);
-        if strength <= f32::EPSILON {
+        let pull = pulls[index].max(0.0);
+        if pull <= f32::EPSILON {
             continue;
         }
-        let warped = eq_gravity_warp_position(position, centers[index], strength, sigma);
-        let local_weight = eq_gravity_weight(position, centers[index], sigma) * strength;
+        let radius = radii[index].max(0.001);
+        let warped = eq_gravity_warp_position(position, centers[index], pull, radius);
+        let local_weight = eq_attractor_weight(position, centers[index], radius) * pull;
         if local_weight <= f32::EPSILON {
             continue;
         }
@@ -190,51 +185,60 @@ fn eq_blended_gravity_warp_position(
     }
 }
 
-/// Sample one gravity-deformed EQ wave from shared attractor state.
-fn eq_gravity_wave_sample(
+/// Sample one shared moving wave before any attractor wells deform it.
+fn eq_base_wave(position: f32, phase_token: f32, wave_cycles: f32, wave_depth: f32) -> f32 {
+    (phase_token + std::f32::consts::TAU * wave_cycles.max(0.0) * position).sin()
+        * wave_depth.clamp(0.0, 1.0)
+}
+
+/// Sample one shared wave deformed by static attractor wells.
+fn eq_wave_sample(
     position: f32,
     phase_token: f32,
+    wave_cycles: f32,
+    wave_depth: f32,
     centers: &[f32],
-    strengths: &[f32],
-    depths: &[f32],
-    cycles: &[f32],
-    phases: &[f32],
-    sigma: f32,
+    targets: &[f32],
+    pulls: &[f32],
+    radii: &[f32],
 ) -> f32 {
     let count = centers
         .len()
-        .min(strengths.len())
-        .min(depths.len())
-        .min(cycles.len())
-        .min(phases.len());
+        .min(targets.len())
+        .min(pulls.len())
+        .min(radii.len());
     let position = position.clamp(0.0, 1.0);
     if count == 0 {
-        return (phase_token + std::f32::consts::TAU * position).sin();
+        return eq_base_wave(position, phase_token, wave_cycles, wave_depth);
     }
 
     let mut weights = Vec::with_capacity(count);
     let mut weight_sum = 0.0;
     for index in 0..count {
-        let weight = eq_gravity_weight(position, centers[index], sigma) * strengths[index].max(0.0);
+        let weight =
+            eq_attractor_weight(position, centers[index], radii[index]) * pulls[index].max(0.0);
         weights.push(weight);
         weight_sum += weight;
     }
 
-    let warped =
-        eq_blended_gravity_warp_position(position, &centers[..count], &strengths[..count], sigma);
+    let warped = eq_blended_gravity_warp_position(
+        position,
+        &centers[..count],
+        &pulls[..count],
+        &radii[..count],
+    );
     let anchor = eq_weighted_average(&centers[..count], &weights, position);
     let influence = eq_gravity_local_influence(weight_sum);
     let slowed = eq_gravity_slowed_position(warped, anchor, influence);
-    let local_cycles = eq_weighted_average(&cycles[..count], &weights, 1.0).max(0.0);
-    let local_depth = eq_weighted_average(&depths[..count], &weights, 1.0).clamp(0.0, 1.0);
-    let local_phase = eq_weighted_phase(phase_token, &phases[..count], &weights);
+    let base = eq_base_wave(slowed, phase_token, wave_cycles, wave_depth);
+    let target = eq_weighted_average(&targets[..count], &weights, base);
 
-    (local_phase + std::f32::consts::TAU * local_cycles * slowed).sin() * local_depth
+    (base + (target - base) * influence).clamp(-1.0, 1.0)
 }
 
 /// Compute raw gravity displacement before endpoint correction.
-fn eq_gravity_raw_displacement(position: f32, center_x: f32, strength: f32, sigma: f32) -> f32 {
-    let sigma = sigma.max(0.001);
+fn eq_gravity_raw_displacement(position: f32, center_x: f32, strength: f32, radius: f32) -> f32 {
+    let sigma = radius.max(0.001);
     let distance = position - center_x;
     let pull = (center_x - position) * strength;
     pull * (-0.5 * (distance / sigma).powi(2)).exp()
@@ -269,22 +273,6 @@ fn eq_weighted_average(values: &[f32], weights: &[f32], fallback: f32) -> f32 {
     } else {
         weighted_sum / weight_total
     }
-}
-
-/// Compute a weighted circular phase mean with the phase token as fallback.
-fn eq_weighted_phase(base_phase: f32, phases: &[f32], weights: &[f32]) -> f32 {
-    let count = phases.len().min(weights.len());
-    let mut sin_sum = base_phase.sin();
-    let mut cos_sum = base_phase.cos();
-    for index in 0..count {
-        let weight = weights[index].max(0.0);
-        if weight <= f32::EPSILON {
-            continue;
-        }
-        sin_sum += phases[index].sin() * weight;
-        cos_sum += phases[index].cos() * weight;
-    }
-    sin_sum.atan2(cos_sum)
 }
 
 /// Return `color` with alpha multiplied by `alpha` in `0..=255`.
@@ -351,23 +339,22 @@ mod eq_surface_tests {
     }
 
     #[test]
-    fn gravity_wave_without_attractors_matches_base_wave() {
+    fn wave_without_attractors_matches_base_wave() {
         let position = 0.3;
         let phase = 0.8;
 
         assert!(
-            (eq_gravity_wave_sample(
-                position,
-                phase,
-                &[],
-                &[],
-                &[],
-                &[],
-                &[],
-                EQ_SURFACE_GRAVITY_SIGMA,
-            ) - (phase + std::f32::consts::TAU * position).sin())
-            .abs()
+            (eq_wave_sample(position, phase, 1.25, 0.75, &[], &[], &[], &[])
+                - (phase + std::f32::consts::TAU * 1.25 * position).sin() * 0.75)
+                .abs()
                 < 1.0e-6
         );
+    }
+
+    #[test]
+    fn attractor_well_pulls_wave_toward_target_y() {
+        let sample = eq_wave_sample(0.5, 0.0, 1.0, 1.0, &[0.5], &[0.8], &[2.0], &[0.12]);
+
+        assert!(sample > 0.2, "expected the well to pull the wave upward");
     }
 }

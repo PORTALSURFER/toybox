@@ -7,11 +7,11 @@ use crate::vector::scene::VectorCommand;
 fn eq_test_model() -> EqAttractorSurfaceModel {
     EqAttractorSurfaceModel {
         attractors: vec![EqAttractor::new(7, 0.5, 0.5).selected(true)],
-        warp: 0.5,
-        pull_force: 1.0,
-        depths: vec![0.8],
-        cycles: vec![1.2],
-        rates_hz: vec![0.4],
+        attractor_pulls: vec![1.0],
+        attractor_radii: vec![0.12],
+        wave_depth: 0.8,
+        wave_cycles: 1.2,
+        wave_phase_token: 0.4,
         reverse_global: false,
         freq_min_hz: 20.0,
         freq_max_hz: 20_000.0,

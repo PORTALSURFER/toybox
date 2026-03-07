@@ -5,12 +5,10 @@ pub(crate) struct EqAttractorSurfaceSmoothedAttractorState {
     pub(crate) x: f32,
     /// Smoothed normalized y coordinate.
     pub(crate) y: f32,
-    /// Smoothed depth value.
-    pub(crate) depth: f32,
-    /// Smoothed cycles value.
-    pub(crate) cycles: f32,
-    /// Smoothed rate in Hz.
-    pub(crate) rate_hz: f32,
+    /// Smoothed local pull strength.
+    pub(crate) pull: f32,
+    /// Smoothed local influence radius in normalized x space.
+    pub(crate) radius: f32,
 }
 
 /// Per-widget runtime cache for EQ attractor surface rendering.
@@ -22,10 +20,12 @@ pub(crate) struct EqAttractorSurfaceRuntimeState {
     pub(crate) drag_origin: Option<Point>,
     /// True once pointer movement exceeded the drag threshold for the active attractor.
     pub(crate) drag_started: bool,
-    /// Smoothed global warp value.
-    pub(crate) smoothed_warp: f32,
-    /// Smoothed global pull-force value.
-    pub(crate) smoothed_pull_force: f32,
+    /// Smoothed shared wave depth.
+    pub(crate) smoothed_wave_depth: f32,
+    /// Smoothed shared wave cycle multiplier.
+    pub(crate) smoothed_wave_cycles: f32,
+    /// Smoothed shared wave phase token.
+    pub(crate) smoothed_wave_phase_token: f32,
     /// Smoothed per-band gain values.
     pub(crate) smoothed_band_gains: Vec<f32>,
     /// Smoothed per-attractor runtime values keyed by attractor id.

@@ -111,16 +111,15 @@ fn render_eq_surface_nodes(
     let resolver = DefaultWidgetColorResolver::new();
     for attractor in &model.attractors {
         let smoothed = runtime
-            .smoothed_attractors
-            .get(&attractor.id)
-            .copied()
-            .unwrap_or(crate::ui::EqAttractorSurfaceSmoothedAttractorState {
-                x: attractor.x,
-                y: attractor.y,
-                depth: 1.0,
-                cycles: 1.0,
-                rate_hz: 0.0,
-            });
+        .smoothed_attractors
+        .get(&attractor.id)
+        .copied()
+        .unwrap_or(crate::ui::EqAttractorSurfaceSmoothedAttractorState {
+            x: attractor.x,
+            y: attractor.y,
+            pull: 1.0,
+            radius: 0.12,
+        });
         let local = eq_normalized_to_local(smoothed.x, smoothed.y, geometry);
         let center = Point {
             x: rect.origin.x + local.x,

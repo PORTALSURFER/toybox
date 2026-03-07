@@ -1,7 +1,5 @@
 /// Fixed frame step used for deterministic UI-side smoothing.
 const EQ_SURFACE_FRAME_DT_SECONDS: f32 = 1.0 / 60.0;
-/// Gaussian width used by attractor gravity blending.
-const EQ_SURFACE_GRAVITY_SIGMA: f32 = 0.12;
 /// Pointer hit radius for attractor handles in pixels.
 const EQ_SURFACE_ATTRACTOR_HIT_RADIUS_PX: i32 = 10;
 /// Pointer travel required before a selected attractor starts moving.
@@ -164,21 +162,33 @@ fn sync_eq_surface_runtime(
     let attractor_coeff = eq_smoothing_coeff(style.attractor_smoothing_seconds);
 
     if !runtime.initialized {
-        runtime.smoothed_warp = model.warp;
-        runtime.smoothed_pull_force = model.pull_force;
+        runtime.smoothed_wave_depth = model.wave_depth;
+        runtime.smoothed_wave_cycles = model.wave_cycles;
+        runtime.smoothed_wave_phase_token = model.wave_phase_token;
     } else {
-        runtime.smoothed_warp = eq_smooth_value(runtime.smoothed_warp, model.warp, motion_coeff);
-        runtime.smoothed_pull_force =
-            eq_smooth_value(runtime.smoothed_pull_force, model.pull_force, motion_coeff);
+        runtime.smoothed_wave_depth = eq_smooth_value(
+            runtime.smoothed_wave_depth,
+            model.wave_depth,
+            motion_coeff,
+        );
+        runtime.smoothed_wave_cycles = eq_smooth_value(
+            runtime.smoothed_wave_cycles,
+            model.wave_cycles,
+            motion_coeff,
+        );
+        runtime.smoothed_wave_phase_token = eq_smooth_value(
+            runtime.smoothed_wave_phase_token,
+            model.wave_phase_token,
+            motion_coeff,
+        );
     }
 
     for (index, attractor) in model.attractors.iter().enumerate() {
         let target = crate::ui::EqAttractorSurfaceSmoothedAttractorState {
             x: attractor.x,
             y: attractor.y,
-            depth: model.depths.get(index).copied().unwrap_or(1.0),
-            cycles: model.cycles.get(index).copied().unwrap_or(1.0),
-            rate_hz: model.rates_hz.get(index).copied().unwrap_or(0.0),
+            pull: model.attractor_pulls.get(index).copied().unwrap_or(1.0),
+            radius: model.attractor_radii.get(index).copied().unwrap_or(0.12),
         };
         let entry = runtime
             .smoothed_attractors
@@ -187,9 +197,8 @@ fn sync_eq_surface_runtime(
         if runtime.initialized {
             entry.x = eq_smooth_value(entry.x, target.x, attractor_coeff);
             entry.y = eq_smooth_value(entry.y, target.y, attractor_coeff);
-            entry.depth = eq_smooth_value(entry.depth, target.depth, attractor_coeff);
-            entry.cycles = eq_smooth_value(entry.cycles, target.cycles, attractor_coeff);
-            entry.rate_hz = eq_smooth_value(entry.rate_hz, target.rate_hz, attractor_coeff);
+            entry.pull = eq_smooth_value(entry.pull, target.pull, attractor_coeff);
+            entry.radius = eq_smooth_value(entry.radius, target.radius, attractor_coeff);
         } else {
             *entry = target;
         }
@@ -223,39 +232,35 @@ fn eq_target_band_values(
             0.0
         };
         let mut centers = Vec::with_capacity(model.attractors.len());
-        let mut strengths = Vec::with_capacity(model.attractors.len());
-        let mut depths = Vec::with_capacity(model.attractors.len());
-        let mut cycles = Vec::with_capacity(model.attractors.len());
-        let mut phases = Vec::with_capacity(model.attractors.len());
+        let mut targets = Vec::with_capacity(model.attractors.len());
+        let mut pulls = Vec::with_capacity(model.attractors.len());
+        let mut radii = Vec::with_capacity(model.attractors.len());
         for attractor in &model.attractors {
             let Some(state) = runtime.smoothed_attractors.get(&attractor.id) else {
                 continue;
             };
-            let strength =
-                eq_gravity_strength(state.y, runtime.smoothed_warp, runtime.smoothed_pull_force);
-            if strength <= f32::EPSILON {
+            if state.pull <= f32::EPSILON {
                 continue;
             }
             centers.push(state.x);
-            strengths.push(strength);
-            depths.push(state.depth.clamp(0.0, 1.0));
-            cycles.push(state.cycles.max(0.0));
-            phases.push(state.rate_hz.max(0.0) * 0.25);
+            targets.push((state.y * 2.0 - 1.0) * runtime.smoothed_wave_depth.clamp(0.0, 1.0));
+            pulls.push(state.pull.max(0.0));
+            radii.push(state.radius.max(0.01));
         }
         let sample_pos = if model.reverse_global {
             1.0 - band_pos
         } else {
             band_pos
         };
-        let wave = eq_gravity_wave_sample(
+        let wave = eq_wave_sample(
             sample_pos,
-            0.0,
+            runtime.smoothed_wave_phase_token,
+            runtime.smoothed_wave_cycles,
+            runtime.smoothed_wave_depth,
             &centers,
-            &strengths,
-            &depths,
-            &cycles,
-            &phases,
-            EQ_SURFACE_GRAVITY_SIGMA,
+            &targets,
+            &pulls,
+            &radii,
         );
         let gain_db = (wave * model.eq_depth_db).clamp(-model.eq_depth_db, model.eq_depth_db);
         let normalized = ((gain_db + style.db_range) / (2.0 * style.db_range)).clamp(0.0, 1.0);
