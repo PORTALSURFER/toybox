@@ -1,8 +1,8 @@
 //! Generic vector shape rendering helpers.
 
+use vello::Scene;
 use vello::kurbo::{Affine, BezPath, Circle, Line, Rect as KurboRect, Stroke};
 use vello::peniko::Fill;
-use vello::Scene;
 
 use super::color_and_angle_helpers::color_to_vello;
 use super::types::{

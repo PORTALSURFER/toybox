@@ -77,6 +77,44 @@
     }
 
     #[test]
+    fn render_region_interaction_reports_shift_modifier() {
+        let mut canvas = Canvas::new(160, 120);
+        let mut layout = Layout::default();
+        let theme = Theme::default();
+        let mut ui_state = UiState::default();
+        let input = InputState {
+            pointer_pos: Point { x: 12, y: 12 },
+            mouse_pressed: true,
+            shift_down: true,
+            ..InputState::default()
+        };
+        let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+
+        let spec = UiSpec::new(RootFrameSpec::new(
+            "root",
+            panel(
+                "panel",
+                Node::Region(RegionSpec::new("plot").layout(LayoutBox::fixed(64, 48).max(64, 48))),
+            )
+            .pad_all(0),
+        ));
+
+        let result =
+            render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+        assert!(result.actions.iter().any(|action| {
+            matches!(
+                action,
+                UiAction::RegionInteracted {
+                    key,
+                    kind,
+                    shift_down,
+                    ..
+                } if key == "plot" && *kind == RegionInteractionKind::Pressed && *shift_down
+            )
+        }));
+    }
+
+    #[test]
     fn render_region_emits_hover_false_when_pointer_is_outside() {
         let mut canvas = Canvas::new(160, 120);
         let mut layout = Layout::default();

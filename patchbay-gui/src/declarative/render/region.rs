@@ -213,5 +213,6 @@ fn push_region_interaction_when(
         local_pointer: response.local_pointer,
         raw_local_pointer: response.raw_local_pointer,
         alt_down: response.alt_down,
+        shift_down: response.shift_down,
     });
 }

@@ -322,40 +322,6 @@ impl<'a> Ui<'a> {
             .fill_circle(center, radius.round().max(1.0) as i32, color);
     }
 
-    /// Draw a stroked circle with vector antialiasing when available.
-    ///
-    /// Falls back to CPU raster circle stroke drawing when vector shapes are disabled.
-    pub(crate) fn stroke_circle_visual(
-        &mut self,
-        center: Point,
-        radius: f32,
-        thickness: f32,
-        color: Color,
-    ) {
-        if radius <= 0.0 || thickness <= 0.0 {
-            return;
-        }
-        if self.vector_shapes_enabled {
-            self.vector_commands
-                .push(VectorCommand::CircleStroke(CircleStrokeVisual {
-                    center: PointF {
-                        x: center.x as f32,
-                        y: center.y as f32,
-                    },
-                    radius,
-                    thickness,
-                    color,
-                }));
-            return;
-        }
-        self.canvas.stroke_circle(
-            center,
-            radius.round().max(1.0) as i32,
-            thickness.round().max(1.0) as i32,
-            color,
-        );
-    }
-
     /// Return or initialize editable textbox runtime state for one stable key.
     pub(crate) fn begin_text_edit_runtime(
         &mut self,
