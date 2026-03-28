@@ -15,7 +15,7 @@ pub enum CurveHighlightMode {
 }
 
 /// Interaction parameters for one curve-editor widget.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CurveInteractionOptions {
     /// Maximum number of points allowed in the editable model.
     pub max_points: usize,
@@ -29,6 +29,8 @@ pub struct CurveInteractionOptions {
     pub endpoint_mode: EndpointMode,
     /// Whether interior points can be deleted by double click.
     pub double_click_delete_interior: bool,
+    /// Snap behavior for curve-point interactions.
+    pub snap: CurveSnapConfig,
 }
 
 impl Default for CurveInteractionOptions {
@@ -40,12 +42,31 @@ impl Default for CurveInteractionOptions {
             push_through_threshold_px: 2,
             endpoint_mode: EndpointMode::Independent,
             double_click_delete_interior: true,
+            snap: CurveSnapConfig::default(),
         }
     }
 }
 
+/// Rendering-time grid overlay settings for one curve editor.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CurveGridConfig {
+    /// Normalized x positions for brighter vertical guide lines.
+    pub emphasized_verticals: Vec<f32>,
+}
+
+/// Snap behavior for curve-editor pointer interactions.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CurveSnapConfig {
+    /// Whether snapping is currently enabled.
+    pub enabled: bool,
+    /// Normalized x positions used for vertical snapping.
+    pub vertical_positions: Vec<f32>,
+    /// Normalized y positions used for horizontal snapping.
+    pub horizontal_positions: Vec<f32>,
+}
+
 /// Full color/style payload for curve-editor rendering.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CurveEditorStyle {
     /// Region background color.
     pub background: Color,
@@ -53,6 +74,8 @@ pub struct CurveEditorStyle {
     pub border: Color,
     /// Vertical grid line color.
     pub grid_vertical: Color,
+    /// Brighter vertical guide color for emphasized beat/grid lines.
+    pub grid_vertical_emphasis: Color,
     /// Horizontal grid line color.
     pub grid_horizontal: Color,
     /// Base curve stroke color.
@@ -89,6 +112,7 @@ impl Default for CurveEditorStyle {
             background: Color::rgb(20, 22, 22),
             border: Color::rgb(80, 85, 80),
             grid_vertical: Color::rgb(39, 43, 40),
+            grid_vertical_emphasis: Color::rgb(69, 76, 71),
             grid_horizontal: Color::rgb(53, 58, 53),
             line: Color::rgb(140, 230, 220),
             line_highlight: Color::rgb(199, 250, 242),
@@ -116,6 +140,8 @@ pub struct CurveEditorSpec {
     pub model: CurveModel,
     /// Visual style payload.
     pub style: CurveEditorStyle,
+    /// Grid overlay payload.
+    pub grid: CurveGridConfig,
     /// Interaction behavior payload.
     pub interaction: CurveInteractionOptions,
     /// Optional normalized playhead x position.
@@ -131,6 +157,7 @@ impl CurveEditorSpec {
             key: key.into(),
             model,
             style: CurveEditorStyle::default(),
+            grid: CurveGridConfig::default(),
             interaction: CurveInteractionOptions::default(),
             playhead_x: None,
             layout: LayoutBox::auto(),
@@ -140,6 +167,12 @@ impl CurveEditorSpec {
     /// Override style payload.
     pub fn style(mut self, style: CurveEditorStyle) -> Self {
         self.style = style;
+        self
+    }
+
+    /// Override grid overlay payload.
+    pub fn grid(mut self, grid: CurveGridConfig) -> Self {
+        self.grid = grid;
         self
     }
 

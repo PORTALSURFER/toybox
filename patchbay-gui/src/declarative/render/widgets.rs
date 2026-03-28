@@ -465,8 +465,9 @@ fn render_curve_editor(
     let request = crate::ui::CurveEditorRectRenderRequest::new(
         WidgetId::from_label(&curve_editor.key),
         rect,
-        curve_editor.style,
-        curve_editor.interaction,
+        curve_editor.style.clone(),
+        curve_editor.grid.clone(),
+        curve_editor.interaction.clone(),
         curve_editor.playhead_x,
     );
     let response = ui.curve_editor_in_rect(&mut model, request);

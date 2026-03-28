@@ -121,11 +121,30 @@ where
                 Some(LRESULT(0))
             }
             WM_KEYDOWN => {
+                let held_changed = self
+                    .key_from_native_message(wparam)
+                    .map(|ch| self.set_shortcut_key_down(ch, true))
+                    .unwrap_or(false);
                 let modifiers = self.current_shortcut_modifiers();
                 if let Some(ch) = translate_virtual_key_to_input_char(wparam) {
                     if self.handle_key_char_input(ch, modifiers) {
                         return Some(LRESULT(0));
                     }
+                }
+                if held_changed {
+                    self.render_frame();
+                    return Some(LRESULT(0));
+                }
+                None
+            }
+            WM_KEYUP => {
+                let held_changed = self
+                    .key_from_native_message(wparam)
+                    .map(|ch| self.set_shortcut_key_down(ch, false))
+                    .unwrap_or(false);
+                if held_changed {
+                    self.render_frame();
+                    return Some(LRESULT(0));
                 }
                 None
             }
@@ -151,7 +170,21 @@ where
                 };
                 let modifiers = ShortcutModifiers::from_bits(lparam.0 as usize);
                 self.recent_injected_char = Some((ch, Instant::now()));
-                let _ = self.handle_key_char_input(ch, modifiers);
+                let held_changed = self.set_shortcut_key_down(ch, true);
+                let handled = self.handle_key_char_input(ch, modifiers);
+                if held_changed && !handled {
+                    self.render_frame();
+                }
+                Some(LRESULT(0))
+            }
+            PATCHBAY_MSG_INJECTED_KEY_UP => {
+                let code = (wparam.0 & 0xFFFF) as u16;
+                let Some(ch) = char::from_u32(code as u32) else {
+                    return Some(LRESULT(0));
+                };
+                if self.set_shortcut_key_down(ch, false) {
+                    self.render_frame();
+                }
                 Some(LRESULT(0))
             }
             _ => None,
@@ -207,6 +240,32 @@ where
         let alt = unsafe { GetAsyncKeyState(VK_MENU.0 as i32) } < 0;
         let ctrl = unsafe { GetAsyncKeyState(VK_CONTROL.0 as i32) } < 0;
         ShortcutModifiers::new(shift, alt, ctrl)
+    }
+
+    fn key_from_native_message(&self, wparam: WPARAM) -> Option<char> {
+        let code = (wparam.0 & 0xFFFF) as u16;
+        match code {
+            0x30..=0x39 | 0x41..=0x5A => Some((code as u8 as char).to_ascii_lowercase()),
+            _ => None,
+        }
+    }
+
+    fn set_shortcut_key_down(&mut self, ch: char, down: bool) -> bool {
+        let canonical = ch.to_ascii_lowercase();
+        let keys = &mut self.input.held_shortcut_keys;
+        if down {
+            if keys.contains(&canonical) {
+                return false;
+            }
+            keys.push(canonical);
+            keys.sort_unstable();
+            true
+        } else if let Some(index) = keys.iter().position(|existing| *existing == canonical) {
+            keys.remove(index);
+            true
+        } else {
+            false
+        }
     }
 
     fn handle_paint_timer_messages(&mut self, message: u32, wparam: WPARAM) -> Option<LRESULT> {

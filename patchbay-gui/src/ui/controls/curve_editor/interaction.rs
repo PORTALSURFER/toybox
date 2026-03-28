@@ -37,6 +37,7 @@ impl<'a> Ui<'a> {
         &self,
         model: &crate::declarative::CurveModel,
         runtime: &CurveEditorRuntimeState,
+        interaction: &crate::declarative::CurveInteractionOptions,
         region: RegionResponse,
         rect: Rect,
     ) -> CurveEditorVisualState {
@@ -55,7 +56,7 @@ impl<'a> Ui<'a> {
             .flatten();
         let preview_point =
             (region.hovered && !region.alt_down && hovered_point.is_none() && direct_segment.is_some())
-                .then(|| preview_point_on_curve(model, region.local_pointer, rect))
+                .then(|| preview_point_on_curve(model, region.local_pointer, rect, &interaction.snap))
                 .flatten();
         let hovered_segment = (region.hovered && preview_point.is_none())
             .then(|| {
@@ -120,7 +121,8 @@ impl<'a> Ui<'a> {
                 && find_segment_hit_within(model, local_pointer, segment_direct_radius, rect).is_some()
             {
                 let preview =
-                    preview_point_on_curve(model, local_pointer, rect).unwrap_or(normalized_pointer);
+                    preview_point_on_curve(model, local_pointer, rect, &interaction.snap)
+                        .unwrap_or_else(|| snap_curve_point(normalized_pointer, &interaction.snap));
                 let inserted_index = insert_point(
                     model,
                     preview,
@@ -178,7 +180,7 @@ impl<'a> Ui<'a> {
             }
             let inserted_index = insert_point(
                 model,
-                normalized_pointer,
+                snap_curve_point(normalized_pointer, &interaction.snap),
                 interaction.max_points,
                 interaction.min_point_spacing_x.max(1.0e-6),
             );
@@ -225,6 +227,7 @@ impl<'a> Ui<'a> {
                             interaction.push_through_threshold_px,
                             rect,
                             interaction.endpoint_mode,
+                            &interaction.snap,
                         );
                         *model = recomputed;
                         runtime.selected_point = Some(moved_index);
@@ -278,6 +281,7 @@ impl<'a> Ui<'a> {
                             (delta_x, delta_y),
                             interaction.min_point_spacing_x.max(1.0e-6),
                             interaction.endpoint_mode,
+                            &interaction.snap,
                         );
                         drag_mode = CurveEditorDragMode::MoveSegment {
                             index,

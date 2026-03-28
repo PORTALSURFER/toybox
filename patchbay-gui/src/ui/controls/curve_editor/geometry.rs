@@ -1,6 +1,48 @@
 /// Base vertical drag scale used for segment tension interaction.
 const CURVE_TENSION_PIXEL_SCALE: f32 = 160.0;
 
+/// Return one canonicalized, sorted list of unique normalized snap positions.
+fn normalized_snap_positions(values: &[f32]) -> Vec<f32> {
+    let mut normalized: Vec<f32> = values
+        .iter()
+        .copied()
+        .filter(|value| value.is_finite())
+        .map(|value| value.clamp(0.0, 1.0))
+        .collect();
+    normalized.sort_by(f32::total_cmp);
+    normalized.dedup_by(|left, right| (*left - *right).abs() <= 1.0e-4);
+    normalized
+}
+
+/// Return the nearest snap target to `value`, preserving `value` when empty.
+fn nearest_snap_value(value: f32, positions: &[f32]) -> f32 {
+    positions
+        .iter()
+        .copied()
+        .min_by(|left, right| {
+            let left_distance = (value - *left).abs();
+            let right_distance = (value - *right).abs();
+            left_distance.total_cmp(&right_distance)
+        })
+        .unwrap_or(value)
+}
+
+/// Return one point snapped according to the active snap configuration.
+fn snap_curve_point(
+    point: crate::declarative::CurvePoint,
+    snap: &crate::declarative::CurveSnapConfig,
+) -> crate::declarative::CurvePoint {
+    if !snap.enabled {
+        return point;
+    }
+    let verticals = normalized_snap_positions(&snap.vertical_positions);
+    let horizontals = normalized_snap_positions(&snap.horizontal_positions);
+    crate::declarative::CurvePoint {
+        x: nearest_snap_value(point.x.clamp(0.0, 1.0), &verticals).clamp(0.0, 1.0),
+        y: nearest_snap_value(point.y.clamp(0.0, 1.0), &horizontals).clamp(0.0, 1.0),
+    }
+}
+
 /// Return one normalized point from rectangle-local pointer coordinates.
 fn curve_point_from_local(local: Point, rect: Rect) -> crate::declarative::CurvePoint {
     let width = (rect.size.width.max(1) as f32 - 1.0).max(1.0);
@@ -155,15 +197,14 @@ fn preview_point_on_curve(
     model: &crate::declarative::CurveModel,
     local_pointer: Point,
     rect: Rect,
+    snap: &crate::declarative::CurveSnapConfig,
 ) -> Option<crate::declarative::CurvePoint> {
     if model.points.len() < 2 {
         return None;
     }
     let pointer = curve_point_from_local(local_pointer, rect);
-    Some(crate::declarative::CurvePoint {
-        x: pointer.x,
-        y: sample_curve_model(model, pointer.x),
-    })
+    let snapped = snap_curve_point(pointer, snap);
+    Some(snapped)
 }
 
 /// Insert one point in sorted order while preserving segment topology.
@@ -249,12 +290,13 @@ fn recompute_move_point_from_origin(
     push_through_threshold_px: i32,
     rect: Rect,
     endpoint_mode: crate::declarative::EndpointMode,
+    snap: &crate::declarative::CurveSnapConfig,
 ) -> (crate::declarative::CurveModel, usize) {
     let mut recomputed = origin_model.clone();
     let moved_index = move_point_with_push_through(
         &mut recomputed,
         origin_index,
-        target,
+        snap_curve_point(target, snap),
         min_spacing_x,
         push_through_threshold_px,
         rect,
@@ -318,6 +360,7 @@ fn move_segment_translated(
     delta: (f32, f32),
     min_spacing_x: f32,
     endpoint_mode: crate::declarative::EndpointMode,
+    snap: &crate::declarative::CurveSnapConfig,
 ) {
     let (start_left_x, start_left_y) = start_left;
     let (start_right_x, start_right_y) = start_right;
@@ -327,6 +370,20 @@ fn move_segment_translated(
     }
     let right_index = segment_index + 1;
     let mut applied_dx = delta_x;
+    let mut applied_dy = delta_y;
+    if snap.enabled {
+        let raw_midpoint = crate::declarative::CurvePoint {
+            x: ((start_left_x + delta_x) + (start_right_x + delta_x)) * 0.5,
+            y: ((start_left_y + delta_y) + (start_right_y + delta_y)) * 0.5,
+        };
+        let snapped_midpoint = snap_curve_point(raw_midpoint, snap);
+        let start_midpoint = crate::declarative::CurvePoint {
+            x: (start_left_x + start_right_x) * 0.5,
+            y: (start_left_y + start_right_y) * 0.5,
+        };
+        applied_dx = snapped_midpoint.x - start_midpoint.x;
+        applied_dy = snapped_midpoint.y - start_midpoint.y;
+    }
     if segment_index == 0 || right_index == model.points.len().saturating_sub(1) {
         applied_dx = 0.0;
     } else {
@@ -336,8 +393,8 @@ fn move_segment_translated(
     }
     model.points[segment_index].x = (start_left_x + applied_dx).clamp(0.0, 1.0);
     model.points[right_index].x = (start_right_x + applied_dx).clamp(0.0, 1.0);
-    model.points[segment_index].y = (start_left_y + delta_y).clamp(0.0, 1.0);
-    model.points[right_index].y = (start_right_y + delta_y).clamp(0.0, 1.0);
+    model.points[segment_index].y = (start_left_y + applied_dy).clamp(0.0, 1.0);
+    model.points[right_index].y = (start_right_y + applied_dy).clamp(0.0, 1.0);
     enforce_endpoint_mode(model, endpoint_mode);
 }
 

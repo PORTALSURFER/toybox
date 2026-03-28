@@ -77,6 +77,24 @@ impl WindowHandle {
         }
     }
 
+    /// Post one injected key-up event with explicit modifier flags.
+    pub fn post_injected_key_up(&self, ch: char, modifiers: ShortcutModifiers) -> bool {
+        let mut units = [0u16; 2];
+        let encoded = ch.encode_utf16(&mut units);
+        if encoded.len() != 1 {
+            return false;
+        }
+        unsafe {
+            PostMessageW(
+                Some(self.hwnd),
+                PATCHBAY_MSG_INJECTED_KEY_UP,
+                WPARAM(encoded[0] as usize),
+                LPARAM(modifiers.to_bits() as isize),
+            )
+            .is_ok()
+        }
+    }
+
     /// Request one immediate render tick that fulfills a pending frame capture.
     #[cfg(feature = "frame-capture")]
     pub fn request_frame_capture(&self) -> bool {

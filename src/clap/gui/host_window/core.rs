@@ -92,6 +92,11 @@ impl GuiHostWindow {
         self.inner.post_injected_text_char(ch, modifiers)
     }
 
+    /// Inject one key-up event tagged as host-injected input.
+    pub fn post_injected_key_up(&self, ch: char, modifiers: ShortcutModifiers) -> bool {
+        self.inner.post_injected_key_up(ch, modifiers)
+    }
+
     /// Set an optional aspect ratio for window resizing.
     pub fn set_aspect_ratio(&mut self, ratio: Option<f32>) {
         log_line_safe(&format!("toybox/gui: set_aspect_ratio ratio={ratio:?}"));

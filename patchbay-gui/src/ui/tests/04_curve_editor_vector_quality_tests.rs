@@ -38,6 +38,7 @@ fn curve_editor_vector_shapes_keep_subpixel_positions() {
         WidgetId::new(4404),
         rect,
         crate::declarative::CurveEditorStyle::default(),
+        crate::declarative::CurveGridConfig::default(),
         crate::declarative::CurveInteractionOptions::default(),
         Some(0.333),
     );

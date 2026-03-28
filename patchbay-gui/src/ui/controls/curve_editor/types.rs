@@ -1,5 +1,5 @@
 /// Request payload for rendering a curve editor in a fixed rectangle.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct CurveEditorRectRenderRequest {
     /// Stable widget id.
     pub(crate) id: WidgetId,
@@ -7,6 +7,8 @@ pub(crate) struct CurveEditorRectRenderRequest {
     pub(crate) rect: Rect,
     /// Rendering style payload.
     pub(crate) style: crate::declarative::CurveEditorStyle,
+    /// Grid overlay payload.
+    pub(crate) grid: crate::declarative::CurveGridConfig,
     /// Interaction configuration payload.
     pub(crate) interaction: crate::declarative::CurveInteractionOptions,
     /// Optional normalized playhead x position.
@@ -19,6 +21,7 @@ impl CurveEditorRectRenderRequest {
         id: WidgetId,
         rect: Rect,
         style: crate::declarative::CurveEditorStyle,
+        grid: crate::declarative::CurveGridConfig,
         interaction: crate::declarative::CurveInteractionOptions,
         playhead_x: Option<f32>,
     ) -> Self {
@@ -26,6 +29,7 @@ impl CurveEditorRectRenderRequest {
             id,
             rect,
             style,
+            grid,
             interaction,
             playhead_x: playhead_x.map(|value| value.clamp(0.0, 1.0)),
         }

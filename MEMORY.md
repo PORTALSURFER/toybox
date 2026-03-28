@@ -1,6 +1,6 @@
 # MEMORY
 
-Last Updated (UTC): 2026-03-07 11:41:00Z
+Last Updated (UTC): 2026-03-28 14:18:24Z
 
 ## Current State
 
@@ -11,15 +11,16 @@ Last Updated (UTC): 2026-03-07 11:41:00Z
 - The EQ attractor surface now uses a shared gravity-field wave model, so attractors bend and locally slow one curve instead of layering separate local sine waves.
 - The EQ attractor surface now requires real pointer travel before emitting a move, so an off-center click selects a node without nudging it.
 - Regression tests cover both node ordering and the curve command shape emitted in vector mode.
+- The curve editor now supports declarative beat-guide overlays, configurable snap targets, and held shortcut-key state so plugins can render brighter grids and temporarily invert snapping while a key is held.
 - Local cargo validation is currently blocked by the private `mts-esp-rs` fetch failing during workspace dependency resolution.
 
 ## Active Mission
 
-- Keep toybox ready for framework iteration while preserving simple, readable attractor styling, gravity-like EQ surface motion, smooth curve rendering, and correct vector/canvas layering.
+- Keep toybox ready for framework iteration while preserving readable attractor styling, smooth curve rendering, and reusable editor/input primitives for plugin UIs.
 
 ## Immediate Next Actions
 
-1. Keep `docs/plans/active/todo.md` as a short ordered queue for the next implementation cycle.
+1. Land the paired Pump changes that consume the new curve-grid, snap, and held-shortcut APIs.
 2. Keep `AGENTS.md`, `MEMORY.md`, and `docs/plans/*` aligned whenever mission or queue changes.
 3. Restore local Cargo access to the pinned `mts-esp-rs` dependency so `bash scripts/ci_local.sh` can run cleanly again.
 
