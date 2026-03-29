@@ -162,6 +162,14 @@ impl HostWindow {
             .unwrap_or(false)
     }
 
+    /// Inject one key-up event with explicit modifiers.
+    pub fn post_injected_key_up(&self, ch: char, modifiers: ShortcutModifiers) -> bool {
+        self.handle
+            .as_ref()
+            .map(|handle| handle.post_injected_key_up(ch, modifiers))
+            .unwrap_or(false)
+    }
+
     /// Clamp requested open size to at least one pixel per dimension.
     pub(super) fn normalize_open_size(size: Size) -> Size {
         Size {

@@ -198,6 +198,16 @@ impl Node {
         self
     }
 
+    /// Override curve-editor grid overlay payload for curve-editor nodes.
+    ///
+    /// Non-curve-editor node kinds are returned unchanged.
+    pub fn curve_grid(mut self, grid: CurveGridConfig) -> Self {
+        if let Self::CurveEditor(curve_editor) = &mut self {
+            curve_editor.grid = grid;
+        }
+        self
+    }
+
     /// Override curve-editor interaction settings for curve-editor nodes.
     ///
     /// Non-curve-editor node kinds are returned unchanged.

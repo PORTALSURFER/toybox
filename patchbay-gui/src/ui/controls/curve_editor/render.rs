@@ -28,12 +28,13 @@ impl<'a> Ui<'a> {
         model: &crate::declarative::CurveModel,
         rect: Rect,
         state: CurveEditorVisualState,
-        style: crate::declarative::CurveEditorStyle,
+        style: &crate::declarative::CurveEditorStyle,
+        grid: &crate::declarative::CurveGridConfig,
         playhead_x: Option<f32>,
     ) {
         self.curve_fill_rect(rect, style.background);
         self.curve_stroke_rect(rect, 1.0, style.border);
-        self.render_curve_grid(rect, style);
+        self.render_curve_grid(rect, style, grid);
         self.render_curve_polyline(model, rect, state, style);
         self.render_curve_preview(rect, state, style);
         self.render_curve_points(model, rect, state, style);
@@ -42,7 +43,12 @@ impl<'a> Ui<'a> {
     }
 
     /// Draw background grid lines.
-    fn render_curve_grid(&mut self, rect: Rect, style: crate::declarative::CurveEditorStyle) {
+    fn render_curve_grid(
+        &mut self,
+        rect: Rect,
+        style: &crate::declarative::CurveEditorStyle,
+        grid: &crate::declarative::CurveGridConfig,
+    ) {
         for step in 1..16 {
             let x = rect.origin.x + ((rect.size.width as i32 - 1) * step) / 16;
             self.curve_stroke_line(
@@ -53,6 +59,27 @@ impl<'a> Ui<'a> {
                 }),
                 1.0,
                 style.grid_vertical,
+            );
+        }
+        for x in grid
+            .emphasized_verticals
+            .iter()
+            .copied()
+            .filter(|value| value.is_finite())
+            .map(|value| value.clamp(0.0, 1.0))
+        {
+            let local_x = rect.origin.x + (x * (rect.size.width.max(1) as f32 - 1.0)).round() as i32;
+            self.curve_stroke_line(
+                pointf_from_i32(Point {
+                    x: local_x,
+                    y: rect.origin.y,
+                }),
+                pointf_from_i32(Point {
+                    x: local_x,
+                    y: rect.origin.y + rect.size.height as i32 - 1,
+                }),
+                1.0,
+                style.grid_vertical_emphasis,
             );
         }
         for step in 1..4 {
@@ -75,7 +102,7 @@ impl<'a> Ui<'a> {
         model: &crate::declarative::CurveModel,
         rect: Rect,
         state: CurveEditorVisualState,
-        style: crate::declarative::CurveEditorStyle,
+        style: &crate::declarative::CurveEditorStyle,
     ) {
         for segment_index in 0..model.segments.len() {
             let left = model.points[segment_index];
@@ -118,7 +145,7 @@ impl<'a> Ui<'a> {
         &mut self,
         rect: Rect,
         state: CurveEditorVisualState,
-        style: crate::declarative::CurveEditorStyle,
+        style: &crate::declarative::CurveEditorStyle,
     ) {
         let Some(preview) = state.preview_point else {
             return;
@@ -147,7 +174,7 @@ impl<'a> Ui<'a> {
         model: &crate::declarative::CurveModel,
         rect: Rect,
         state: CurveEditorVisualState,
-        style: crate::declarative::CurveEditorStyle,
+        style: &crate::declarative::CurveEditorStyle,
     ) {
         for (index, point) in model.points.iter().copied().enumerate() {
             let local = local_from_curve_point_f32(point, rect);
@@ -201,7 +228,7 @@ impl<'a> Ui<'a> {
         &mut self,
         model: &crate::declarative::CurveModel,
         rect: Rect,
-        style: crate::declarative::CurveEditorStyle,
+        style: &crate::declarative::CurveEditorStyle,
         playhead_x: Option<f32>,
     ) {
         let Some(playhead_x) = playhead_x else {

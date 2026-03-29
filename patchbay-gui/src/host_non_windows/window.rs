@@ -186,4 +186,9 @@ impl HostWindow {
     pub fn post_injected_text_char(&self, _ch: char, _modifiers: ShortcutModifiers) -> bool {
         false
     }
+
+    /// Stub injected key-up path for non-Windows builds.
+    pub fn post_injected_key_up(&self, _ch: char, _modifiers: ShortcutModifiers) -> bool {
+        false
+    }
 }

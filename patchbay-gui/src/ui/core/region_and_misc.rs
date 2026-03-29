@@ -18,6 +18,7 @@ impl<'a> Ui<'a> {
             local_pointer,
             raw_local_pointer,
             alt_down: self.input.alt_down,
+            shift_down: self.input.shift_down,
             active: self.state.active == Some(id),
             pressed: false,
             released: false,

@@ -50,6 +50,11 @@ pub struct InputState {
     /// normalized to control characters such as backspace (`\u{8}`), return
     /// (`\r`), and escape (`\u{1b}`).
     pub key_pressed: Option<char>,
+    /// Canonicalized shortcut-style keys currently held down.
+    ///
+    /// Entries are stored as lowercase ASCII when possible so callers can
+    /// query held state case-insensitively via [`Self::shortcut_key_down`].
+    pub held_shortcut_keys: Vec<char>,
     /// Files dropped onto the window this frame.
     pub dropped_files: Vec<PathBuf>,
 }
@@ -71,8 +76,17 @@ impl Default for InputState {
             alt_down: false,
             wheel_delta: 0.0,
             key_pressed: None,
+            held_shortcut_keys: Vec::new(),
             dropped_files: Vec::new(),
         }
+    }
+}
+
+impl InputState {
+    /// Return `true` when `key` is currently held in shortcut-normalized form.
+    pub fn shortcut_key_down(&self, key: char) -> bool {
+        let canonical = canonical_shortcut_char(key);
+        self.held_shortcut_keys.contains(&canonical)
     }
 }
 
