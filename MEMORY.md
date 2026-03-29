@@ -1,6 +1,6 @@
 # MEMORY
 
-Last Updated (UTC): 2026-03-28 14:18:24Z
+Last Updated (UTC): 2026-03-29 14:42:26Z
 
 ## Current State
 
@@ -12,6 +12,7 @@ Last Updated (UTC): 2026-03-28 14:18:24Z
 - The EQ attractor surface now requires real pointer travel before emitting a move, so an off-center click selects a node without nudging it.
 - Regression tests cover both node ordering and the curve command shape emitted in vector mode.
 - The curve editor now supports declarative beat-guide overlays, configurable snap targets, and held shortcut-key state so plugins can render brighter grids and temporarily invert snapping while a key is held.
+- Win32 shortcut handling now maps Ctrl-letter `WM_CHAR` control codes back to their ASCII letters for shortcut matching, and matched Ctrl shortcuts are swallowed while text edit is active instead of leaking characters into text boxes.
 - Local cargo validation is currently blocked by the private `mts-esp-rs` fetch failing during workspace dependency resolution.
 
 ## Active Mission
@@ -20,7 +21,7 @@ Last Updated (UTC): 2026-03-28 14:18:24Z
 
 ## Immediate Next Actions
 
-1. Land the paired Pump changes that consume the new curve-grid, snap, and held-shortcut APIs.
+1. Land the paired Pump changes that consume the updated Ctrl-shortcut handling on `main`.
 2. Keep `AGENTS.md`, `MEMORY.md`, and `docs/plans/*` aligned whenever mission or queue changes.
 3. Restore local Cargo access to the pinned `mts-esp-rs` dependency so `bash scripts/ci_local.sh` can run cleanly again.
 

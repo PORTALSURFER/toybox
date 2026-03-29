@@ -209,12 +209,19 @@ where
     }
 
     fn handle_key_char_input(&mut self, ch: char, modifiers: ShortcutModifiers) -> bool {
+        let action_key = self.resolve_shortcut_action(ch, modifiers).or_else(|| {
+            shortcut_char_from_control_char(ch, modifiers)
+                .and_then(|shortcut_ch| self.resolve_shortcut_action(shortcut_ch, modifiers))
+        });
         if self.active_text_edit {
+            if should_swallow_shortcut_while_text_edit_active(modifiers, action_key.is_some()) {
+                return true;
+            }
             self.input.key_pressed = Some(ch);
             self.render_frame();
             return true;
         }
-        let Some(action_key) = self.resolve_shortcut_action(ch, modifiers) else {
+        let Some(action_key) = action_key else {
             return false;
         };
         let action = UiAction::ButtonPressed { key: action_key };
@@ -380,4 +387,28 @@ fn translate_virtual_key_to_input_char(wparam: WPARAM) -> Option<char> {
         key if key == VK_END.0 as u16 => Some('\u{1f}'),
         _ => None,
     }
+}
+
+/// Recover an ASCII shortcut character from a control-code `WM_CHAR`.
+///
+/// Windows commonly reports `Ctrl+A` through `Ctrl+Z` as control characters
+/// `\u{1}` through `\u{1a}`. Patchbay maps those codes back to ASCII letters
+/// for shortcut matching while leaving normal text-edit handling unchanged.
+fn shortcut_char_from_control_char(ch: char, modifiers: ShortcutModifiers) -> Option<char> {
+    if !modifiers.ctrl {
+        return None;
+    }
+    let code = ch as u32;
+    if !(1..=26).contains(&code) {
+        return None;
+    }
+    Some((b'a' + (code as u8).saturating_sub(1)) as char)
+}
+
+/// Return `true` when a matched Ctrl shortcut should be ignored inside text edit.
+fn should_swallow_shortcut_while_text_edit_active(
+    modifiers: ShortcutModifiers,
+    shortcut_matched: bool,
+) -> bool {
+    modifiers.ctrl && shortcut_matched
 }

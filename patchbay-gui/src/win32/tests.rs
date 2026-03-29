@@ -4,8 +4,8 @@ mod tests {
         ShortcutBinding, ShortcutModifiers, VK_BACK, VK_DELETE, VK_END, VK_ESCAPE, VK_HOME,
         VK_LEFT, VK_RETURN, VK_RIGHT, VK_SPACE, VK_TAB, WPARAM, client_size_changed,
         enforce_aspect_min, resolved_layout_size_for_resize_request,
-        resolved_root_frame_resize_request,
-        translate_virtual_key_to_input_char,
+        resolved_root_frame_resize_request, shortcut_char_from_control_char,
+        should_swallow_shortcut_while_text_edit_active, translate_virtual_key_to_input_char,
     };
     use crate::canvas::Size;
 
@@ -199,5 +199,33 @@ mod tests {
         assert!(binding.matches('s', ShortcutModifiers::default()));
         assert!(binding.matches('S', ShortcutModifiers::default()));
         assert!(!binding.matches('s', ShortcutModifiers::new(true, false, false)));
+    }
+
+    #[test]
+    fn ctrl_modified_wm_char_maps_control_codes_back_to_letters() {
+        let modifiers = ShortcutModifiers::new(false, false, true);
+        assert_eq!(shortcut_char_from_control_char('\u{19}', modifiers), Some('y'));
+        assert_eq!(shortcut_char_from_control_char('\u{1a}', modifiers), Some('z'));
+        assert_eq!(shortcut_char_from_control_char('z', modifiers), None);
+        assert_eq!(
+            shortcut_char_from_control_char('\u{1a}', ShortcutModifiers::default()),
+            None
+        );
+    }
+
+    #[test]
+    fn text_edit_swallow_only_matched_ctrl_shortcuts() {
+        assert!(should_swallow_shortcut_while_text_edit_active(
+            ShortcutModifiers::new(false, false, true),
+            true
+        ));
+        assert!(!should_swallow_shortcut_while_text_edit_active(
+            ShortcutModifiers::new(false, false, true),
+            false
+        ));
+        assert!(!should_swallow_shortcut_while_text_edit_active(
+            ShortcutModifiers::default(),
+            true
+        ));
     }
 }
