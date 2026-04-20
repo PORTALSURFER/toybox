@@ -15,5 +15,6 @@ This directory contains project context and execution plans.
 - `docs/ADR-2026-02-06-reliability-hardening.md`: reliability-focused architecture decision.
 - `docs/DESIGN-PRINCIPLES.md`: engineering design guidance.
 - `docs/GUI-*.md`: GUI architecture, contract, migration, and layout specifications.
+- `docs/PATCHBAY-SCENE-PIPELINE.md`: shared live/headless scene-planning seam for renderer migration work.
 - `docs/PACKAGING.md`: packaging notes.
 - `docs/VST3.md`: VST3 feature and SDK setup guidance.

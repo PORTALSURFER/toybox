@@ -2,15 +2,15 @@
 
 use crate::canvas::{Canvas, Color, Point, Size};
 use crate::declarative::{
-    LayoutEngineState, RootTransform, UiAction, UiInvalidationScope, UiSpec, plan_root_render,
-    render_checked_with_engine,
+    LayoutEngineState, SceneRenderFeatures, UiAction, UiInvalidationScope, UiSpec,
+    execute_scene_frame, plan_scene_frame,
 };
 #[cfg(feature = "frame-capture")]
 use crate::frame_capture::FrameCaptureState;
 use crate::host::{GuiError, InputState, ShortcutBinding, ShortcutModifiers};
 use crate::logging::log_line_safe;
 use crate::renderer::{PresentationTransform, Renderer, RendererDevice};
-use crate::ui::{Layout, Theme, Ui, UiState};
+use crate::ui::{Layout, Theme, UiState};
 use raw_window_handle_06::{
     DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
     RawWindowHandle as RawWindowHandle06, Win32WindowHandle, WindowHandle as WindowHandle06,

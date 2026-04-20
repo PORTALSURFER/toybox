@@ -55,68 +55,43 @@ where
 
     fn render_ui_frame(&mut self) {
         self.ui_state.begin_frame();
-        let initial_spec = (self.build_spec)(&self.input, &self.state);
-        let initial_plan = plan_root_render(&initial_spec, self.input.window_size);
-        let mut mapped_input = self.input.clone();
-        mapped_input.window_size = initial_plan.layout_size;
-        let drag_active = self.input.mouse_down || self.input.mouse_secondary_down;
-        mapped_input.pointer_in_window = self.input.pointer_in_window || drag_active;
-        mapped_input.pointer_pos = map_surface_pointer_to_design(
-            &initial_plan.transform,
-            self.input.pointer_pos,
-            self.input.pointer_in_window,
-            drag_active,
-        );
-        let spec = (self.build_spec)(&mapped_input, &self.state);
-        self.active_text_edit = spec_has_active_text_edit(&spec);
+        let frame = plan_scene_frame(&self.input, |input| (self.build_spec)(input, &self.state));
+        self.active_text_edit = spec_has_active_text_edit(&frame.spec);
         self.active_text_edit_shared
             .store(self.active_text_edit, Ordering::Release);
-        let plan = plan_root_render(&spec, self.input.window_size);
-        mapped_input.window_size = plan.layout_size;
-        mapped_input.pointer_in_window = self.input.pointer_in_window || drag_active;
-        mapped_input.pointer_pos = map_surface_pointer_to_design(
-            &plan.transform,
-            self.input.pointer_pos,
-            self.input.pointer_in_window,
-            drag_active,
-        );
-        if self.canvas.size() != plan.layout_size {
+        if self.canvas.size() != frame.plan.layout_size {
             self.canvas
-                .resize(plan.layout_size.width, plan.layout_size.height);
+                .resize(frame.plan.layout_size.width, frame.plan.layout_size.height);
         }
         self.canvas.clear(self.theme.background);
         self.renderer
             .set_presentation_transform(PresentationTransform {
-                scale_x: plan.transform.scale_x,
-                scale_y: plan.transform.scale_y,
-                offset_x: plan.transform.offset_x,
-                offset_y: plan.transform.offset_y,
+                scale_x: frame.plan.transform.scale_x,
+                scale_y: frame.plan.transform.scale_y,
+                offset_x: frame.plan.transform.offset_x,
+                offset_y: frame.plan.transform.offset_y,
             });
-        let mut ui = Ui::new(
+        match execute_scene_frame(
+            &frame,
             &mut self.canvas,
-            &mapped_input,
             &mut self.ui_state,
             &mut self.layout,
             &self.theme,
-        );
-        ui.set_vector_text_enabled(self.renderer.vector_text_available());
-        ui.set_vector_shapes_enabled(true);
-        ui.reset_input_consumption();
-        ui.clear_overlays();
-        match render_checked_with_engine(
-            &spec,
-            &mut ui,
-            Point { x: 0, y: 0 },
             &mut self.layout_engine,
+            SceneRenderFeatures {
+                vector_text: self.renderer.vector_text_available(),
+                vector_shapes: true,
+            },
         ) {
-            Ok(result) => {
-                for action in result.actions {
+            Ok(executed) => {
+                for action in executed.render_result.actions {
                     update_text_edit_tracking_for_action(&mut self.active_text_edit, &action);
                     self.active_text_edit_shared
                         .store(self.active_text_edit, Ordering::Release);
                     invalidate_engine_for_action(&mut self.layout_engine, &action);
                     (self.reduce_action)(&mut self.state, action);
                 }
+                self.renderer.set_vector_commands(executed.vector_commands);
             }
             Err(err) => {
                 log_line_safe(&format!(
@@ -124,11 +99,7 @@ where
                 ));
             }
         }
-        ui.draw_overlays();
-        let vector_commands = ui.take_vector_commands();
-        drop(ui);
-        self.renderer.set_vector_commands(vector_commands);
-        self.apply_measured_root_frame_resize_request(&spec);
+        self.apply_measured_root_frame_resize_request(&frame.spec);
     }
 
     fn apply_measured_root_frame_resize_request(&mut self, spec: &UiSpec) {
@@ -217,21 +188,6 @@ where
         self.input.key_pressed = None;
         self.input.dropped_files.clear();
     }
-}
-
-fn map_surface_pointer_to_design(
-    transform: &RootTransform,
-    surface_pointer: Point,
-    pointer_in_window: bool,
-    drag_active: bool,
-) -> Point {
-    if drag_active {
-        return transform.surface_to_design(surface_pointer);
-    }
-    if pointer_in_window {
-        return transform.surface_to_design_clamped(surface_pointer);
-    }
-    transform.surface_to_design(surface_pointer)
 }
 
 /// Resolve a pending host resize request from measured root-frame output.

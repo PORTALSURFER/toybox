@@ -6,9 +6,12 @@
 
 use crate::Canvas;
 use crate::canvas::{Point, Size};
-use crate::declarative::{RenderResult, RootTransform, UiSpec, render_checked};
+use crate::declarative::{
+    LayoutEngineState, RenderResult, RootTransform, SceneRenderFeatures, UiSpec,
+    execute_scene_frame, plan_scene_frame,
+};
 use crate::host::InputState;
-use crate::ui::{Layout, Theme, Ui, UiState};
+use crate::ui::{Layout, Theme, UiState};
 
 /// Pixel data and metadata for one rendered declarative frame.
 #[derive(Debug)]
@@ -70,13 +73,13 @@ fn remap_canvas_to_surface(
 
 /// Render a single UI frame into an in-memory PNG-friendly pixel buffer.
 ///
-/// The callback receives input snapshot with the requested logical size and can
-/// build a [`UiSpec`]. The spec is evaluated twice like the live loop:
+/// The callback receives input snapshot with the requested logical size and is
+/// planned through the same two-pass scene contract as the live renderer before
+/// backend-specific headless execution happens.
 ///
-/// - first pass: collect design/surface transform for pointer remapping
-/// - second pass: render using transformed pointer coordinates
-///
-/// This is currently intended for test and CI screenshot generation only.
+/// Headless rendering still disables vector text and vector shapes temporarily.
+/// That fallback is expected to disappear once the shared scene contract is
+/// consumed by the Radiant-backed headless path tracked by `OPT-90`/`OPT-91`.
 pub fn render_spec_to_frame<Build>(
     size: Size,
     mut build_spec: Build,
@@ -92,53 +95,42 @@ where
         window_size,
         ..InputState::default()
     };
-    let initial_spec = build_spec(&input);
-    let initial_plan = crate::declarative::plan_root_render(&initial_spec, input.window_size);
-
-    let mut mapped_input = input.clone();
-    mapped_input.pointer_pos = initial_plan
-        .transform
-        .surface_to_design_clamped(mapped_input.pointer_pos);
-
-    let spec = build_spec(&mapped_input);
-    let plan = crate::declarative::plan_root_render(&spec, mapped_input.window_size);
-    mapped_input.pointer_pos = plan
-        .transform
-        .surface_to_design_clamped(mapped_input.pointer_pos);
-
-    let layout_size = plan.layout_size;
+    let frame = plan_scene_frame(&input, &mut build_spec);
+    let layout_size = frame.plan.layout_size;
     let mut canvas = Canvas::new(layout_size.width, layout_size.height);
     let mut layout = Layout::default();
     let mut ui_state = UiState::default();
+    let mut engine = LayoutEngineState::default();
     let theme = Theme::default();
-    let mut ui = Ui::new(
+    let executed = execute_scene_frame(
+        &frame,
         &mut canvas,
-        &mapped_input,
         &mut ui_state,
         &mut layout,
         &theme,
-    );
-    ui.set_vector_text_enabled(false);
-    ui.set_vector_shapes_enabled(false);
-
-    let render_result = render_checked(&spec, &mut ui, crate::canvas::Point { x: 0, y: 0 })
-        .map_err(|err| err.to_string())?;
+        &mut engine,
+        SceneRenderFeatures {
+            vector_text: false,
+            vector_shapes: false,
+        },
+    )
+    .map_err(|err| err.to_string())?;
     let pixels = if layout_size == input.window_size {
         canvas.pixels().to_vec()
     } else {
         remap_canvas_to_surface(
             canvas.pixels(),
             layout_size,
-            input.window_size,
-            &plan.transform,
+            frame.surface_input.window_size,
+            &frame.plan.transform,
         )
     };
 
     Ok(RenderedFrame {
-        width: input.window_size.width,
-        height: input.window_size.height,
+        width: frame.surface_input.window_size.width,
+        height: frame.surface_input.window_size.height,
         pixels,
-        render_result,
+        render_result: executed.render_result,
     })
 }
 

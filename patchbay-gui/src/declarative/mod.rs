@@ -42,6 +42,7 @@ include!("theme/core_tokens.rs");
 include!("theme/widget_colors.rs");
 include!("render/entry/theme_tokens.rs");
 include!("render/entry/root_render_plan.rs");
+include!("render/entry/scene_frame.rs");
 include!("render/entry/debug_border_candidates.rs");
 include!("render/entry/render_checked.rs");
 include!("debug/border_selection.rs");
