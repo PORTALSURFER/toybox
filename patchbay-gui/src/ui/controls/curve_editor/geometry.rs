@@ -282,6 +282,7 @@ fn enforce_endpoint_mode(
 }
 
 /// Recompute move-point drag output from one drag-origin snapshot.
+#[allow(clippy::too_many_arguments)]
 fn recompute_move_point_from_origin(
     origin_model: &crate::declarative::CurveModel,
     origin_index: usize,
@@ -352,6 +353,7 @@ fn move_point_with_push_through(
 }
 
 /// Move one segment by translating both endpoint points.
+#[allow(clippy::too_many_arguments)]
 fn move_segment_translated(
     model: &mut crate::declarative::CurveModel,
     segment_index: usize,

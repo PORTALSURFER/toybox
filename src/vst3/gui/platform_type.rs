@@ -46,7 +46,8 @@ pub unsafe fn platform_type_matches(requested: *const c_char, expected: FIDStrin
 /// VST3 `IPlugView::attached` callback.
 ///
 /// On Windows, this accepts `kPlatformTypeHWND` and maps the parent pointer to
-/// `RawWindowHandle::Win32`. On other platforms this currently returns `None`.
+/// `RawWindowHandle::Win32`. On macOS, this accepts `kPlatformTypeNSView` and
+/// maps the parent pointer to `RawWindowHandle::AppKit`.
 ///
 /// # Safety
 ///
@@ -63,17 +64,28 @@ pub unsafe fn parent_to_raw_window_handle(
 
     #[cfg(target_os = "windows")]
     {
-        if !platform_type_matches(platform, kPlatformTypeHWND) {
+        if !unsafe { platform_type_matches(platform, kPlatformTypeHWND) } {
             return None;
         }
 
         let mut handle = raw_window_handle::Win32WindowHandle::empty();
         handle.hwnd = parent;
         handle.hinstance = std::ptr::null_mut();
-        Some(raw_window_handle::RawWindowHandle::Win32(handle))
+        return Some(raw_window_handle::RawWindowHandle::Win32(handle));
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        if !unsafe { platform_type_matches(platform, kPlatformTypeNSView) } {
+            return None;
+        }
+
+        let mut handle = raw_window_handle::AppKitWindowHandle::empty();
+        handle.ns_view = parent;
+        Some(raw_window_handle::RawWindowHandle::AppKit(handle))
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
         let _ = platform;
         None

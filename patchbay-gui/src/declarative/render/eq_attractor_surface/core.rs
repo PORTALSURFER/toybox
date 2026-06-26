@@ -124,22 +124,20 @@ fn reduce_eq_surface_interaction(
         }
     }
 
-    if response.dragged {
-        if let Some(id) = runtime.active_drag_id {
-            if !runtime.drag_started
-                && let Some(origin) = runtime.drag_origin
-            {
-                let dx = response.raw_local_pointer.x - origin.x;
-                let dy = response.raw_local_pointer.y - origin.y;
-                let distance2 = dx * dx + dy * dy;
-                if distance2 >= EQ_SURFACE_DRAG_THRESHOLD_PX.pow(2) {
-                    runtime.drag_started = true;
-                }
+    if response.dragged && let Some(id) = runtime.active_drag_id {
+        if !runtime.drag_started
+            && let Some(origin) = runtime.drag_origin
+        {
+            let dx = response.raw_local_pointer.x - origin.x;
+            let dy = response.raw_local_pointer.y - origin.y;
+            let distance2 = dx * dx + dy * dy;
+            if distance2 >= EQ_SURFACE_DRAG_THRESHOLD_PX.pow(2) {
+                runtime.drag_started = true;
             }
-            if runtime.drag_started {
-                let (x, y) = eq_pointer_to_normalized(response.raw_local_pointer, geometry);
-                emitted.push(EqAttractorSurfaceAction::Move { id, x, y });
-            }
+        }
+        if runtime.drag_started {
+            let (x, y) = eq_pointer_to_normalized(response.raw_local_pointer, geometry);
+            emitted.push(EqAttractorSurfaceAction::Move { id, x, y });
         }
     }
 

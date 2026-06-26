@@ -75,7 +75,7 @@ pub fn curve_editor(key: impl Into<String>, model: CurveModel) -> Node {
 ///
 /// # Examples
 /// ```
-/// use patchbay_gui::declarative::{
+/// use patchbay_gui::{
 ///     EqAttractor, EqAttractorSurfaceModel, EqAttractorSurfaceStyle, eq_attractor_surface,
 /// };
 ///

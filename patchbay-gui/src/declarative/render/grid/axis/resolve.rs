@@ -154,7 +154,7 @@ fn distribute_remaining_tracks(plan: &GridAxisPlan<'_>, result: &mut [u32]) {
         .map(|index| axis_track(plan, index).fr_weight())
         .collect();
     let fr = distribute_weighted_u32(remainder, &weights);
-    for (value, added) in result.iter_mut().zip(fr.into_iter()) {
+    for (value, added) in result.iter_mut().zip(fr) {
         *value += added;
     }
 }

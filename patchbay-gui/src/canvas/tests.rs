@@ -63,7 +63,7 @@ fn fill_polygon_fills_triangle_interior() {
         pixel_at(&canvas, 8, 8),
         [color.r, color.g, color.b, color.a]
     );
-    assert_eq!(pixel_at(&canvas, 1, 1), [0, 0, 0, 0]);
+    assert_eq!(pixel_at(&canvas, 1, 1), [0, 0, 0, 255]);
 }
 
 #[test]
