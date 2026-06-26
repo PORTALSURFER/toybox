@@ -1,6 +1,6 @@
 # MEMORY
 
-Last Updated (UTC): 2026-03-29 14:42:26Z
+Last Updated (UTC): 2026-06-26 14:07:26Z
 
 ## Current State
 
@@ -13,15 +13,16 @@ Last Updated (UTC): 2026-03-29 14:42:26Z
 - Regression tests cover both node ordering and the curve command shape emitted in vector mode.
 - The curve editor now supports declarative beat-guide overlays, configurable snap targets, and held shortcut-key state so plugins can render brighter grids and temporarily invert snapping while a key is held.
 - Win32 shortcut handling now maps Ctrl-letter `WM_CHAR` control codes back to their ASCII letters for shortcut matching, and matched Ctrl shortcuts are swallowed while text edit is active instead of leaking characters into text boxes.
-- Local cargo validation is currently blocked by the private `mts-esp-rs` fetch failing during workspace dependency resolution.
+- macOS VST3 entry exports use the Steinberg/Ableton lowercase `bundleEntry` and `bundleExit` symbols.
+- Local preflight avoids Bash 4-only `mapfile` usage so it can run under macOS system Bash.
 
 ## Active Mission
 
-- Keep toybox ready for framework iteration while preserving readable attractor styling, smooth curve rendering, and reusable editor/input primitives for plugin UIs.
+- Keep toybox ready for framework iteration while preserving reusable VST3 host compatibility, readable attractor styling, smooth curve rendering, and reusable editor/input primitives for plugin UIs.
 
 ## Immediate Next Actions
 
-1. Land the paired Pump changes that consume the updated Ctrl-shortcut handling on `main`.
+1. Bump Pump to the Toybox revision that exports lowercase macOS VST3 bundle entrypoints.
 2. Keep `AGENTS.md`, `MEMORY.md`, and `docs/plans/*` aligned whenever mission or queue changes.
 3. Restore local Cargo access to the pinned `mts-esp-rs` dependency so `bash scripts/ci_local.sh` can run cleanly again.
 

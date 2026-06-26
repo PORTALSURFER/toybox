@@ -11,7 +11,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-mapfile -t plugin_files < <(rg -l "^[[:space:]]*impl[[:space:]]+Plugin[[:space:]]+for[[:space:]]+" . -g '*.rs')
+plugin_files=()
+while IFS= read -r file; do
+  plugin_files+=("$file")
+done < <(rg -l "^[[:space:]]*impl[[:space:]]+Plugin[[:space:]]+for[[:space:]]+" . -g '*.rs')
 
 if [[ ${#plugin_files[@]} -eq 0 ]]; then
   echo "No plugin declarations found; nothing to check."
