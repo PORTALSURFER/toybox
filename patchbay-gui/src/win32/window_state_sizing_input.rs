@@ -97,6 +97,7 @@ where
         let secondary = unsafe { GetAsyncKeyState(VK_RBUTTON.0 as i32) } < 0;
         let shift = unsafe { GetAsyncKeyState(VK_SHIFT.0 as i32) } < 0;
         let alt = unsafe { GetAsyncKeyState(VK_MENU.0 as i32) } < 0;
+        let command = unsafe { GetAsyncKeyState(VK_CONTROL.0 as i32) } < 0;
 
         // Do not synthesize press edges from global key state. Client-area
         // button-down messages provide precise intent; global polling can
@@ -112,6 +113,7 @@ where
         self.input.mouse_secondary_down = secondary;
         self.input.shift_down = shift;
         self.input.alt_down = alt;
+        self.input.command_down = command;
         self.last_mouse_down = primary;
         self.last_mouse_secondary_down = secondary;
     }

@@ -105,6 +105,8 @@ pub enum UiAction {
         raw_local_pointer: Point,
         /// Whether Alt was held during this interaction frame.
         alt_down: bool,
+        /// Whether the platform command key was held during this interaction frame.
+        command_down: bool,
         /// Whether Shift was held during this interaction frame.
         shift_down: bool,
     },

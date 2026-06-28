@@ -50,6 +50,8 @@ pub struct RegionResponse {
     pub raw_local_pointer: Point,
     /// Whether Alt was held during this frame.
     pub alt_down: bool,
+    /// Whether the platform command key was held during this frame.
+    pub command_down: bool,
     /// Whether Shift was held during this frame.
     pub shift_down: bool,
     /// The region is actively being dragged.
