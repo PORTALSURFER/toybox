@@ -37,6 +37,8 @@ pub struct InputState {
     pub shift_down: bool,
     /// Whether either Alt key is currently held.
     pub alt_down: bool,
+    /// Whether either platform command key is currently held.
+    pub command_down: bool,
     /// Scroll delta for this frame (positive = up).
     pub wheel_delta: f32,
     /// Key press captured this frame.
@@ -69,6 +71,7 @@ impl Default for InputState {
             mouse_secondary_released: false,
             shift_down: false,
             alt_down: false,
+            command_down: false,
             wheel_delta: 0.0,
             key_pressed: None,
             held_shortcut_keys: Vec::new(),
