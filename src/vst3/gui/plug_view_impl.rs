@@ -6,7 +6,12 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
             bool_to_tresult(unsafe { platform_type_matches(r#type, kPlatformTypeHWND) })
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "macos")]
+        {
+            bool_to_tresult(unsafe { platform_type_matches(r#type, kPlatformTypeNSView) })
+        }
+
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
         {
             let _ = r#type;
             kResultFalse

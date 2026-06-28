@@ -37,6 +37,28 @@ fn platform_type_matches_expected_constant() {
     assert!(unsafe { platform_type_matches(kPlatformTypeHWND, kPlatformTypeHWND) });
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn hosted_view_supports_nsview_platform_on_macos() {
+    let view = HostedVst3View::new(
+        MockHostedGui {
+            last_size: Mutex::new(None),
+            resize_request: std::sync::Mutex::new(None),
+        },
+        420,
+        240,
+    );
+
+    assert_eq!(
+        unsafe { view.isPlatformTypeSupported(kPlatformTypeNSView) },
+        kResultTrue
+    );
+    assert_eq!(
+        unsafe { view.isPlatformTypeSupported(kPlatformTypeHWND) },
+        kResultFalse
+    );
+}
+
 #[test]
 fn parent_handle_conversion_rejects_null_parent() {
     let converted = unsafe { parent_to_raw_window_handle(std::ptr::null_mut(), kPlatformTypeHWND) };
@@ -337,5 +359,19 @@ fn parent_handle_conversion_maps_hwnd() {
             assert_eq!(handle.hwnd, parent);
         }
         _ => panic!("expected Win32 raw window handle"),
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn parent_handle_conversion_maps_ns_view() {
+    let parent = std::ptr::dangling_mut::<std::ffi::c_void>();
+    let converted = unsafe { parent_to_raw_window_handle(parent, kPlatformTypeNSView) }
+        .expect("expected handle");
+    match converted {
+        raw_window_handle::RawWindowHandle::AppKit(handle) => {
+            assert_eq!(handle.ns_view, parent);
+        }
+        _ => panic!("expected AppKit raw window handle"),
     }
 }

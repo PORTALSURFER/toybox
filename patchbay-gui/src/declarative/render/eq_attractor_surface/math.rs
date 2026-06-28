@@ -192,6 +192,7 @@ fn eq_base_wave(position: f32, phase_token: f32, wave_cycles: f32, wave_depth: f
 }
 
 /// Sample one shared wave deformed by static attractor wells.
+#[allow(clippy::too_many_arguments)]
 fn eq_wave_sample(
     position: f32,
     phase_token: f32,
