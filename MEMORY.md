@@ -1,9 +1,14 @@
 # MEMORY
 
-Last Updated (UTC): 2026-06-26 14:07:26Z
+Last Updated (UTC): 2026-06-28 12:10:51Z
 
 ## Current State
 
+- Active user-requested task: make Ioskeley Mono the default Patchbay/Radiant vector text font and let Pump pick it up via a toybox revision bump.
+- Branch `codex/radiant-ioskeley-default-font` vendors Ioskeley Mono v2.0.0 `Normal/Unhinted/IoskeleyMono-Regular.ttf` under `assets/IoskeleyMono/` with OFL text and source notes.
+- `patchbay-gui` now prefers bundled Ioskeley Mono before the existing Sometype Mono fallback chain, while `PATCHBAY_GUI_FONT_PATH` still overrides bundled candidates.
+- Focused validation passed: `cargo fmt --all -- --check`, `cargo test -p patchbay-gui bundled_font_candidates_prefer_ioskeley_mono -- --nocapture`, `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk cargo clippy --all-targets --all-features -- -D warnings`, and `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk bash scripts/ci_local.sh`.
+- `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk cargo test --all` still aborts in the pre-existing `stress_deeply_nested_panel_tree_measures_without_failure` stack-overflow test; the local CI lane does not run that full workspace test command.
 - Handoff preflight runs through `bash scripts/run_agent_request.sh`.
 - Local validation runs through `bash scripts/ci_local.sh`.
 - The EQ attractor surface now renders each attractor as a single filled color circle on the visual/vector draw path.
@@ -22,7 +27,7 @@ Last Updated (UTC): 2026-06-26 14:07:26Z
 
 ## Immediate Next Actions
 
-1. Bump Pump to the Toybox revision that exports lowercase macOS VST3 bundle entrypoints.
+1. Commit/push the Ioskeley Mono toybox revision, then bump Pump to that Toybox commit so Pump uses the new default font.
 2. Keep `AGENTS.md`, `MEMORY.md`, and `docs/plans/*` aligned whenever mission or queue changes.
 3. Restore local Cargo access to the pinned `mts-esp-rs` dependency so `bash scripts/ci_local.sh` can run cleanly again.
 
