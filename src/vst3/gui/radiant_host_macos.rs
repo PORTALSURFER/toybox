@@ -734,7 +734,7 @@ fn dispatch_key_character(runtime: &mut dyn RadiantVst3Editor, ch: char) -> bool
         '\u{1b}' => runtime.cancel_text_entry(),
         '\r' | '\n' => runtime.dispatch_key_press(WidgetKey::Enter),
         '\u{8}' => runtime.dispatch_key_press(WidgetKey::Backspace),
-        '\u{7f}' => runtime.dispatch_key_press(WidgetKey::Delete),
+        '\u{7f}' => runtime.dispatch_key_press(WidgetKey::Backspace),
         NS_UP_ARROW_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::ArrowUp),
         NS_DOWN_ARROW_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::ArrowDown),
         NS_LEFT_ARROW_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::ArrowLeft),
@@ -1113,6 +1113,17 @@ mod tests {
                 WidgetKey::End,
             ]
         );
+        assert!(editor.characters.is_empty());
+    }
+
+    #[test]
+    fn appkit_delete_character_and_forward_delete_dispatch_distinct_keys() {
+        let mut editor = MockEditor::new();
+
+        assert!(dispatch_key_character(&mut editor, '\u{7f}'));
+        assert!(dispatch_key_character(&mut editor, NS_DELETE_FUNCTION_KEY));
+
+        assert_eq!(editor.keys, vec![WidgetKey::Backspace, WidgetKey::Delete]);
         assert!(editor.characters.is_empty());
     }
 
