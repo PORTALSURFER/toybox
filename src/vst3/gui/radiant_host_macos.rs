@@ -279,11 +279,23 @@ impl Vst3HostedGui for RadiantVst3HostedGui {
                 return false;
             };
             let handled = dispatch_vst3_key_down(runtime, key, key_code, modifiers);
-            if handled {
-                let _: () = msg_send![root_view.as_ptr(), setNeedsDisplay: YES];
-            }
+            let _: () = msg_send![root_view.as_ptr(), setNeedsDisplay: YES];
             handled
         }
+    }
+
+    fn on_key_up(&self, _key: u16, _key_code: i16, _modifiers: i16) -> bool {
+        let Some(root_view) = self.root_view else {
+            return false;
+        };
+        unsafe {
+            let Some(runtime) = runtime_mut(root_view.as_ptr()) else {
+                return false;
+            };
+            dispatch_vst3_key_up(runtime);
+            let _: () = msg_send![root_view.as_ptr(), setNeedsDisplay: YES];
+        }
+        false
     }
 }
 
@@ -776,6 +788,7 @@ fn dispatch_vst3_key_down(
     };
 
     let modifiers = vst3_pointer_modifiers(modifiers);
+    runtime.dispatch_event(Event::pointer_modifiers_changed(modifiers));
     if modifiers.command {
         return false;
     }
@@ -815,6 +828,10 @@ fn dispatch_vst3_key_down(
         return false;
     };
     dispatch_key_text(runtime, &character.to_string(), modifiers)
+}
+
+fn dispatch_vst3_key_up(runtime: &mut dyn RadiantVst3Editor) {
+    runtime.dispatch_event(Event::pointer_modifiers_changed(PointerModifiers::default()));
 }
 
 fn vst3_pointer_modifiers(modifiers: i16) -> PointerModifiers {
@@ -1172,6 +1189,36 @@ mod tests {
         ));
         assert!(editor.characters.is_empty());
         assert!(editor.keys.is_empty());
+    }
+
+    #[test]
+    fn vst3_key_callbacks_set_modifiers_before_key_down_and_clear_on_key_up() {
+        use toybox_vst3_ffi::Steinberg::KeyModifier_::{kAlternateKey, kShiftKey};
+        use toybox_vst3_ffi::Steinberg::VirtualKeyCodes_::KEY_LEFT;
+
+        let mut editor = MockEditor::new();
+        let modifiers = (kShiftKey | kAlternateKey) as i16;
+
+        assert!(dispatch_vst3_key_down(
+            &mut editor,
+            0,
+            KEY_LEFT as i16,
+            modifiers
+        ));
+        dispatch_vst3_key_up(&mut editor);
+
+        assert_eq!(editor.keys, vec![WidgetKey::ArrowLeft]);
+        assert_eq!(
+            editor.events,
+            vec![
+                Event::pointer_modifiers_changed(PointerModifiers {
+                    shift: true,
+                    alt: true,
+                    command: false,
+                }),
+                Event::pointer_modifiers_changed(PointerModifiers::default()),
+            ]
+        );
     }
 
     #[test]
