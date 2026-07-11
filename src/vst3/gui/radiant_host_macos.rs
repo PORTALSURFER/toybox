@@ -98,6 +98,7 @@ unsafe impl Encode for NSRect {
 
 struct RedrawDriver {
     stop: Arc<AtomicBool>,
+    tick_pending: Arc<AtomicBool>,
     handle: Option<JoinHandle<()>>,
 }
 
@@ -305,10 +306,7 @@ unsafe fn create_editor_view(
     editor.resize(width, height);
     (*root_view.as_ptr()).set_ivar("runtime", Box::into_raw(Box::new(editor)) as usize);
     (*root_view.as_ptr()).set_ivar("renderer", Box::into_raw(Box::new(renderer)) as usize);
-    (*root_view.as_ptr()).set_ivar(
-        "redraw_driver",
-        start_redraw_driver(root_view.as_ptr()) as usize,
-    );
+    start_redraw_driver(root_view.as_ptr());
     let _: () = msg_send![root_view.as_ptr(), updateTrackingAreas];
     Ok(root_view)
 }
@@ -611,6 +609,7 @@ extern "C" fn key_down(this: &Object, _cmd: Sel, event: *mut Object) {
 
 extern "C" fn playhead_redraw_tick(this: &Object, _cmd: Sel, _timer: *mut Object) {
     unsafe {
+        complete_pending_redraw_tick(this);
         if runtime_mut(this)
             .map(|runtime| runtime.needs_realtime_redraw())
             .unwrap_or(false)
@@ -836,25 +835,35 @@ unsafe fn event_position(this: &Object, event: *mut Object) -> Point {
     Point::new(local_point.x as f32, local_point.y as f32)
 }
 
-unsafe fn start_redraw_driver(view: *mut Object) -> *mut RedrawDriver {
+unsafe fn start_redraw_driver(view: *mut Object) {
     if view.is_null() {
-        return ptr::null_mut();
+        return;
     }
     let retained_view: *mut Object = msg_send![view, retain];
     let view_addr = retained_view as usize;
     let stop = Arc::new(AtomicBool::new(false));
+    let tick_pending = Arc::new(AtomicBool::new(false));
+    let driver = Box::into_raw(Box::new(RedrawDriver {
+        stop: Arc::clone(&stop),
+        tick_pending: Arc::clone(&tick_pending),
+        handle: None,
+    }));
+    (*view).set_ivar("redraw_driver", driver as usize);
     let stop_for_thread = Arc::clone(&stop);
+    let tick_pending_for_thread = Arc::clone(&tick_pending);
     let handle = thread::spawn(move || {
         while !stop_for_thread.load(Ordering::Acquire) {
-            let view = view_addr as *mut Object;
-            unsafe {
-                let _: () = msg_send![
-                    view,
-                    performSelectorOnMainThread: sel!(playheadRedrawTick:)
-                    withObject: ptr::null_mut::<Object>()
-                    waitUntilDone: NO
-                ];
-                wake_main_run_loop();
+            if claim_redraw_tick(&tick_pending_for_thread) {
+                let view = view_addr as *mut Object;
+                unsafe {
+                    let _: () = msg_send![
+                        view,
+                        performSelectorOnMainThread: sel!(playheadRedrawTick:)
+                        withObject: ptr::null_mut::<Object>()
+                        waitUntilDone: NO
+                    ];
+                    wake_main_run_loop();
+                }
             }
             thread::sleep(PLAYHEAD_REDRAW_INTERVAL);
         }
@@ -863,10 +872,24 @@ unsafe fn start_redraw_driver(view: *mut Object) -> *mut RedrawDriver {
             let _: () = msg_send![view, release];
         }
     });
-    Box::into_raw(Box::new(RedrawDriver {
-        stop,
-        handle: Some(handle),
-    }))
+    (*driver).handle = Some(handle);
+}
+
+fn claim_redraw_tick(tick_pending: &AtomicBool) -> bool {
+    tick_pending
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+}
+
+fn complete_redraw_tick(tick_pending: &AtomicBool) {
+    tick_pending.store(false, Ordering::Release);
+}
+
+unsafe fn complete_pending_redraw_tick(view: &Object) {
+    let driver = *view.get_ivar::<usize>("redraw_driver") as *const RedrawDriver;
+    if let Some(driver) = driver.as_ref() {
+        complete_redraw_tick(&driver.tick_pending);
+    }
 }
 
 unsafe fn wake_main_run_loop() {
@@ -1163,6 +1186,17 @@ mod tests {
 
         assert_eq!(gui.last_size(), Some((640, 480)));
         assert_eq!(gui.initial_open_size(), (640, 480));
+    }
+
+    #[test]
+    fn redraw_tick_claims_are_coalesced_until_main_thread_completion() {
+        let tick_pending = AtomicBool::new(false);
+
+        assert!(claim_redraw_tick(&tick_pending));
+        assert!(!claim_redraw_tick(&tick_pending));
+
+        complete_redraw_tick(&tick_pending);
+        assert!(claim_redraw_tick(&tick_pending));
     }
 
     #[test]
