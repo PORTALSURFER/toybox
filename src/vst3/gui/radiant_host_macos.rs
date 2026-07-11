@@ -541,17 +541,18 @@ extern "C" fn key_down(this: &Object, _cmd: Sel, event: *mut Object) {
         if event.is_null() {
             return;
         }
-        let Some(runtime) = runtime_mut(this) else {
-            return;
-        };
         let mut handled = false;
-        if let Some(text) = event_characters(event) {
+        if let Some(runtime) = runtime_mut(this)
+            && let Some(text) = event_characters(event)
+        {
             for ch in text.chars() {
                 handled |= dispatch_key_character(runtime, ch);
             }
         }
         if handled {
             let _: () = msg_send![this, setNeedsDisplay: YES];
+        } else {
+            let _: () = msg_send![super(this, class!(NSView)), keyDown: event];
         }
     }
 }

@@ -30,4 +30,6 @@ Vello renderer for plugin GUIs, so plugins contain no native paint replay code.
   embedded Vello, detaches, and exits cleanly.
 - The smoke host asserts that the editor receives its logical size before the
   first paint plan is requested.
+- Key events that Radiant does not consume continue through AppKit's responder
+  chain instead of being swallowed by the hosted view.
 - Remaining: Pump migration and real-host VST3 verification.
