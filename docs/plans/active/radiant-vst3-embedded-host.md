@@ -32,4 +32,6 @@ Vello renderer for plugin GUIs, so plugins contain no native paint replay code.
   first paint plan is requested.
 - Key events that Radiant does not consume continue through AppKit's responder
   chain instead of being swallowed by the hosted view.
+- Closing and reopening a hosted view preserves the last host-provided logical
+  size while rebuilding only the native resources.
 - Remaining: Pump migration and real-host VST3 verification.

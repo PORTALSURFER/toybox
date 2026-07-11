@@ -186,7 +186,6 @@ impl RadiantVst3HostedGui {
                 let _: () = msg_send![view, release];
             }
         }
-        self.size.set(None);
     }
 
     fn hosted_size(&self) -> Option<(u32, u32)> {
@@ -870,6 +869,21 @@ mod tests {
         );
 
         assert_eq!(gui.last_size(), Some((420, 282)));
+    }
+
+    #[test]
+    fn hosted_gui_preserves_last_host_size_after_close() {
+        let mut gui = RadiantVst3HostedGui::new(
+            "ToyboxRadiantVst3EditorPreservedSizeTest",
+            MockEditor::new(),
+            420,
+            282,
+        );
+
+        gui.request_resize(640, 480);
+        gui.close();
+
+        assert_eq!(gui.last_size(), Some((640, 480)));
     }
 
     #[test]
