@@ -433,6 +433,10 @@ fn editor_view_class(class_name: &'static str) -> *const Class {
                 right_mouse_down as extern "C" fn(&Object, Sel, *mut Object),
             );
             decl.add_method(
+                sel!(rightMouseDragged:),
+                right_mouse_dragged as extern "C" fn(&Object, Sel, *mut Object),
+            );
+            decl.add_method(
                 sel!(rightMouseUp:),
                 right_mouse_up as extern "C" fn(&Object, Sel, *mut Object),
             );
@@ -551,6 +555,10 @@ extern "C" fn mouse_up(this: &Object, _cmd: Sel, event: *mut Object) {
 
 extern "C" fn right_mouse_down(this: &Object, _cmd: Sel, event: *mut Object) {
     dispatch_mouse_event(this, event, PointerButton::Secondary, MouseEventKind::Press);
+}
+
+extern "C" fn right_mouse_dragged(this: &Object, _cmd: Sel, event: *mut Object) {
+    dispatch_mouse_event(this, event, PointerButton::Secondary, MouseEventKind::Move);
 }
 
 extern "C" fn right_mouse_up(this: &Object, _cmd: Sel, event: *mut Object) {
@@ -1088,6 +1096,8 @@ mod tests {
 
             let responds_mouse_moved: BOOL =
                 msg_send![view.as_ptr(), respondsToSelector: sel!(mouseMoved:)];
+            let responds_right_mouse_dragged: BOOL =
+                msg_send![view.as_ptr(), respondsToSelector: sel!(rightMouseDragged:)];
             let responds_flags_changed: BOOL =
                 msg_send![view.as_ptr(), respondsToSelector: sel!(flagsChanged:)];
             let responds_key_down: BOOL =
@@ -1095,6 +1105,7 @@ mod tests {
             let responds_redraw_tick: BOOL =
                 msg_send![view.as_ptr(), respondsToSelector: sel!(playheadRedrawTick:)];
             assert_eq!(responds_mouse_moved, YES);
+            assert_eq!(responds_right_mouse_dragged, YES);
             assert_eq!(responds_flags_changed, YES);
             assert_eq!(responds_key_down, YES);
             assert_eq!(responds_redraw_tick, YES);
