@@ -658,8 +658,7 @@ fn dispatch_mouse_event(
                 ));
             }
             MouseEventKind::Move => {
-                runtime.dispatch_event(Event::pointer_move(position));
-                runtime.dispatch_event(Event::pointer_modifiers_changed(modifiers));
+                dispatch_pointer_move(runtime, position, modifiers);
             }
             MouseEventKind::Release => {
                 runtime.dispatch_event(Event::pointer_modifiers_changed(modifiers));
@@ -668,6 +667,15 @@ fn dispatch_mouse_event(
         }
         let _: () = msg_send![this, setNeedsDisplay: YES];
     }
+}
+
+fn dispatch_pointer_move(
+    runtime: &mut dyn RadiantVst3Editor,
+    position: Point,
+    modifiers: PointerModifiers,
+) {
+    runtime.dispatch_event(Event::pointer_modifiers_changed(modifiers));
+    runtime.dispatch_event(Event::pointer_move(position));
 }
 
 fn pointer_press_event_for_click_count(
@@ -929,6 +937,7 @@ mod tests {
 
     struct MockEditor {
         plan: SurfacePaintPlan,
+        events: Vec<Event>,
         characters: Vec<char>,
         keys: Vec<WidgetKey>,
         canceled: bool,
@@ -938,6 +947,7 @@ mod tests {
         fn new() -> Self {
             Self {
                 plan: SurfacePaintPlan::empty(&ThemeTokens::default()),
+                events: Vec::new(),
                 characters: Vec::new(),
                 keys: Vec::new(),
                 canceled: false,
@@ -948,7 +958,9 @@ mod tests {
     impl RadiantVst3Editor for MockEditor {
         fn resize(&mut self, _width: u32, _height: u32) {}
 
-        fn dispatch_event(&mut self, _event: Event) {}
+        fn dispatch_event(&mut self, event: Event) {
+            self.events.push(event);
+        }
 
         fn paint_plan(&mut self) -> &SurfacePaintPlan {
             &self.plan
@@ -990,6 +1002,26 @@ mod tests {
             pointer_press_event_for_click_count(position, PointerButton::Primary, modifiers, 2),
             Event::PointerDoubleClick { position: clicked, .. } if clicked == position
         ));
+    }
+
+    #[test]
+    fn pointer_move_dispatches_modifiers_before_position() {
+        let mut editor = MockEditor::new();
+        let position = Point::new(24.0, 48.0);
+        let modifiers = PointerModifiers {
+            shift: true,
+            ..PointerModifiers::default()
+        };
+
+        dispatch_pointer_move(&mut editor, position, modifiers);
+
+        assert_eq!(
+            editor.events,
+            vec![
+                Event::pointer_modifiers_changed(modifiers),
+                Event::pointer_move(position),
+            ]
+        );
     }
 
     #[test]
