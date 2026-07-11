@@ -43,4 +43,5 @@ Vello renderer for plugin GUIs, so plugins contain no native paint replay code.
 - Embedded validation shares the scene encoder's nested clip suppression rules.
 - Hosted views accept `NativeTextOptions` and forward portable font policy to
   Radiant's embedded text renderer.
+- Trait-based embedded renders use Radiant's monotonic animation clock.
 - Remaining: Pump migration and real-host VST3 verification.
