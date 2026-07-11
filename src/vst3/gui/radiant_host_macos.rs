@@ -35,6 +35,13 @@ use super::{Vst3HostedGui, vst3_key_down_to_input_char};
 const NSEVENT_MODIFIER_FLAG_SHIFT: u64 = 1 << 17;
 const NSEVENT_MODIFIER_FLAG_OPTION: u64 = 1 << 19;
 const NSEVENT_MODIFIER_FLAG_COMMAND: u64 = 1 << 20;
+const NS_UP_ARROW_FUNCTION_KEY: char = '\u{f700}';
+const NS_DOWN_ARROW_FUNCTION_KEY: char = '\u{f701}';
+const NS_LEFT_ARROW_FUNCTION_KEY: char = '\u{f702}';
+const NS_RIGHT_ARROW_FUNCTION_KEY: char = '\u{f703}';
+const NS_DELETE_FUNCTION_KEY: char = '\u{f728}';
+const NS_HOME_FUNCTION_KEY: char = '\u{f729}';
+const NS_END_FUNCTION_KEY: char = '\u{f72b}';
 const NSTRACKING_MOUSE_ENTERED_AND_EXITED: usize = 0x01;
 const NSTRACKING_MOUSE_MOVED: usize = 0x02;
 const NSTRACKING_ACTIVE_ALWAYS: usize = 0x80;
@@ -729,6 +736,13 @@ fn dispatch_key_character(runtime: &mut dyn RadiantVst3Editor, ch: char) -> bool
         '\r' | '\n' => runtime.dispatch_key_press(WidgetKey::Enter),
         '\u{8}' => runtime.dispatch_key_press(WidgetKey::Backspace),
         '\u{7f}' => runtime.dispatch_key_press(WidgetKey::Delete),
+        NS_UP_ARROW_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::ArrowUp),
+        NS_DOWN_ARROW_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::ArrowDown),
+        NS_LEFT_ARROW_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::ArrowLeft),
+        NS_RIGHT_ARROW_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::ArrowRight),
+        NS_DELETE_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::Delete),
+        NS_HOME_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::Home),
+        NS_END_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::End),
         _ if !ch.is_control() => runtime.dispatch_character(ch),
         _ => false,
     }
@@ -1046,6 +1060,37 @@ mod tests {
 
         assert!(dispatch_key_text(&mut editor, "å", modifiers));
         assert_eq!(editor.characters, vec!['å']);
+    }
+
+    #[test]
+    fn appkit_function_keys_dispatch_semantic_widget_keys() {
+        let mut editor = MockEditor::new();
+
+        for character in [
+            NS_UP_ARROW_FUNCTION_KEY,
+            NS_DOWN_ARROW_FUNCTION_KEY,
+            NS_LEFT_ARROW_FUNCTION_KEY,
+            NS_RIGHT_ARROW_FUNCTION_KEY,
+            NS_DELETE_FUNCTION_KEY,
+            NS_HOME_FUNCTION_KEY,
+            NS_END_FUNCTION_KEY,
+        ] {
+            assert!(dispatch_key_character(&mut editor, character));
+        }
+
+        assert_eq!(
+            editor.keys,
+            vec![
+                WidgetKey::ArrowUp,
+                WidgetKey::ArrowDown,
+                WidgetKey::ArrowLeft,
+                WidgetKey::ArrowRight,
+                WidgetKey::Delete,
+                WidgetKey::Home,
+                WidgetKey::End,
+            ]
+        );
+        assert!(editor.characters.is_empty());
     }
 
     #[test]
