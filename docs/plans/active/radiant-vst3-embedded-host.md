@@ -26,4 +26,6 @@ Vello renderer for plugin GUIs, so plugins contain no native paint replay code.
 - Radiant's host-driven embedded Vello renderer is pinned and consumed directly.
 - The generic editor contract and macOS hosted view compile with focused tests passing.
 - Toybox's focused tests, feature-specific clippy lane, and normal local CI pass.
+- A macOS main-thread smoke host attaches, draws a gradient `FillPath` through
+  embedded Vello, detaches, and exits cleanly.
 - Remaining: Pump migration and real-host VST3 verification.
