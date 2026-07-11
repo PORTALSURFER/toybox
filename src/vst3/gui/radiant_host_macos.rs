@@ -35,6 +35,9 @@ use super::{Vst3HostedGui, vst3_key_down_to_input_char};
 const NSEVENT_MODIFIER_FLAG_SHIFT: u64 = 1 << 17;
 const NSEVENT_MODIFIER_FLAG_OPTION: u64 = 1 << 19;
 const NSEVENT_MODIFIER_FLAG_COMMAND: u64 = 1 << 20;
+const NS_ENTER_CHARACTER: char = '\u{3}';
+const NS_TAB_CHARACTER: char = '\u{9}';
+const NS_BACK_TAB_CHARACTER: char = '\u{19}';
 const NS_UP_ARROW_FUNCTION_KEY: char = '\u{f700}';
 const NS_DOWN_ARROW_FUNCTION_KEY: char = '\u{f701}';
 const NS_LEFT_ARROW_FUNCTION_KEY: char = '\u{f702}';
@@ -732,7 +735,8 @@ unsafe fn make_first_responder(this: &Object) {
 fn dispatch_key_character(runtime: &mut dyn RadiantVst3Editor, ch: char) -> bool {
     match ch {
         '\u{1b}' => runtime.cancel_text_entry(),
-        '\r' | '\n' => runtime.dispatch_key_press(WidgetKey::Enter),
+        NS_ENTER_CHARACTER | '\r' | '\n' => runtime.dispatch_key_press(WidgetKey::Enter),
+        NS_TAB_CHARACTER | NS_BACK_TAB_CHARACTER => runtime.dispatch_key_press(WidgetKey::Tab),
         '\u{8}' => runtime.dispatch_key_press(WidgetKey::Backspace),
         '\u{7f}' => runtime.dispatch_key_press(WidgetKey::Backspace),
         NS_UP_ARROW_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::ArrowUp),
@@ -1124,6 +1128,21 @@ mod tests {
         assert!(dispatch_key_character(&mut editor, NS_DELETE_FUNCTION_KEY));
 
         assert_eq!(editor.keys, vec![WidgetKey::Backspace, WidgetKey::Delete]);
+        assert!(editor.characters.is_empty());
+    }
+
+    #[test]
+    fn appkit_tab_backtab_and_keypad_enter_dispatch_semantic_keys() {
+        let mut editor = MockEditor::new();
+
+        for character in [NS_TAB_CHARACTER, NS_BACK_TAB_CHARACTER, NS_ENTER_CHARACTER] {
+            assert!(dispatch_key_character(&mut editor, character));
+        }
+
+        assert_eq!(
+            editor.keys,
+            vec![WidgetKey::Tab, WidgetKey::Tab, WidgetKey::Enter]
+        );
         assert!(editor.characters.is_empty());
     }
 
