@@ -1,13 +1,14 @@
 # MEMORY
 
-Last Updated (UTC): 2026-07-11 12:54:39Z
+Last Updated (UTC): 2026-07-11 18:28:00Z
 
 ## Current State
 
 - Active user-requested task: make Toybox own the reusable macOS VST3 hosted-view lifecycle while Radiant owns all GUI rendering, then migrate Pump off its plugin-local Cocoa renderer.
 - Branch `codex/radiant-vst3-embedded-host` adds the opt-in `radiant-vst3` feature and a generic `RadiantVst3Editor` / `RadiantVst3HostedGui` contract.
-- The hosted view forwards AppKit lifecycle, input, resize, and redraw events to a declarative editor and renders its `SurfacePaintPlan` only through Radiant's embedded Vello renderer pinned at `4d526a93a5724d153537efb3ff2ad0cb686b9f85`.
+- The hosted view forwards AppKit lifecycle, input, resize, and redraw events to a declarative editor and renders its `SurfacePaintPlan` only through Radiant's embedded Vello renderer pinned at `af6387df13d699a70acc33035c38316ca95261ad`.
 - Radiant now acquires and recovers the presentation surface before rendering, so a Lost/Outdated resize cannot replace the target after the frame was drawn.
+- Radiant embedded validation shares the canonical encoder's clip state, so unsupported surfaces inside suppressed clips are ignored consistently.
 - Validation passes: focused `radiant_host_macos` tests, `cargo clippy --features radiant-vst3 --all-targets -- -D warnings`, normal local CI, and the main-thread `radiant-vst3-host-smoke` executable rendering a gradient `FillPath` through embedded Vello.
 - The hosted-view lifecycle initializes `RadiantVst3Editor::resize` after renderer creation and before storing the runtime, so the first `drawRect:` always sees the declared logical size.
 - Unhandled AppKit `keyDown:` events are forwarded to `NSView`'s superclass so host shortcuts remain available while the plugin view is focused.
