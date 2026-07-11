@@ -1,6 +1,6 @@
 # MEMORY
 
-Last Updated (UTC): 2026-07-11 23:10:16Z
+Last Updated (UTC): 2026-07-11 23:15:47Z
 
 ## Current State
 
@@ -19,6 +19,7 @@ Last Updated (UTC): 2026-07-11 23:10:16Z
 - GitHub Actions configures the existing secret-backed private-repository URL rewrite before Cargo runs on Linux and Windows, allowing the pinned private `mts-esp-rs` dependency to resolve.
 - Linux CI installs ripgrep so enforcement scripts run for real and fail closed if `rg` is unavailable; its general clippy lane excludes SDK-dependent VST3 workspace members and leaves them to the explicit optional VST3 lane.
 - The intentionally deep 300-panel layout stress test uses an explicit 8 MiB test thread, preserving the extreme-depth assertion without overflowing Windows or macOS test-harness stacks.
+- Win32 aspect-ratio resize tests now reflect the growth-only minimum-size contract and upward pixel rounding, covering `534x300` for 16:9 and `667x500` for 4:3 host-client sizing.
 - Active user-requested task: make Ioskeley Mono the default Patchbay/Radiant vector text font and let Pump pick it up via a toybox revision bump.
 - Branch `codex/radiant-ioskeley-default-font` vendors Ioskeley Mono v2.0.0 `Normal/Unhinted/IoskeleyMono-Regular.ttf` under `assets/IoskeleyMono/` with OFL text and source notes.
 - `patchbay-gui` now prefers bundled Ioskeley Mono before the existing Sometype Mono fallback chain, while `PATCHBAY_GUI_FONT_PATH` still overrides bundled candidates.
