@@ -38,4 +38,6 @@ Vello renderer for plugin GUIs, so plugins contain no native paint replay code.
   shortcuts bypass Radiant and continue through the host responder chain.
 - Linux and Windows CI configure the repository's private-dependency token
   before Cargo fetches the pinned `mts-esp-rs` revision.
+- The pinned Radiant renderer recovers its presentation surface before scene
+  rendering so recovery frames use the current target view.
 - Remaining: Pump migration and real-host VST3 verification.
