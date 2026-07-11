@@ -170,7 +170,7 @@ impl RadiantVst3HostedGui {
         let Some(editor) = self.editor.take() else {
             return false;
         };
-        let (width, height) = self.default_size;
+        let (width, height) = self.initial_open_size();
         let root_view = match unsafe {
             create_editor_view(
                 parent,
@@ -207,6 +207,10 @@ impl RadiantVst3HostedGui {
 
     fn hosted_size(&self) -> Option<(u32, u32)> {
         self.size.get().or(Some(self.default_size))
+    }
+
+    fn initial_open_size(&self) -> (u32, u32) {
+        self.hosted_size().unwrap_or(self.default_size)
     }
 
     /// Apply a host-driven resize to the hosted child view.
@@ -959,6 +963,7 @@ mod tests {
         gui.close();
 
         assert_eq!(gui.last_size(), Some((640, 480)));
+        assert_eq!(gui.initial_open_size(), (640, 480));
     }
 
     #[test]
