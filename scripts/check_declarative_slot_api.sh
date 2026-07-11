@@ -7,6 +7,11 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${repo_root}"
 
+if ! command -v rg >/dev/null 2>&1; then
+  echo "[slot-api] ripgrep (rg) is required" >&2
+  exit 1
+fi
+
 forbidden_regex='row_sections|column_sections|weighted_section_lengths|weighted_section|fraction_section|fill_section|GridKind::Section(Column|Row)'
 source_roots=(
   "patchbay-gui/src/declarative"

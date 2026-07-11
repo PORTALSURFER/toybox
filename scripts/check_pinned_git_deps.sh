@@ -8,6 +8,11 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${repo_root}"
 
+if ! command -v rg >/dev/null 2>&1; then
+  echo "[pinned-git-deps] ripgrep (rg) is required" >&2
+  exit 1
+fi
+
 violations=0
 
 while IFS= read -r manifest; do

@@ -11,6 +11,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+if ! command -v rg >/dev/null 2>&1; then
+  echo "[state-check] ripgrep (rg) is required" >&2
+  exit 1
+fi
+
 plugin_files=()
 while IFS= read -r file; do
   plugin_files+=("$file")

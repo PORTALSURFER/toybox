@@ -44,4 +44,6 @@ Vello renderer for plugin GUIs, so plugins contain no native paint replay code.
 - Hosted views accept `NativeTextOptions` and forward portable font policy to
   Radiant's embedded text renderer.
 - Trait-based embedded renders use Radiant's monotonic animation clock.
+- CI authenticates private dependencies, installs required enforcement tooling,
+  and keeps SDK-dependent VST3 crates out of the SDK-optional general lint lane.
 - Remaining: Pump migration and real-host VST3 verification.

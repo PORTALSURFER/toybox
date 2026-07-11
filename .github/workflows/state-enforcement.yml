@@ -27,6 +27,9 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install --yes ripgrep
+
       - name: Validate pinned git dependencies
         run: ./scripts/check_pinned_git_deps.sh
 
@@ -43,7 +46,11 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        run: cargo clippy --workspace --all-targets --features gui -- -D warnings
+        run: >-
+          cargo clippy --workspace --all-targets --features gui
+          --exclude toybox-vst3-ffi
+          --exclude toybox-minimal-vst3
+          -- -D warnings
 
       - name: Lint toybox VST3 feature (SDK optional)
         if: ${{ vars.VST3_SDK_DIR != '' }}
