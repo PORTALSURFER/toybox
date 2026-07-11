@@ -23,6 +23,8 @@ use toybox::vst3::gui::{RadiantVst3Editor, RadiantVst3HostedGui, Vst3HostedGui};
 struct SmokeEditor {
     /// Gradient path presented by the hosted surface.
     plan: SurfacePaintPlan,
+    /// Last logical size supplied by the host lifecycle.
+    size: Option<(u32, u32)>,
 }
 
 #[cfg(all(target_os = "macos", feature = "radiant-vst3"))]
@@ -50,17 +52,25 @@ impl SmokeEditor {
                 clear_color: ThemeTokens::default().bg_primary,
                 primitives: vec![PaintPrimitive::FillPath(fill)],
             },
+            size: None,
         }
     }
 }
 
 #[cfg(all(target_os = "macos", feature = "radiant-vst3"))]
 impl RadiantVst3Editor for SmokeEditor {
-    fn resize(&mut self, _width: u32, _height: u32) {}
+    fn resize(&mut self, width: u32, height: u32) {
+        self.size = Some((width, height));
+    }
 
     fn dispatch_event(&mut self, _event: Event) {}
 
     fn paint_plan(&mut self) -> &SurfacePaintPlan {
+        assert_eq!(
+            self.size,
+            Some((420, 282)),
+            "editor must be sized before its first paint"
+        );
         &self.plan
     }
 

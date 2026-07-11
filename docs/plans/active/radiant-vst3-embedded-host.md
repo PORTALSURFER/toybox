@@ -28,4 +28,6 @@ Vello renderer for plugin GUIs, so plugins contain no native paint replay code.
 - Toybox's focused tests, feature-specific clippy lane, and normal local CI pass.
 - A macOS main-thread smoke host attaches, draws a gradient `FillPath` through
   embedded Vello, detaches, and exits cleanly.
+- The smoke host asserts that the editor receives its logical size before the
+  first paint plan is requested.
 - Remaining: Pump migration and real-host VST3 verification.

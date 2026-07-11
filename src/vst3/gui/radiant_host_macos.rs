@@ -243,7 +243,7 @@ impl Vst3HostedGui for RadiantVst3HostedGui {
 unsafe fn create_editor_view(
     parent: NonNull<c_void>,
     class_name: &'static str,
-    editor: Box<dyn RadiantVst3Editor>,
+    mut editor: Box<dyn RadiantVst3Editor>,
     width: u32,
     height: u32,
 ) -> Result<NonNull<Object>, Box<dyn RadiantVst3Editor>> {
@@ -258,6 +258,7 @@ unsafe fn create_editor_view(
         let _: () = msg_send![root_view.as_ptr(), release];
         return Err(editor);
     };
+    editor.resize(width, height);
     (*root_view.as_ptr()).set_ivar("runtime", Box::into_raw(Box::new(editor)) as usize);
     (*root_view.as_ptr()).set_ivar("renderer", Box::into_raw(Box::new(renderer)) as usize);
     (*root_view.as_ptr()).set_ivar(
