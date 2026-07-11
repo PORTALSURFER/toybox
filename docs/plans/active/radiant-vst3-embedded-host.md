@@ -36,4 +36,6 @@ Vello renderer for plugin GUIs, so plugins contain no native paint replay code.
   size while rebuilding only the native resources.
 - Text input preserves AppKit's modifier-produced characters, while Command
   shortcuts bypass Radiant and continue through the host responder chain.
+- Linux and Windows CI configure the repository's private-dependency token
+  before Cargo fetches the pinned `mts-esp-rs` revision.
 - Remaining: Pump migration and real-host VST3 verification.
