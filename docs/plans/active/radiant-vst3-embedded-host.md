@@ -41,4 +41,6 @@ Vello renderer for plugin GUIs, so plugins contain no native paint replay code.
 - The pinned Radiant renderer recovers its presentation surface before scene
   rendering so recovery frames use the current target view.
 - Embedded validation shares the scene encoder's nested clip suppression rules.
+- Hosted views accept `NativeTextOptions` and forward portable font policy to
+  Radiant's embedded text renderer.
 - Remaining: Pump migration and real-host VST3 verification.

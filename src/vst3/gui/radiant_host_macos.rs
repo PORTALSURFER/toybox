@@ -20,7 +20,8 @@ use objc::runtime::{BOOL, Class, NO, Object, Sel, YES};
 use objc::{Encode, Encoding, class, msg_send, sel, sel_impl};
 use radiant::gui::types::{Point, Vector2};
 use radiant::runtime::{
-    EmbeddedVelloRenderer, EmbeddedVelloSurfaceHandle, Event, Renderer, SurfacePaintPlan,
+    EmbeddedVelloRenderer, EmbeddedVelloSurfaceHandle, Event, NativeTextOptions, Renderer,
+    SurfacePaintPlan,
 };
 use radiant::theme::DpiScale;
 use radiant::widgets::{PointerButton, PointerModifiers, WidgetKey};
@@ -125,6 +126,7 @@ pub struct RadiantVst3HostedGui {
     default_size: (u32, u32),
     class_name: &'static str,
     editor: Option<Box<dyn RadiantVst3Editor>>,
+    text_options: NativeTextOptions,
 }
 
 impl RadiantVst3HostedGui {
@@ -142,7 +144,14 @@ impl RadiantVst3HostedGui {
             default_size: (width.max(1), height.max(1)),
             class_name,
             editor: Some(Box::new(editor)),
+            text_options: NativeTextOptions::default(),
         }
+    }
+
+    /// Configure portable embedded fonts or host-approved font paths for Radiant text rendering.
+    pub fn with_text_options(mut self, text_options: NativeTextOptions) -> Self {
+        self.text_options = text_options;
+        self
     }
 
     fn set_parent(&mut self, parent: raw_window_handle::RawWindowHandle) {
@@ -162,14 +171,22 @@ impl RadiantVst3HostedGui {
             return false;
         };
         let (width, height) = self.default_size;
-        let root_view =
-            match unsafe { create_editor_view(parent, self.class_name, editor, width, height) } {
-                Ok(root_view) => root_view,
-                Err(editor) => {
-                    self.editor = Some(editor);
-                    return false;
-                }
-            };
+        let root_view = match unsafe {
+            create_editor_view(
+                parent,
+                self.class_name,
+                editor,
+                width,
+                height,
+                &self.text_options,
+            )
+        } {
+            Ok(root_view) => root_view,
+            Err(editor) => {
+                self.editor = Some(editor);
+                return false;
+            }
+        };
         self.root_view = Some(root_view);
         self.size.set(Some((width, height)));
         true
@@ -245,6 +262,7 @@ unsafe fn create_editor_view(
     mut editor: Box<dyn RadiantVst3Editor>,
     width: u32,
     height: u32,
+    text_options: &NativeTextOptions,
 ) -> Result<NonNull<Object>, Box<dyn RadiantVst3Editor>> {
     let Some(root_view) = new_radiant_view(class_name, width, height) else {
         return Err(editor);
@@ -252,7 +270,7 @@ unsafe fn create_editor_view(
     let parent = parent.as_ptr().cast::<Object>();
     let _: () = msg_send![parent, addSubview: root_view.as_ptr()];
     let _: () = msg_send![root_view.as_ptr(), setWantsLayer: YES];
-    let Some(renderer) = embedded_renderer_for_view(root_view, width, height) else {
+    let Some(renderer) = embedded_renderer_for_view(root_view, width, height, text_options) else {
         let _: () = msg_send![root_view.as_ptr(), removeFromSuperview];
         let _: () = msg_send![root_view.as_ptr(), release];
         return Err(editor);
@@ -287,6 +305,7 @@ unsafe fn embedded_renderer_for_view(
     view: NonNull<Object>,
     width: u32,
     height: u32,
+    text_options: &NativeTextOptions,
 ) -> Option<EmbeddedVelloRenderer> {
     let window_handle = AppKitWindowHandle::new(view.cast());
     let display_handle = AppKitDisplayHandle::new();
@@ -294,10 +313,11 @@ unsafe fn embedded_renderer_for_view(
         RawDisplayHandle06::AppKit(display_handle),
         RawWindowHandle06::AppKit(window_handle),
     );
-    EmbeddedVelloRenderer::new(
+    EmbeddedVelloRenderer::new_with_text_options(
         handle,
         Vector2::new(width.max(1) as f32, height.max(1) as f32),
         view_dpi_scale(view.as_ptr()),
+        text_options,
     )
     .ok()
 }
@@ -812,6 +832,7 @@ unsafe fn drop_renderer(view: *const Object) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use radiant::runtime::EmbeddedFont;
     use radiant::theme::ThemeTokens;
 
     struct MockEditor {
@@ -907,6 +928,22 @@ mod tests {
         );
 
         assert_eq!(gui.last_size(), Some((420, 282)));
+    }
+
+    #[test]
+    fn hosted_gui_preserves_explicit_text_options() {
+        let gui = RadiantVst3HostedGui::new(
+            "ToyboxRadiantVst3EditorTextOptionsTest",
+            MockEditor::new(),
+            420,
+            282,
+        )
+        .with_text_options(
+            NativeTextOptions::default().embedded_font(EmbeddedFont::from_static(b"font bytes")),
+        );
+
+        assert_eq!(gui.text_options.embedded_fonts.len(), 1);
+        assert_eq!(gui.text_options.embedded_fonts[0].bytes(), b"font bytes");
     }
 
     #[test]
