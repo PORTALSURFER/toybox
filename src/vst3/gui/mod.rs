@@ -30,5 +30,10 @@ include!("hosted_view_types.rs");
 include!("plug_view_impl.rs");
 include!("view_rect_utils.rs");
 
+#[cfg(all(feature = "radiant-vst3", target_os = "macos"))]
+mod radiant_host_macos;
+#[cfg(all(feature = "radiant-vst3", target_os = "macos"))]
+pub use radiant_host_macos::{RadiantVst3Editor, RadiantVst3HostedGui};
+
 #[cfg(all(test, feature = "gui"))]
 mod tests;

@@ -11,14 +11,23 @@ image = { version = "0.25", default-features = false, features = ["png"], option
 mts_esp = { git = "https://github.com/PORTALSURFER/mts-esp-rs", rev = "d107a979e44c1b16dcc72dfd47cdd8dac77854ca", package = "mts-esp-rs" }
 patchbay-gui = { path = "patchbay-gui", version = "0.1.0", optional = true }
 raw-window-handle = { version = "0.5.2", optional = true }
+radiant = { git = "https://github.com/PORTALSURFER/radiant.git", rev = "9b45df71893a71f165fcae4183a189d664cecb10", default-features = false, optional = true }
+raw-window-handle-06 = { package = "raw-window-handle", version = "0.6", optional = true }
 toybox-vst3-ffi = { path = "crates/vst3-ffi", optional = true }
 toybox-process-log = { path = "crates/process-log" }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = { version = "0.2.7", optional = true }
+
 [features]
 default = []
+# The legacy `objc` macros probe this cfg internally. Declaring it keeps those
+# expansions compatible with Cargo's checked-cfg lint on current toolchains.
+cargo-clippy = []
 gui = ["dep:patchbay-gui", "dep:raw-window-handle"]
 screenshot-test = ["gui", "dep:image", "patchbay-gui/frame-capture"]
 vst3 = ["dep:toybox-vst3-ffi"]
+radiant-vst3 = ["gui", "vst3", "dep:radiant", "dep:raw-window-handle-06", "dep:objc"]
 
 [lints]
 workspace = true
