@@ -30,7 +30,7 @@ use raw_window_handle_06::{
     RawWindowHandle as RawWindowHandle06,
 };
 
-use super::Vst3HostedGui;
+use super::{Vst3HostedGui, vst3_key_down_to_input_char};
 
 const NSEVENT_MODIFIER_FLAG_SHIFT: u64 = 1 << 17;
 const NSEVENT_MODIFIER_FLAG_OPTION: u64 = 1 << 19;
@@ -257,6 +257,22 @@ impl Vst3HostedGui for RadiantVst3HostedGui {
 
     fn request_resize(&self, width: u32, height: u32) {
         self.resize_view(width, height);
+    }
+
+    fn on_key_down(&self, key: u16, key_code: i16, modifiers: i16) -> bool {
+        let Some(root_view) = self.root_view else {
+            return false;
+        };
+        unsafe {
+            let Some(runtime) = runtime_mut(root_view.as_ptr()) else {
+                return false;
+            };
+            let handled = dispatch_vst3_key_down(runtime, key, key_code, modifiers);
+            if handled {
+                let _: () = msg_send![root_view.as_ptr(), setNeedsDisplay: YES];
+            }
+            handled
+        }
     }
 }
 
@@ -715,6 +731,70 @@ fn dispatch_key_text(
     })
 }
 
+fn dispatch_vst3_key_down(
+    runtime: &mut dyn RadiantVst3Editor,
+    key: u16,
+    key_code: i16,
+    modifiers: i16,
+) -> bool {
+    use toybox_vst3_ffi::Steinberg::VirtualKeyCodes_::{
+        KEY_BACK, KEY_DELETE, KEY_DOWN, KEY_END, KEY_ENTER, KEY_ESCAPE, KEY_HOME, KEY_LEFT,
+        KEY_RETURN, KEY_RIGHT, KEY_TAB, KEY_UP,
+    };
+
+    let modifiers = vst3_pointer_modifiers(modifiers);
+    if modifiers.command {
+        return false;
+    }
+
+    let key_code = i64::from(key_code);
+    let semantic_key = if key_code == KEY_ENTER as i64 || key_code == KEY_RETURN as i64 {
+        Some(WidgetKey::Enter)
+    } else if key_code == KEY_TAB as i64 {
+        Some(WidgetKey::Tab)
+    } else if key_code == KEY_BACK as i64 {
+        Some(WidgetKey::Backspace)
+    } else if key_code == KEY_DELETE as i64 {
+        Some(WidgetKey::Delete)
+    } else if key_code == KEY_LEFT as i64 {
+        Some(WidgetKey::ArrowLeft)
+    } else if key_code == KEY_RIGHT as i64 {
+        Some(WidgetKey::ArrowRight)
+    } else if key_code == KEY_UP as i64 {
+        Some(WidgetKey::ArrowUp)
+    } else if key_code == KEY_DOWN as i64 {
+        Some(WidgetKey::ArrowDown)
+    } else if key_code == KEY_HOME as i64 {
+        Some(WidgetKey::Home)
+    } else if key_code == KEY_END as i64 {
+        Some(WidgetKey::End)
+    } else {
+        None
+    };
+    if let Some(key) = semantic_key {
+        return runtime.dispatch_key_press(key);
+    }
+    if key_code == KEY_ESCAPE as i64 {
+        return runtime.cancel_text_entry();
+    }
+
+    let Some(character) = vst3_key_down_to_input_char(key, key_code as i16) else {
+        return false;
+    };
+    dispatch_key_text(runtime, &character.to_string(), modifiers)
+}
+
+fn vst3_pointer_modifiers(modifiers: i16) -> PointerModifiers {
+    use toybox_vst3_ffi::Steinberg::KeyModifier_::{kAlternateKey, kCommandKey, kShiftKey};
+
+    let modifiers = i64::from(modifiers);
+    PointerModifiers {
+        command: modifiers & kCommandKey as i64 != 0,
+        shift: modifiers & kShiftKey as i64 != 0,
+        alt: modifiers & kAlternateKey as i64 != 0,
+    }
+}
+
 unsafe fn event_click_count(event: *mut Object) -> usize {
     msg_send![event, clickCount]
 }
@@ -842,6 +922,8 @@ mod tests {
     struct MockEditor {
         plan: SurfacePaintPlan,
         characters: Vec<char>,
+        keys: Vec<WidgetKey>,
+        canceled: bool,
     }
 
     impl MockEditor {
@@ -849,6 +931,8 @@ mod tests {
             Self {
                 plan: SurfacePaintPlan::empty(&ThemeTokens::default()),
                 characters: Vec::new(),
+                keys: Vec::new(),
+                canceled: false,
             }
         }
     }
@@ -866,8 +950,9 @@ mod tests {
             false
         }
 
-        fn dispatch_key_press(&mut self, _key: WidgetKey) -> bool {
-            false
+        fn dispatch_key_press(&mut self, key: WidgetKey) -> bool {
+            self.keys.push(key);
+            true
         }
 
         fn dispatch_character(&mut self, character: char) -> bool {
@@ -876,7 +961,8 @@ mod tests {
         }
 
         fn cancel_text_entry(&mut self) -> bool {
-            false
+            self.canceled = true;
+            true
         }
     }
 
@@ -920,6 +1006,34 @@ mod tests {
 
         assert!(dispatch_key_text(&mut editor, "å", modifiers));
         assert_eq!(editor.characters, vec!['å']);
+    }
+
+    #[test]
+    fn vst3_key_callback_dispatches_text_and_semantic_keys() {
+        use toybox_vst3_ffi::Steinberg::VirtualKeyCodes_::KEY_LEFT;
+
+        let mut editor = MockEditor::new();
+
+        assert!(dispatch_vst3_key_down(&mut editor, 'A' as u16, 0, 0));
+        assert!(dispatch_vst3_key_down(&mut editor, 0, KEY_LEFT as i16, 0));
+        assert_eq!(editor.characters, vec!['A']);
+        assert_eq!(editor.keys, vec![WidgetKey::ArrowLeft]);
+    }
+
+    #[test]
+    fn vst3_command_modified_text_is_left_for_the_host() {
+        use toybox_vst3_ffi::Steinberg::KeyModifier_::kCommandKey;
+
+        let mut editor = MockEditor::new();
+
+        assert!(!dispatch_vst3_key_down(
+            &mut editor,
+            'z' as u16,
+            0,
+            kCommandKey as i16
+        ));
+        assert!(editor.characters.is_empty());
+        assert!(editor.keys.is_empty());
     }
 
     #[test]
