@@ -34,4 +34,6 @@ Vello renderer for plugin GUIs, so plugins contain no native paint replay code.
   chain instead of being swallowed by the hosted view.
 - Closing and reopening a hosted view preserves the last host-provided logical
   size while rebuilding only the native resources.
+- Text input preserves AppKit's modifier-produced characters, while Command
+  shortcuts bypass Radiant and continue through the host responder chain.
 - Remaining: Pump migration and real-host VST3 verification.

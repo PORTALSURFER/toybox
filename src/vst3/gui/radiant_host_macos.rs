@@ -544,9 +544,7 @@ extern "C" fn key_down(this: &Object, _cmd: Sel, event: *mut Object) {
         if let Some(runtime) = runtime_mut(this)
             && let Some(text) = event_characters(event)
         {
-            for ch in text.chars() {
-                handled |= dispatch_key_character(runtime, ch);
-            }
+            handled = dispatch_key_text(runtime, &text, event_modifiers(event));
         }
         if handled {
             let _: () = msg_send![this, setNeedsDisplay: YES];
@@ -647,7 +645,7 @@ unsafe fn event_modifiers(event: *mut Object) -> PointerModifiers {
 }
 
 unsafe fn event_characters(event: *mut Object) -> Option<String> {
-    let characters: *mut Object = msg_send![event, charactersIgnoringModifiers];
+    let characters: *mut Object = msg_send![event, characters];
     ns_string_to_string(characters)
 }
 
@@ -678,6 +676,19 @@ fn dispatch_key_character(runtime: &mut dyn RadiantVst3Editor, ch: char) -> bool
         _ if !ch.is_control() => runtime.dispatch_character(ch),
         _ => false,
     }
+}
+
+fn dispatch_key_text(
+    runtime: &mut dyn RadiantVst3Editor,
+    text: &str,
+    modifiers: PointerModifiers,
+) -> bool {
+    if modifiers.command {
+        return false;
+    }
+    text.chars().fold(false, |handled, ch| {
+        handled | dispatch_key_character(runtime, ch)
+    })
 }
 
 unsafe fn event_click_count(event: *mut Object) -> usize {
@@ -805,12 +816,14 @@ mod tests {
 
     struct MockEditor {
         plan: SurfacePaintPlan,
+        characters: Vec<char>,
     }
 
     impl MockEditor {
         fn new() -> Self {
             Self {
                 plan: SurfacePaintPlan::empty(&ThemeTokens::default()),
+                characters: Vec::new(),
             }
         }
     }
@@ -832,8 +845,9 @@ mod tests {
             false
         }
 
-        fn dispatch_character(&mut self, _character: char) -> bool {
-            false
+        fn dispatch_character(&mut self, character: char) -> bool {
+            self.characters.push(character);
+            true
         }
 
         fn cancel_text_entry(&mut self) -> bool {
@@ -857,6 +871,30 @@ mod tests {
             pointer_press_event_for_click_count(position, PointerButton::Primary, modifiers, 2),
             Event::PointerDoubleClick { position: clicked, .. } if clicked == position
         ));
+    }
+
+    #[test]
+    fn command_modified_text_is_left_for_the_host_responder_chain() {
+        let mut editor = MockEditor::new();
+        let modifiers = PointerModifiers {
+            command: true,
+            ..PointerModifiers::default()
+        };
+
+        assert!(!dispatch_key_text(&mut editor, "z", modifiers));
+        assert!(editor.characters.is_empty());
+    }
+
+    #[test]
+    fn option_generated_text_preserves_the_character_appkit_produced() {
+        let mut editor = MockEditor::new();
+        let modifiers = PointerModifiers {
+            alt: true,
+            ..PointerModifiers::default()
+        };
+
+        assert!(dispatch_key_text(&mut editor, "å", modifiers));
+        assert_eq!(editor.characters, vec!['å']);
     }
 
     #[test]
