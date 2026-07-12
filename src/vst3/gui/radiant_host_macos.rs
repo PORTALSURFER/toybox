@@ -621,10 +621,10 @@ extern "C" fn key_down(this: &Object, _cmd: Sel, event: *mut Object) {
             return;
         }
         let mut handled = false;
-        if let Some(runtime) = runtime_mut(this)
-            && let Some(text) = event_characters(event)
-        {
-            handled = dispatch_key_text(runtime, &text, event_modifiers(event));
+        if let Some(runtime) = runtime_mut(this) {
+            let modifiers = event_modifiers(event);
+            let text = event_characters(event);
+            handled = dispatch_appkit_key_down(runtime, text.as_deref(), modifiers);
         }
         if handled {
             let _: () = msg_send![this, setNeedsDisplay: YES];
@@ -786,6 +786,15 @@ fn dispatch_key_text(
     text.chars().fold(false, |handled, ch| {
         handled | dispatch_key_character(runtime, ch)
     })
+}
+
+fn dispatch_appkit_key_down(
+    runtime: &mut dyn RadiantVst3Editor,
+    text: Option<&str>,
+    modifiers: PointerModifiers,
+) -> bool {
+    runtime.dispatch_event(Event::pointer_modifiers_changed(modifiers));
+    text.is_some_and(|text| dispatch_key_text(runtime, text, modifiers))
 }
 
 fn dispatch_vst3_key_down(
@@ -1012,6 +1021,7 @@ mod tests {
         events: Vec<Event>,
         characters: Vec<char>,
         keys: Vec<WidgetKey>,
+        operations: Vec<&'static str>,
         canceled: bool,
     }
 
@@ -1022,6 +1032,7 @@ mod tests {
                 events: Vec::new(),
                 characters: Vec::new(),
                 keys: Vec::new(),
+                operations: Vec::new(),
                 canceled: false,
             }
         }
@@ -1031,6 +1042,7 @@ mod tests {
         fn resize(&mut self, _width: u32, _height: u32) {}
 
         fn dispatch_event(&mut self, event: Event) {
+            self.operations.push("event");
             self.events.push(event);
         }
 
@@ -1043,16 +1055,19 @@ mod tests {
         }
 
         fn dispatch_key_press(&mut self, key: WidgetKey) -> bool {
+            self.operations.push("key");
             self.keys.push(key);
             true
         }
 
         fn dispatch_character(&mut self, character: char) -> bool {
+            self.operations.push("character");
             self.characters.push(character);
             true
         }
 
         fn cancel_text_entry(&mut self) -> bool {
+            self.operations.push("cancel");
             self.canceled = true;
             true
         }
@@ -1106,6 +1121,28 @@ mod tests {
 
         assert!(!dispatch_key_text(&mut editor, "z", modifiers));
         assert!(editor.characters.is_empty());
+    }
+
+    #[test]
+    fn appkit_key_down_dispatches_modifiers_before_semantic_key() {
+        let mut editor = MockEditor::new();
+        let modifiers = PointerModifiers {
+            shift: true,
+            ..PointerModifiers::default()
+        };
+
+        assert!(dispatch_appkit_key_down(
+            &mut editor,
+            Some(&NS_LEFT_ARROW_FUNCTION_KEY.to_string()),
+            modifiers,
+        ));
+
+        assert_eq!(editor.operations, vec!["event", "key"]);
+        assert_eq!(
+            editor.events,
+            vec![Event::pointer_modifiers_changed(modifiers)]
+        );
+        assert_eq!(editor.keys, vec![WidgetKey::ArrowLeft]);
     }
 
     #[test]
