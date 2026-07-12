@@ -6,6 +6,34 @@ use clack_plugin::events::UnknownEvent;
 use clack_plugin::events::io::{EventBatch, EventBatcher, InputEvents, InputEventsIter};
 use clack_plugin::events::spaces::CoreEventSpace;
 
+use crate::events::{BlockEvent, BlockEventTimeline, TimelineIngestReport};
+
+/// Collect CLAP input into a bounded, chronological block timeline.
+///
+/// The classifier converts borrowed CLAP events into caller-owned `Copy`
+/// payloads and decides whether each item is a parameter or non-parameter
+/// event. Offsets are clamped by the timeline, and equal-offset parameters are
+/// ordered before other events regardless of their source-list position.
+///
+/// The timeline must have been allocated before entering the audio callback.
+/// This function resets, fills, and prepares it without growing its storage.
+pub fn collect_clap_timeline<P: Copy, E: Copy>(
+    input: &InputEvents<'_>,
+    frame_count: usize,
+    timeline: &mut BlockEventTimeline<P, E>,
+    mut classify: impl FnMut(&UnknownEvent) -> Option<BlockEvent<P, E>>,
+) -> TimelineIngestReport {
+    timeline.begin_block(frame_count);
+    let mut report = TimelineIngestReport::default();
+    for event in input {
+        if let Some(payload) = classify(event) {
+            report.record(timeline.push(i64::from(event.header().time()), payload));
+        }
+    }
+    timeline.prepare();
+    report
+}
+
 /// Provides CLAP input event batching and common range conversions.
 pub struct EventRouter<'a> {
     /// Source CLAP input events for a single process call.
@@ -98,14 +126,17 @@ pub fn bounds_to_range(
 
 #[cfg(test)]
 mod tests {
-    use super::{EventRouter, bounds_to_range};
+    use super::{EventRouter, bounds_to_range, collect_clap_timeline};
     use std::ops::Bound;
 
     use clack_plugin::events::Pckn;
-    use clack_plugin::events::event_types::ParamValueEvent;
+    use clack_plugin::events::event_types::{NoteOnEvent, ParamValueEvent};
     use clack_plugin::events::io::InputEvents;
     use clack_plugin::events::spaces::CoreEventSpace;
     use clack_plugin::utils::{ClapId, Cookie};
+
+    use crate::events::{BlockEvent, BlockEventTimeline};
+    use crate::test_alloc::assert_realtime_safe;
 
     #[test]
     fn bounds_to_range_handles_empty_buffer() {
@@ -159,5 +190,52 @@ mod tests {
         });
 
         assert!(saw_param);
+    }
+
+    #[test]
+    fn clap_collection_is_parameter_first_and_realtime_safe() {
+        let note = NoteOnEvent::new(8, Pckn::match_all(), 0.75);
+        let before =
+            ParamValueEvent::new(4, ClapId::new(1), Pckn::match_all(), 0.25, Cookie::empty());
+        let at_note =
+            ParamValueEvent::new(8, ClapId::new(1), Pckn::match_all(), 0.5, Cookie::empty());
+        let after =
+            ParamValueEvent::new(12, ClapId::new(1), Pckn::match_all(), 0.75, Cookie::empty());
+        let source = [
+            before.as_ref(),
+            note.as_ref(),
+            at_note.as_ref(),
+            after.as_ref(),
+        ];
+        let input = InputEvents::from_buffer(&source);
+        let mut timeline = BlockEventTimeline::<(u32, u32), u8>::with_capacity(source.len());
+
+        let report = assert_realtime_safe(|| {
+            collect_clap_timeline(&input, 16, &mut timeline, |event| {
+                match event.as_core_event()? {
+                    CoreEventSpace::ParamValue(param) => Some(BlockEvent::Parameter((
+                        param.param_id()?.get(),
+                        (param.value() * 100.0) as u32,
+                    ))),
+                    CoreEventSpace::NoteOn(_) => Some(BlockEvent::Event(1)),
+                    _ => None,
+                }
+            })
+        });
+
+        assert_eq!(report.overflowed(), 0);
+        assert_eq!(
+            timeline
+                .events()
+                .iter()
+                .map(|event| (event.sample_offset(), *event.event()))
+                .collect::<Vec<_>>(),
+            vec![
+                (4, BlockEvent::Parameter((1, 25))),
+                (8, BlockEvent::Parameter((1, 50))),
+                (8, BlockEvent::Event(1)),
+                (12, BlockEvent::Parameter((1, 75))),
+            ]
+        );
     }
 }

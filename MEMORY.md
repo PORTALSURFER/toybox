@@ -1,17 +1,22 @@
 # MEMORY
 
-Last Updated (UTC): 2026-07-12 18:36:14Z
+Last Updated (UTC): 2026-07-12 20:24:55Z
 
 ## Current State
 
-- Active user-requested task: No active Toybox implementation tasks are currently running.
+- Active user-requested task: implement OPT-1159, the reusable realtime-safe sample-offset event timeline for CLAP and VST3.
+- Branch `wsvasek/opt-1159-toybox-provide-a-realtime-safe-sample-offset-event-timeline` adds a format-neutral fixed-capacity `BlockEventTimeline<P, E>`, CLAP classifier ingestion, and VST3 parameter-queue plus `IEventList` ingestion.
+- Timeline ordering is deterministic by clamped sample offset, parameter-before-event priority, and stable source sequence. Full capacity retains the earliest events and explicitly reports replacements and drops without growing storage.
+- Regression coverage includes before/at/after-note points, repeated points for one parameter, unsorted and null VST3 queues, CLAP/VST3 parity, zero capacity, final state at the inclusive block boundary, required block sizes `1/16/64/512/2048`, and thread-local allocation/deallocation auditing.
+- Validation passes with `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk`: focused event tests, all-features clippy, `bash scripts/ci_local.sh` (107 VST3-feature tests plus external API coverage), and `cargo test --all` (including 285 Patchbay GUI tests).
+- Commit `fad729cc35a39e5bca160906b83f79c52d68ea37` is pushed and ready-for-review PR #5 is open at `https://github.com/PORTALSURFER/toybox/pull/5`; current status is `waiting for user review` while GitHub checks run.
 - OPT-1148 is signed off and complete. PR #4 adds `InstanceConnection<T>`, processor/controller roles, and the `impl_vst3_instance_connection!` delegation macro.
 - The exact host-connected processor publishes an owned `Arc<T>` reference through the standard VST3 `IConnectionPoint::notify(IMessage*)` channel; only the matching controller adopts it, with no process-global creation-order registry and no retained COM peer cycle.
 - Shared-state handles use `TypeId` rather than diagnostic type-name strings, so duplicate crate/type paths cannot make distinct concrete types compatible.
 - Message attributes own exported handles for the synchronous transfer lifetime; receivers borrow handles to clone compatible state, so rejected offers release the exported `Arc` exactly once.
 - Focused tests cover reversed creation order, two independent simultaneous pairs, either callback direction, a host proxy that exposes no Toybox private interface, exact `kNoInterface` bridge-query semantics, concrete-type mismatch rejection, rejected-offer ownership, incompatible processor-to-processor connections, and 128 disconnect/destroy/reconnect cycles.
 - Validation passes with `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk`: focused connection tests, VST3 clippy, `scripts/run_agent_request.sh`, and `scripts/ci_local.sh` (97 VST3-feature tests).
-- Active user-requested task: make Toybox own the reusable macOS VST3 hosted-view lifecycle while Radiant owns all GUI rendering, then migrate Pump off its plugin-local Cocoa renderer.
+- Toybox owns the reusable macOS VST3 hosted-view lifecycle while Radiant owns all GUI rendering; Pump consumes the shared host path instead of a plugin-local Cocoa renderer.
 - Branch `codex/radiant-vst3-embedded-host` adds the opt-in `radiant-vst3` feature and a generic `RadiantVst3Editor` / `RadiantVst3HostedGui` contract.
 - The hosted view forwards AppKit lifecycle, input, resize, and redraw events to a declarative editor and renders its `SurfacePaintPlan` only through Radiant's embedded Vello renderer pinned at `6575b0c9a6b5abad17f711a36b832b7e7434e7b1`.
 - Radiant now acquires and recovers the presentation surface before rendering, so a Lost/Outdated resize cannot replace the target after the frame was drawn.
@@ -31,11 +36,11 @@ Last Updated (UTC): 2026-07-12 18:36:14Z
 - AppKit's `\u{7f}` delete character maps to Radiant Backspace, while `NSDeleteFunctionKey` remains the distinct forward Delete action.
 - AppKit Tab, Backtab, and keypad Enter control characters map to Radiant's semantic Tab and Enter keys instead of falling through to the host responder chain.
 - VST3 key callbacks dispatch converted Shift, Option, and Command state into Radiant before key handling and clear modifier state on key-up, with redraw invalidation on both transitions.
-- Active user-requested task: make Ioskeley Mono the default Patchbay/Radiant vector text font and let Pump pick it up via a toybox revision bump.
+- Ioskeley Mono is the default Patchbay/Radiant vector text font and is available to downstream plugins through Toybox.
 - Branch `codex/radiant-ioskeley-default-font` vendors Ioskeley Mono v2.0.0 `Normal/Unhinted/IoskeleyMono-Regular.ttf` under `assets/IoskeleyMono/` with OFL text and source notes.
 - `patchbay-gui` now prefers bundled Ioskeley Mono before the existing Sometype Mono fallback chain, while `PATCHBAY_GUI_FONT_PATH` still overrides bundled candidates.
 - Focused validation passed: `cargo fmt --all -- --check`, `cargo test -p patchbay-gui bundled_font_candidates_prefer_ioskeley_mono -- --nocapture`, `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk cargo clippy --all-targets --all-features -- -D warnings`, and `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk bash scripts/ci_local.sh`.
-- `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk cargo test --all` still aborts in the pre-existing `stress_deeply_nested_panel_tree_measures_without_failure` stack-overflow test; the local CI lane does not run that full workspace test command.
+- `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk cargo test --all` currently passes, including `stress_deeply_nested_panel_tree_measures_without_failure`.
 - Handoff preflight runs through `bash scripts/run_agent_request.sh`.
 - Local validation runs through `bash scripts/ci_local.sh`.
 - The EQ attractor surface now renders each attractor as a single filled color circle on the visual/vector draw path.
@@ -50,12 +55,13 @@ Last Updated (UTC): 2026-07-12 18:36:14Z
 
 ## Active Mission
 
-- Keep the signed-off VST3 instance connection stable while plugin repositories adopt the canonical merged Toybox revision.
+- Land OPT-1159 as reusable Toybox infrastructure, then let Kickforge OPT-1147 adopt the canonical merged revision.
 
 ## Immediate Next Actions
 
-1. Let Kickforge repin to the canonical Toybox merge and run its multi-instance host/stress validation.
-2. Keep further plugin-specific migration work in plugin repositories.
+1. Wait for explicit user review/sign-off on Toybox PR #5.
+2. After sign-off, merge and complete the repository cleanup procedure.
+3. Then let Kickforge OPT-1147 repin and add only plugin-specific event application and DSP segmentation.
 
 ## Constraints And Notes
 
