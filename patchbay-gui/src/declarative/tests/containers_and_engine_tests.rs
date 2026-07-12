@@ -386,20 +386,28 @@ fn layout_engine_resolves_node_ids_and_supports_subtree_measure_invalidation() {
 
 #[test]
 fn stress_deeply_nested_panel_tree_measures_without_failure() {
-    let mut node = textbox("leaf");
-    for index in 0..300 {
-        node = panel(format!("layer-{index}"), node).pad_all(0);
-    }
-    let spec = UiSpec::new(root_frame_sized(
-        "root",
-        node,
-        Size {
-            width: 400,
-            height: 240,
-        },
-    ));
-    let measured = measure_checked(&spec).expect("deep tree should measure");
-    assert!(measured.width > 0 && measured.height > 0);
+    std::thread::Builder::new()
+        .name("deep-layout-stress".into())
+        .stack_size(8 * 1024 * 1024)
+        .spawn(|| {
+            let mut node = textbox("leaf");
+            for index in 0..300 {
+                node = panel(format!("layer-{index}"), node).pad_all(0);
+            }
+            let spec = UiSpec::new(root_frame_sized(
+                "root",
+                node,
+                Size {
+                    width: 400,
+                    height: 240,
+                },
+            ));
+            let measured = measure_checked(&spec).expect("deep tree should measure");
+            assert!(measured.width > 0 && measured.height > 0);
+        })
+        .expect("deep layout stress thread should start")
+        .join()
+        .expect("deep layout stress thread should finish");
 }
 
 #[test]

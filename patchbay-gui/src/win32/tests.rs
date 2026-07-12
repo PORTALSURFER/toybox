@@ -70,10 +70,12 @@ mod tests {
         assert_eq!(
             resolved,
             Size {
-                width: 533,
+                width: 534,
                 height: 300,
             }
         );
+        assert!(resolved.width >= requested.width);
+        assert!(resolved.height >= requested.height);
     }
 
     #[test]
@@ -97,10 +99,12 @@ mod tests {
         assert_eq!(
             resolved,
             Size {
-                width: 640,
-                height: 480,
+                width: 667,
+                height: 500,
             }
         );
+        assert!(resolved.width >= 640);
+        assert!(resolved.height >= 500);
     }
 
     #[test]

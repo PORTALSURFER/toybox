@@ -23,6 +23,8 @@ pub use crate::vst3::entry::PluginClassIds;
 pub use crate::vst3::gui::parent_to_raw_window_handle;
 #[cfg(feature = "gui")]
 pub use crate::vst3::gui::{HostedVst3View, Vst3HostedGui};
+#[cfg(all(feature = "radiant-vst3", target_os = "macos"))]
+pub use crate::vst3::gui::{RadiantVst3Editor, RadiantVst3HostedGui};
 pub use crate::vst3::gui::{
     bool_to_tresult, copy_wstring, default_platform_type, platform_type_matches, tchar_len,
     view_rect,

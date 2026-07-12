@@ -1,0 +1,49 @@
+# Radiant VST3 Embedded Host
+
+## Objective
+
+Make Toybox own reusable VST3 hosted-view lifecycle and use Radiant's embedded
+Vello renderer for plugin GUIs, so plugins contain no native paint replay code.
+
+## Scope
+
+- Add Radiant's host-driven embedded Vello renderer as a pinned Toybox dependency.
+- Add a reusable Toybox editor-runtime contract for Radiant paint plans and input.
+- Move macOS VST3 `NSView` lifecycle, redraw scheduling, resize, and input forwarding
+  out of Pump into Toybox.
+- Keep Pump responsible only for DSP, state/parameters, and declarative UI composition.
+
+## Definition of Done
+
+- Toybox creates and owns the host-parented native view.
+- Radiant Vello renders every `SurfacePaintPlan` for that view.
+- Toybox forwards pointer, modifier, keyboard, resize, and redraw events generically.
+- Pump has no AppKit primitive renderer or VST3 Cocoa view implementation.
+- Focused hosted-view tests and the normal Toybox validation lane pass.
+
+## Progress
+
+- Radiant's host-driven embedded Vello renderer is pinned and consumed directly.
+- The generic editor contract and macOS hosted view compile with focused tests passing.
+- Toybox's focused tests, feature-specific clippy lane, and normal local CI pass.
+- A macOS main-thread smoke host attaches, draws a gradient `FillPath` through
+  embedded Vello, detaches, and exits cleanly.
+- The smoke host asserts that the editor receives its logical size before the
+  first paint plan is requested.
+- Key events that Radiant does not consume continue through AppKit's responder
+  chain instead of being swallowed by the hosted view.
+- Closing and reopening a hosted view preserves the last host-provided logical
+  size while rebuilding only the native resources.
+- Text input preserves AppKit's modifier-produced characters, while Command
+  shortcuts bypass Radiant and continue through the host responder chain.
+- Linux and Windows CI configure the repository's private-dependency token
+  before Cargo fetches the pinned `mts-esp-rs` revision.
+- The pinned Radiant renderer recovers its presentation surface before scene
+  rendering so recovery frames use the current target view.
+- Embedded validation shares the scene encoder's nested clip suppression rules.
+- Hosted views accept `NativeTextOptions` and forward portable font policy to
+  Radiant's embedded text renderer.
+- Trait-based embedded renders use Radiant's monotonic animation clock.
+- CI authenticates private dependencies, installs required enforcement tooling,
+  and keeps SDK-dependent VST3 crates out of the SDK-optional general lint lane.
+- Remaining: Pump migration and real-host VST3 verification.
