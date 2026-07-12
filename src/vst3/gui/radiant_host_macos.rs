@@ -9,7 +9,7 @@ use std::cell::Cell;
 use std::ffi::{CStr, c_void};
 use std::ptr::{self, NonNull};
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
 use std::thread::{self, JoinHandle};
@@ -51,6 +51,7 @@ const NSTRACKING_ACTIVE_ALWAYS: usize = 0x80;
 const NSTRACKING_IN_VISIBLE_RECT: usize = 0x200;
 const NSTRACKING_ENABLED_DURING_MOUSE_DRAG: usize = 0x400;
 const PLAYHEAD_REDRAW_INTERVAL: Duration = Duration::from_millis(33);
+static EDITOR_VIEW_CLASS_REGISTRATION: Mutex<()> = Mutex::new(());
 
 type CFRunLoopRef = *mut c_void;
 
@@ -331,7 +332,8 @@ unsafe fn new_radiant_view(
     width: u32,
     height: u32,
 ) -> Option<NonNull<Object>> {
-    let view: *mut Object = msg_send![editor_view_class(class_name), alloc];
+    let view_class = editor_view_class(class_name)?;
+    let view: *mut Object = msg_send![view_class, alloc];
     let view: *mut Object =
         msg_send![view, initWithFrame: ns_rect(0.0, 0.0, width as f64, height as f64)];
     let view = NonNull::new(view)?;
@@ -408,13 +410,23 @@ fn ns_rect(x: f64, y: f64, width: f64, height: f64) -> NSRect {
     }
 }
 
-fn editor_view_class(class_name: &'static str) -> *const Class {
+fn editor_view_class(class_name: &'static str) -> Option<&'static Class> {
     if let Some(existing) = Class::get(class_name) {
-        return existing;
+        return Some(existing);
     }
+
+    let _registration = EDITOR_VIEW_CLASS_REGISTRATION
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(existing) = Class::get(class_name) {
+        return Some(existing);
+    }
+
     {
         let superclass = class!(NSView);
-        let mut decl = ClassDecl::new(class_name, superclass).expect("unique class name");
+        let Some(mut decl) = ClassDecl::new(class_name, superclass) else {
+            return Class::get(class_name);
+        };
         decl.add_ivar::<usize>("runtime");
         decl.add_ivar::<usize>("renderer");
         decl.add_ivar::<usize>("tracking_area");
@@ -486,7 +498,7 @@ fn editor_view_class(class_name: &'static str) -> *const Class {
             );
             decl.add_method(sel!(dealloc), dealloc as extern "C" fn(&Object, Sel));
         }
-        decl.register()
+        Some(decl.register())
     }
 }
 
@@ -1274,6 +1286,33 @@ mod tests {
 
         complete_redraw_tick(&tick_pending);
         assert!(claim_redraw_tick(&tick_pending));
+    }
+
+    #[test]
+    fn radiant_editor_view_class_registration_is_concurrency_safe() {
+        const THREAD_COUNT: usize = 8;
+        let barrier = Arc::new(std::sync::Barrier::new(THREAD_COUNT));
+        let handles = (0..THREAD_COUNT)
+            .map(|_| {
+                let barrier = Arc::clone(&barrier);
+                thread::spawn(move || {
+                    barrier.wait();
+                    editor_view_class("ToyboxRadiantVst3EditorConcurrentRegistrationTest")
+                        .map(|class| class as *const Class as usize)
+                })
+            })
+            .collect::<Vec<_>>();
+        let classes = handles
+            .into_iter()
+            .map(|handle| {
+                handle
+                    .join()
+                    .expect("class registration thread should not panic")
+            })
+            .collect::<Vec<_>>();
+
+        assert!(classes[0].is_some());
+        assert!(classes.iter().all(|class| *class == classes[0]));
     }
 
     #[test]
