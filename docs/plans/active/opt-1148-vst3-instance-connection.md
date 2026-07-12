@@ -12,6 +12,7 @@
 - Either `connect` callback direction can establish the shared state.
 - Hosts may interpose an `IConnectionPoint` proxy that exposes no Toybox private interface.
 - Unsupported private bridge queries return COM-correct `kNoInterface` with a null output pointer.
+- Shared-state compatibility uses concrete Rust `TypeId`, not diagnostic type-name strings.
 - Disconnect and destruction do not retain COM peers or create lifetime cycles.
 - Focused VST3 tests and the full local Toybox validation lane pass.
 
@@ -31,6 +32,7 @@
 - `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk bash scripts/ci_local.sh`
 
 All checks pass. The first preflight without `VST3_SDK_DIR` failed at the expected SDK gate; the
-same preflight with the repository's local SDK path passes. The VST3 feature lane now runs 95 tests,
+same preflight with the repository's local SDK path passes. The VST3 feature lane now runs 96 tests,
 including both callback directions through a proxy exposing only `IConnectionPoint` and exact
-unsupported-interface result semantics.
+unsupported-interface result semantics. Concrete-type mismatch coverage verifies rejection and
+that the exported `Arc` reference is released exactly once by direct adoption.

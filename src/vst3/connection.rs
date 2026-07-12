@@ -1,8 +1,8 @@
 //! Identity-safe VST3 processor/controller instance connections.
 
+use std::any::TypeId;
 use std::ffi::{CStr, c_void};
 use std::ptr;
-use std::slice;
 use std::sync::{Arc, Mutex, RwLock};
 
 use toybox_vst3_ffi::Steinberg::Vst::{
@@ -182,10 +182,8 @@ where
 
     #[doc(hidden)]
     pub fn export_shared(&self) -> *mut SharedStateHandle {
-        let type_name = std::any::type_name::<T>().as_bytes();
         Box::into_raw(Box::new(SharedStateHandle {
-            type_name: type_name.as_ptr(),
-            type_name_len: type_name.len(),
+            type_id: TypeId::of::<T>(),
             state: Arc::into_raw(self.shared()).cast::<c_void>(),
             release: release_arc::<T>,
         }))
@@ -196,14 +194,8 @@ where
         let Some(handle) = (unsafe { handle.as_ref() }) else {
             return kInvalidArgument;
         };
-        let expected = std::any::type_name::<T>().as_bytes();
-        let received = if handle.type_name.is_null() {
-            &[][..]
-        } else {
-            unsafe { slice::from_raw_parts(handle.type_name, handle.type_name_len) }
-        };
         let compatible = self.role == InstanceConnectionRole::Controller
-            && received == expected
+            && handle.type_id == TypeId::of::<T>()
             && !handle.state.is_null();
 
         let handle =
@@ -251,8 +243,8 @@ unsafe fn release_handle(handle: *mut SharedStateHandle) {
 #[doc(hidden)]
 #[repr(C)]
 pub struct SharedStateHandle {
-    type_name: *const u8,
-    type_name_len: usize,
+    /// Concrete Rust identity, including the defining crate instance and version.
+    type_id: TypeId,
     state: *const c_void,
     release: unsafe extern "system" fn(*const c_void),
 }
@@ -626,6 +618,9 @@ mod tests {
     #[derive(Debug)]
     struct State(u32);
 
+    #[derive(Debug)]
+    struct OtherState(u32);
+
     struct Endpoint {
         connection: InstanceConnection<State>,
     }
@@ -732,6 +727,24 @@ mod tests {
 
         assert_eq!(result, kNoInterface);
         assert!(object.is_null());
+    }
+
+    #[test]
+    fn shared_state_handle_rejects_a_different_concrete_type() {
+        let processor_state = Arc::new(State(7));
+        let processor = InstanceConnection::new(
+            InstanceConnectionRole::Processor,
+            Arc::clone(&processor_state),
+        );
+        let controller =
+            InstanceConnection::new(InstanceConnectionRole::Controller, Arc::new(OtherState(11)));
+        let handle = processor.export_shared();
+
+        assert_eq!(unsafe { (*handle).type_id }, TypeId::of::<State>());
+        assert_eq!(Arc::strong_count(&processor_state), 3);
+        assert_eq!(unsafe { controller.adopt_shared(handle) }, kResultFalse);
+        assert_eq!(Arc::strong_count(&processor_state), 2);
+        assert_eq!(controller.shared().0, 11);
     }
 
     #[test]

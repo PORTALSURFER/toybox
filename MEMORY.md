@@ -1,14 +1,15 @@
 # MEMORY
 
-Last Updated (UTC): 2026-07-12 17:56:16Z
+Last Updated (UTC): 2026-07-12 18:20:02Z
 
 ## Current State
 
 - Active user-requested task: OPT-1148 replaces order-based VST3 processor/controller pairing with the host's exact `IConnectionPoint` relationship.
 - Branch `wsvasek/opt-1148-replace-order-based-vst3-processorcontroller-instance` adds `InstanceConnection<T>`, processor/controller roles, and the `impl_vst3_instance_connection!` delegation macro.
 - The exact host-connected processor publishes an owned `Arc<T>` reference through the standard VST3 `IConnectionPoint::notify(IMessage*)` channel; only the matching controller adopts it, with no process-global creation-order registry and no retained COM peer cycle.
-- Focused tests cover reversed creation order, two independent simultaneous pairs, either callback direction, a host proxy that exposes no Toybox private interface, exact `kNoInterface` bridge-query semantics, incompatible processor-to-processor connections, and 128 disconnect/destroy/reconnect cycles.
-- Validation passes with `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk`: focused connection tests, VST3 clippy, `scripts/run_agent_request.sh`, and `scripts/ci_local.sh` (95 VST3-feature tests).
+- Shared-state handles use `TypeId` rather than diagnostic type-name strings, so duplicate crate/type paths cannot make distinct concrete types compatible.
+- Focused tests cover reversed creation order, two independent simultaneous pairs, either callback direction, a host proxy that exposes no Toybox private interface, exact `kNoInterface` bridge-query semantics, concrete-type mismatch rejection with correct `Arc` ownership, incompatible processor-to-processor connections, and 128 disconnect/destroy/reconnect cycles.
+- Validation passes with `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk`: focused connection tests, VST3 clippy, `scripts/run_agent_request.sh`, and `scripts/ci_local.sh` (96 VST3-feature tests).
 - Active user-requested task: make Toybox own the reusable macOS VST3 hosted-view lifecycle while Radiant owns all GUI rendering, then migrate Pump off its plugin-local Cocoa renderer.
 - Branch `codex/radiant-vst3-embedded-host` adds the opt-in `radiant-vst3` feature and a generic `RadiantVst3Editor` / `RadiantVst3HostedGui` contract.
 - The hosted view forwards AppKit lifecycle, input, resize, and redraw events to a declarative editor and renders its `SurfacePaintPlan` only through Radiant's embedded Vello renderer pinned at `6575b0c9a6b5abad17f711a36b832b7e7434e7b1`.
