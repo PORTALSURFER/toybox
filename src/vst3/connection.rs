@@ -10,7 +10,7 @@ use toybox_vst3_ffi::Steinberg::Vst::{
     IMessageTrait,
 };
 use toybox_vst3_ffi::Steinberg::{
-    FUnknown, FUnknownVtbl, TUID, kInvalidArgument, kResultFalse, kResultOk, tresult,
+    FUnknown, FUnknownVtbl, TUID, kInvalidArgument, kNoInterface, kResultFalse, kResultOk, tresult,
 };
 use toybox_vst3_ffi::com_scrape_types::{
     Construct, Guid, Header, Inherits, InterfaceList, SmartPtr, Unknown, Wrapper,
@@ -543,7 +543,7 @@ where
         let guid = unsafe { &*iid.cast::<Guid>() };
         let Some(result) = C::Interfaces::query(guid) else {
             unsafe { *object = ptr::null_mut() };
-            return kResultFalse;
+            return kNoInterface;
         };
         let data = unsafe { W::data_from_header(header) };
         unsafe { W::add_ref(data) };
@@ -712,6 +712,26 @@ mod tests {
             kResultOk
         );
         assert_eq!(second_controller.connection.shared().0, 42);
+    }
+
+    #[test]
+    fn bridge_query_interface_reports_no_interface_for_unsupported_iid() {
+        let endpoint = ComWrapper::new(Endpoint::new(InstanceConnectionRole::Processor, 1));
+        let bridge = endpoint
+            .as_com_ref::<IToyboxSharedState>()
+            .expect("endpoint shared-state bridge");
+        let mut object = ptr::dangling_mut::<c_void>();
+
+        let result = unsafe {
+            ((*(*bridge.as_ptr()).vtbl).base.queryInterface)(
+                bridge.as_ptr().cast::<FUnknown>(),
+                (&IMessage::IID as *const Guid).cast::<TUID>(),
+                &mut object,
+            )
+        };
+
+        assert_eq!(result, kNoInterface);
+        assert!(object.is_null());
     }
 
     #[test]

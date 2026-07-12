@@ -11,6 +11,7 @@
 - A host-connected controller adopts only the shared state of its exact processor peer.
 - Either `connect` callback direction can establish the shared state.
 - Hosts may interpose an `IConnectionPoint` proxy that exposes no Toybox private interface.
+- Unsupported private bridge queries return COM-correct `kNoInterface` with a null output pointer.
 - Disconnect and destruction do not retain COM peers or create lifetime cycles.
 - Focused VST3 tests and the full local Toybox validation lane pass.
 
@@ -30,5 +31,6 @@
 - `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk bash scripts/ci_local.sh`
 
 All checks pass. The first preflight without `VST3_SDK_DIR` failed at the expected SDK gate; the
-same preflight with the repository's local SDK path passes. The VST3 feature lane now runs 94 tests,
-including both callback directions through a proxy exposing only `IConnectionPoint`.
+same preflight with the repository's local SDK path passes. The VST3 feature lane now runs 95 tests,
+including both callback directions through a proxy exposing only `IConnectionPoint` and exact
+unsupported-interface result semantics.
