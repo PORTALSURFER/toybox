@@ -1,6 +1,6 @@
 # MEMORY
 
-Last Updated (UTC): 2026-07-12 20:23:11Z
+Last Updated (UTC): 2026-07-12 20:24:55Z
 
 ## Current State
 
@@ -9,6 +9,7 @@ Last Updated (UTC): 2026-07-12 20:23:11Z
 - Timeline ordering is deterministic by clamped sample offset, parameter-before-event priority, and stable source sequence. Full capacity retains the earliest events and explicitly reports replacements and drops without growing storage.
 - Regression coverage includes before/at/after-note points, repeated points for one parameter, unsorted and null VST3 queues, CLAP/VST3 parity, zero capacity, final state at the inclusive block boundary, required block sizes `1/16/64/512/2048`, and thread-local allocation/deallocation auditing.
 - Validation passes with `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk`: focused event tests, all-features clippy, `bash scripts/ci_local.sh` (107 VST3-feature tests plus external API coverage), and `cargo test --all` (including 285 Patchbay GUI tests).
+- Commit `fad729cc35a39e5bca160906b83f79c52d68ea37` is pushed and ready-for-review PR #5 is open at `https://github.com/PORTALSURFER/toybox/pull/5`; current status is `waiting for user review` while GitHub checks run.
 - OPT-1148 is signed off and complete. PR #4 adds `InstanceConnection<T>`, processor/controller roles, and the `impl_vst3_instance_connection!` delegation macro.
 - The exact host-connected processor publishes an owned `Arc<T>` reference through the standard VST3 `IConnectionPoint::notify(IMessage*)` channel; only the matching controller adopts it, with no process-global creation-order registry and no retained COM peer cycle.
 - Shared-state handles use `TypeId` rather than diagnostic type-name strings, so duplicate crate/type paths cannot make distinct concrete types compatible.
@@ -58,9 +59,9 @@ Last Updated (UTC): 2026-07-12 20:23:11Z
 
 ## Immediate Next Actions
 
-1. Commit, push, and open the ready-for-review OPT-1159 pull request.
-2. Stop for explicit user review before merge.
-3. After sign-off, let Kickforge OPT-1147 repin and add only plugin-specific event application and DSP segmentation.
+1. Wait for explicit user review/sign-off on Toybox PR #5.
+2. After sign-off, merge and complete the repository cleanup procedure.
+3. Then let Kickforge OPT-1147 repin and add only plugin-specific event application and DSP segmentation.
 
 ## Constraints And Notes
 
