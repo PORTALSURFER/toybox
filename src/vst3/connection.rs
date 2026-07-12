@@ -1,20 +1,21 @@
 //! Identity-safe VST3 processor/controller instance connections.
 
-use std::ffi::c_void;
+use std::ffi::{CStr, c_void};
 use std::ptr;
 use std::slice;
 use std::sync::{Arc, Mutex, RwLock};
 
-#[cfg(test)]
-use toybox_vst3_ffi::Steinberg::Vst::IConnectionPointTrait;
-use toybox_vst3_ffi::Steinberg::Vst::{IConnectionPoint, IMessage};
+use toybox_vst3_ffi::Steinberg::Vst::{
+    IAttributeList, IAttributeListTrait, IConnectionPoint, IConnectionPointTrait, IMessage,
+    IMessageTrait,
+};
 use toybox_vst3_ffi::Steinberg::{
     FUnknown, FUnknownVtbl, TUID, kInvalidArgument, kResultFalse, kResultOk, tresult,
 };
 use toybox_vst3_ffi::com_scrape_types::{
     Construct, Guid, Header, Inherits, InterfaceList, SmartPtr, Unknown, Wrapper,
 };
-use toybox_vst3_ffi::{Class, ComRef, Interface};
+use toybox_vst3_ffi::{Class, ComRef, ComWrapper, Interface};
 
 /// Identifies which side of a VST3 component/controller connection owns canonical state.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -75,19 +76,10 @@ where
         let Some(other_ref) = (unsafe { ComRef::from_raw(other) }) else {
             return kInvalidArgument;
         };
-        let Some(bridge) = other_ref.cast::<IToyboxSharedState>() else {
-            return kResultFalse;
-        };
 
         let result = match self.role {
-            InstanceConnectionRole::Processor => {
-                let handle = self.export_shared();
-                unsafe { bridge.adopt_shared(handle) }
-            }
-            InstanceConnectionRole::Controller => {
-                let handle = bridge.export_shared();
-                unsafe { self.adopt_shared(handle) }
-            }
+            InstanceConnectionRole::Processor => unsafe { self.offer_shared(&other_ref) },
+            InstanceConnectionRole::Controller => unsafe { self.request_shared(&other_ref) },
         };
 
         if result == kResultOk {
@@ -115,8 +107,77 @@ where
     }
 
     #[doc(hidden)]
-    pub unsafe fn notify(&self, _message: *mut IMessage) -> tresult {
-        kResultFalse
+    pub unsafe fn notify(&self, message: *mut IMessage) -> tresult {
+        let Some(message) = (unsafe { ComRef::from_raw(message) }) else {
+            return kInvalidArgument;
+        };
+        let message_id = unsafe { message.getMessageID() };
+        if message_id.is_null()
+            || unsafe { CStr::from_ptr(message_id) }.to_bytes() != SHARED_STATE_MESSAGE_ID
+        {
+            return kResultFalse;
+        }
+        let Some(attributes) = (unsafe { ComRef::from_raw(message.getAttributes()) }) else {
+            return kResultFalse;
+        };
+
+        match self.role {
+            InstanceConnectionRole::Processor => {
+                let mut existing_handle = 0_i64;
+                if unsafe {
+                    attributes.getInt(
+                        SHARED_STATE_HANDLE_ATTRIBUTE.as_ptr().cast(),
+                        &mut existing_handle,
+                    )
+                } == kResultOk
+                {
+                    return kResultFalse;
+                }
+                let handle = self.export_shared();
+                let result = unsafe {
+                    attributes.setInt(SHARED_STATE_HANDLE_ATTRIBUTE.as_ptr().cast(), handle as i64)
+                };
+                if result != kResultOk {
+                    unsafe { release_handle(handle) };
+                }
+                result
+            }
+            InstanceConnectionRole::Controller => {
+                let mut handle = 0_i64;
+                if unsafe {
+                    attributes.getInt(SHARED_STATE_HANDLE_ATTRIBUTE.as_ptr().cast(), &mut handle)
+                } != kResultOk
+                    || handle == 0
+                {
+                    return kResultFalse;
+                }
+                unsafe { self.adopt_shared(handle as usize as *mut SharedStateHandle) }
+            }
+        }
+    }
+
+    /// Sends processor-owned state to a connected controller through the standard message channel.
+    unsafe fn offer_shared(&self, other: &ComRef<'_, IConnectionPoint>) -> tresult {
+        let handle = self.export_shared();
+        let (message, _) = transfer_message(Some(handle));
+        let result = unsafe { other.notify(message.as_ptr()) };
+        if result != kResultOk {
+            unsafe { release_handle(handle) };
+        }
+        result
+    }
+
+    /// Requests processor-owned state through the standard message channel.
+    unsafe fn request_shared(&self, other: &ComRef<'_, IConnectionPoint>) -> tresult {
+        let (message, attributes) = transfer_message(None);
+        let result = unsafe { other.notify(message.as_ptr()) };
+        if result != kResultOk {
+            return result;
+        }
+        let Some(handle) = attributes.handle() else {
+            return kResultFalse;
+        };
+        unsafe { self.adopt_shared(handle) }
     }
 
     #[doc(hidden)]
@@ -177,6 +238,15 @@ unsafe extern "system" fn release_arc<T>(state: *const c_void) {
     }
 }
 
+/// Releases an exported handle when message delivery fails before the peer consumes it.
+unsafe fn release_handle(handle: *mut SharedStateHandle) {
+    if let Some(handle) = unsafe { handle.as_ref() } {
+        let handle =
+            unsafe { Box::from_raw(handle as *const SharedStateHandle as *mut SharedStateHandle) };
+        unsafe { (handle.release)(handle.state) };
+    }
+}
+
 /// Opaque owned state transfer used by Toybox's private COM bridge.
 #[doc(hidden)]
 #[repr(C)]
@@ -185,6 +255,152 @@ pub struct SharedStateHandle {
     type_name_len: usize,
     state: *const c_void,
     release: unsafe extern "system" fn(*const c_void),
+}
+
+/// Message identifier for the private payload sent through the standard VST3 channel.
+const SHARED_STATE_MESSAGE_ID: &[u8] = b"Toybox.SharedState.V1";
+/// NUL-terminated form returned by [`IMessageTrait::getMessageID`].
+const SHARED_STATE_MESSAGE_ID_C: &[u8] = b"Toybox.SharedState.V1\0";
+/// NUL-terminated attribute key containing the owned handle address.
+const SHARED_STATE_HANDLE_ATTRIBUTE: &[u8] = b"handle\0";
+
+/// Minimal standard VST3 attribute list used for the synchronous state-transfer handshake.
+#[derive(Default)]
+struct TransferAttributes {
+    /// Owned handle offered by the processor, or populated in response to a request.
+    handle: Mutex<Option<usize>>,
+}
+
+impl TransferAttributes {
+    /// Creates request attributes without a handle or offer attributes with one.
+    fn new(handle: Option<*mut SharedStateHandle>) -> Self {
+        Self {
+            handle: Mutex::new(handle.map(|handle| handle as usize)),
+        }
+    }
+
+    /// Returns the currently stored handle.
+    fn handle(&self) -> Option<*mut SharedStateHandle> {
+        self.handle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .map(|handle| handle as *mut SharedStateHandle)
+    }
+
+    /// Checks whether an attribute identifier names the transfer handle.
+    unsafe fn matches_handle_attribute(id: *const std::ffi::c_char) -> bool {
+        !id.is_null()
+            && unsafe { CStr::from_ptr(id) }.to_bytes()
+                == &SHARED_STATE_HANDLE_ATTRIBUTE[..SHARED_STATE_HANDLE_ATTRIBUTE.len() - 1]
+    }
+}
+
+impl Class for TransferAttributes {
+    type Interfaces = (IAttributeList,);
+}
+
+impl IAttributeListTrait for TransferAttributes {
+    unsafe fn setInt(&self, id: *const std::ffi::c_char, value: i64) -> tresult {
+        if !unsafe { Self::matches_handle_attribute(id) } || value == 0 {
+            return kResultFalse;
+        }
+        *self
+            .handle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(value as usize);
+        kResultOk
+    }
+
+    unsafe fn getInt(&self, id: *const std::ffi::c_char, value: *mut i64) -> tresult {
+        if value.is_null() || !unsafe { Self::matches_handle_attribute(id) } {
+            return kResultFalse;
+        }
+        let Some(handle) = self.handle() else {
+            return kResultFalse;
+        };
+        unsafe { *value = handle as usize as i64 };
+        kResultOk
+    }
+
+    unsafe fn setFloat(&self, _id: *const std::ffi::c_char, _value: f64) -> tresult {
+        kResultFalse
+    }
+
+    unsafe fn getFloat(&self, _id: *const std::ffi::c_char, _value: *mut f64) -> tresult {
+        kResultFalse
+    }
+
+    unsafe fn setString(&self, _id: *const std::ffi::c_char, _string: *const u16) -> tresult {
+        kResultFalse
+    }
+
+    unsafe fn getString(
+        &self,
+        _id: *const std::ffi::c_char,
+        _string: *mut u16,
+        _size_in_bytes: u32,
+    ) -> tresult {
+        kResultFalse
+    }
+
+    unsafe fn setBinary(
+        &self,
+        _id: *const std::ffi::c_char,
+        _data: *const c_void,
+        _size_in_bytes: u32,
+    ) -> tresult {
+        kResultFalse
+    }
+
+    unsafe fn getBinary(
+        &self,
+        _id: *const std::ffi::c_char,
+        _data: *mut *const c_void,
+        _size_in_bytes: *mut u32,
+    ) -> tresult {
+        kResultFalse
+    }
+}
+
+/// Minimal standard VST3 message carrying the transfer attributes.
+struct TransferMessage {
+    /// Attributes returned to the peer for the lifetime of this message.
+    attributes: toybox_vst3_ffi::ComPtr<IAttributeList>,
+}
+
+impl Class for TransferMessage {
+    type Interfaces = (IMessage,);
+}
+
+impl IMessageTrait for TransferMessage {
+    unsafe fn getMessageID(&self) -> *const i8 {
+        SHARED_STATE_MESSAGE_ID_C.as_ptr().cast()
+    }
+
+    unsafe fn setMessageID(&self, _id: *const i8) {}
+
+    unsafe fn getAttributes(&self) -> *mut IAttributeList {
+        self.attributes.as_ptr()
+    }
+}
+
+/// Creates the COM message and retains directly accessible attributes for synchronous responses.
+fn transfer_message(
+    handle: Option<*mut SharedStateHandle>,
+) -> (
+    toybox_vst3_ffi::ComPtr<IMessage>,
+    ComWrapper<TransferAttributes>,
+) {
+    let attributes = ComWrapper::new(TransferAttributes::new(handle));
+    let attributes_ptr = attributes
+        .to_com_ptr::<IAttributeList>()
+        .expect("transfer attributes expose IAttributeList");
+    let message = ComWrapper::new(TransferMessage {
+        attributes: attributes_ptr,
+    })
+    .to_com_ptr::<IMessage>()
+    .expect("transfer message exposes IMessage");
+    (message, attributes)
 }
 
 /// Private COM bridge queried from the exact `IConnectionPoint` supplied by the host.
@@ -428,10 +644,74 @@ mod tests {
 
     crate::impl_vst3_instance_connection!(Endpoint, connection);
 
+    /// Host-style proxy that deliberately exposes only the standard connection interface.
+    struct ConnectionProxy {
+        destination: toybox_vst3_ffi::ComPtr<IConnectionPoint>,
+    }
+
+    impl Class for ConnectionProxy {
+        type Interfaces = (IConnectionPoint,);
+    }
+
+    impl IConnectionPointTrait for ConnectionProxy {
+        unsafe fn connect(&self, _other: *mut IConnectionPoint) -> tresult {
+            kResultFalse
+        }
+
+        unsafe fn disconnect(&self, _other: *mut IConnectionPoint) -> tresult {
+            kResultFalse
+        }
+
+        unsafe fn notify(&self, message: *mut IMessage) -> tresult {
+            unsafe { self.destination.notify(message) }
+        }
+    }
+
     fn connection_point(endpoint: &ComWrapper<Endpoint>) -> ComRef<'_, IConnectionPoint> {
         endpoint
             .as_com_ref::<IConnectionPoint>()
             .expect("endpoint connection point")
+    }
+
+    fn connection_proxy(endpoint: &ComWrapper<Endpoint>) -> ComWrapper<ConnectionProxy> {
+        ComWrapper::new(ConnectionProxy {
+            destination: endpoint
+                .to_com_ptr::<IConnectionPoint>()
+                .expect("proxy destination connection point"),
+        })
+    }
+
+    #[test]
+    fn proxied_connection_points_transfer_state_through_messages() {
+        let first_processor = ComWrapper::new(Endpoint::new(InstanceConnectionRole::Processor, 41));
+        let first_controller =
+            ComWrapper::new(Endpoint::new(InstanceConnectionRole::Controller, 0));
+        let processor_proxy = connection_proxy(&first_processor);
+        let processor_proxy_point = processor_proxy
+            .as_com_ref::<IConnectionPoint>()
+            .expect("processor proxy connection point");
+        assert!(processor_proxy.as_com_ref::<IToyboxSharedState>().is_none());
+
+        assert_eq!(
+            unsafe { connection_point(&first_controller).connect(processor_proxy_point.as_ptr()) },
+            kResultOk
+        );
+        assert_eq!(first_controller.connection.shared().0, 41);
+
+        let second_processor =
+            ComWrapper::new(Endpoint::new(InstanceConnectionRole::Processor, 42));
+        let second_controller =
+            ComWrapper::new(Endpoint::new(InstanceConnectionRole::Controller, 0));
+        let controller_proxy = connection_proxy(&second_controller);
+        let controller_proxy_point = controller_proxy
+            .as_com_ref::<IConnectionPoint>()
+            .expect("controller proxy connection point");
+
+        assert_eq!(
+            unsafe { connection_point(&second_processor).connect(controller_proxy_point.as_ptr()) },
+            kResultOk
+        );
+        assert_eq!(second_controller.connection.shared().0, 42);
     }
 
     #[test]
