@@ -1,9 +1,14 @@
 # MEMORY
 
-Last Updated (UTC): 2026-07-11 23:59:07Z
+Last Updated (UTC): 2026-07-12 17:30:49Z
 
 ## Current State
 
+- Active user-requested task: OPT-1148 replaces order-based VST3 processor/controller pairing with the host's exact `IConnectionPoint` relationship.
+- Branch `wsvasek/opt-1148-replace-order-based-vst3-processorcontroller-instance` adds `InstanceConnection<T>`, processor/controller roles, and the `impl_vst3_instance_connection!` delegation macro.
+- The exact host-connected processor publishes an owned `Arc<T>` reference through Toybox's private COM bridge; only the matching controller adopts it, with no process-global creation-order registry and no retained COM peer cycle.
+- Focused tests cover reversed creation order, two independent simultaneous pairs, either callback direction, incompatible processor-to-processor connections, and 128 disconnect/destroy/reconnect cycles.
+- Validation passes with `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk`: focused connection tests, VST3 clippy, `scripts/run_agent_request.sh`, and `scripts/ci_local.sh` (93 VST3-feature tests).
 - Active user-requested task: make Toybox own the reusable macOS VST3 hosted-view lifecycle while Radiant owns all GUI rendering, then migrate Pump off its plugin-local Cocoa renderer.
 - Branch `codex/radiant-vst3-embedded-host` adds the opt-in `radiant-vst3` feature and a generic `RadiantVst3Editor` / `RadiantVst3HostedGui` contract.
 - The hosted view forwards AppKit lifecycle, input, resize, and redraw events to a declarative editor and renders its `SurfacePaintPlan` only through Radiant's embedded Vello renderer pinned at `6575b0c9a6b5abad17f711a36b832b7e7434e7b1`.
@@ -43,15 +48,16 @@ Last Updated (UTC): 2026-07-11 23:59:07Z
 
 ## Active Mission
 
-- Own reusable plugin infrastructure in Toybox while keeping all GUI scene construction and rendering in Radiant and keeping plugins limited to DSP, state/parameters, and declarative UI composition.
+- Keep OPT-1148's reusable VST3 instance connection ready for user review, then let plugin repositories adopt the canonical merged Toybox revision.
 
 ## Immediate Next Actions
 
-1. Run the full Toybox validation lane and commit/push the hosted-view API.
-2. Pin Pump to the resulting Toybox revision and delete Pump's Cocoa view and primitive paint replay.
-3. Build and inspect a fresh Pump VST3 in a real host before requesting review.
+1. Wait for explicit user review and sign-off on the OPT-1148 Toybox PR.
+2. Merge and clean up only after sign-off.
+3. Repin Kickforge to the canonical merge and run the requested multi-instance host/stress validation there.
 
 ## Constraints And Notes
 
 - VST3 checks remain opt-in and require `VST3_SDK_DIR`.
+- OPT-1148 plugin migration adds `IConnectionPoint` and `IToyboxSharedState` to processor/controller interface tuples, gives each object an `InstanceConnection<Shared>`, invokes `impl_vst3_instance_connection!`, and reads controller state through `connection.shared()`.
 - Keep reusable framework behavior in `toybox`; keep plugin-specific behavior in plugin repositories.

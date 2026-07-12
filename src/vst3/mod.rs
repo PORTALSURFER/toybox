@@ -5,6 +5,7 @@
 
 pub mod bundle;
 pub mod component;
+pub mod connection;
 pub mod entry;
 pub mod gui;
 pub mod params;
