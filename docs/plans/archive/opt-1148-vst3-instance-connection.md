@@ -19,7 +19,7 @@
 
 ## Integration
 
-- Plugin processor and controller classes add `IConnectionPoint` and Toybox's private shared-state
+- Plugin processor and controller classes add `IConnectionPoint` and Toybox private shared-state
   bridge to their COM interface lists; state transfer itself uses `IMessage`, so host proxies are
   tolerated.
 - Each class owns an `InstanceConnection<T>` with the appropriate processor/controller role.
@@ -33,7 +33,14 @@
 - `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk bash scripts/ci_local.sh`
 
 All checks pass. The first preflight without `VST3_SDK_DIR` failed at the expected SDK gate; the
-same preflight with the repository's local SDK path passes. The VST3 feature lane now runs 97 tests,
-including both callback directions through a proxy exposing only `IConnectionPoint` and exact
-unsupported-interface result semantics. Concrete-type mismatch coverage verifies rejection and
-that the exported `Arc` reference is released exactly once by direct adoption and rejected offers.
+same preflight with the repository local SDK path passes. The VST3 feature lane runs 97 tests,
+including both callback directions through a proxy exposing only `IConnectionPoint`, exact
+unsupported-interface result semantics, concrete-type mismatch rejection, and exactly-once
+`Arc` release for direct adoption and rejected offers.
+
+## Outcome
+
+User review signed off Toybox PR #4. The final implementation head `ce7f8bf` passed Linux and
+Windows CI, and the merge/cleanup procedure was authorized. Plugin repositories can now adopt the
+canonical merged Toybox revision.
+

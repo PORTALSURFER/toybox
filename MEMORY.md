@@ -1,11 +1,11 @@
 # MEMORY
 
-Last Updated (UTC): 2026-07-12 18:28:42Z
+Last Updated (UTC): 2026-07-12 18:36:14Z
 
 ## Current State
 
-- Active user-requested task: OPT-1148 replaces order-based VST3 processor/controller pairing with the host's exact `IConnectionPoint` relationship.
-- Branch `wsvasek/opt-1148-replace-order-based-vst3-processorcontroller-instance` adds `InstanceConnection<T>`, processor/controller roles, and the `impl_vst3_instance_connection!` delegation macro.
+- Active user-requested task: No active Toybox implementation tasks are currently running.
+- OPT-1148 is signed off and complete. PR #4 adds `InstanceConnection<T>`, processor/controller roles, and the `impl_vst3_instance_connection!` delegation macro.
 - The exact host-connected processor publishes an owned `Arc<T>` reference through the standard VST3 `IConnectionPoint::notify(IMessage*)` channel; only the matching controller adopts it, with no process-global creation-order registry and no retained COM peer cycle.
 - Shared-state handles use `TypeId` rather than diagnostic type-name strings, so duplicate crate/type paths cannot make distinct concrete types compatible.
 - Message attributes own exported handles for the synchronous transfer lifetime; receivers borrow handles to clone compatible state, so rejected offers release the exported `Arc` exactly once.
@@ -50,13 +50,12 @@ Last Updated (UTC): 2026-07-12 18:28:42Z
 
 ## Active Mission
 
-- Keep OPT-1148's reusable VST3 instance connection ready for user review, then let plugin repositories adopt the canonical merged Toybox revision.
+- Keep the signed-off VST3 instance connection stable while plugin repositories adopt the canonical merged Toybox revision.
 
 ## Immediate Next Actions
 
-1. Wait for explicit user review and sign-off on the proxy-safe OPT-1148 Toybox PR #4 update.
-2. Merge and clean up only after sign-off.
-3. Repin Kickforge to the canonical merge and run the requested multi-instance host/stress validation there.
+1. Let Kickforge repin to the canonical Toybox merge and run its multi-instance host/stress validation.
+2. Keep further plugin-specific migration work in plugin repositories.
 
 ## Constraints And Notes
 
