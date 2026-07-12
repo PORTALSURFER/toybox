@@ -285,7 +285,7 @@ impl Vst3HostedGui for RadiantVst3HostedGui {
         }
     }
 
-    fn on_key_up(&self, _key: u16, _key_code: i16, _modifiers: i16) -> bool {
+    fn on_key_up(&self, _key: u16, _key_code: i16, modifiers: i16) -> bool {
         let Some(root_view) = self.root_view else {
             return false;
         };
@@ -293,7 +293,7 @@ impl Vst3HostedGui for RadiantVst3HostedGui {
             let Some(runtime) = runtime_mut(root_view.as_ptr()) else {
                 return false;
             };
-            dispatch_vst3_key_up(runtime);
+            dispatch_vst3_key_up(runtime, modifiers);
             let _: () = msg_send![root_view.as_ptr(), setNeedsDisplay: YES];
         }
         false
@@ -842,8 +842,10 @@ fn dispatch_vst3_key_down(
     dispatch_key_text(runtime, &character.to_string(), modifiers)
 }
 
-fn dispatch_vst3_key_up(runtime: &mut dyn RadiantVst3Editor) {
-    runtime.dispatch_event(Event::pointer_modifiers_changed(PointerModifiers::default()));
+fn dispatch_vst3_key_up(runtime: &mut dyn RadiantVst3Editor, modifiers: i16) {
+    runtime.dispatch_event(Event::pointer_modifiers_changed(vst3_pointer_modifiers(
+        modifiers,
+    )));
 }
 
 fn vst3_pointer_modifiers(modifiers: i16) -> PointerModifiers {
@@ -1204,7 +1206,7 @@ mod tests {
     }
 
     #[test]
-    fn vst3_key_callbacks_set_modifiers_before_key_down_and_clear_on_key_up() {
+    fn vst3_key_callbacks_preserve_held_modifiers_on_key_up() {
         use toybox_vst3_ffi::Steinberg::KeyModifier_::{kAlternateKey, kShiftKey};
         use toybox_vst3_ffi::Steinberg::VirtualKeyCodes_::KEY_LEFT;
 
@@ -1217,7 +1219,8 @@ mod tests {
             KEY_LEFT as i16,
             modifiers
         ));
-        dispatch_vst3_key_up(&mut editor);
+        dispatch_vst3_key_up(&mut editor, kShiftKey as i16);
+        dispatch_vst3_key_up(&mut editor, 0);
 
         assert_eq!(editor.keys, vec![WidgetKey::ArrowLeft]);
         assert_eq!(
@@ -1226,6 +1229,11 @@ mod tests {
                 Event::pointer_modifiers_changed(PointerModifiers {
                     shift: true,
                     alt: true,
+                    command: false,
+                }),
+                Event::pointer_modifiers_changed(PointerModifiers {
+                    shift: true,
+                    alt: false,
                     command: false,
                 }),
                 Event::pointer_modifiers_changed(PointerModifiers::default()),
