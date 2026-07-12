@@ -7,6 +7,7 @@ pub mod bundle;
 pub mod component;
 pub mod connection;
 pub mod entry;
+pub mod events;
 pub mod gui;
 pub mod params;
 pub mod prelude;

@@ -20,6 +20,7 @@ pub use crate::vst3::component::{
 };
 pub use crate::vst3::connection::{IToyboxSharedState, InstanceConnection, InstanceConnectionRole};
 pub use crate::vst3::entry::PluginClassIds;
+pub use crate::vst3::events::{Vst3EventTimeline, Vst3ParameterPoint, collect_vst3_timeline};
 #[cfg(feature = "gui")]
 pub use crate::vst3::gui::parent_to_raw_window_handle;
 #[cfg(feature = "gui")]
@@ -40,5 +41,9 @@ pub use crate::vst3::state::{
     read_versioned_payload, try_encode_versioned_payload, write_all, write_versioned_payload,
 };
 
+pub use crate::events::{
+    BlockEvent, BlockEventTimeline, ScheduledBlockEvent, TimelineBatch, TimelineIngestReport,
+    TimelinePushStatus,
+};
 pub use crate::impl_vst3_instance_connection;
 pub use crate::vst3_plugin_entry;

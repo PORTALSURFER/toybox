@@ -33,7 +33,7 @@ pub use crate::clap::automation::{
     DEFAULT_AUTOMATION_QUEUE_MAX_EVENTS,
 };
 pub use crate::clap::entry::PluginEntry;
-pub use crate::clap::events::{EventRouter, bounds_to_range};
+pub use crate::clap::events::{EventRouter, bounds_to_range, collect_clap_timeline};
 pub use crate::clap::params::{
     ParamBuilder, ParamSpec, apply_param_events, apply_param_events_from_unknown, bool_to_param,
     param_to_bool, parse_toggle_text, push_param_gesture_begin, push_param_gesture_end,
@@ -48,3 +48,7 @@ pub use crate::clap::state::{
 };
 pub use crate::clap::transport::transport_state_from_transport;
 pub use crate::clap_plugin_entry;
+pub use crate::events::{
+    BlockEvent, BlockEventTimeline, ScheduledBlockEvent, TimelineBatch, TimelineIngestReport,
+    TimelinePushStatus,
+};

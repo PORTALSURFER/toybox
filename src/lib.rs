@@ -13,11 +13,14 @@
 pub mod bundle;
 pub mod clap;
 pub mod dsp;
+pub mod events;
 #[cfg(feature = "gui")]
 pub mod gui;
 #[cfg(feature = "gui")]
 mod logging;
 mod state;
+#[cfg(test)]
+mod test_alloc;
 #[cfg(feature = "vst3")]
 pub mod vst3;
 
