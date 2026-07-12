@@ -151,7 +151,7 @@ where
                 {
                     return kResultFalse;
                 }
-                unsafe { self.adopt_shared(handle as usize as *mut SharedStateHandle) }
+                unsafe { self.adopt_borrowed_shared(handle as usize as *const SharedStateHandle) }
             }
         }
     }
@@ -160,11 +160,7 @@ where
     unsafe fn offer_shared(&self, other: &ComRef<'_, IConnectionPoint>) -> tresult {
         let handle = self.export_shared();
         let (message, _) = transfer_message(Some(handle));
-        let result = unsafe { other.notify(message.as_ptr()) };
-        if result != kResultOk {
-            unsafe { release_handle(handle) };
-        }
-        result
+        unsafe { other.notify(message.as_ptr()) }
     }
 
     /// Requests processor-owned state through the standard message channel.
@@ -177,7 +173,7 @@ where
         let Some(handle) = attributes.handle() else {
             return kResultFalse;
         };
-        unsafe { self.adopt_shared(handle) }
+        unsafe { self.adopt_borrowed_shared(handle) }
     }
 
     #[doc(hidden)]
@@ -191,6 +187,15 @@ where
 
     #[doc(hidden)]
     pub unsafe fn adopt_shared(&self, handle: *mut SharedStateHandle) -> tresult {
+        let result = unsafe { self.adopt_borrowed_shared(handle) };
+        if !handle.is_null() {
+            unsafe { release_handle(handle) };
+        }
+        result
+    }
+
+    /// Clones compatible state from a handle whose ownership remains with the caller.
+    unsafe fn adopt_borrowed_shared(&self, handle: *const SharedStateHandle) -> tresult {
         let Some(handle) = (unsafe { handle.as_ref() }) else {
             return kInvalidArgument;
         };
@@ -198,14 +203,13 @@ where
             && handle.type_id == TypeId::of::<T>()
             && !handle.state.is_null();
 
-        let handle =
-            unsafe { Box::from_raw(handle as *const SharedStateHandle as *mut SharedStateHandle) };
         if !compatible {
-            unsafe { (handle.release)(handle.state) };
             return kResultFalse;
         }
 
-        let shared = unsafe { Arc::from_raw(handle.state.cast::<T>()) };
+        let state = handle.state.cast::<T>();
+        unsafe { Arc::increment_strong_count(state) };
+        let shared = unsafe { Arc::from_raw(state) };
         let mut current = self
             .shared
             .write()
@@ -230,7 +234,7 @@ unsafe extern "system" fn release_arc<T>(state: *const c_void) {
     }
 }
 
-/// Releases an exported handle when message delivery fails before the peer consumes it.
+/// Releases an exported handle and its owned `Arc` reference.
 unsafe fn release_handle(handle: *mut SharedStateHandle) {
     if let Some(handle) = unsafe { handle.as_ref() } {
         let handle =
@@ -287,6 +291,19 @@ impl TransferAttributes {
     }
 }
 
+impl Drop for TransferAttributes {
+    fn drop(&mut self) {
+        let handle = self
+            .handle
+            .get_mut()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        if let Some(handle) = handle {
+            unsafe { release_handle(handle as *mut SharedStateHandle) };
+        }
+    }
+}
+
 impl Class for TransferAttributes {
     type Interfaces = (IAttributeList,);
 }
@@ -296,10 +313,14 @@ impl IAttributeListTrait for TransferAttributes {
         if !unsafe { Self::matches_handle_attribute(id) } || value == 0 {
             return kResultFalse;
         }
-        *self
+        let mut handle = self
             .handle
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(value as usize);
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if handle.is_some() {
+            return kResultFalse;
+        }
+        *handle = Some(value as usize);
         kResultOk
     }
 
@@ -639,6 +660,16 @@ mod tests {
 
     crate::impl_vst3_instance_connection!(Endpoint, connection);
 
+    struct OtherEndpoint {
+        connection: InstanceConnection<OtherState>,
+    }
+
+    impl Class for OtherEndpoint {
+        type Interfaces = (IConnectionPoint, IToyboxSharedState);
+    }
+
+    crate::impl_vst3_instance_connection!(OtherEndpoint, connection);
+
     /// Host-style proxy that deliberately exposes only the standard connection interface.
     struct ConnectionProxy {
         destination: toybox_vst3_ffi::ComPtr<IConnectionPoint>,
@@ -745,6 +776,34 @@ mod tests {
         assert_eq!(unsafe { controller.adopt_shared(handle) }, kResultFalse);
         assert_eq!(Arc::strong_count(&processor_state), 2);
         assert_eq!(controller.shared().0, 11);
+    }
+
+    #[test]
+    fn rejected_offer_releases_the_exported_state_once() {
+        let processor_state = Arc::new(State(7));
+        let processor = ComWrapper::new(Endpoint {
+            connection: InstanceConnection::new(
+                InstanceConnectionRole::Processor,
+                Arc::clone(&processor_state),
+            ),
+        });
+        let controller = ComWrapper::new(OtherEndpoint {
+            connection: InstanceConnection::new(
+                InstanceConnectionRole::Controller,
+                Arc::new(OtherState(11)),
+            ),
+        });
+        let controller_point = controller
+            .as_com_ref::<IConnectionPoint>()
+            .expect("other controller connection point");
+
+        assert_eq!(Arc::strong_count(&processor_state), 2);
+        assert_eq!(
+            unsafe { connection_point(&processor).connect(controller_point.as_ptr()) },
+            kResultFalse
+        );
+        assert_eq!(Arc::strong_count(&processor_state), 2);
+        assert_eq!(controller.connection.shared().0, 11);
     }
 
     #[test]
