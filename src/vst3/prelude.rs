@@ -18,6 +18,7 @@ pub use crate::vst3::component::{
     CATEGORY_AUDIO_MODULE_CLASS, CATEGORY_COMPONENT_CONTROLLER_CLASS, copy_cstring,
     write_class_info, write_class_info_many, write_wide_name,
 };
+pub use crate::vst3::connection::{IToyboxSharedState, InstanceConnection, InstanceConnectionRole};
 pub use crate::vst3::entry::PluginClassIds;
 #[cfg(feature = "gui")]
 pub use crate::vst3::gui::parent_to_raw_window_handle;
@@ -39,4 +40,5 @@ pub use crate::vst3::state::{
     read_versioned_payload, try_encode_versioned_payload, write_all, write_versioned_payload,
 };
 
+pub use crate::impl_vst3_instance_connection;
 pub use crate::vst3_plugin_entry;
