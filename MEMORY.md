@@ -1,6 +1,6 @@
 # MEMORY
 
-Last Updated (UTC): 2026-07-14 11:49:56Z
+Last Updated (UTC): 2026-07-14 11:58:47Z
 
 ## Current State
 
@@ -11,7 +11,7 @@ Last Updated (UTC): 2026-07-14 11:49:56Z
 - Segment translation now clamps one shared x/y delta for both endpoints, preserving pair offset and slope at normalized y bounds, neighbor/minimum-spacing limits, fixed endpoint x constraints, and coupled endpoint y constraints.
 - Focused coverage includes modifier-gated hover/color, insertion suppression, direct-line/point/empty-canvas precedence, legacy defaults, translation, commit/cancel/consecutive gestures, feedback clearing, and all group-clamp boundaries.
 - Validation passes with `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk`: 295 Patchbay GUI tests, all-target/all-feature clippy, `bash scripts/ci_local.sh` (107 VST3-feature tests plus external API coverage), and the legacy exhaustive-literal integration test under the GUI feature.
-- Ready-for-review PR #6 is open at `https://github.com/PORTALSURFER/toybox/pull/6`; current status is `waiting for user review` and merge requires explicit user sign-off.
+- OPT-1169 is signed off and complete in Toybox through PR #6 at `https://github.com/PORTALSURFER/toybox/pull/6`; no further Toybox implementation remains before Pump adoption.
 - The current-head review fix cancels a modifier-gated `MoveSegment` before mutation when Command is released or the pointer leaves the editor/window; regression coverage proves the model and changed response remain untouched, and the 295-test GUI suite plus full local CI pass.
 - `CurveEditorModifier` is re-exported through both `patchbay_gui` and `toybox::gui::declarative`; an external integration test compiles and names `Command` through both supported downstream APIs.
 - `CurveInteractionOptions`, `CurveEditorStyle`, and `Node` retain their legacy public shapes. Modifier and highlight settings travel through the existing opaque `SlotSpec` wrapper, with regression coverage for external exhaustive literals, fluent builder ordering, and declarative render dispatch.
@@ -67,13 +67,12 @@ Last Updated (UTC): 2026-07-14 11:49:56Z
 
 ## Active Mission
 
-- Land OPT-1169 as reusable Toybox curve-editor infrastructure, then let Pump OPT-1118 enable and style the Command-gated interaction after user sign-off.
+- Carry the completed OPT-1169 Toybox curve-editor contract into Pump OPT-1118.
 
 ## Immediate Next Actions
 
-1. Wait for explicit user review/sign-off on ready-for-review Toybox PR #6 for OPT-1169.
-2. After sign-off, merge and complete the repository cleanup procedure.
-3. Then let Pump OPT-1118 repin Toybox and opt in with `.curve_segment_move(CurveSegmentMoveOptions::new(CurveEditorModifier::Command, color))`.
+1. Let Pump OPT-1118 repin Toybox and opt in with `.curve_segment_move(CurveSegmentMoveOptions::new(CurveEditorModifier::Command, color))`.
+2. Keep future shared curve-editor changes source-compatible for legacy `CurveInteractionOptions`, `CurveEditorStyle`, and `Node` consumers.
 
 ## Constraints And Notes
 
