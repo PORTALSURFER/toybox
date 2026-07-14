@@ -334,7 +334,7 @@ fn command_drag_translates_one_pair_and_commit_cancel_and_next_gesture_clear_sta
 }
 
 #[test]
-fn segment_move_feedback_clears_on_modifier_release_and_pointer_exit() {
+fn gated_segment_move_cancels_on_modifier_release_and_pointer_exit() {
     let interaction = command_segment_move_options();
     let style = crate::declarative::CurveEditorStyle {
         segment_move_highlight: Color::rgb(7, 8, 9),
@@ -353,11 +353,12 @@ fn segment_move_feedback_clears_on_modifier_release_and_pointer_exit() {
         style.clone(),
     );
 
-    let (_, modifier_released_commands) = render_frame(
+    let before_modifier_release = model.clone();
+    let (modifier_release_response, modifier_released_commands) = render_frame(
         &mut model,
         &mut ui_state,
         InputState {
-            pointer_pos: start,
+            pointer_pos: offset(start, 20, -12),
             mouse_down: true,
             command_down: false,
             ..InputState::default()
@@ -365,6 +366,9 @@ fn segment_move_feedback_clears_on_modifier_release_and_pointer_exit() {
         interaction.clone(),
         style.clone(),
     );
+    assert!(!modifier_release_response.changed);
+    assert_eq!(model, before_modifier_release);
+    assert!(runtime_drag_mode(&ui_state).is_none());
     assert!(!modifier_released_commands.iter().any(|command| {
         matches!(command, VectorCommand::Polyline(line) if line.color == move_color)
             || matches!(command, VectorCommand::CircleFill(circle) if circle.color == move_color)
@@ -373,7 +377,26 @@ fn segment_move_feedback_clears_on_modifier_release_and_pointer_exit() {
         |command| matches!(command, VectorCommand::CircleFill(circle) if circle.color == preview_color)
     ));
 
-    let (_, pointer_exit_commands) = render_frame(
+    let _ = render_frame(
+        &mut model,
+        &mut ui_state,
+        InputState {
+            pointer_pos: start,
+            mouse_released: true,
+            ..InputState::default()
+        },
+        interaction.clone(),
+        style.clone(),
+    );
+    let _ = render_frame(
+        &mut model,
+        &mut ui_state,
+        press_input(start, true),
+        interaction.clone(),
+        style.clone(),
+    );
+    let before_pointer_exit = model.clone();
+    let (pointer_exit_response, pointer_exit_commands) = render_frame(
         &mut model,
         &mut ui_state,
         InputState {
@@ -386,6 +409,9 @@ fn segment_move_feedback_clears_on_modifier_release_and_pointer_exit() {
         interaction,
         style,
     );
+    assert!(!pointer_exit_response.changed);
+    assert_eq!(model, before_pointer_exit);
+    assert!(runtime_drag_mode(&ui_state).is_none());
     assert!(!pointer_exit_commands.iter().any(|command| {
         matches!(command, VectorCommand::Polyline(line) if line.color == move_color)
             || matches!(command, VectorCommand::CircleFill(circle) if circle.color == move_color)

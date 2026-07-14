@@ -290,6 +290,14 @@ impl<'a> Ui<'a> {
                         start_right_y,
                         mut dragging,
                     } => {
+                        let gated_drag_is_invalid = interaction
+                            .segment_move_modifier
+                            .is_some_and(|modifier| {
+                                !curve_editor_modifier_down(modifier, region) || !region.hovered
+                            });
+                        if gated_drag_is_invalid {
+                            return false;
+                        }
                         if !dragging
                             && !Self::curve_editor_drag_threshold_reached(
                                 start_pointer,
