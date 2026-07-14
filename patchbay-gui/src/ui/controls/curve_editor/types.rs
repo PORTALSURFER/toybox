@@ -105,6 +105,8 @@ struct CurveEditorVisualState {
     hovered_point: Option<usize>,
     /// Hovered segment index.
     hovered_segment: Option<usize>,
+    /// Modifier-gated segment-move target or active segment index.
+    segment_move_segment: Option<usize>,
     /// Optional preview point for insertion.
     preview_point: Option<crate::declarative::CurvePoint>,
 }

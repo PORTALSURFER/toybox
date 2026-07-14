@@ -23,3 +23,7 @@ mod curve_editor_vector_quality_tests {
 mod curve_editor_snap_tests {
     include!("05_curve_editor_snap_tests.rs");
 }
+
+mod curve_editor_segment_move_tests {
+    include!("06_curve_editor_segment_move_tests.rs");
+}

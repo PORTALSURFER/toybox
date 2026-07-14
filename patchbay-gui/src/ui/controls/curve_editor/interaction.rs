@@ -54,19 +54,45 @@ impl<'a> Ui<'a> {
                 find_segment_hit_within(model, region.local_pointer, segment_direct_radius, rect)
             })
             .flatten();
-        let preview_point =
-            (region.hovered && !region.alt_down && hovered_point.is_none() && direct_segment.is_some())
-                .then(|| preview_point_on_curve(model, region.local_pointer, rect, &interaction.snap))
-                .flatten();
-        let hovered_segment = (region.hovered && preview_point.is_none())
+        let near_segment = region
+            .hovered
             .then(|| {
                 find_segment_hit_within(model, region.local_pointer, segment_near_radius, rect)
             })
             .flatten();
+        let active_move_segment = match runtime.drag_mode.as_ref() {
+            Some(CurveEditorDragMode::MoveSegment { index, .. }) => Some(*index),
+            _ => None,
+        };
+        let modifier_gates_segment_move = interaction.segment_move_modifier.is_some();
+        let segment_move_modifier_down = interaction
+            .segment_move_modifier
+            .is_some_and(|modifier| curve_editor_modifier_down(modifier, region));
+        let segment_move_segment = (region.hovered
+            && !region.alt_down
+            && hovered_point.is_none()
+            && segment_move_modifier_down)
+            .then_some(active_move_segment.or(near_segment))
+            .flatten();
+        let preview_point = (region.hovered
+            && !region.alt_down
+            && runtime.drag_mode.is_none()
+            && hovered_point.is_none()
+            && segment_move_segment.is_none()
+            && direct_segment.is_some())
+        .then(|| preview_point_on_curve(model, region.local_pointer, rect, &interaction.snap))
+        .flatten();
+        let hovered_segment = (region.hovered
+            && preview_point.is_none()
+            && segment_move_segment.is_none()
+            && (!modifier_gates_segment_move || region.alt_down))
+        .then_some(near_segment)
+        .flatten();
         CurveEditorVisualState {
             selected_point: runtime.selected_point,
             hovered_point,
             hovered_segment,
+            segment_move_segment,
             preview_point,
         }
     }
@@ -85,6 +111,17 @@ impl<'a> Ui<'a> {
         let raw_local_pointer = region.raw_local_pointer;
         let normalized_pointer = curve_point_from_local(local_pointer, rect);
         let raw_normalized_pointer = curve_point_from_local(raw_local_pointer, rect);
+
+        // Focus loss can clear the host button state without a release frame.
+        // Do not let that stale drag mode leak into the next gesture.
+        if runtime.drag_mode.is_some()
+            && region.active
+            && !region.pressed
+            && !region.dragged
+            && !region.released
+        {
+            runtime.drag_mode = None;
+        }
 
         // Windows reports a double click as a press + double-click in the same frame.
         // Handle deletion first so the press path cannot swallow the action.
@@ -117,6 +154,17 @@ impl<'a> Ui<'a> {
                 });
                 return false;
             }
+            let near_segment =
+                find_segment_hit_within(model, local_pointer, segment_near_radius, rect);
+            let modifier_gated_segment = interaction
+                .segment_move_modifier
+                .filter(|modifier| curve_editor_modifier_down(*modifier, region))
+                .filter(|_| !region.alt_down)
+                .and(near_segment);
+            if let Some(index) = modifier_gated_segment {
+                runtime.drag_mode = Some(move_segment_drag_mode(model, index, local_pointer));
+                return false;
+            }
             if !region.alt_down
                 && find_segment_hit_within(model, local_pointer, segment_direct_radius, rect).is_some()
             {
@@ -139,8 +187,7 @@ impl<'a> Ui<'a> {
                 enforce_endpoint_mode(model, interaction.endpoint_mode);
                 return true;
             }
-            if let Some(index) = find_segment_hit_within(model, local_pointer, segment_near_radius, rect)
-            {
+            if let Some(index) = near_segment {
                 runtime.drag_mode = if region.alt_down {
                     let start_tension = model
                         .segments
@@ -154,19 +201,14 @@ impl<'a> Ui<'a> {
                         start_tension,
                         dragging: false,
                     })
+                } else if interaction.segment_move_modifier.is_none() {
+                    Some(move_segment_drag_mode(model, index, local_pointer))
                 } else {
-                    let right_index = (index + 1).min(model.points.len().saturating_sub(1));
-                    Some(CurveEditorDragMode::MoveSegment {
-                        index,
-                        start_pointer: local_pointer,
-                        start_left_x: model.points[index].x,
-                        start_right_x: model.points[right_index].x,
-                        start_left_y: model.points[index].y,
-                        start_right_y: model.points[right_index].y,
-                        dragging: false,
-                    })
+                    None
                 };
-                return false;
+                if runtime.drag_mode.is_some() {
+                    return false;
+                }
             }
             if let Some(index) = find_point_hit_within(model, local_pointer, node_insert_guard, rect) {
                 runtime.selected_point = Some(index);
@@ -341,6 +383,34 @@ impl<'a> Ui<'a> {
         }
 
         changed
+    }
+}
+
+/// Return whether the configured curve-editor modifier is held this frame.
+fn curve_editor_modifier_down(
+    modifier: crate::declarative::CurveEditorModifier,
+    region: RegionResponse,
+) -> bool {
+    match modifier {
+        crate::declarative::CurveEditorModifier::Command => region.command_down,
+    }
+}
+
+/// Build one segment-translation drag from the current pair geometry.
+fn move_segment_drag_mode(
+    model: &crate::declarative::CurveModel,
+    index: usize,
+    start_pointer: Point,
+) -> CurveEditorDragMode {
+    let right_index = (index + 1).min(model.points.len().saturating_sub(1));
+    CurveEditorDragMode::MoveSegment {
+        index,
+        start_pointer,
+        start_left_x: model.points[index].x,
+        start_right_x: model.points[right_index].x,
+        start_left_y: model.points[index].y,
+        start_right_y: model.points[right_index].y,
+        dragging: false,
     }
 }
 
