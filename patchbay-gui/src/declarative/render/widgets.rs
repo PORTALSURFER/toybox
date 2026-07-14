@@ -458,7 +458,7 @@ fn scale_alpha(color: Color, alpha: u8) -> Color {
 fn render_curve_editor(
     curve_editor: &CurveEditorSpec,
     segment_move: Option<CurveSegmentMoveOptions>,
-    point_horizontal_constraint: Option<CurveEditorModifier>,
+    point_horizontal_constraint: Option<CurvePointHorizontalConstraintModifier>,
     rect: Rect,
     ui: &mut Ui<'_>,
     actions: &mut Vec<UiAction>,

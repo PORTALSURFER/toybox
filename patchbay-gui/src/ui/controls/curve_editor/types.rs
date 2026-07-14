@@ -14,7 +14,8 @@ pub(crate) struct CurveEditorRectRenderRequest {
     /// Optional modifier-gated grouped segment-move configuration.
     pub(crate) segment_move: Option<crate::declarative::CurveSegmentMoveOptions>,
     /// Optional modifier that constrains point dragging horizontally.
-    pub(crate) point_horizontal_constraint: Option<crate::declarative::CurveEditorModifier>,
+    pub(crate) point_horizontal_constraint:
+        Option<crate::declarative::CurvePointHorizontalConstraintModifier>,
     /// Optional normalized playhead x position.
     pub(crate) playhead_x: Option<f32>,
 }
@@ -53,7 +54,7 @@ impl CurveEditorRectRenderRequest {
     /// Opt into modifier-gated horizontal movement for curve-point drags.
     pub(crate) fn point_horizontal_constraint(
         mut self,
-        modifier: crate::declarative::CurveEditorModifier,
+        modifier: crate::declarative::CurvePointHorizontalConstraintModifier,
     ) -> Self {
         self.point_horizontal_constraint = Some(modifier);
         self
@@ -73,7 +74,8 @@ struct CurveEditorInteractionDecorators {
     /// Optional modifier-gated grouped segment-move configuration.
     segment_move: Option<crate::declarative::CurveSegmentMoveOptions>,
     /// Optional modifier that constrains point dragging horizontally.
-    point_horizontal_constraint: Option<crate::declarative::CurveEditorModifier>,
+    point_horizontal_constraint:
+        Option<crate::declarative::CurvePointHorizontalConstraintModifier>,
 }
 
 /// Runtime drag mode for curve-editor interactions.

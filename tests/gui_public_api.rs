@@ -2,9 +2,13 @@
 
 #![cfg(feature = "gui")]
 
-use patchbay_gui::CurveEditorModifier as PatchbayCurveEditorModifier;
+use patchbay_gui::{
+    CurveEditorModifier as PatchbayCurveEditorModifier,
+    CurvePointHorizontalConstraintModifier as PatchbayCurvePointHorizontalConstraintModifier,
+};
 use toybox::gui::declarative::{
     CurveEditorModifier as ToyboxCurveEditorModifier,
+    CurvePointHorizontalConstraintModifier as ToyboxCurvePointHorizontalConstraintModifier,
     CurveSegmentMoveOptions as ToyboxCurveSegmentMoveOptions,
 };
 
@@ -12,11 +16,31 @@ use toybox::gui::declarative::{
 fn curve_editor_modifier_is_nameable_through_supported_public_apis() {
     let direct = PatchbayCurveEditorModifier::Command;
     let facade = ToyboxCurveEditorModifier::Command;
-    let direct_shift = PatchbayCurveEditorModifier::Shift;
-    let facade_shift = ToyboxCurveEditorModifier::Shift;
+    let direct_shift: PatchbayCurvePointHorizontalConstraintModifier =
+        PatchbayCurveEditorModifier::Shift;
+    let facade_shift: ToyboxCurvePointHorizontalConstraintModifier =
+        ToyboxCurveEditorModifier::Shift;
 
     assert_eq!(direct, facade);
     assert_eq!(direct_shift, facade_shift);
+}
+
+#[test]
+fn legacy_curve_editor_modifier_matches_remain_exhaustive() {
+    fn direct_name(modifier: PatchbayCurveEditorModifier) -> &'static str {
+        match modifier {
+            PatchbayCurveEditorModifier::Command => "command",
+        }
+    }
+
+    fn facade_name(modifier: ToyboxCurveEditorModifier) -> &'static str {
+        match modifier {
+            ToyboxCurveEditorModifier::Command => "command",
+        }
+    }
+
+    assert_eq!(direct_name(PatchbayCurveEditorModifier::Command), "command");
+    assert_eq!(facade_name(ToyboxCurveEditorModifier::Command), "command");
 }
 
 #[test]

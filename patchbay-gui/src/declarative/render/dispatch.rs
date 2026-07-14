@@ -27,7 +27,7 @@ struct RenderCtx<'a> {
     /// Segment-move decorator inherited from the active opaque slot.
     curve_segment_move: Option<CurveSegmentMoveOptions>,
     /// Point-horizontal-constraint decorator inherited from the active opaque slot.
-    curve_point_horizontal_constraint: Option<CurveEditorModifier>,
+    curve_point_horizontal_constraint: Option<CurvePointHorizontalConstraintModifier>,
 }
 
 /// Queue one per-node reason flag for the next rendered child.

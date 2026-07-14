@@ -6,7 +6,7 @@ pub struct SlotSpec {
     /// Optional curve-editor interaction decorator carried by this opaque wrapper.
     curve_segment_move: Option<CurveSegmentMoveOptions>,
     /// Optional modifier that constrains curve-point dragging horizontally.
-    curve_point_horizontal_constraint: Option<CurveEditorModifier>,
+    curve_point_horizontal_constraint: Option<CurvePointHorizontalConstraintModifier>,
 }
 
 impl SlotSpec {
@@ -35,12 +35,17 @@ impl SlotSpec {
     }
 
     /// Return the point-horizontal-constraint modifier carried by this slot.
-    pub(crate) const fn curve_point_horizontal_constraint(&self) -> Option<CurveEditorModifier> {
+    pub(crate) const fn curve_point_horizontal_constraint(
+        &self,
+    ) -> Option<CurvePointHorizontalConstraintModifier> {
         self.curve_point_horizontal_constraint
     }
 
     /// Store an opt-in point-horizontal-constraint modifier on this slot.
-    pub(crate) fn set_curve_point_horizontal_constraint(&mut self, modifier: CurveEditorModifier) {
+    pub(crate) fn set_curve_point_horizontal_constraint(
+        &mut self,
+        modifier: CurvePointHorizontalConstraintModifier,
+    ) {
         self.curve_point_horizontal_constraint = Some(modifier);
     }
 

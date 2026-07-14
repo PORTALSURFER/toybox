@@ -249,7 +249,10 @@ impl Node {
     /// Opt into modifier-gated horizontal movement for curve-point dragging.
     ///
     /// Non-curve-editor node kinds are returned unchanged.
-    pub fn curve_point_horizontal_constraint(self, modifier: CurveEditorModifier) -> Self {
+    pub fn curve_point_horizontal_constraint(
+        self,
+        modifier: CurvePointHorizontalConstraintModifier,
+    ) -> Self {
         match self {
             Self::CurveEditor(curve_editor) => {
                 let mut slot = SlotSpec::new(Self::CurveEditor(curve_editor));

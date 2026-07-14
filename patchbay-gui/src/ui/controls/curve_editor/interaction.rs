@@ -115,7 +115,7 @@ impl<'a> Ui<'a> {
         let raw_normalized_pointer = curve_point_from_local(raw_local_pointer, rect);
         let point_horizontal_constraint_down = decorators
             .point_horizontal_constraint
-            .is_some_and(|modifier| curve_editor_modifier_down(modifier, region));
+            .is_some_and(|_| region.shift_down);
         let segment_move = decorators.segment_move;
 
         // Focus loss can clear the host button state without a release frame.
@@ -452,7 +452,6 @@ fn curve_editor_modifier_down(
 ) -> bool {
     match modifier {
         crate::declarative::CurveEditorModifier::Command => region.command_down,
-        crate::declarative::CurveEditorModifier::Shift => region.shift_down,
     }
 }
 
