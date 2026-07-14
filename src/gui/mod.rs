@@ -15,10 +15,10 @@ pub mod waveform;
 pub mod declarative {
     pub use patchbay_gui::{
         AccentKey, Align, ButtonSpec, ColorStateVariants, ColorTokens, ContainerLayout,
-        ContainerLength, ControlTokens, CurveEditorSpec, CurveEditorStyle, CurveGridConfig,
-        CurveHighlightMode, CurveInteractionOptions, CurveModel, CurvePoint, CurveSegment,
-        CurveSnapConfig, DeclarativeError, DefaultWidgetColorResolver, DropdownSpec, EdgeInsets,
-        EndpointMode, EqAttractor, EqAttractorColorPolicy, EqAttractorSurfaceAction,
+        ContainerLength, ControlTokens, CurveEditorModifier, CurveEditorSpec, CurveEditorStyle,
+        CurveGridConfig, CurveHighlightMode, CurveInteractionOptions, CurveModel, CurvePoint,
+        CurveSegment, CurveSnapConfig, DeclarativeError, DefaultWidgetColorResolver, DropdownSpec,
+        EdgeInsets, EndpointMode, EqAttractor, EqAttractorColorPolicy, EqAttractorSurfaceAction,
         EqAttractorSurfaceModel, EqAttractorSurfaceSpec, EqAttractorSurfaceStyle, FlexSpec,
         GridKind, GridSpec, GridTemplate, IndicatorSpec, Justify, KnobSpec, LayoutBox,
         LayoutContainerKind, LayoutDiagnostic, LayoutDiagnosticCode, LayoutDiagnosticLevel,

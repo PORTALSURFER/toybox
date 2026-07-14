@@ -1,6 +1,6 @@
 # MEMORY
 
-Last Updated (UTC): 2026-07-14 10:15:13Z
+Last Updated (UTC): 2026-07-14 10:17:30Z
 
 ## Current State
 
@@ -13,6 +13,7 @@ Last Updated (UTC): 2026-07-14 10:15:13Z
 - Validation passes with `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk`: 291 Patchbay GUI tests, all-target/all-feature clippy, `bash scripts/ci_local.sh` (107 VST3-feature tests plus external API coverage), and `cargo test --all`.
 - Ready-for-review PR #6 is open at `https://github.com/PORTALSURFER/toybox/pull/6`; current status is `waiting for user review` and merge requires explicit user sign-off.
 - The current-head review fix cancels a modifier-gated `MoveSegment` before mutation when Command is released or the pointer leaves the editor/window; regression coverage proves the model and changed response remain untouched, and the 291-test GUI suite plus full local CI pass.
+- `CurveEditorModifier` is re-exported through both `patchbay_gui` and `toybox::gui::declarative`; an external integration test compiles and names `Command` through both supported downstream APIs.
 - Active user-requested task: implement OPT-1159, the reusable realtime-safe sample-offset event timeline for CLAP and VST3.
 - Branch `wsvasek/opt-1159-toybox-provide-a-realtime-safe-sample-offset-event-timeline` adds a format-neutral fixed-capacity `BlockEventTimeline<P, E>`, CLAP classifier ingestion, and VST3 parameter-queue plus `IEventList` ingestion.
 - Timeline ordering is deterministic by clamped sample offset, parameter-before-event priority, and stable source sequence. Full capacity retains the earliest events and explicitly reports replacements and drops without growing storage.
