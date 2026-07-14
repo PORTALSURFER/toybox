@@ -458,6 +458,7 @@ fn scale_alpha(color: Color, alpha: u8) -> Color {
 fn render_curve_editor(
     curve_editor: &CurveEditorSpec,
     segment_move: Option<CurveSegmentMoveOptions>,
+    point_horizontal_constraint: Option<CurvePointHorizontalConstraintModifier>,
     rect: Rect,
     ui: &mut Ui<'_>,
     actions: &mut Vec<UiAction>,
@@ -473,6 +474,11 @@ fn render_curve_editor(
     );
     let request = if let Some(segment_move) = segment_move {
         request.segment_move(segment_move)
+    } else {
+        request
+    };
+    let request = if let Some(modifier) = point_horizontal_constraint {
+        request.point_horizontal_constraint(modifier)
     } else {
         request
     };

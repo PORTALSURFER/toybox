@@ -27,3 +27,7 @@ mod curve_editor_snap_tests {
 mod curve_editor_segment_move_tests {
     include!("06_curve_editor_segment_move_tests.rs");
 }
+
+mod curve_editor_point_constraint_tests {
+    include!("07_curve_editor_point_constraint_tests.rs");
+}

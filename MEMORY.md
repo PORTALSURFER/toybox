@@ -1,8 +1,18 @@
 # MEMORY
 
-Last Updated (UTC): 2026-07-14 21:30:03Z
+Last Updated (UTC): 2026-07-14 22:13:06Z
 
 ## Current State
+
+- Active user-requested task: implement OPT-1173, an opt-in Shift horizontal constraint for reusable Patchbay curve-point dragging.
+- Branch `wsvasek/opt-1173-toybox-add-opt-in-shift-horizontal-constraint-for-curve` adds `.curve_point_horizontal_constraint(CurveEditorModifier::Shift)` through the existing opaque slot decorator so legacy `CurveInteractionOptions`, `CurveEditorStyle`, and `CurveEditorSpec` shapes remain unchanged.
+- `CurveEditorDragMode::MovePoint` now owns prior-frame constraint state, a stable visible-y anchor, and a normalized vertical pointer offset/rebase. Shift at press locks the origin y; mid-drag engagement captures the visible moved y; release preserves the anchored y and later vertical deltas without a jump.
+- Constrained movement continues through origin-snapshot recomputation, x snapping, ordering/minimum spacing, sticky drag-through removal/restoration, endpoint enforcement, commit/release/focus cleanup, and selected-point remapping.
+- Focused coverage includes opt-in/default behavior, held-at-start Shift, vertical drift, repeated mid-gesture toggles, no-jump release, Shift+Command x snapping, neighbor and coupled-endpoint boundaries, sticky restoration, release/focus loss, consecutive gestures, declarative dispatch, decorator composition, public API naming, and legacy exhaustive modifier matches.
+- Validation passes: 304 Patchbay GUI tests, 5 public GUI API tests, 17 macOS Radiant/VST3 host input tests, and canonical local CI with GUI/VST3 warnings-denied clippy plus 116 VST3-feature tests.
+- Commit `9cb14b9` is pushed and ready-for-review PR #8 is open at `https://github.com/PORTALSURFER/toybox/pull/8`; current status is `waiting for user review`.
+- The current-head Y-snap review fix separates the persistent vertical pointer rebase from frame-scoped snap suppression: the active constraint and exact release frame preserve the anchor, while later unconstrained drag frames restore configured `horizontal_positions` Y snapping. Regression coverage proves both the no-jump release and restored snap behavior.
+- The current-head public-API review fix removes `Shift` as an enum variant so downstream `CurveEditorModifier::Command` matches remain exhaustive. `CurveEditorModifier::Shift` remains the exact decorator call through an associated `CurvePointHorizontalConstraintModifier` token re-exported by both supported public APIs.
 
 - Active user-requested task: implement OPT-1170, reusable realtime-safe VST3 runtime replacement and coherent state handoff in Toybox.
 - Branch `wsvasek/opt-1170-toybox-provide-reusable-realtime-safe-vst3-runtime-and-state` adds `src/vst3/realtime.rs` and exports the API through both `toybox::vst3` and `toybox::vst3::prelude`.
@@ -78,12 +88,12 @@ Last Updated (UTC): 2026-07-14 21:30:03Z
 
 ## Active Mission
 
-- Complete the signed-off OPT-1170 PR #7 merge and branch cleanup, then hand the merged Toybox contract to Kickforge OPT-1150.
+- Publish the validated OPT-1173 implementation as a ready-for-review PR, then stop for explicit user review/sign-off.
 
 ## Immediate Next Actions
 
-1. Merge signed-off PR #7 and verify clean, synchronized `main` with no remaining feature branch.
-2. Let Kickforge OPT-1150 repin the merged Toybox revision and remove its local runtime/state handoff primitives.
+1. Wait for explicit user review/sign-off on ready-for-review PR #8.
+2. After explicit sign-off and merge, let Pump OPT-1116 repin Toybox and enable the Shift decorator in its Patchbay curve editor.
 
 ## Constraints And Notes
 

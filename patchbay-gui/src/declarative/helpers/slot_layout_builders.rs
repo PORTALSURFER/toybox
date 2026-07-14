@@ -120,7 +120,7 @@ fn accepts_widget_layout(node: &Node) -> bool {
         || matches!(
             node,
             Node::Slot(slot)
-                if slot.curve_segment_move().is_some()
+                if slot.has_curve_editor_decorator()
                     && matches!(slot.child(), Node::CurveEditor(_))
         )
 }

@@ -21,6 +21,23 @@ pub enum CurveEditorModifier {
     Command,
 }
 
+impl CurveEditorModifier {
+    /// The Shift key for the opt-in curve-point horizontal constraint.
+    ///
+    /// This associated token preserves exhaustive matches over
+    /// [`CurveEditorModifier`] while keeping the decorator call site concise.
+    #[allow(non_upper_case_globals)]
+    pub const Shift: CurvePointHorizontalConstraintModifier =
+        CurvePointHorizontalConstraintModifier { _private: () };
+}
+
+/// Modifier token accepted by the curve-point horizontal-constraint decorator.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CurvePointHorizontalConstraintModifier {
+    /// Prevent external construction so the supported token remains explicit.
+    _private: (),
+}
+
 /// Opt-in configuration for moving a curve segment as one translated pair.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CurveSegmentMoveOptions {

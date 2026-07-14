@@ -57,6 +57,91 @@ fn curve_segment_move_decorator_reaches_render_and_hover_feedback() {
 }
 
 #[test]
+fn curve_point_horizontal_constraint_decorator_reaches_interaction_runtime() {
+    let size = Size {
+        width: 220,
+        height: 160,
+    };
+    let model = CurveModel::new(
+        vec![
+            CurvePoint::new(0.0, 0.2),
+            CurvePoint::new(0.3, 0.4),
+            CurvePoint::new(1.0, 0.8),
+        ],
+        vec![CurveSegment::new(0.0); 2],
+    );
+    let spec = UiSpec::new(
+        root_frame_sized(
+            "root",
+            Node::Absolute(
+                AbsoluteSpec::new(vec![AbsoluteChild::new(
+                    Point { x: 0, y: 0 },
+                    curve_editor("curve", model)
+                        .curve_point_horizontal_constraint(CurveEditorModifier::Shift)
+                        .widget_layout(LayoutBox::fixed(size.width, size.height)),
+                )])
+                .layout(ContainerLayout::fill()),
+            ),
+            size,
+        )
+        .padding(0),
+    );
+    let point_to_pointer = |point: CurvePoint| Point {
+        x: (point.x * (size.width - 1) as f32).round() as i32,
+        y: ((1.0 - point.y) * (size.height - 1) as f32).round() as i32,
+    };
+    let mut ui_state = UiState::default();
+    let theme = Theme::default();
+    let mut canvas = Canvas::new(size.width, size.height);
+    let mut layout = Layout::default();
+    let press_input = InputState {
+        window_size: size,
+        pointer_pos: point_to_pointer(CurvePoint::new(0.3, 0.4)),
+        mouse_pressed: true,
+        mouse_down: true,
+        shift_down: true,
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(
+        &mut canvas,
+        &press_input,
+        &mut ui_state,
+        &mut layout,
+        &theme,
+    );
+    render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("press should render");
+
+    let mut canvas = Canvas::new(size.width, size.height);
+    let mut layout = Layout::default();
+    let drag_input = InputState {
+        window_size: size,
+        pointer_pos: point_to_pointer(CurvePoint::new(0.5, 0.9)),
+        mouse_down: true,
+        shift_down: true,
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(
+        &mut canvas,
+        &drag_input,
+        &mut ui_state,
+        &mut layout,
+        &theme,
+    );
+    let result = render_checked(&spec, &mut ui, Point { x: 0, y: 0 })
+        .expect("constrained drag should render");
+    let moved = result
+        .actions
+        .iter()
+        .find_map(|action| match action {
+            UiAction::CurveEditorChanged { key, model } if key == "curve" => Some(model),
+            _ => None,
+        })
+        .expect("drag should emit one curve update");
+    assert!((moved.points[1].x - 0.5).abs() < 0.006);
+    assert!((moved.points[1].y - 0.4).abs() < 0.006);
+}
+
+#[test]
 fn render_unlabeled_knob_uses_reduced_hit_region() {
     let mut tokens = ThemeTokens::default();
     tokens.controls.knob_diameter = 96;

@@ -1,21 +1,25 @@
 # Active Todo Queue
 
-Mission: hand the merged OPT-1170 Toybox runtime/state contract to Kickforge OPT-1150.
+Mission: deliver OPT-1173 as an opt-in reusable Shift horizontal constraint for Patchbay curve-point dragging.
 
-## Completed PR
+## Active PR
 
-- Branch: `wsvasek/opt-1170-toybox-provide-reusable-realtime-safe-vst3-runtime-and-state`
-- PR: `https://github.com/PORTALSURFER/toybox/pull/7`
-- Scope: generic latest-wins runtime publication/adoption/deferred retirement plus bounded owned snapshot-and-generation state publication under `toybox::vst3`
-- Definition of Done: no allocation, blocking, or destruction on audio; stale and redundant candidates retire on control; old-or-complete state observations; documented unsafe/lifecycle boundaries; deterministic concurrency, stress, Miri, external adoption, clippy, and test evidence
-- Status: `signed off`; PR #7 is the complete Toybox delivery for OPT-1170
+- Branch: `wsvasek/opt-1173-toybox-add-opt-in-shift-horizontal-constraint-for-curve`
+- PR: `https://github.com/PORTALSURFER/toybox/pull/8`
+- Scope: add a source-compatible declarative point-horizontal-constraint decorator and keep its anchor/rebase state inside `CurveEditorDragMode::MovePoint`
+- Definition of Done: opt-in Shift constraint; stable engage/release transitions; unchanged unconfigured behavior; Command x-snap composition; ordering, spacing, sticky removal, endpoints, release/focus cleanup, and consecutive-gesture coverage
+- Status: `waiting for user review`
 
 ## Immediate Queue
 
-1. Merge PR #7 and complete branch cleanup; no further Toybox implementation remains for OPT-1170.
-2. Let Kickforge OPT-1150 repin Toybox and replace its local raw-pointer handoff while retaining Kickforge-specific runtime construction, sample-rate equality, state shape, reset, and tail policy.
+1. Wait for explicit user review/sign-off on PR #8.
+2. After merge, let Pump OPT-1116 repin Toybox and adopt `.curve_point_horizontal_constraint(CurveEditorModifier::Shift)`.
 
 ## Validation Note
 
-- Canonical local CI, VST3 warnings-denied clippy/tests, 500 repeated focused runs, and focused Miri pass.
-- The issue's workspace `--all-features` commands remain blocked by the unchanged `origin/main` format-string error in `patchbay-gui/src/declarative/render/grid/axis/resolve.rs` under `layout-overflow-warnings`; keep that baseline cleanup outside this single-intent PR.
+- `cargo test -p patchbay-gui`: 304 passed, including seven focused constraint tests and declarative render coverage.
+- `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk cargo test -p toybox --features radiant-vst3 radiant_host_macos::tests`: 17 platform-input/host tests passed.
+- `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk bash scripts/ci_local.sh`: passed, including warnings-denied GUI/VST3 clippy and 116 VST3-feature tests.
+- `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk cargo test --features gui --test gui_public_api`: 5 passed.
+- Current-head review fix keeps Y snapping suppressed only while constrained and on the no-jump release frame; configured Y snapping resumes on subsequent drag frames.
+- Current-head API review fix keeps `CurveEditorModifier` exhaustive with only `Command`; `CurveEditorModifier::Shift` is an associated opt-in token for the point constraint, with compile coverage through both public re-export paths.

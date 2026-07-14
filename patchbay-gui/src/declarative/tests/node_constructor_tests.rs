@@ -226,6 +226,39 @@ fn curve_segment_move_decorator_preserves_following_curve_builders() {
 }
 
 #[test]
+fn curve_point_constraint_composes_with_segment_move_and_following_builders() {
+    let segment_move = CurveSegmentMoveOptions::new(
+        CurveEditorModifier::Command,
+        Color::rgb(4, 5, 6),
+    );
+    let model = CurveModel::new(
+        vec![CurvePoint::new(0.0, 0.0), CurvePoint::new(1.0, 1.0)],
+        vec![CurveSegment::new(0.0)],
+    );
+    let node = curve_editor("curve", model)
+        .curve_point_horizontal_constraint(CurveEditorModifier::Shift)
+        .curve_segment_move(segment_move)
+        .curve_grid(CurveGridConfig {
+            emphasized_verticals: vec![0.5],
+        })
+        .fill();
+
+    let Node::Slot(slot) = node else {
+        panic!("curve interaction opt-ins should share the opaque slot wrapper");
+    };
+    assert_eq!(slot.curve_segment_move(), Some(segment_move));
+    assert_eq!(
+        slot.curve_point_horizontal_constraint(),
+        Some(CurveEditorModifier::Shift)
+    );
+    let Node::CurveEditor(curve_editor) = slot.child() else {
+        panic!("decorated slot should preserve the curve-editor child");
+    };
+    assert_eq!(curve_editor.grid.emphasized_verticals, vec![0.5]);
+    assert_eq!(curve_editor.layout, LayoutBox::fill());
+}
+
+#[test]
 fn helper_node_constructors_build_valid_spec() {
     let controls = row(vec![
         knob("drive", 0.5, (0.0, 1.0)),
