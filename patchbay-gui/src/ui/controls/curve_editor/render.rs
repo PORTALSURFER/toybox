@@ -124,9 +124,18 @@ impl<'a> Ui<'a> {
                     y: rect.origin.y as f32 + local.y,
                 });
             }
-            let highlighted = state.preview_point.is_none() && state.hovered_segment == Some(segment_index);
-            let line_color = if highlighted {
+            let segment_move_highlighted = state.segment_move_segment == Some(segment_index);
+            let highlighted = state.preview_point.is_none()
+                && (state.hovered_segment == Some(segment_index) || segment_move_highlighted);
+            let highlight_color = if segment_move_highlighted {
+                state
+                    .segment_move_highlight
+                    .unwrap_or(style.line_highlight)
+            } else {
                 style.line_highlight
+            };
+            let line_color = if highlighted {
+                highlight_color
             } else {
                 style.line
             };
@@ -135,7 +144,7 @@ impl<'a> Ui<'a> {
                 && matches!(style.highlight_mode, crate::declarative::CurveHighlightMode::BrightCircle)
             {
                 let mid = points[points.len() / 2];
-                self.curve_fill_circle(mid, scaled_curve_f32(5.0, rect), style.line_highlight);
+                self.curve_fill_circle(mid, scaled_curve_f32(5.0, rect), highlight_color);
             }
         }
     }

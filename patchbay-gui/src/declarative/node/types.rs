@@ -3,6 +3,8 @@
 pub struct SlotSpec {
     /// The single child hosted by this slot.
     pub(crate) child: Box<Node>,
+    /// Optional curve-editor interaction decorator carried by this opaque wrapper.
+    curve_segment_move: Option<CurveSegmentMoveOptions>,
 }
 
 impl SlotSpec {
@@ -10,12 +12,32 @@ impl SlotSpec {
     pub fn new(child: Node) -> Self {
         Self {
             child: Box::new(child),
+            curve_segment_move: None,
         }
     }
 
     /// Borrow the slot child node.
     pub fn child(&self) -> &Node {
         self.child.as_ref()
+    }
+
+    /// Return the curve-segment move decorator carried by this slot, if any.
+    pub(crate) const fn curve_segment_move(&self) -> Option<CurveSegmentMoveOptions> {
+        self.curve_segment_move
+    }
+
+    /// Store an opt-in curve-segment move decorator on this slot.
+    pub(crate) fn set_curve_segment_move(&mut self, options: CurveSegmentMoveOptions) {
+        self.curve_segment_move = Some(options);
+    }
+
+    /// Mutably borrow the curve editor hosted by a decorated slot.
+    pub(crate) fn decorated_curve_editor_mut(&mut self) -> Option<&mut CurveEditorSpec> {
+        self.curve_segment_move?;
+        match self.child.as_mut() {
+            Node::CurveEditor(curve_editor) => Some(curve_editor),
+            _ => None,
+        }
     }
 }
 

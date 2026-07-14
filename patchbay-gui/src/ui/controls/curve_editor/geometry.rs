@@ -393,10 +393,13 @@ fn move_segment_translated(
         let max_dx = model.points[right_index + 1].x - min_spacing_x - start_right_x;
         applied_dx = applied_dx.clamp(min_dx, max_dx);
     }
-    model.points[segment_index].x = (start_left_x + applied_dx).clamp(0.0, 1.0);
-    model.points[right_index].x = (start_right_x + applied_dx).clamp(0.0, 1.0);
-    model.points[segment_index].y = (start_left_y + applied_dy).clamp(0.0, 1.0);
-    model.points[right_index].y = (start_right_y + applied_dy).clamp(0.0, 1.0);
+    let min_dy = -start_left_y.min(start_right_y);
+    let max_dy = 1.0 - start_left_y.max(start_right_y);
+    applied_dy = applied_dy.clamp(min_dy, max_dy);
+    model.points[segment_index].x = start_left_x + applied_dx;
+    model.points[right_index].x = start_right_x + applied_dx;
+    model.points[segment_index].y = start_left_y + applied_dy;
+    model.points[right_index].y = start_right_y + applied_dy;
     enforce_endpoint_mode(model, endpoint_mode);
 }
 

@@ -196,6 +196,36 @@ fn node_fluent_helpers_apply_container_and_style_fields() {
 }
 
 #[test]
+fn curve_segment_move_decorator_preserves_following_curve_builders() {
+    let options = CurveSegmentMoveOptions::new(
+        CurveEditorModifier::Command,
+        Color::rgb(4, 5, 6),
+    );
+    let style = CurveEditorStyle {
+        line: Color::rgb(7, 8, 9),
+        ..CurveEditorStyle::default()
+    };
+    let model = CurveModel::new(
+        vec![CurvePoint::new(0.0, 0.0), CurvePoint::new(1.0, 1.0)],
+        vec![CurveSegment::new(0.0)],
+    );
+    let node = curve_editor("curve", model)
+        .curve_segment_move(options)
+        .curve_style(style.clone())
+        .fill();
+
+    let Node::Slot(slot) = node else {
+        panic!("segment-move opt-in should use the existing opaque slot wrapper");
+    };
+    assert_eq!(slot.curve_segment_move(), Some(options));
+    let Node::CurveEditor(curve_editor) = slot.child() else {
+        panic!("segment-move slot should preserve the curve-editor child");
+    };
+    assert_eq!(curve_editor.style, style);
+    assert_eq!(curve_editor.layout, LayoutBox::fill());
+}
+
+#[test]
 fn helper_node_constructors_build_valid_spec() {
     let controls = row(vec![
         knob("drive", 0.5, (0.0, 1.0)),

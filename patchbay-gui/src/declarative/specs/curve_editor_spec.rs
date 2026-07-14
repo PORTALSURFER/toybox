@@ -14,6 +14,41 @@ pub enum CurveHighlightMode {
     BrightCircle,
 }
 
+/// Keyboard modifier that can gate a curve-editor interaction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CurveEditorModifier {
+    /// The platform command key (Command on macOS, Control on Windows).
+    Command,
+}
+
+/// Opt-in configuration for moving a curve segment as one translated pair.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CurveSegmentMoveOptions {
+    /// Modifier that must remain held throughout the segment drag.
+    pub modifier: CurveEditorModifier,
+    /// Curve stroke and marker color used for the gated move target.
+    pub highlight: Color,
+}
+
+impl CurveSegmentMoveOptions {
+    /// Build an opt-in segment-move configuration.
+    pub const fn new(modifier: CurveEditorModifier, highlight: Color) -> Self {
+        Self {
+            modifier,
+            highlight,
+        }
+    }
+}
+
+impl Default for CurveSegmentMoveOptions {
+    fn default() -> Self {
+        Self::new(
+            CurveEditorModifier::Command,
+            Color::rgb(255, 190, 92),
+        )
+    }
+}
+
 /// Interaction parameters for one curve-editor widget.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CurveInteractionOptions {

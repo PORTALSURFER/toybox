@@ -24,6 +24,8 @@ struct RenderCtx<'a> {
     node_sequence: usize,
     /// Current container depth in the render tree.
     depth: usize,
+    /// Segment-move decorator inherited from the active opaque slot.
+    curve_segment_move: Option<CurveSegmentMoveOptions>,
 }
 
 /// Queue one per-node reason flag for the next rendered child.
@@ -222,7 +224,12 @@ fn render_node(node: &Node, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx<'_>
                 ContainerKind::Slot,
                 ctx.depth,
             );
-            render_node(&slot.child, rect, ui, ctx)
+            let previous_segment_move = ctx.curve_segment_move;
+            if let Some(segment_move) = slot.curve_segment_move() {
+                ctx.curve_segment_move = Some(segment_move);
+            }
+            render_node(&slot.child, rect, ui, ctx);
+            ctx.curve_segment_move = previous_segment_move;
         }
         Node::Panel(panel) => render_panel(panel, rect, ui, ctx),
         Node::PaddingBox(padding_box) => render_padding_box(padding_box, rect, ui, ctx),
@@ -244,7 +251,15 @@ fn render_node(node: &Node, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx<'_>
         Node::Button(button) => render_button(button, rect, ui, ctx.tokens, ctx.actions),
         Node::Dropdown(dropdown) => render_dropdown(dropdown, rect, ui, ctx.tokens, ctx.actions),
         Node::TabBar(tab_bar) => render_tab_bar(tab_bar, rect, ui, ctx.tokens, ctx.actions),
-        Node::CurveEditor(curve_editor) => render_curve_editor(curve_editor, rect, ui, ctx.actions),
+        Node::CurveEditor(curve_editor) => {
+            render_curve_editor(
+                curve_editor,
+                ctx.curve_segment_move,
+                rect,
+                ui,
+                ctx.actions,
+            )
+        }
         Node::EqAttractorSurface(surface) => {
             render_eq_attractor_surface(surface, rect, ui, ctx.tokens, ctx.actions)
         }

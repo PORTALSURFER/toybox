@@ -2,6 +2,59 @@ use super::super::*;
 use crate::canvas::Canvas;
 use crate::host::InputState;
 use crate::ui::{Layout, Theme, UiState};
+use crate::vector::scene::VectorCommand;
+
+#[test]
+fn curve_segment_move_decorator_reaches_render_and_hover_feedback() {
+    let move_color = Color::rgb(4, 5, 6);
+    let model = CurveModel::new(
+        vec![CurvePoint::new(0.0, 0.2), CurvePoint::new(1.0, 0.8)],
+        vec![CurveSegment::new(0.0)],
+    );
+    let spec = UiSpec::new(
+        RootFrameSpec::new(
+            "root",
+            Node::Absolute(
+                AbsoluteSpec::new(vec![AbsoluteChild::new(
+                    Point { x: 0, y: 0 },
+                    curve_editor("curve", model)
+                        .curve_segment_move(CurveSegmentMoveOptions::new(
+                            CurveEditorModifier::Command,
+                            move_color,
+                        ))
+                        .widget_layout(LayoutBox::fixed(220, 160).max(220, 160)),
+                )])
+                .layout(ContainerLayout::fill()),
+            ),
+        )
+        .padding(0)
+        .layout(LayoutBox::fixed(220, 160)),
+    );
+    let mut canvas = Canvas::new(220, 160);
+    let mut layout = Layout::default();
+    let theme = Theme::default();
+    let mut ui_state = UiState::default();
+    let input = InputState {
+        window_size: Size {
+            width: 220,
+            height: 160,
+        },
+        pointer_pos: Point { x: 110, y: 80 },
+        command_down: true,
+        ..InputState::default()
+    };
+    let mut ui = Ui::new(&mut canvas, &input, &mut ui_state, &mut layout, &theme);
+    ui.set_vector_shapes_enabled(true);
+
+    render_checked(&spec, &mut ui, Point { x: 0, y: 0 }).expect("render should succeed");
+    let commands = ui.take_vector_commands();
+    assert!(commands.iter().any(
+        |command| matches!(command, VectorCommand::Polyline(line) if line.color == move_color)
+    ));
+    assert!(commands.iter().any(
+        |command| matches!(command, VectorCommand::CircleFill(circle) if circle.color == move_color)
+    ));
+}
 
 #[test]
 fn render_unlabeled_knob_uses_reduced_hit_region() {

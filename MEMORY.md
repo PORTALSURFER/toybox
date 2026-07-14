@@ -1,9 +1,21 @@
 # MEMORY
 
-Last Updated (UTC): 2026-07-12 20:24:55Z
+Last Updated (UTC): 2026-07-14 11:58:47Z
 
 ## Current State
 
+- Active user-requested task: implement OPT-1169, modifier-gated grouped curve-segment dragging and dedicated feedback in the reusable Patchbay curve editor.
+- Branch `wsvasek/opt-1169-toybox-add-modifier-gated-grouped-curve-segment-dragging-and` adds `.curve_segment_move(CurveSegmentMoveOptions)` as the opt-in contract while keeping legacy unmodified near-segment dragging as the default.
+- Command-hover and Command-press now select a complete segment before direct-line insertion, while point interaction, empty-canvas insertion, Alt tension adjustment, and unmodified direct-line insertion retain their existing precedence.
+- `CurveSegmentMoveOptions` combines the required modifier and dedicated segment-translation stroke/marker color, and feedback resolves cleanly across modifier release, pointer exit, release, focus loss, and consecutive gestures.
+- Segment translation now clamps one shared x/y delta for both endpoints, preserving pair offset and slope at normalized y bounds, neighbor/minimum-spacing limits, fixed endpoint x constraints, and coupled endpoint y constraints.
+- Focused coverage includes modifier-gated hover/color, insertion suppression, direct-line/point/empty-canvas precedence, legacy defaults, translation, commit/cancel/consecutive gestures, feedback clearing, and all group-clamp boundaries.
+- Validation passes with `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk`: 295 Patchbay GUI tests, all-target/all-feature clippy, `bash scripts/ci_local.sh` (107 VST3-feature tests plus external API coverage), and the legacy exhaustive-literal integration test under the GUI feature.
+- OPT-1169 is signed off and complete in Toybox through PR #6 at `https://github.com/PORTALSURFER/toybox/pull/6`; no further Toybox implementation remains before Pump adoption.
+- The current-head review fix cancels a modifier-gated `MoveSegment` before mutation when Command is released or the pointer leaves the editor/window; regression coverage proves the model and changed response remain untouched, and the 295-test GUI suite plus full local CI pass.
+- `CurveEditorModifier` is re-exported through both `patchbay_gui` and `toybox::gui::declarative`; an external integration test compiles and names `Command` through both supported downstream APIs.
+- `CurveInteractionOptions`, `CurveEditorStyle`, and `Node` retain their legacy public shapes. Modifier and highlight settings travel through the existing opaque `SlotSpec` wrapper, with regression coverage for external exhaustive literals, fluent builder ordering, and declarative render dispatch.
+- `row_slots` and `column_slots` recognize the opaque segment-move decorator as a widget-layout proxy, so `weighted_slot(...).width_bounds()/height_bounds()` still reach the wrapped curve editor regardless of builder ordering.
 - Active user-requested task: implement OPT-1159, the reusable realtime-safe sample-offset event timeline for CLAP and VST3.
 - Branch `wsvasek/opt-1159-toybox-provide-a-realtime-safe-sample-offset-event-timeline` adds a format-neutral fixed-capacity `BlockEventTimeline<P, E>`, CLAP classifier ingestion, and VST3 parameter-queue plus `IEventList` ingestion.
 - Timeline ordering is deterministic by clamped sample offset, parameter-before-event priority, and stable source sequence. Full capacity retains the earliest events and explicitly reports replacements and drops without growing storage.
@@ -55,13 +67,12 @@ Last Updated (UTC): 2026-07-12 20:24:55Z
 
 ## Active Mission
 
-- Land OPT-1159 as reusable Toybox infrastructure, then let Kickforge OPT-1147 adopt the canonical merged revision.
+- Carry the completed OPT-1169 Toybox curve-editor contract into Pump OPT-1118.
 
 ## Immediate Next Actions
 
-1. Wait for explicit user review/sign-off on Toybox PR #5.
-2. After sign-off, merge and complete the repository cleanup procedure.
-3. Then let Kickforge OPT-1147 repin and add only plugin-specific event application and DSP segmentation.
+1. Let Pump OPT-1118 repin Toybox and opt in with `.curve_segment_move(CurveSegmentMoveOptions::new(CurveEditorModifier::Command, color))`.
+2. Keep future shared curve-editor changes source-compatible for legacy `CurveInteractionOptions`, `CurveEditorStyle`, and `Node` consumers.
 
 ## Constraints And Notes
 

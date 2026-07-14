@@ -457,6 +457,7 @@ fn scale_alpha(color: Color, alpha: u8) -> Color {
 /// Render a curve-editor node and emit model change actions.
 fn render_curve_editor(
     curve_editor: &CurveEditorSpec,
+    segment_move: Option<CurveSegmentMoveOptions>,
     rect: Rect,
     ui: &mut Ui<'_>,
     actions: &mut Vec<UiAction>,
@@ -470,6 +471,11 @@ fn render_curve_editor(
         curve_editor.interaction.clone(),
         curve_editor.playhead_x,
     );
+    let request = if let Some(segment_move) = segment_move {
+        request.segment_move(segment_move)
+    } else {
+        request
+    };
     let response = ui.curve_editor_in_rect(&mut model, request);
     if response.changed {
         actions.push(UiAction::CurveEditorChanged {
