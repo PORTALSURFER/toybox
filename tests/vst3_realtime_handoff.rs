@@ -84,10 +84,7 @@ fn downstream_plugin_needs_no_raw_pointer_handoff() {
             },
         )
         .expect("validated state");
-    let observation = state_audio.observe(|| Settings {
-        drive: drive.load(Ordering::Relaxed),
-        output: output.load(Ordering::Relaxed),
-    });
+    let observation = state_audio.observe();
     assert_eq!(
         observation.snapshot(),
         Settings {
@@ -97,4 +94,5 @@ fn downstream_plugin_needs_no_raw_pointer_handoff() {
     );
     assert_eq!(observation.generation(), generation);
     assert!(observation.changed());
+    assert_eq!(state_control.reclaim(), 1);
 }

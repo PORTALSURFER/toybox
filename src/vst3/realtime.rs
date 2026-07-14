@@ -6,11 +6,11 @@
 //! boundary. Rejected and displaced values are never destroyed there: they are
 //! moved into a deferred batch for a control thread to reclaim.
 //!
-//! The state API is a bounded seqlock-style reader around caller-owned atomic
-//! fields. Validation and writer serialization happen on control threads. The
-//! audio callback performs at most two generation loads and one snapshot read,
-//! keeping its previous coherent snapshot whenever a write overlaps the block
-//! boundary.
+//! The state API publishes a fully constructed, Toybox-owned snapshot and its
+//! generation through the same bounded ownership machinery. Validation,
+//! optional caller-side field mirroring, and writer serialization happen on
+//! control threads. Audio atomically adopts the complete snapshot or keeps its
+//! previous one; it never infers coherence from separately stored fields.
 //!
 //! # Runtime replacement example
 //!
@@ -44,7 +44,7 @@ use std::error::Error;
 use std::fmt;
 use std::marker::PhantomData;
 use std::ptr;
-use std::sync::atomic::{AtomicPtr, AtomicU64, Ordering, fence};
+use std::sync::atomic::{AtomicPtr, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// Monotonic identity assigned when a control-side runtime build is registered.
@@ -570,11 +570,11 @@ impl StateGeneration {
 /// Failure from validation or control-side state publication.
 #[derive(Debug, Eq, PartialEq)]
 pub enum StatePublishError<E> {
-    /// Payload validation failed before the generation entered update state.
+    /// Payload validation failed before any control-side update or publication.
     Invalid(E),
     /// A previous writer panicked while applying fields; audio remains on its old snapshot.
     Poisoned,
-    /// No later even generation can be represented without wrapping.
+    /// No later generation can be represented without wrapping.
     GenerationExhausted,
 }
 
@@ -595,58 +595,85 @@ where
 
 impl<E> Error for StatePublishError<E> where E: Error + 'static {}
 
-/// Generation gate and control-writer serialization shared with audio.
+/// Fully constructed snapshot paired with its completed generation.
+struct PublishedState<T> {
+    /// Snapshot copied into audio-owned runtime storage on adoption.
+    snapshot: T,
+    /// Generation published atomically with `snapshot`.
+    generation: StateGeneration,
+}
+
+/// Control-writer serialization and completed-publication metadata.
 struct CoherentStateShared {
-    /// Even values are complete; odd values indicate an update in progress.
-    generation: AtomicU64,
     /// Serializes control writers without ever being acquired by audio.
     writer: Mutex<()>,
+    /// Most recent generation whose complete snapshot was published.
+    published_generation: AtomicU64,
 }
 
 /// Cloneable control-side publisher for coherent multi-field state updates.
-#[derive(Clone)]
-pub struct CoherentStatePublisher {
-    /// Shared generation gate and writer lock.
+pub struct CoherentStatePublisher<T>
+where
+    T: Copy + Send + 'static,
+{
+    /// Typed ownership handoff for complete snapshot values.
+    runtime: RuntimePublisher<PublishedState<T>>,
+    /// Shared writer lock and completed generation.
     shared: Arc<CoherentStateShared>,
 }
 
-impl CoherentStatePublisher {
+impl<T> Clone for CoherentStatePublisher<T>
+where
+    T: Copy + Send + 'static,
+{
+    fn clone(&self) -> Self {
+        Self {
+            runtime: self.runtime.clone(),
+            shared: Arc::clone(&self.shared),
+        }
+    }
+}
+
+impl<T> CoherentStatePublisher<T>
+where
+    T: Copy + Send + 'static,
+{
     /// Creates paired control and audio state endpoints from a coherent initial snapshot.
     ///
-    /// `T: Copy` ensures replacing or returning snapshots cannot invoke a
-    /// destructor on the audio thread.
-    pub fn new<T>(initial: T) -> (Self, AudioStateSnapshot<T>)
-    where
-        T: Copy,
-    {
+    /// `T: Copy` ensures returning or mutating the audio-owned snapshot cannot
+    /// invoke a destructor in the process callback.
+    pub fn new(initial: T) -> (Self, AudioStateSnapshot<T>) {
+        let (runtime, audio) = RuntimePublisher::new(PublishedState {
+            snapshot: initial,
+            generation: StateGeneration::INITIAL,
+        });
         let shared = Arc::new(CoherentStateShared {
-            generation: AtomicU64::new(StateGeneration::INITIAL.get()),
             writer: Mutex::new(()),
+            published_generation: AtomicU64::new(StateGeneration::INITIAL.get()),
         });
         (
             Self {
+                runtime,
                 shared: Arc::clone(&shared),
             },
-            AudioStateSnapshot {
-                shared,
-                current: initial,
-                generation: StateGeneration::INITIAL,
-            },
+            AudioStateSnapshot { runtime: audio },
         )
     }
 
     /// Validates a payload, then serializes and publishes its multi-field update.
     ///
-    /// Validation completes before the writer lock is acquired and before the
-    /// generation becomes odd. `apply` should update caller-owned thread-safe
-    /// fields and must not panic. If it does panic, the mutex is poisoned and
-    /// the generation deliberately remains odd so audio never adopts a partial
-    /// snapshot.
-    pub fn validate_and_publish<P, V, E>(
+    /// Validation completes before the writer lock is acquired. `apply` may
+    /// mirror the validated value into caller-owned control/UI fields, including
+    /// relaxed atomics, but audio coherence never depends on those stores: the
+    /// complete validated `T` is published as one owned value afterward.
+    ///
+    /// `apply` must not panic. If it does, the writer mutex is poisoned and no
+    /// snapshot is published, so audio remains on its previous complete value.
+    pub fn validate_and_publish<P, E>(
         &self,
         payload: P,
-        validate: impl FnOnce(P) -> Result<V, E>,
-        apply: impl FnOnce(V),
+        validate: impl FnOnce(P) -> Result<T, E>,
+        apply: impl FnOnce(T),
     ) -> Result<StateGeneration, StatePublishError<E>> {
         let validated = validate(payload).map_err(StatePublishError::Invalid)?;
         let _writer = self
@@ -654,102 +681,87 @@ impl CoherentStatePublisher {
             .writer
             .lock()
             .map_err(|_| StatePublishError::Poisoned)?;
-        let before = self.shared.generation.load(Ordering::Acquire);
-        if before & 1 != 0 {
-            return Err(StatePublishError::Poisoned);
-        }
-        let Some(in_progress) = before.checked_add(1) else {
-            return Err(StatePublishError::GenerationExhausted);
-        };
-        let Some(complete) = in_progress.checked_add(1) else {
-            return Err(StatePublishError::GenerationExhausted);
-        };
-
-        // Acquire prevents the following field stores from moving before the
-        // odd generation; release publishes the preceding writer-lock state.
-        if self
-            .shared
-            .generation
-            .compare_exchange(before, in_progress, Ordering::AcqRel, Ordering::Acquire)
-            .is_err()
-        {
-            return Err(StatePublishError::Poisoned);
-        }
+        let registration = self
+            .runtime
+            .register()
+            .map_err(|_| StatePublishError::GenerationExhausted)?;
+        let generation = StateGeneration(registration.revision().get());
 
         apply(validated);
-        self.shared.generation.store(complete, Ordering::Release);
-        Ok(StateGeneration(complete))
+        registration.publish(PublishedState {
+            snapshot: validated,
+            generation,
+        });
+        self.shared
+            .published_generation
+            .store(generation.get(), Ordering::Release);
+        Ok(generation)
     }
 
-    /// Returns the completed generation, or `None` while a writer is active.
-    pub fn completed_generation(&self) -> Option<StateGeneration> {
-        let generation = self.shared.generation.load(Ordering::Acquire);
-        (generation & 1 == 0).then_some(StateGeneration(generation))
+    /// Returns the most recently completed control-side publication generation.
+    pub fn completed_generation(&self) -> StateGeneration {
+        StateGeneration(self.shared.published_generation.load(Ordering::Acquire))
+    }
+
+    /// Reclaims state snapshot storage on this control thread.
+    ///
+    /// As with [`RuntimePublisher::reclaim`], a value may require one later
+    /// audio boundary before its local retire batch becomes visible here.
+    pub fn reclaim(&self) -> usize {
+        self.runtime.reclaim()
     }
 }
 
 /// Cached coherent state snapshot owned by the serialized audio callback.
 pub struct AudioStateSnapshot<T>
 where
-    T: Copy,
+    T: Copy + Send + 'static,
 {
-    /// Shared generation gate; audio never acquires its writer mutex.
-    shared: Arc<CoherentStateShared>,
-    /// Last snapshot proven coherent by equal even generation reads.
-    current: T,
-    /// Completed generation associated with `current`.
-    generation: StateGeneration,
+    /// Typed audio ownership of the current complete snapshot.
+    runtime: AudioRuntime<PublishedState<T>>,
 }
 
 impl<T> AudioStateSnapshot<T>
 where
-    T: Copy,
+    T: Copy + Send + 'static,
 {
     /// Observes state once at an audio block boundary without waiting or retrying.
     ///
-    /// `read` should copy caller-owned atomic fields into `T`. If a writer is
-    /// active before the read, `read` is skipped. If a writer overlaps the read,
-    /// the candidate is discarded and the previous coherent snapshot is
-    /// returned. The closure itself remains responsible for realtime safety.
-    pub fn observe(&mut self, read: impl FnOnce() -> T) -> StateObservation<T> {
-        let before = self.shared.generation.load(Ordering::Acquire);
-        if before & 1 != 0 {
-            return self.observation(false);
-        }
-
-        let candidate = read();
-        // Keep every field read before the closing generation check. Together
-        // with the opening acquire and writer's odd/even publication, this
-        // full fence prevents a relaxed field load from escaping the checked
-        // interval on weakly ordered targets.
-        fence(Ordering::SeqCst);
-        let after = self.shared.generation.load(Ordering::Acquire);
-        if before != after || after & 1 != 0 {
-            return self.observation(false);
-        }
-
-        let generation = StateGeneration(after);
-        let changed = generation != self.generation;
-        self.current = candidate;
-        self.generation = generation;
+    /// Toybox attempts one bounded adoption of a fully constructed snapshot.
+    /// A control update still in progress has nothing published, so this method
+    /// simply returns the previous snapshot. No caller-owned fields are read.
+    pub fn observe(&mut self) -> StateObservation<T> {
+        let changed = matches!(
+            self.runtime.try_adopt(|_, _| true),
+            RuntimeAdoption::Adopted { .. }
+        );
         self.observation(changed)
     }
 
-    /// Returns the current cached snapshot without reading caller-owned fields.
-    pub const fn current(&self) -> T {
-        self.current
+    /// Returns the current audio-owned coherent snapshot.
+    pub fn current(&self) -> T {
+        self.runtime.current().snapshot
+    }
+
+    /// Mutably borrows the current audio-owned snapshot.
+    ///
+    /// This lets downstream DSP apply sample-accurate or audio-thread-owned
+    /// changes between control-side full-state publications.
+    pub fn current_mut(&mut self) -> &mut T {
+        &mut self.runtime.current_mut().snapshot
     }
 
     /// Returns the completed generation associated with the cached snapshot.
-    pub const fn generation(&self) -> StateGeneration {
-        self.generation
+    pub fn generation(&self) -> StateGeneration {
+        self.runtime.current().generation
     }
 
     /// Constructs an observation from the current cached state.
     fn observation(&self, changed: bool) -> StateObservation<T> {
+        let current = self.runtime.current();
         StateObservation {
-            snapshot: self.current,
-            generation: self.generation,
+            snapshot: current.snapshot,
+            generation: current.generation,
             changed,
         }
     }
@@ -1016,7 +1028,7 @@ mod tests {
     }
 
     #[test]
-    fn invalid_state_never_enters_the_generation_gate() {
+    fn invalid_state_never_enters_control_update_or_publication() {
         let (control, mut audio) = CoherentStatePublisher::new(Pair { left: 1, right: 1 });
         let applied = AtomicBool::new(false);
         let result = control.validate_and_publish(
@@ -1027,12 +1039,9 @@ mod tests {
 
         assert_eq!(result, Err(StatePublishError::Invalid("mismatch")));
         assert!(!applied.load(Ordering::Relaxed));
-        assert_eq!(
-            control.completed_generation(),
-            Some(StateGeneration::INITIAL)
-        );
-        let observed = audio.observe(|| Pair { left: 9, right: 9 });
-        assert_eq!(observed.snapshot(), Pair { left: 9, right: 9 });
+        assert_eq!(control.completed_generation(), StateGeneration::INITIAL);
+        let observed = audio.observe();
+        assert_eq!(observed.snapshot(), Pair { left: 1, right: 1 });
         assert!(!observed.changed());
     }
 
@@ -1062,70 +1071,41 @@ mod tests {
         });
 
         started.wait();
-        let read_called = AtomicBool::new(false);
-        let during = assert_realtime_safe(|| {
-            audio.observe(|| {
-                read_called.store(true, Ordering::Relaxed);
-                Pair {
-                    left: left.load(Ordering::Relaxed),
-                    right: right.load(Ordering::Relaxed),
-                }
-            })
-        });
-        assert!(!read_called.load(Ordering::Relaxed));
+        assert_eq!(left.load(Ordering::Relaxed), 2);
+        assert_eq!(right.load(Ordering::Relaxed), 1);
+        let during = assert_realtime_safe(|| audio.observe());
         assert_eq!(during.snapshot(), initial);
         assert!(!during.changed());
 
         finish.wait();
         let completed = writer.join().expect("writer thread");
-        let after = assert_realtime_safe(|| {
-            audio.observe(|| Pair {
-                left: left.load(Ordering::Relaxed),
-                right: right.load(Ordering::Relaxed),
-            })
-        });
+        let after = assert_realtime_safe(|| audio.observe());
         assert_eq!(after.snapshot(), Pair { left: 2, right: 2 });
         assert_eq!(after.generation(), completed);
         assert!(after.changed());
+        assert_eq!(control.reclaim(), 1);
 
-        let stable = audio.observe(|| Pair {
-            left: left.load(Ordering::Relaxed),
-            right: right.load(Ordering::Relaxed),
-        });
+        let stable = audio.observe();
         assert_eq!(stable.snapshot(), Pair { left: 2, right: 2 });
         assert!(!stable.changed());
     }
 
     #[test]
-    fn overlapping_read_discards_its_candidate_without_retrying() {
-        let left = AtomicU32::new(1);
-        let right = AtomicU32::new(1);
+    fn latest_snapshot_and_generation_are_adopted_together() {
         let (control, mut audio) = CoherentStatePublisher::new(Pair { left: 1, right: 1 });
-        let reads = AtomicUsize::new(0);
+        let first = control
+            .validate_and_publish(Pair { left: 2, right: 2 }, Ok::<_, Infallible>, |_| {})
+            .expect("first state publication");
+        let latest = control
+            .validate_and_publish(Pair { left: 3, right: 3 }, Ok::<_, Infallible>, |_| {})
+            .expect("latest state publication");
 
-        let observed = audio.observe(|| {
-            reads.fetch_add(1, Ordering::Relaxed);
-            let candidate = Pair {
-                left: left.load(Ordering::Relaxed),
-                right: right.load(Ordering::Relaxed),
-            };
-            control
-                .validate_and_publish(Pair { left: 2, right: 2 }, Ok::<_, Infallible>, |pair| {
-                    left.store(pair.left, Ordering::Relaxed);
-                    right.store(pair.right, Ordering::Relaxed);
-                })
-                .expect("overlapping state publication");
-            candidate
-        });
-
-        assert_eq!(reads.load(Ordering::Relaxed), 1);
-        assert_eq!(observed.snapshot(), Pair { left: 1, right: 1 });
-        assert!(!observed.changed());
-        let next = audio.observe(|| Pair {
-            left: left.load(Ordering::Relaxed),
-            right: right.load(Ordering::Relaxed),
-        });
-        assert_eq!(next.snapshot(), Pair { left: 2, right: 2 });
-        assert!(next.changed());
+        assert!(latest > first);
+        assert_eq!(control.completed_generation(), latest);
+        let observed = assert_realtime_safe(|| audio.observe());
+        assert_eq!(observed.snapshot(), Pair { left: 3, right: 3 });
+        assert_eq!(observed.generation(), latest);
+        assert!(observed.changed());
+        assert_eq!(control.reclaim(), 1);
     }
 }

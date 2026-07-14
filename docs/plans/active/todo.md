@@ -6,7 +6,7 @@ Mission: deliver OPT-1170 as Toybox-owned realtime-safe VST3 runtime and coheren
 
 - Branch: `wsvasek/opt-1170-toybox-provide-reusable-realtime-safe-vst3-runtime-and-state`
 - PR: `https://github.com/PORTALSURFER/toybox/pull/7`
-- Scope: generic latest-wins runtime publication/adoption/deferred retirement plus a bounded coherent multi-field state-generation gate under `toybox::vst3`
+- Scope: generic latest-wins runtime publication/adoption/deferred retirement plus bounded owned snapshot-and-generation state publication under `toybox::vst3`
 - Definition of Done: no allocation, blocking, or destruction on audio; stale and redundant candidates retire on control; old-or-complete state observations; documented unsafe/lifecycle boundaries; deterministic concurrency, stress, Miri, external adoption, clippy, and test evidence
 - Status: `waiting for user review`
 
