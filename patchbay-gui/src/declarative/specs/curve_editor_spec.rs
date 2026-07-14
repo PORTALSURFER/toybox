@@ -21,6 +21,34 @@ pub enum CurveEditorModifier {
     Command,
 }
 
+/// Opt-in configuration for moving a curve segment as one translated pair.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CurveSegmentMoveOptions {
+    /// Modifier that must remain held throughout the segment drag.
+    pub modifier: CurveEditorModifier,
+    /// Curve stroke and marker color used for the gated move target.
+    pub highlight: Color,
+}
+
+impl CurveSegmentMoveOptions {
+    /// Build an opt-in segment-move configuration.
+    pub const fn new(modifier: CurveEditorModifier, highlight: Color) -> Self {
+        Self {
+            modifier,
+            highlight,
+        }
+    }
+}
+
+impl Default for CurveSegmentMoveOptions {
+    fn default() -> Self {
+        Self::new(
+            CurveEditorModifier::Command,
+            Color::rgb(255, 190, 92),
+        )
+    }
+}
+
 /// Interaction parameters for one curve-editor widget.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CurveInteractionOptions {
@@ -34,10 +62,6 @@ pub struct CurveInteractionOptions {
     pub push_through_threshold_px: i32,
     /// Endpoint coupling policy.
     pub endpoint_mode: EndpointMode,
-    /// Optional modifier required to move a segment as one translated pair.
-    ///
-    /// `None` preserves the legacy unmodified near-segment drag behavior.
-    pub segment_move_modifier: Option<CurveEditorModifier>,
     /// Whether interior points can be deleted by double click.
     pub double_click_delete_interior: bool,
     /// Snap behavior for curve-point interactions.
@@ -52,7 +76,6 @@ impl Default for CurveInteractionOptions {
             drag_start_threshold_px: 3,
             push_through_threshold_px: 2,
             endpoint_mode: EndpointMode::Independent,
-            segment_move_modifier: None,
             double_click_delete_interior: true,
             snap: CurveSnapConfig::default(),
         }
@@ -94,8 +117,6 @@ pub struct CurveEditorStyle {
     pub line: Color,
     /// Curve stroke color when one segment is highlighted.
     pub line_highlight: Color,
-    /// Curve stroke and marker color for modifier-gated segment movement.
-    pub segment_move_highlight: Color,
     /// Node fill color.
     pub node_fill: Color,
     /// Node stroke color.
@@ -130,7 +151,6 @@ impl Default for CurveEditorStyle {
             grid_horizontal: Color::rgb(53, 58, 53),
             line: Color::rgb(140, 230, 220),
             line_highlight: Color::rgb(199, 250, 242),
-            segment_move_highlight: Color::rgb(255, 190, 92),
             node_fill: Color::rgb(170, 180, 170),
             node_stroke: Color::rgb(110, 120, 110),
             node_hover_fill: Color::rgb(220, 236, 220),

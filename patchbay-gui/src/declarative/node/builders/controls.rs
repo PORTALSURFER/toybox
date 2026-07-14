@@ -182,7 +182,7 @@ impl Node {
     ///
     /// Non-curve-editor node kinds are returned unchanged.
     pub fn curve_model(mut self, model: CurveModel) -> Self {
-        if let Self::CurveEditor(curve_editor) = &mut self {
+        if let Some(curve_editor) = self.curve_editor_mut() {
             curve_editor.model = model;
         }
         self
@@ -192,7 +192,7 @@ impl Node {
     ///
     /// Non-curve-editor node kinds are returned unchanged.
     pub fn curve_style(mut self, style: CurveEditorStyle) -> Self {
-        if let Self::CurveEditor(curve_editor) = &mut self {
+        if let Some(curve_editor) = self.curve_editor_mut() {
             curve_editor.style = style;
         }
         self
@@ -202,7 +202,7 @@ impl Node {
     ///
     /// Non-curve-editor node kinds are returned unchanged.
     pub fn curve_grid(mut self, grid: CurveGridConfig) -> Self {
-        if let Self::CurveEditor(curve_editor) = &mut self {
+        if let Some(curve_editor) = self.curve_editor_mut() {
             curve_editor.grid = grid;
         }
         self
@@ -212,7 +212,7 @@ impl Node {
     ///
     /// Non-curve-editor node kinds are returned unchanged.
     pub fn curve_interaction(mut self, interaction: CurveInteractionOptions) -> Self {
-        if let Self::CurveEditor(curve_editor) = &mut self {
+        if let Some(curve_editor) = self.curve_editor_mut() {
             curve_editor.interaction = interaction;
         }
         self
@@ -222,10 +222,37 @@ impl Node {
     ///
     /// Non-curve-editor node kinds are returned unchanged.
     pub fn curve_playhead_x(mut self, playhead_x: Option<f32>) -> Self {
-        if let Self::CurveEditor(curve_editor) = &mut self {
+        if let Some(curve_editor) = self.curve_editor_mut() {
             curve_editor.playhead_x = playhead_x;
         }
         self
+    }
+
+    /// Opt into modifier-gated grouped curve-segment movement.
+    ///
+    /// Non-curve-editor node kinds are returned unchanged.
+    pub fn curve_segment_move(self, options: CurveSegmentMoveOptions) -> Self {
+        match self {
+            Self::CurveEditor(curve_editor) => {
+                let mut slot = SlotSpec::new(Self::CurveEditor(curve_editor));
+                slot.set_curve_segment_move(options);
+                Self::Slot(slot)
+            }
+            Self::Slot(mut slot) if matches!(slot.child(), Self::CurveEditor(_)) => {
+                slot.set_curve_segment_move(options);
+                Self::Slot(slot)
+            }
+            other => other,
+        }
+    }
+
+    /// Mutably borrow a direct or segment-move-decorated curve editor.
+    fn curve_editor_mut(&mut self) -> Option<&mut CurveEditorSpec> {
+        match self {
+            Self::CurveEditor(curve_editor) => Some(curve_editor),
+            Self::Slot(slot) => slot.decorated_curve_editor_mut(),
+            _ => None,
+        }
     }
 
     /// Override EQ attractor surface model for EQ attractor surface nodes.

@@ -30,9 +30,17 @@ fn model() -> crate::declarative::CurveModel {
 fn command_segment_move_options() -> crate::declarative::CurveInteractionOptions {
     crate::declarative::CurveInteractionOptions {
         drag_start_threshold_px: 0,
-        segment_move_modifier: Some(crate::declarative::CurveEditorModifier::Command),
         ..crate::declarative::CurveInteractionOptions::default()
     }
+}
+
+fn command_segment_move(
+    highlight: Color,
+) -> crate::declarative::CurveSegmentMoveOptions {
+    crate::declarative::CurveSegmentMoveOptions::new(
+        crate::declarative::CurveEditorModifier::Command,
+        highlight,
+    )
 }
 
 fn point_for_curve(point: crate::declarative::CurvePoint) -> Point {
@@ -73,23 +81,44 @@ fn render_frame(
     interaction: crate::declarative::CurveInteractionOptions,
     style: crate::declarative::CurveEditorStyle,
 ) -> (CurveEditorResponse, Vec<VectorCommand>) {
+    render_frame_with_segment_move(
+        model,
+        ui_state,
+        input,
+        interaction,
+        style,
+        Some(crate::declarative::CurveSegmentMoveOptions::default()),
+    )
+}
+
+fn render_frame_with_segment_move(
+    model: &mut crate::declarative::CurveModel,
+    ui_state: &mut UiState,
+    input: InputState,
+    interaction: crate::declarative::CurveInteractionOptions,
+    style: crate::declarative::CurveEditorStyle,
+    segment_move: Option<crate::declarative::CurveSegmentMoveOptions>,
+) -> (CurveEditorResponse, Vec<VectorCommand>) {
     let mut canvas = Canvas::new(240, 170);
     let mut layout = Layout::default();
     let theme = Theme::default();
     let mut ui = Ui::new(&mut canvas, &input, ui_state, &mut layout, &theme);
     ui.reset_input_consumption();
     ui.set_vector_shapes_enabled(true);
-    let response = ui.curve_editor_in_rect(
-        model,
-        CurveEditorRectRenderRequest::new(
+    let request = CurveEditorRectRenderRequest::new(
             CURVE_ID,
             rect(),
             style,
             crate::declarative::CurveGridConfig::default(),
             interaction,
             None,
-        ),
-    );
+        );
+    let request = if let Some(segment_move) = segment_move {
+        request.segment_move(segment_move)
+    } else {
+        request
+    };
+    let response = ui.curve_editor_in_rect(model, request);
     (response, ui.take_vector_commands())
 }
 
@@ -116,23 +145,23 @@ fn command_hover_uses_dedicated_segment_move_color_and_suppresses_preview() {
     let mut ui_state = UiState::default();
     let style = crate::declarative::CurveEditorStyle {
         line_highlight: Color::rgb(1, 2, 3),
-        segment_move_highlight: Color::rgb(4, 5, 6),
         ..crate::declarative::CurveEditorStyle::default()
     };
     let preview_fill = style.preview_fill;
-    let segment_move_highlight = style.segment_move_highlight;
+    let segment_move_highlight = Color::rgb(4, 5, 6);
     let input = InputState {
         pointer_pos: segment_midpoint(&model, 1),
         command_down: true,
         ..InputState::default()
     };
 
-    let (response, commands) = render_frame(
+    let (response, commands) = render_frame_with_segment_move(
         &mut model,
         &mut ui_state,
         input,
         command_segment_move_options(),
         style,
+        Some(command_segment_move(segment_move_highlight)),
     );
 
     assert!(!response.changed);
@@ -228,12 +257,13 @@ fn unmodified_direct_line_keeps_insertion_and_default_keeps_legacy_segment_drag(
     let mut legacy_model = model();
     let near_pointer = offset(segment_midpoint(&legacy_model, 1), 0, -5);
     let mut legacy_state = UiState::default();
-    let (legacy_response, _) = render_frame(
+    let (legacy_response, _) = render_frame_with_segment_move(
         &mut legacy_model,
         &mut legacy_state,
         press_input(near_pointer, false),
         crate::declarative::CurveInteractionOptions::default(),
         crate::declarative::CurveEditorStyle::default(),
+        None,
     );
     assert!(!legacy_response.changed);
     assert!(matches!(
@@ -336,25 +366,23 @@ fn command_drag_translates_one_pair_and_commit_cancel_and_next_gesture_clear_sta
 #[test]
 fn gated_segment_move_cancels_on_modifier_release_and_pointer_exit() {
     let interaction = command_segment_move_options();
-    let style = crate::declarative::CurveEditorStyle {
-        segment_move_highlight: Color::rgb(7, 8, 9),
-        ..crate::declarative::CurveEditorStyle::default()
-    };
-    let move_color = style.segment_move_highlight;
+    let style = crate::declarative::CurveEditorStyle::default();
+    let move_color = Color::rgb(7, 8, 9);
     let preview_color = style.preview_fill;
     let mut model = model();
     let mut ui_state = UiState::default();
     let start = segment_midpoint(&model, 1);
-    let _ = render_frame(
+    let _ = render_frame_with_segment_move(
         &mut model,
         &mut ui_state,
         press_input(start, true),
         interaction.clone(),
         style.clone(),
+        Some(command_segment_move(move_color)),
     );
 
     let before_modifier_release = model.clone();
-    let (modifier_release_response, modifier_released_commands) = render_frame(
+    let (modifier_release_response, modifier_released_commands) = render_frame_with_segment_move(
         &mut model,
         &mut ui_state,
         InputState {
@@ -365,6 +393,7 @@ fn gated_segment_move_cancels_on_modifier_release_and_pointer_exit() {
         },
         interaction.clone(),
         style.clone(),
+        Some(command_segment_move(move_color)),
     );
     assert!(!modifier_release_response.changed);
     assert_eq!(model, before_modifier_release);
@@ -377,7 +406,7 @@ fn gated_segment_move_cancels_on_modifier_release_and_pointer_exit() {
         |command| matches!(command, VectorCommand::CircleFill(circle) if circle.color == preview_color)
     ));
 
-    let _ = render_frame(
+    let _ = render_frame_with_segment_move(
         &mut model,
         &mut ui_state,
         InputState {
@@ -387,16 +416,18 @@ fn gated_segment_move_cancels_on_modifier_release_and_pointer_exit() {
         },
         interaction.clone(),
         style.clone(),
+        Some(command_segment_move(move_color)),
     );
-    let _ = render_frame(
+    let _ = render_frame_with_segment_move(
         &mut model,
         &mut ui_state,
         press_input(start, true),
         interaction.clone(),
         style.clone(),
+        Some(command_segment_move(move_color)),
     );
     let before_pointer_exit = model.clone();
-    let (pointer_exit_response, pointer_exit_commands) = render_frame(
+    let (pointer_exit_response, pointer_exit_commands) = render_frame_with_segment_move(
         &mut model,
         &mut ui_state,
         InputState {
@@ -408,6 +439,7 @@ fn gated_segment_move_cancels_on_modifier_release_and_pointer_exit() {
         },
         interaction,
         style,
+        Some(command_segment_move(move_color)),
     );
     assert!(!pointer_exit_response.changed);
     assert_eq!(model, before_pointer_exit);

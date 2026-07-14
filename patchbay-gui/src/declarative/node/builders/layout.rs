@@ -7,8 +7,12 @@ impl Node {
     /// this request and are returned unchanged.
     pub fn widget_layout(mut self, layout: LayoutBox) -> Self {
         match &mut self {
-            Self::Slot(_)
-            | Self::Panel(_)
+            Self::Slot(slot) => {
+                if let Some(curve_editor) = slot.decorated_curve_editor_mut() {
+                    curve_editor.layout = layout;
+                }
+            }
+            Self::Panel(_)
             | Self::PaddingBox(_)
             | Self::AlignBox(_)
             | Self::AspectBox(_)
@@ -98,7 +102,11 @@ impl Node {
             Self::Spacer(spacer) => spacer.layout = LayoutBox::fill(),
             Self::Region(region) => region.layout = LayoutBox::fill(),
             Self::Indicator(indicator) => indicator.layout = LayoutBox::fill(),
-            Self::Slot(_) => {}
+            Self::Slot(slot) => {
+                if let Some(curve_editor) = slot.decorated_curve_editor_mut() {
+                    curve_editor.layout = LayoutBox::fill();
+                }
+            }
         }
         self
     }
@@ -135,7 +143,11 @@ impl Node {
             Self::Spacer(spacer) => spacer.layout = LayoutBox::auto().fill_width(),
             Self::Region(region) => region.layout = LayoutBox::auto().fill_width(),
             Self::Indicator(indicator) => indicator.layout = LayoutBox::auto().fill_width(),
-            Self::Slot(_) => {}
+            Self::Slot(slot) => {
+                if let Some(curve_editor) = slot.decorated_curve_editor_mut() {
+                    curve_editor.layout = LayoutBox::auto().fill_width();
+                }
+            }
         }
         self
     }
@@ -176,7 +188,11 @@ impl Node {
             Self::Spacer(spacer) => spacer.layout = LayoutBox::auto().fill_height(),
             Self::Region(region) => region.layout = LayoutBox::auto().fill_height(),
             Self::Indicator(indicator) => indicator.layout = LayoutBox::auto().fill_height(),
-            Self::Slot(_) => {}
+            Self::Slot(slot) => {
+                if let Some(curve_editor) = slot.decorated_curve_editor_mut() {
+                    curve_editor.layout = LayoutBox::auto().fill_height();
+                }
+            }
         }
         self
     }

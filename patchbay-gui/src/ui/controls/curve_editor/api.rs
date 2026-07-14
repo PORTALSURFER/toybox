@@ -10,10 +10,12 @@ impl<'a> Ui<'a> {
         let region_key = format!("curve-editor-{:016x}", request.id.as_u64());
         let region = self.region_with_key(&region_key, request.rect);
         let interaction = request.interaction.clone();
+        let segment_move = request.segment_move;
         let changed = self.reduce_curve_editor_interaction(
             model,
             &mut runtime,
             interaction.clone(),
+            segment_move,
             region,
             request.rect,
         );
@@ -25,6 +27,7 @@ impl<'a> Ui<'a> {
             model,
             &runtime,
             &interaction,
+            segment_move,
             region,
             request.rect,
         );

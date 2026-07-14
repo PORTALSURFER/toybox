@@ -128,7 +128,9 @@ impl<'a> Ui<'a> {
             let highlighted = state.preview_point.is_none()
                 && (state.hovered_segment == Some(segment_index) || segment_move_highlighted);
             let highlight_color = if segment_move_highlighted {
-                style.segment_move_highlight
+                state
+                    .segment_move_highlight
+                    .unwrap_or(style.line_highlight)
             } else {
                 style.line_highlight
             };

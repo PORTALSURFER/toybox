@@ -11,6 +11,8 @@ pub(crate) struct CurveEditorRectRenderRequest {
     pub(crate) grid: crate::declarative::CurveGridConfig,
     /// Interaction configuration payload.
     pub(crate) interaction: crate::declarative::CurveInteractionOptions,
+    /// Optional modifier-gated grouped segment-move configuration.
+    pub(crate) segment_move: Option<crate::declarative::CurveSegmentMoveOptions>,
     /// Optional normalized playhead x position.
     pub(crate) playhead_x: Option<f32>,
 }
@@ -31,8 +33,18 @@ impl CurveEditorRectRenderRequest {
             style,
             grid,
             interaction,
+            segment_move: None,
             playhead_x: playhead_x.map(|value| value.clamp(0.0, 1.0)),
         }
+    }
+
+    /// Opt into modifier-gated grouped segment movement for this request.
+    pub(crate) fn segment_move(
+        mut self,
+        segment_move: crate::declarative::CurveSegmentMoveOptions,
+    ) -> Self {
+        self.segment_move = Some(segment_move);
+        self
     }
 }
 
@@ -107,6 +119,8 @@ struct CurveEditorVisualState {
     hovered_segment: Option<usize>,
     /// Modifier-gated segment-move target or active segment index.
     segment_move_segment: Option<usize>,
+    /// Dedicated highlight color for modifier-gated segment movement.
+    segment_move_highlight: Option<crate::canvas::Color>,
     /// Optional preview point for insertion.
     preview_point: Option<crate::declarative::CurvePoint>,
 }

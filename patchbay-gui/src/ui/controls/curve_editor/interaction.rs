@@ -38,6 +38,7 @@ impl<'a> Ui<'a> {
         model: &crate::declarative::CurveModel,
         runtime: &CurveEditorRuntimeState,
         interaction: &crate::declarative::CurveInteractionOptions,
+        segment_move: Option<crate::declarative::CurveSegmentMoveOptions>,
         region: RegionResponse,
         rect: Rect,
     ) -> CurveEditorVisualState {
@@ -64,10 +65,9 @@ impl<'a> Ui<'a> {
             Some(CurveEditorDragMode::MoveSegment { index, .. }) => Some(*index),
             _ => None,
         };
-        let modifier_gates_segment_move = interaction.segment_move_modifier.is_some();
-        let segment_move_modifier_down = interaction
-            .segment_move_modifier
-            .is_some_and(|modifier| curve_editor_modifier_down(modifier, region));
+        let modifier_gates_segment_move = segment_move.is_some();
+        let segment_move_modifier_down = segment_move
+            .is_some_and(|options| curve_editor_modifier_down(options.modifier, region));
         let segment_move_segment = (region.hovered
             && !region.alt_down
             && hovered_point.is_none()
@@ -93,6 +93,7 @@ impl<'a> Ui<'a> {
             hovered_point,
             hovered_segment,
             segment_move_segment,
+            segment_move_highlight: segment_move.map(|options| options.highlight),
             preview_point,
         }
     }
@@ -103,6 +104,7 @@ impl<'a> Ui<'a> {
         model: &mut crate::declarative::CurveModel,
         runtime: &mut CurveEditorRuntimeState,
         interaction: crate::declarative::CurveInteractionOptions,
+        segment_move: Option<crate::declarative::CurveSegmentMoveOptions>,
         region: RegionResponse,
         rect: Rect,
     ) -> bool {
@@ -156,9 +158,8 @@ impl<'a> Ui<'a> {
             }
             let near_segment =
                 find_segment_hit_within(model, local_pointer, segment_near_radius, rect);
-            let modifier_gated_segment = interaction
-                .segment_move_modifier
-                .filter(|modifier| curve_editor_modifier_down(*modifier, region))
+            let modifier_gated_segment = segment_move
+                .filter(|options| curve_editor_modifier_down(options.modifier, region))
                 .filter(|_| !region.alt_down)
                 .and(near_segment);
             if let Some(index) = modifier_gated_segment {
@@ -201,7 +202,7 @@ impl<'a> Ui<'a> {
                         start_tension,
                         dragging: false,
                     })
-                } else if interaction.segment_move_modifier.is_none() {
+                } else if segment_move.is_none() {
                     Some(move_segment_drag_mode(model, index, local_pointer))
                 } else {
                     None
@@ -290,10 +291,10 @@ impl<'a> Ui<'a> {
                         start_right_y,
                         mut dragging,
                     } => {
-                        let gated_drag_is_invalid = interaction
-                            .segment_move_modifier
-                            .is_some_and(|modifier| {
-                                !curve_editor_modifier_down(modifier, region) || !region.hovered
+                        let gated_drag_is_invalid = segment_move
+                            .is_some_and(|options| {
+                                !curve_editor_modifier_down(options.modifier, region)
+                                    || !region.hovered
                             });
                         if gated_drag_is_invalid {
                             return false;
