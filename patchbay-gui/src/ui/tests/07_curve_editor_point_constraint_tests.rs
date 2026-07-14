@@ -242,6 +242,55 @@ fn shift_and_command_keep_y_anchored_while_x_uses_snap_targets() {
 }
 
 #[test]
+fn release_frame_preserves_anchor_then_restores_y_snapping() {
+    let interaction = crate::declarative::CurveInteractionOptions {
+        drag_start_threshold_px: 0,
+        snap: crate::declarative::CurveSnapConfig {
+            enabled: true,
+            vertical_positions: Vec::new(),
+            horizontal_positions: vec![0.25, 0.75],
+        },
+        ..crate::declarative::CurveInteractionOptions::default()
+    };
+    let mut model = model();
+    let mut ui_state = UiState::default();
+    let start = model.points[1];
+    render_frame(
+        &mut model,
+        &mut ui_state,
+        input(start, true, true, false),
+        interaction.clone(),
+        true,
+    );
+    render_frame(
+        &mut model,
+        &mut ui_state,
+        input(crate::declarative::CurvePoint::new(0.4, 0.9), false, true, false),
+        interaction.clone(),
+        true,
+    );
+    assert_close(model.points[1].y, start.y);
+
+    render_frame(
+        &mut model,
+        &mut ui_state,
+        input(crate::declarative::CurvePoint::new(0.4, 0.9), false, false, false),
+        interaction.clone(),
+        true,
+    );
+    assert_close(model.points[1].y, start.y);
+
+    render_frame(
+        &mut model,
+        &mut ui_state,
+        input(crate::declarative::CurvePoint::new(0.45, 0.65), false, false, false),
+        interaction,
+        true,
+    );
+    assert_close(model.points[1].y, 0.25);
+}
+
+#[test]
 fn horizontal_constraint_preserves_neighbor_and_coupled_endpoint_rules() {
     let interaction = crate::declarative::CurveInteractionOptions {
         min_point_spacing_x: 0.05,

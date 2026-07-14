@@ -254,6 +254,8 @@ impl<'a> Ui<'a> {
                         mut vertical_pointer_offset_y,
                         mut vertical_pointer_rebased,
                     } => {
+                        let horizontal_constraint_released_this_frame =
+                            !point_horizontal_constraint_down && horizontal_constraint_active;
                         if point_horizontal_constraint_down && !horizontal_constraint_active {
                             let visible_y = runtime
                                 .selected_point
@@ -301,7 +303,9 @@ impl<'a> Ui<'a> {
                             effective_pointer.y
                         };
                         let mut effective_snap = interaction.snap.clone();
-                        if horizontal_constraint_active || vertical_pointer_rebased {
+                        if horizontal_constraint_active
+                            || horizontal_constraint_released_this_frame
+                        {
                             effective_snap.horizontal_positions.clear();
                         }
                         let (recomputed, moved_index) = recompute_move_point_from_origin(
