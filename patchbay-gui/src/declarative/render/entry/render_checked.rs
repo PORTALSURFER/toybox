@@ -123,6 +123,7 @@ fn render_root_frame_and_collect(
         node_sequence: 0,
         depth: 1,
         curve_segment_move: None,
+        curve_point_horizontal_constraint: None,
     };
     let response =
         ui.root_frame_with_key_at(&spec.root.key, style, Some(state.resolved), state.origin, |ui, rect| {

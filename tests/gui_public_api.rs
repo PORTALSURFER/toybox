@@ -12,8 +12,11 @@ use toybox::gui::declarative::{
 fn curve_editor_modifier_is_nameable_through_supported_public_apis() {
     let direct = PatchbayCurveEditorModifier::Command;
     let facade = ToyboxCurveEditorModifier::Command;
+    let direct_shift = PatchbayCurveEditorModifier::Shift;
+    let facade_shift = ToyboxCurveEditorModifier::Shift;
 
     assert_eq!(direct, facade);
+    assert_eq!(direct_shift, facade_shift);
 }
 
 #[test]
@@ -70,6 +73,21 @@ fn segment_move_is_opted_into_without_extending_legacy_struct_literals() {
         vec![patchbay_gui::CurveSegment::new(0.0)],
     );
     let node = patchbay_gui::curve_editor("curve", model).curve_segment_move(facade_options);
+
+    assert!(matches!(node, patchbay_gui::Node::Slot(_)));
+}
+
+#[test]
+fn point_horizontal_constraint_is_an_opt_in_declarative_decorator() {
+    let model = patchbay_gui::CurveModel::new(
+        vec![
+            patchbay_gui::CurvePoint::new(0.0, 0.0),
+            patchbay_gui::CurvePoint::new(1.0, 1.0),
+        ],
+        vec![patchbay_gui::CurveSegment::new(0.0)],
+    );
+    let node = patchbay_gui::curve_editor("curve", model)
+        .curve_point_horizontal_constraint(ToyboxCurveEditorModifier::Shift);
 
     assert!(matches!(node, patchbay_gui::Node::Slot(_)));
 }

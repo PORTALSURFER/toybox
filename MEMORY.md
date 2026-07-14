@@ -1,8 +1,15 @@
 # MEMORY
 
-Last Updated (UTC): 2026-07-14 21:30:03Z
+Last Updated (UTC): 2026-07-14 21:50:13Z
 
 ## Current State
+
+- Active user-requested task: implement OPT-1173, an opt-in Shift horizontal constraint for reusable Patchbay curve-point dragging.
+- Branch `wsvasek/opt-1173-toybox-add-opt-in-shift-horizontal-constraint-for-curve` adds `.curve_point_horizontal_constraint(CurveEditorModifier::Shift)` through the existing opaque slot decorator so legacy `CurveInteractionOptions`, `CurveEditorStyle`, and `CurveEditorSpec` shapes remain unchanged.
+- `CurveEditorDragMode::MovePoint` now owns prior-frame constraint state, a stable visible-y anchor, and a normalized vertical pointer offset/rebase. Shift at press locks the origin y; mid-drag engagement captures the visible moved y; release preserves the anchored y and later vertical deltas without a jump.
+- Constrained movement continues through origin-snapshot recomputation, x snapping, ordering/minimum spacing, sticky drag-through removal/restoration, endpoint enforcement, commit/release/focus cleanup, and selected-point remapping.
+- Focused coverage includes opt-in/default behavior, held-at-start Shift, vertical drift, repeated mid-gesture toggles, no-jump release, Shift+Command x snapping, neighbor and coupled-endpoint boundaries, sticky restoration, release/focus loss, consecutive gestures, declarative dispatch, decorator composition, and public API naming.
+- Validation passes: 303 Patchbay GUI tests, 4 public GUI API tests, 17 macOS Radiant/VST3 host input tests, and canonical local CI with GUI/VST3 warnings-denied clippy plus 116 VST3-feature tests.
 
 - Active user-requested task: implement OPT-1170, reusable realtime-safe VST3 runtime replacement and coherent state handoff in Toybox.
 - Branch `wsvasek/opt-1170-toybox-provide-reusable-realtime-safe-vst3-runtime-and-state` adds `src/vst3/realtime.rs` and exports the API through both `toybox::vst3` and `toybox::vst3::prelude`.
@@ -78,12 +85,12 @@ Last Updated (UTC): 2026-07-14 21:30:03Z
 
 ## Active Mission
 
-- Complete the signed-off OPT-1170 PR #7 merge and branch cleanup, then hand the merged Toybox contract to Kickforge OPT-1150.
+- Publish the validated OPT-1173 implementation as a ready-for-review PR, then stop for explicit user review/sign-off.
 
 ## Immediate Next Actions
 
-1. Merge signed-off PR #7 and verify clean, synchronized `main` with no remaining feature branch.
-2. Let Kickforge OPT-1150 repin the merged Toybox revision and remove its local runtime/state handoff primitives.
+1. Commit and push the OPT-1173 branch, then open its ready-for-review PR.
+2. After explicit sign-off and merge, let Pump OPT-1116 repin Toybox and enable the Shift decorator in its Patchbay curve editor.
 
 ## Constraints And Notes
 

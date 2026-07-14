@@ -19,6 +19,8 @@ pub enum CurveHighlightMode {
 pub enum CurveEditorModifier {
     /// The platform command key (Command on macOS, Control on Windows).
     Command,
+    /// The Shift key.
+    Shift,
 }
 
 /// Opt-in configuration for moving a curve segment as one translated pair.

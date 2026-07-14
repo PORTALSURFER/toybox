@@ -5,6 +5,8 @@ pub struct SlotSpec {
     pub(crate) child: Box<Node>,
     /// Optional curve-editor interaction decorator carried by this opaque wrapper.
     curve_segment_move: Option<CurveSegmentMoveOptions>,
+    /// Optional modifier that constrains curve-point dragging horizontally.
+    curve_point_horizontal_constraint: Option<CurveEditorModifier>,
 }
 
 impl SlotSpec {
@@ -13,6 +15,7 @@ impl SlotSpec {
         Self {
             child: Box::new(child),
             curve_segment_move: None,
+            curve_point_horizontal_constraint: None,
         }
     }
 
@@ -31,9 +34,26 @@ impl SlotSpec {
         self.curve_segment_move = Some(options);
     }
 
+    /// Return the point-horizontal-constraint modifier carried by this slot.
+    pub(crate) const fn curve_point_horizontal_constraint(&self) -> Option<CurveEditorModifier> {
+        self.curve_point_horizontal_constraint
+    }
+
+    /// Store an opt-in point-horizontal-constraint modifier on this slot.
+    pub(crate) fn set_curve_point_horizontal_constraint(&mut self, modifier: CurveEditorModifier) {
+        self.curve_point_horizontal_constraint = Some(modifier);
+    }
+
+    /// Return whether this slot decorates a curve-editor interaction.
+    pub(crate) const fn has_curve_editor_decorator(&self) -> bool {
+        self.curve_segment_move.is_some() || self.curve_point_horizontal_constraint.is_some()
+    }
+
     /// Mutably borrow the curve editor hosted by a decorated slot.
     pub(crate) fn decorated_curve_editor_mut(&mut self) -> Option<&mut CurveEditorSpec> {
-        self.curve_segment_move?;
+        if !self.has_curve_editor_decorator() {
+            return None;
+        }
         match self.child.as_mut() {
             Node::CurveEditor(curve_editor) => Some(curve_editor),
             _ => None,
