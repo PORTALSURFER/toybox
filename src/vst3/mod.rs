@@ -12,5 +12,12 @@ pub mod gui;
 pub mod params;
 pub mod prelude;
 pub mod processor;
+pub mod realtime;
 pub mod registration;
 pub mod state;
+
+pub use realtime::{
+    AudioRuntime, AudioStateSnapshot, CoherentStatePublisher, RuntimeAdoption, RuntimePublisher,
+    RuntimeRegistration, RuntimeRejection, RuntimeRevision, RuntimeRevisionExhausted,
+    StateGeneration, StateObservation, StatePublishError,
+};

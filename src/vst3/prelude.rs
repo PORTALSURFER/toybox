@@ -35,6 +35,11 @@ pub use crate::vst3::params::{
     ParamRange, for_each_param_point, latest_param_point, parse_tchar_f64,
 };
 pub use crate::vst3::processor::{StereoAudioBuffers, process_ok, stereo_f32_buffers};
+pub use crate::vst3::realtime::{
+    AudioRuntime, AudioStateSnapshot, CoherentStatePublisher, RuntimeAdoption, RuntimePublisher,
+    RuntimeRegistration, RuntimeRejection, RuntimeRevision, RuntimeRevisionExhausted,
+    StateGeneration, StateObservation, StatePublishError,
+};
 pub use crate::vst3::registration::{Vst3FactoryClass, create_plugin_factory};
 pub use crate::vst3::state::{
     StreamError, VersionedPayload, decode_versioned_payload, encode_versioned_payload, read_exact,
