@@ -32,6 +32,10 @@ radiant-vst3 = ["gui", "vst3", "dep:radiant", "dep:raw-window-handle-06", "dep:o
 [lints]
 workspace = true
 
+[[bench]]
+name = "oversampling"
+harness = false
+
 [workspace]
 members = [
     "crates/process-log",

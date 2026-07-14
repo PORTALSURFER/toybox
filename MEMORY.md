@@ -1,8 +1,19 @@
 # MEMORY
 
-Last Updated (UTC): 2026-07-14 22:13:06Z
+Last Updated (UTC): 2026-07-14 23:24:10Z
 
 ## Current State
+
+- Active user-requested task: implement OPT-1174, reusable realtime-safe fixed 2x/4x mono audio oversampling primitives for downstream plugin stages.
+- Branch `wsvasek/opt-1174-toybox-provide-reusable-realtime-2x4x-audio-oversampling` adds a deterministic 111-tap linear-phase half-band FIR with only its 56 nonzero even-phase coefficients evaluated at runtime.
+- `HalfBandInterpolator2x` and `HalfBandDecimator2x` are the reusable stages; `MonoOversampler2x`, `MonoOversampler4x`, and factor-selecting `MonoOversampler` invoke statically dispatched callbacks exactly 2 or 4 times per base input; `SourceDecimator2x` and `SourceDecimator4x` accept caller-generated high-rate arrays.
+- `SampleDelay` reports exact rational base-rate delay: 55/2 for one 2x stage, 55 for 2x input-process-output, 165/4 for 4x source decimation/interpolation, and 165/2 for 4x input-process-output. `DryPathAligner` covers integer and half-sample wet/dry alignment with inline state.
+- The measured response is under 0.001 dB ripple through 90% of base Nyquist, exactly -6.0206 dB at Nyquist, and below -85 dB from 110% onward. Coefficients, transition-band behavior, CPU scaling, realtime constraints, and fractional alignment behavior are documented in `docs/OVERSAMPLING.md`.
+- Twelve focused tests cover response, latency/impulses, reset determinism, block independence, callback counts, DC/low-frequency gain, 44.1/48/96/192 kHz stability, hard-clip/foldback/FM-like alias reduction at 44.1/48/96 kHz, and post-construction allocator/deallocator auditing.
+- `examples/selective_oversampling.rs` and external public-API coverage show stage-local nonlinear processing and high-rate source decimation while leaving intentionally aliased policy downstream.
+- The stable benchmark covers block sizes 1/16/64/256/1024 and 1/16/64 instances. An Apple M5 Pro reference run measured about 51-53 ns/sample/instance at 2x and 163-175 ns/sample/instance at 4x outside the block-size-1 single-instance cold edge.
+- Canonical local CI, exact all-target clippy, and `cargo test --all` pass with `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk`, including 128 VST3-feature tests and 304 Patchbay GUI tests.
+- The implementation is validated and ready to commit, push, and publish as a ready-for-review PR; user review/sign-off remains required before merge.
 
 - Active user-requested task: implement OPT-1173, an opt-in Shift horizontal constraint for reusable Patchbay curve-point dragging.
 - Branch `wsvasek/opt-1173-toybox-add-opt-in-shift-horizontal-constraint-for-curve` adds `.curve_point_horizontal_constraint(CurveEditorModifier::Shift)` through the existing opaque slot decorator so legacy `CurveInteractionOptions`, `CurveEditorStyle`, and `CurveEditorSpec` shapes remain unchanged.
@@ -88,12 +99,13 @@ Last Updated (UTC): 2026-07-14 22:13:06Z
 
 ## Active Mission
 
-- Publish the validated OPT-1173 implementation as a ready-for-review PR, then stop for explicit user review/sign-off.
+- Publish the validated OPT-1174 reusable oversampling implementation as a ready-for-review PR, then stop for explicit user review/sign-off.
 
 ## Immediate Next Actions
 
-1. Wait for explicit user review/sign-off on ready-for-review PR #8.
-2. After explicit sign-off and merge, let Pump OPT-1116 repin Toybox and enable the Shift decorator in its Patchbay curve editor.
+1. Commit and push the validated OPT-1174 implementation.
+2. Open a ready-for-review PR and stop for explicit user review/sign-off.
+3. After explicit sign-off and merge, let Kickforge OPT-1152 repin Toybox and adopt the shared stages with plugin-owned policy.
 
 ## Constraints And Notes
 
