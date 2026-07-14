@@ -1,9 +1,20 @@
 # MEMORY
 
-Last Updated (UTC): 2026-07-14 11:58:47Z
+Last Updated (UTC): 2026-07-14 21:30:03Z
 
 ## Current State
 
+- Active user-requested task: implement OPT-1170, reusable realtime-safe VST3 runtime replacement and coherent state handoff in Toybox.
+- Branch `wsvasek/opt-1170-toybox-provide-reusable-realtime-safe-vst3-runtime-and-state` adds `src/vst3/realtime.rs` and exports the API through both `toybox::vst3` and `toybox::vst3::prelude`.
+- `RuntimePublisher<T>` registers monotonic revisions before construction, reconciles overlapping publishers so the greatest registered revision wins, and pairs with a non-`Sync` `AudioRuntime<T>` that attempts one bounded adoption at each block boundary.
+- Audio rejection covers stale and plugin-defined redundant replacements; displaced values enter an audio-local intrusive retire list and are published with one bounded compare-exchange attempt for `RuntimePublisher::reclaim()` on a control thread. No raw-pointer ownership is exposed downstream.
+- `CoherentStatePublisher<T>::validate_and_publish(...)` validates before entering the update, serializes control writers, optionally mirrors fields for control/UI state, then publishes one Toybox-owned `T: Copy` snapshot together with its generation. `AudioStateSnapshot<T>` performs one bounded adoption and never infers coherence from separately stored relaxed atomics, while exposing a changed-generation edge for downstream reset policy.
+- PR #7 review follow-up replaces the original caller-read seqlock after P1 feedback showed relaxed state-field stores could become visible without the closing generation load observing the writer. The deterministic regression pauses after one mirrored field changes and proves audio retains the old owned snapshot until the complete value is published.
+- Safety documentation covers every raw-pointer boundary and the shutdown contract: `AudioRuntime<T>` may be dropped only after host processing stops; that teardown is the only non-control path where runtime destructors may run.
+- Focused validation passes: 9 ownership/concurrency tests, external Kickforge-style adoption coverage, allocator/deallocator auditing, 500 repeated stress runs, and all 9 focused tests under nightly Miri.
+- Canonical `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk bash scripts/ci_local.sh`, VST3 warnings-denied clippy, 116 VST3-feature unit tests, external tests, and doctests pass.
+- The issue's exact workspace `--all-features` clippy/test commands are blocked by an unchanged `origin/main` invalid format placeholder in `patchbay-gui/src/declarative/render/grid/axis/resolve.rs` when `layout-overflow-warnings` is enabled; this unrelated baseline error is not part of OPT-1170.
+- OPT-1170 is signed off and complete in Toybox through PR #7 at `https://github.com/PORTALSURFER/toybox/pull/7`; its final head includes the owned-snapshot P1 soundness fix, and no further Toybox implementation remains before Kickforge adoption.
 - Active user-requested task: implement OPT-1169, modifier-gated grouped curve-segment dragging and dedicated feedback in the reusable Patchbay curve editor.
 - Branch `wsvasek/opt-1169-toybox-add-modifier-gated-grouped-curve-segment-dragging-and` adds `.curve_segment_move(CurveSegmentMoveOptions)` as the opt-in contract while keeping legacy unmodified near-segment dragging as the default.
 - Command-hover and Command-press now select a complete segment before direct-line insertion, while point interaction, empty-canvas insertion, Alt tension adjustment, and unmodified direct-line insertion retain their existing precedence.
@@ -67,12 +78,12 @@ Last Updated (UTC): 2026-07-14 11:58:47Z
 
 ## Active Mission
 
-- Carry the completed OPT-1169 Toybox curve-editor contract into Pump OPT-1118.
+- Complete the signed-off OPT-1170 PR #7 merge and branch cleanup, then hand the merged Toybox contract to Kickforge OPT-1150.
 
 ## Immediate Next Actions
 
-1. Let Pump OPT-1118 repin Toybox and opt in with `.curve_segment_move(CurveSegmentMoveOptions::new(CurveEditorModifier::Command, color))`.
-2. Keep future shared curve-editor changes source-compatible for legacy `CurveInteractionOptions`, `CurveEditorStyle`, and `Node` consumers.
+1. Merge signed-off PR #7 and verify clean, synchronized `main` with no remaining feature branch.
+2. Let Kickforge OPT-1150 repin the merged Toybox revision and remove its local runtime/state handoff primitives.
 
 ## Constraints And Notes
 
