@@ -86,7 +86,7 @@ fn wrap_slot_child(child: Slot) -> Node {
     if matches!(align_y, SlotAlign::Stretch) || matches!(child.params.size_cross, SlotCrossSize::Fill) {
         content = content.fill_height();
     }
-    if is_widget_node(&content) {
+    if accepts_widget_layout(&content) {
         let mut layout = node_layout(&content);
         layout.min_width = min_width;
         layout.max_width = max_width;
@@ -112,4 +112,15 @@ fn wrap_slot_child(child: Slot) -> Node {
             .align(align)
             .layout(ContainerLayout::fill()),
     )
+}
+
+/// Return whether slot metadata can be applied through widget-layout builders.
+fn accepts_widget_layout(node: &Node) -> bool {
+    is_widget_node(node)
+        || matches!(
+            node,
+            Node::Slot(slot)
+                if slot.curve_segment_move().is_some()
+                    && matches!(slot.child(), Node::CurveEditor(_))
+        )
 }

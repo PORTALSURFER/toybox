@@ -1,6 +1,6 @@
 # MEMORY
 
-Last Updated (UTC): 2026-07-14 10:30:36Z
+Last Updated (UTC): 2026-07-14 11:49:56Z
 
 ## Current State
 
@@ -10,11 +10,12 @@ Last Updated (UTC): 2026-07-14 10:30:36Z
 - `CurveSegmentMoveOptions` combines the required modifier and dedicated segment-translation stroke/marker color, and feedback resolves cleanly across modifier release, pointer exit, release, focus loss, and consecutive gestures.
 - Segment translation now clamps one shared x/y delta for both endpoints, preserving pair offset and slope at normalized y bounds, neighbor/minimum-spacing limits, fixed endpoint x constraints, and coupled endpoint y constraints.
 - Focused coverage includes modifier-gated hover/color, insertion suppression, direct-line/point/empty-canvas precedence, legacy defaults, translation, commit/cancel/consecutive gestures, feedback clearing, and all group-clamp boundaries.
-- Validation passes with `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk`: 293 Patchbay GUI tests, all-target/all-feature clippy, `bash scripts/ci_local.sh` (107 VST3-feature tests plus external API coverage), and the legacy exhaustive-literal integration test under the GUI feature.
+- Validation passes with `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk`: 295 Patchbay GUI tests, all-target/all-feature clippy, `bash scripts/ci_local.sh` (107 VST3-feature tests plus external API coverage), and the legacy exhaustive-literal integration test under the GUI feature.
 - Ready-for-review PR #6 is open at `https://github.com/PORTALSURFER/toybox/pull/6`; current status is `waiting for user review` and merge requires explicit user sign-off.
-- The current-head review fix cancels a modifier-gated `MoveSegment` before mutation when Command is released or the pointer leaves the editor/window; regression coverage proves the model and changed response remain untouched, and the 291-test GUI suite plus full local CI pass.
+- The current-head review fix cancels a modifier-gated `MoveSegment` before mutation when Command is released or the pointer leaves the editor/window; regression coverage proves the model and changed response remain untouched, and the 295-test GUI suite plus full local CI pass.
 - `CurveEditorModifier` is re-exported through both `patchbay_gui` and `toybox::gui::declarative`; an external integration test compiles and names `Command` through both supported downstream APIs.
 - `CurveInteractionOptions`, `CurveEditorStyle`, and `Node` retain their legacy public shapes. Modifier and highlight settings travel through the existing opaque `SlotSpec` wrapper, with regression coverage for external exhaustive literals, fluent builder ordering, and declarative render dispatch.
+- `row_slots` and `column_slots` recognize the opaque segment-move decorator as a widget-layout proxy, so `weighted_slot(...).width_bounds()/height_bounds()` still reach the wrapped curve editor regardless of builder ordering.
 - Active user-requested task: implement OPT-1159, the reusable realtime-safe sample-offset event timeline for CLAP and VST3.
 - Branch `wsvasek/opt-1159-toybox-provide-a-realtime-safe-sample-offset-event-timeline` adds a format-neutral fixed-capacity `BlockEventTimeline<P, E>`, CLAP classifier ingestion, and VST3 parameter-queue plus `IEventList` ingestion.
 - Timeline ordering is deterministic by clamped sample offset, parameter-before-event priority, and stable source sequence. Full capacity retains the earliest events and explicitly reports replacements and drops without growing storage.
