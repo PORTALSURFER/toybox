@@ -10,6 +10,7 @@ Last Updated (UTC): 2026-07-14 21:50:13Z
 - Constrained movement continues through origin-snapshot recomputation, x snapping, ordering/minimum spacing, sticky drag-through removal/restoration, endpoint enforcement, commit/release/focus cleanup, and selected-point remapping.
 - Focused coverage includes opt-in/default behavior, held-at-start Shift, vertical drift, repeated mid-gesture toggles, no-jump release, Shift+Command x snapping, neighbor and coupled-endpoint boundaries, sticky restoration, release/focus loss, consecutive gestures, declarative dispatch, decorator composition, and public API naming.
 - Validation passes: 303 Patchbay GUI tests, 4 public GUI API tests, 17 macOS Radiant/VST3 host input tests, and canonical local CI with GUI/VST3 warnings-denied clippy plus 116 VST3-feature tests.
+- Commit `9cb14b9` is pushed and ready-for-review PR #8 is open at `https://github.com/PORTALSURFER/toybox/pull/8`; current status is `waiting for user review`.
 
 - Active user-requested task: implement OPT-1170, reusable realtime-safe VST3 runtime replacement and coherent state handoff in Toybox.
 - Branch `wsvasek/opt-1170-toybox-provide-reusable-realtime-safe-vst3-runtime-and-state` adds `src/vst3/realtime.rs` and exports the API through both `toybox::vst3` and `toybox::vst3::prelude`.
