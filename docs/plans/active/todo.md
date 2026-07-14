@@ -5,16 +5,15 @@ Mission: deliver OPT-1170 as Toybox-owned realtime-safe VST3 runtime and coheren
 ## Active PR
 
 - Branch: `wsvasek/opt-1170-toybox-provide-reusable-realtime-safe-vst3-runtime-and-state`
-- PR: intended ready-for-review PR for OPT-1170
+- PR: `https://github.com/PORTALSURFER/toybox/pull/7`
 - Scope: generic latest-wins runtime publication/adoption/deferred retirement plus a bounded coherent multi-field state-generation gate under `toybox::vst3`
 - Definition of Done: no allocation, blocking, or destruction on audio; stale and redundant candidates retire on control; old-or-complete state observations; documented unsafe/lifecycle boundaries; deterministic concurrency, stress, Miri, external adoption, clippy, and test evidence
-- Status: `validated`
+- Status: `waiting for user review`
 
 ## Immediate Queue
 
-1. Commit and push the validated OPT-1170 implementation, then open the PR ready for review.
-2. Stop at `waiting for user review` until the user explicitly signs off.
-3. After merge, let Kickforge OPT-1150 repin Toybox and replace its local raw-pointer handoff while retaining Kickforge-specific runtime construction, sample-rate equality, state shape, reset, and tail policy.
+1. Stop at `waiting for user review` until the user explicitly signs off.
+2. After merge, let Kickforge OPT-1150 repin Toybox and replace its local raw-pointer handoff while retaining Kickforge-specific runtime construction, sample-rate equality, state shape, reset, and tail policy.
 
 ## Validation Note
 
