@@ -5,17 +5,15 @@ Mission: deliver OPT-1174 as reusable realtime-safe fixed 2x/4x mono audio overs
 ## Active PR
 
 - Branch: `wsvasek/opt-1174-toybox-provide-reusable-realtime-2x4x-audio-oversampling`
-- PR: intended ready-for-review PR for OPT-1174
+- PR: `https://github.com/PORTALSURFER/toybox/pull/9`
 - Scope: deterministic 2x half-band interpolation/decimation stages, composable 4x input-processing and source-generation paths, exact rational latency, dry alignment, reset behavior, spectral/realtime validation, benchmark coverage, and a selective downstream example
 - Definition of Done: reusable 2x/4x stages and callbacks; source decimation; no post-construction audio-thread allocation/locking/logging/panic/dynamic dispatch; documented response and latency; alias, stability, reset, equivalence, and allocator coverage; required CPU matrix; full Toybox validation
-- Status: `validated`
+- Status: `waiting for user review`
 
 ## Immediate Queue
 
-1. Commit and push the validated OPT-1174 implementation.
-2. Open a ready-for-review PR with the complete scope, Definition of Done, validation commands, known limitations, and explicit user-review requirement.
-3. Stop at `waiting for user review` until explicit sign-off.
-4. After merge, let Kickforge OPT-1152 repin Toybox and adopt the primitives with Kickforge-owned stage policy.
+1. Wait for explicit user review/sign-off on ready-for-review PR #9.
+2. After merge, let Kickforge OPT-1152 repin Toybox and adopt the primitives with Kickforge-owned stage policy.
 
 ## Validation Note
 
