@@ -28,6 +28,8 @@ struct RenderCtx<'a> {
     curve_segment_move: Option<CurveSegmentMoveOptions>,
     /// Point-horizontal-constraint decorator inherited from the active opaque slot.
     curve_point_horizontal_constraint: Option<CurvePointHorizontalConstraintModifier>,
+    /// Point-vertical-constraint decorator inherited from the active opaque slot.
+    curve_point_vertical_constraint: Option<CurvePointVerticalConstraintModifier>,
 }
 
 /// Queue one per-node reason flag for the next rendered child.
@@ -228,15 +230,20 @@ fn render_node(node: &Node, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx<'_>
             );
             let previous_segment_move = ctx.curve_segment_move;
             let previous_point_horizontal_constraint = ctx.curve_point_horizontal_constraint;
+            let previous_point_vertical_constraint = ctx.curve_point_vertical_constraint;
             if let Some(segment_move) = slot.curve_segment_move() {
                 ctx.curve_segment_move = Some(segment_move);
             }
             if let Some(modifier) = slot.curve_point_horizontal_constraint() {
                 ctx.curve_point_horizontal_constraint = Some(modifier);
             }
+            if let Some(modifier) = slot.curve_point_vertical_constraint() {
+                ctx.curve_point_vertical_constraint = Some(modifier);
+            }
             render_node(&slot.child, rect, ui, ctx);
             ctx.curve_segment_move = previous_segment_move;
             ctx.curve_point_horizontal_constraint = previous_point_horizontal_constraint;
+            ctx.curve_point_vertical_constraint = previous_point_vertical_constraint;
         }
         Node::Panel(panel) => render_panel(panel, rect, ui, ctx),
         Node::PaddingBox(padding_box) => render_padding_box(padding_box, rect, ui, ctx),
@@ -263,6 +270,7 @@ fn render_node(node: &Node, rect: Rect, ui: &mut Ui<'_>, ctx: &mut RenderCtx<'_>
                 curve_editor,
                 ctx.curve_segment_move,
                 ctx.curve_point_horizontal_constraint,
+                ctx.curve_point_vertical_constraint,
                 rect,
                 ui,
                 ctx.actions,

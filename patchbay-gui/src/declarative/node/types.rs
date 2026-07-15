@@ -7,6 +7,8 @@ pub struct SlotSpec {
     curve_segment_move: Option<CurveSegmentMoveOptions>,
     /// Optional modifier that constrains curve-point dragging horizontally.
     curve_point_horizontal_constraint: Option<CurvePointHorizontalConstraintModifier>,
+    /// Optional modifier chord that constrains curve-point dragging vertically.
+    curve_point_vertical_constraint: Option<CurvePointVerticalConstraintModifier>,
 }
 
 impl SlotSpec {
@@ -16,6 +18,7 @@ impl SlotSpec {
             child: Box::new(child),
             curve_segment_move: None,
             curve_point_horizontal_constraint: None,
+            curve_point_vertical_constraint: None,
         }
     }
 
@@ -49,9 +52,26 @@ impl SlotSpec {
         self.curve_point_horizontal_constraint = Some(modifier);
     }
 
+    /// Return the point-vertical-constraint modifier carried by this slot.
+    pub(crate) const fn curve_point_vertical_constraint(
+        &self,
+    ) -> Option<CurvePointVerticalConstraintModifier> {
+        self.curve_point_vertical_constraint
+    }
+
+    /// Store an opt-in point-vertical-constraint modifier on this slot.
+    pub(crate) fn set_curve_point_vertical_constraint(
+        &mut self,
+        modifier: CurvePointVerticalConstraintModifier,
+    ) {
+        self.curve_point_vertical_constraint = Some(modifier);
+    }
+
     /// Return whether this slot decorates a curve-editor interaction.
     pub(crate) const fn has_curve_editor_decorator(&self) -> bool {
-        self.curve_segment_move.is_some() || self.curve_point_horizontal_constraint.is_some()
+        self.curve_segment_move.is_some()
+            || self.curve_point_horizontal_constraint.is_some()
+            || self.curve_point_vertical_constraint.is_some()
     }
 
     /// Mutably borrow the curve editor hosted by a decorated slot.

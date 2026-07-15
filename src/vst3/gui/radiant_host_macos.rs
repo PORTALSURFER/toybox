@@ -1097,7 +1097,8 @@ mod tests {
         let position = Point::new(24.0, 48.0);
         let modifiers = PointerModifiers {
             shift: true,
-            ..PointerModifiers::default()
+            alt: true,
+            command: true,
         };
 
         dispatch_pointer_move(&mut editor, position, modifiers);

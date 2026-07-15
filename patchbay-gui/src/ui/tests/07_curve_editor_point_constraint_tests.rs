@@ -35,11 +35,22 @@ fn point_for_curve(point: crate::declarative::CurvePoint) -> Point {
 }
 
 fn input(point: crate::declarative::CurvePoint, pressed: bool, shift: bool, command: bool) -> InputState {
+    input_with_modifiers(point, pressed, shift, false, command)
+}
+
+fn input_with_modifiers(
+    point: crate::declarative::CurvePoint,
+    pressed: bool,
+    shift: bool,
+    alt: bool,
+    command: bool,
+) -> InputState {
     InputState {
         pointer_pos: point_for_curve(point),
         mouse_pressed: pressed,
         mouse_down: true,
         shift_down: shift,
+        alt_down: alt,
         command_down: command,
         ..InputState::default()
     }
@@ -51,6 +62,17 @@ fn render_frame(
     input: InputState,
     interaction: crate::declarative::CurveInteractionOptions,
     constrained: bool,
+) -> CurveEditorResponse {
+    render_frame_with_constraints(model, ui_state, input, interaction, constrained, false)
+}
+
+fn render_frame_with_constraints(
+    model: &mut crate::declarative::CurveModel,
+    ui_state: &mut UiState,
+    input: InputState,
+    interaction: crate::declarative::CurveInteractionOptions,
+    horizontal_constrained: bool,
+    vertical_constrained: bool,
 ) -> CurveEditorResponse {
     let mut canvas = Canvas::new(240, 170);
     let mut layout = Layout::default();
@@ -65,12 +87,35 @@ fn render_frame(
         interaction,
         None,
     );
-    let request = if constrained {
+    let request = if horizontal_constrained {
         request.point_horizontal_constraint(crate::declarative::CurveEditorModifier::Shift)
     } else {
         request
     };
+    let request = if vertical_constrained {
+        request.point_vertical_constraint(crate::declarative::CurveEditorModifier::ShiftOption)
+    } else {
+        request
+    };
     ui.curve_editor_in_rect(model, request)
+}
+
+fn render_constraint_drag_frame(
+    model: &mut crate::declarative::CurveModel,
+    ui_state: &mut UiState,
+    point: crate::declarative::CurvePoint,
+    shift: bool,
+    alt: bool,
+    interaction: &crate::declarative::CurveInteractionOptions,
+) -> CurveEditorResponse {
+    render_frame_with_constraints(
+        model,
+        ui_state,
+        input_with_modifiers(point, false, shift, alt, false),
+        interaction.clone(),
+        true,
+        true,
+    )
 }
 
 fn assert_close(actual: f32, expected: f32) {
@@ -78,6 +123,320 @@ fn assert_close(actual: f32, expected: f32) {
         (actual - expected).abs() < 0.006,
         "expected {expected}, got {actual}"
     );
+}
+
+#[test]
+fn shift_option_from_press_locks_origin_x_while_gain_remains_movable() {
+    let interaction = crate::declarative::CurveInteractionOptions {
+        drag_start_threshold_px: 0,
+        ..crate::declarative::CurveInteractionOptions::default()
+    };
+    let mut model = model();
+    let mut ui_state = UiState::default();
+    let start = model.points[1];
+    render_frame_with_constraints(
+        &mut model,
+        &mut ui_state,
+        input_with_modifiers(start, true, true, true, false),
+        interaction.clone(),
+        true,
+        true,
+    );
+    render_frame_with_constraints(
+        &mut model,
+        &mut ui_state,
+        input_with_modifiers(
+            crate::declarative::CurvePoint::new(0.9, 0.85),
+            false,
+            true,
+            true,
+            false,
+        ),
+        interaction,
+        true,
+        true,
+    );
+
+    assert_close(model.points[1].x, start.x);
+    assert_close(model.points[1].y, 0.85);
+}
+
+#[test]
+fn mid_drag_vertical_constraint_captures_visible_x_and_releases_without_jump() {
+    let interaction = crate::declarative::CurveInteractionOptions {
+        drag_start_threshold_px: 0,
+        ..crate::declarative::CurveInteractionOptions::default()
+    };
+    let mut model = model();
+    let mut ui_state = UiState::default();
+    let start = model.points[1];
+    render_frame_with_constraints(
+        &mut model,
+        &mut ui_state,
+        input_with_modifiers(start, true, false, false, false),
+        interaction.clone(),
+        true,
+        true,
+    );
+    render_constraint_drag_frame(
+        &mut model,
+        &mut ui_state,
+        crate::declarative::CurvePoint::new(0.38, 0.7),
+        false,
+        false,
+        &interaction,
+    );
+    let first_anchor = model.points[1].x;
+    render_constraint_drag_frame(
+        &mut model,
+        &mut ui_state,
+        crate::declarative::CurvePoint::new(0.44, 0.7),
+        true,
+        true,
+        &interaction,
+    );
+    render_constraint_drag_frame(
+        &mut model,
+        &mut ui_state,
+        crate::declarative::CurvePoint::new(0.9, 0.85),
+        true,
+        true,
+        &interaction,
+    );
+    assert_close(model.points[1].x, first_anchor);
+    assert_close(model.points[1].y, 0.85);
+
+    render_constraint_drag_frame(
+        &mut model,
+        &mut ui_state,
+        crate::declarative::CurvePoint::new(0.9, 0.85),
+        false,
+        false,
+        &interaction,
+    );
+    assert_close(model.points[1].x, first_anchor);
+    assert_close(model.points[1].y, 0.85);
+    render_constraint_drag_frame(
+        &mut model,
+        &mut ui_state,
+        crate::declarative::CurvePoint::new(0.8, 0.75),
+        false,
+        false,
+        &interaction,
+    );
+    assert_close(model.points[1].x, first_anchor - 0.1);
+    assert_close(model.points[1].y, 0.75);
+
+    let second_anchor = model.points[1].x;
+    render_constraint_drag_frame(
+        &mut model,
+        &mut ui_state,
+        crate::declarative::CurvePoint::new(0.1, 0.2),
+        true,
+        true,
+        &interaction,
+    );
+    assert_close(model.points[1].x, second_anchor);
+    assert_close(model.points[1].y, 0.2);
+    render_constraint_drag_frame(
+        &mut model,
+        &mut ui_state,
+        crate::declarative::CurvePoint::new(0.1, 0.2),
+        false,
+        false,
+        &interaction,
+    );
+    assert_close(model.points[1].x, second_anchor);
+    assert_close(model.points[1].y, 0.2);
+}
+
+#[test]
+fn option_release_to_shift_only_preserves_both_axes_then_moves_horizontally() {
+    let interaction = crate::declarative::CurveInteractionOptions {
+        drag_start_threshold_px: 0,
+        ..crate::declarative::CurveInteractionOptions::default()
+    };
+    let mut model = model();
+    let mut ui_state = UiState::default();
+    let start = model.points[1];
+    render_frame_with_constraints(
+        &mut model,
+        &mut ui_state,
+        input_with_modifiers(start, true, true, true, false),
+        interaction.clone(),
+        true,
+        true,
+    );
+    render_constraint_drag_frame(
+        &mut model,
+        &mut ui_state,
+        crate::declarative::CurvePoint::new(0.8, 0.75),
+        true,
+        true,
+        &interaction,
+    );
+    assert_close(model.points[1].x, start.x);
+    assert_close(model.points[1].y, 0.75);
+
+    render_constraint_drag_frame(
+        &mut model,
+        &mut ui_state,
+        crate::declarative::CurvePoint::new(0.8, 0.75),
+        true,
+        false,
+        &interaction,
+    );
+    assert_close(model.points[1].x, start.x);
+    assert_close(model.points[1].y, 0.75);
+    render_constraint_drag_frame(
+        &mut model,
+        &mut ui_state,
+        crate::declarative::CurvePoint::new(0.9, 0.1),
+        true,
+        false,
+        &interaction,
+    );
+    assert_close(model.points[1].x, start.x + 0.1);
+    assert_close(model.points[1].y, 0.75);
+
+    render_constraint_drag_frame(
+        &mut model,
+        &mut ui_state,
+        crate::declarative::CurvePoint::new(0.9, 0.1),
+        false,
+        false,
+        &interaction,
+    );
+    assert_close(model.points[1].x, start.x + 0.1);
+    assert_close(model.points[1].y, 0.75);
+    render_constraint_drag_frame(
+        &mut model,
+        &mut ui_state,
+        crate::declarative::CurvePoint::new(0.8, 0.0),
+        false,
+        false,
+        &interaction,
+    );
+    assert_close(model.points[1].x, start.x);
+    assert_close(model.points[1].y, 0.65);
+}
+
+#[test]
+fn shift_option_precedes_command_x_snapping_and_preserves_boundaries() {
+    let interaction = crate::declarative::CurveInteractionOptions {
+        drag_start_threshold_px: 0,
+        push_through_threshold_px: 2,
+        snap: crate::declarative::CurveSnapConfig {
+            enabled: true,
+            vertical_positions: vec![0.0, 0.25, 0.5, 0.75, 1.0],
+            horizontal_positions: Vec::new(),
+        },
+        ..crate::declarative::CurveInteractionOptions::default()
+    };
+    let mut model = model();
+    let mut ui_state = UiState::default();
+    let start = model.points[1];
+    render_frame_with_constraints(
+        &mut model,
+        &mut ui_state,
+        input_with_modifiers(start, true, true, true, false),
+        interaction.clone(),
+        true,
+        true,
+    );
+    for (point, command) in [
+        (crate::declarative::CurvePoint::new(0.52, 0.9), true),
+        (crate::declarative::CurvePoint::new(1.2, 0.6), false),
+        (crate::declarative::CurvePoint::new(-0.2, 0.3), true),
+    ] {
+        render_frame_with_constraints(
+            &mut model,
+            &mut ui_state,
+            input_with_modifiers(point, false, true, true, command),
+            interaction.clone(),
+            true,
+            true,
+        );
+        assert_close(model.points[1].x, start.x);
+    }
+    assert_eq!(model.points.len(), 4);
+    assert_close(model.points[1].y, 0.3);
+}
+
+#[test]
+fn vertical_constraint_preserves_coupled_endpoints_and_clears_between_gestures() {
+    let interaction = crate::declarative::CurveInteractionOptions {
+        drag_start_threshold_px: 0,
+        endpoint_mode: crate::declarative::EndpointMode::CoupledY,
+        ..crate::declarative::CurveInteractionOptions::default()
+    };
+    let mut model = model();
+    let mut ui_state = UiState::default();
+    let endpoint = model.points[0];
+    render_frame_with_constraints(
+        &mut model,
+        &mut ui_state,
+        input_with_modifiers(endpoint, true, true, true, false),
+        interaction.clone(),
+        true,
+        true,
+    );
+    render_frame_with_constraints(
+        &mut model,
+        &mut ui_state,
+        input_with_modifiers(
+            crate::declarative::CurvePoint::new(0.8, 0.9),
+            false,
+            true,
+            true,
+            false,
+        ),
+        interaction.clone(),
+        true,
+        true,
+    );
+    assert_close(model.points[0].x, 0.0);
+    assert_close(model.points[0].y, 0.9);
+    assert_close(model.points.last().unwrap().y, 0.9);
+
+    let release_pointer = point_for_curve(model.points[0]);
+    render_frame_with_constraints(
+        &mut model,
+        &mut ui_state,
+        InputState {
+            pointer_pos: release_pointer,
+            mouse_released: true,
+            ..InputState::default()
+        },
+        interaction.clone(),
+        true,
+        true,
+    );
+    let next_start = model.points[1];
+    render_frame_with_constraints(
+        &mut model,
+        &mut ui_state,
+        input_with_modifiers(next_start, true, false, false, false),
+        interaction.clone(),
+        true,
+        true,
+    );
+    render_frame_with_constraints(
+        &mut model,
+        &mut ui_state,
+        input_with_modifiers(
+            crate::declarative::CurvePoint::new(0.45, 0.25),
+            false,
+            false,
+            false,
+            false,
+        ),
+        interaction,
+        true,
+        true,
+    );
+    assert_close(model.points[1].x, 0.45);
+    assert_close(model.points[1].y, 0.25);
 }
 
 #[test]

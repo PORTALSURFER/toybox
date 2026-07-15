@@ -113,9 +113,13 @@ impl<'a> Ui<'a> {
         let raw_local_pointer = region.raw_local_pointer;
         let normalized_pointer = curve_point_from_local(local_pointer, rect);
         let raw_normalized_pointer = curve_point_from_local(raw_local_pointer, rect);
+        let point_vertical_constraint_down = decorators.point_vertical_constraint.is_some()
+            && region.shift_down
+            && region.alt_down;
         let point_horizontal_constraint_down = decorators
             .point_horizontal_constraint
-            .is_some_and(|_| region.shift_down);
+            .is_some_and(|_| region.shift_down)
+            && !point_vertical_constraint_down;
         let segment_move = decorators.segment_move;
 
         // Focus loss can clear the host button state without a release frame.
@@ -157,6 +161,7 @@ impl<'a> Ui<'a> {
                     index,
                     local_pointer,
                     point_horizontal_constraint_down,
+                    point_vertical_constraint_down,
                 ));
                 return false;
             }
@@ -188,6 +193,7 @@ impl<'a> Ui<'a> {
                     inserted_index,
                     local_pointer,
                     point_horizontal_constraint_down,
+                    point_vertical_constraint_down,
                 ));
                 enforce_endpoint_mode(model, interaction.endpoint_mode);
                 return true;
@@ -222,6 +228,7 @@ impl<'a> Ui<'a> {
                     index,
                     local_pointer,
                     point_horizontal_constraint_down,
+                    point_vertical_constraint_down,
                 ));
                 return false;
             }
@@ -237,6 +244,7 @@ impl<'a> Ui<'a> {
                 inserted_index,
                 local_pointer,
                 point_horizontal_constraint_down,
+                point_vertical_constraint_down,
             ));
             enforce_endpoint_mode(model, interaction.endpoint_mode);
             return true;
@@ -253,17 +261,35 @@ impl<'a> Ui<'a> {
                         mut horizontal_constraint_anchor_y,
                         mut vertical_pointer_offset_y,
                         mut vertical_pointer_rebased,
+                        mut vertical_constraint_active,
+                        mut vertical_constraint_anchor_x,
+                        mut horizontal_pointer_offset_x,
+                        mut horizontal_pointer_rebased,
                     } => {
+                        let visible_point = runtime
+                            .selected_point
+                            .and_then(|index| model.points.get(index))
+                            .copied()
+                            .or_else(|| origin_model.points.get(origin_index).copied());
                         let horizontal_constraint_released_this_frame =
                             !point_horizontal_constraint_down && horizontal_constraint_active;
+                        let vertical_constraint_released_this_frame =
+                            !point_vertical_constraint_down && vertical_constraint_active;
+                        if point_vertical_constraint_down && !vertical_constraint_active {
+                            vertical_constraint_anchor_x = visible_point.map(|point| point.x);
+                            vertical_constraint_active = vertical_constraint_anchor_x.is_some();
+                        } else if !point_vertical_constraint_down && vertical_constraint_active {
+                            if let Some(anchor_x) = vertical_constraint_anchor_x {
+                                horizontal_pointer_offset_x = anchor_x - raw_normalized_pointer.x;
+                                horizontal_pointer_rebased = true;
+                            }
+                            vertical_constraint_active = false;
+                            vertical_constraint_anchor_x = None;
+                        }
                         if point_horizontal_constraint_down && !horizontal_constraint_active {
-                            let visible_y = runtime
-                                .selected_point
-                                .and_then(|index| model.points.get(index))
-                                .map(|point| point.y)
-                                .or_else(|| origin_model.points.get(origin_index).map(|point| point.y));
-                            horizontal_constraint_anchor_y = visible_y;
-                            horizontal_constraint_active = visible_y.is_some();
+                            horizontal_constraint_anchor_y = visible_point.map(|point| point.y);
+                            horizontal_constraint_active =
+                                horizontal_constraint_anchor_y.is_some();
                         } else if !point_horizontal_constraint_down
                             && horizontal_constraint_active
                         {
@@ -290,11 +316,22 @@ impl<'a> Ui<'a> {
                                 horizontal_constraint_anchor_y,
                                 vertical_pointer_offset_y,
                                 vertical_pointer_rebased,
+                                vertical_constraint_active,
+                                vertical_constraint_anchor_x,
+                                horizontal_pointer_offset_x,
+                                horizontal_pointer_rebased,
                             });
                             return false;
                         }
                         dragging = true;
                         let mut effective_pointer = raw_normalized_pointer;
+                        effective_pointer.x = if vertical_constraint_active {
+                            vertical_constraint_anchor_x.unwrap_or(effective_pointer.x)
+                        } else if horizontal_pointer_rebased {
+                            effective_pointer.x + horizontal_pointer_offset_x
+                        } else {
+                            effective_pointer.x
+                        };
                         effective_pointer.y = if horizontal_constraint_active {
                             horizontal_constraint_anchor_y.unwrap_or(effective_pointer.y)
                         } else if vertical_pointer_rebased {
@@ -307,6 +344,9 @@ impl<'a> Ui<'a> {
                             || horizontal_constraint_released_this_frame
                         {
                             effective_snap.horizontal_positions.clear();
+                        }
+                        if vertical_constraint_active || vertical_constraint_released_this_frame {
+                            effective_snap.vertical_positions.clear();
                         }
                         let (recomputed, moved_index) = recompute_move_point_from_origin(
                             &origin_model,
@@ -329,6 +369,10 @@ impl<'a> Ui<'a> {
                             horizontal_constraint_anchor_y,
                             vertical_pointer_offset_y,
                             vertical_pointer_rebased,
+                            vertical_constraint_active,
+                            vertical_constraint_anchor_x,
+                            horizontal_pointer_offset_x,
+                            horizontal_pointer_rebased,
                         };
                         changed = true;
                     }
@@ -461,6 +505,7 @@ fn move_point_drag_mode(
     origin_index: usize,
     start_pointer: Point,
     horizontal_constraint_active: bool,
+    vertical_constraint_active: bool,
 ) -> CurveEditorDragMode {
     CurveEditorDragMode::MovePoint {
         origin_index,
@@ -472,6 +517,11 @@ fn move_point_drag_mode(
             .then(|| model.points[origin_index].y),
         vertical_pointer_offset_y: 0.0,
         vertical_pointer_rebased: false,
+        vertical_constraint_active,
+        vertical_constraint_anchor_x: vertical_constraint_active
+            .then(|| model.points[origin_index].x),
+        horizontal_pointer_offset_x: 0.0,
+        horizontal_pointer_rebased: false,
     }
 }
 

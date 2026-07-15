@@ -267,6 +267,27 @@ impl Node {
         }
     }
 
+    /// Opt into Shift+Option vertical movement for curve-point dragging.
+    ///
+    /// Non-curve-editor node kinds are returned unchanged.
+    pub fn curve_point_vertical_constraint(
+        self,
+        modifier: CurvePointVerticalConstraintModifier,
+    ) -> Self {
+        match self {
+            Self::CurveEditor(curve_editor) => {
+                let mut slot = SlotSpec::new(Self::CurveEditor(curve_editor));
+                slot.set_curve_point_vertical_constraint(modifier);
+                Self::Slot(slot)
+            }
+            Self::Slot(mut slot) if matches!(slot.child(), Self::CurveEditor(_)) => {
+                slot.set_curve_point_vertical_constraint(modifier);
+                Self::Slot(slot)
+            }
+            other => other,
+        }
+    }
+
     /// Mutably borrow a direct or interaction-decorated curve editor.
     fn curve_editor_mut(&mut self) -> Option<&mut CurveEditorSpec> {
         match self {

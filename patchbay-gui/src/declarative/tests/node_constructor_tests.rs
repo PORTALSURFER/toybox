@@ -237,6 +237,7 @@ fn curve_point_constraint_composes_with_segment_move_and_following_builders() {
     );
     let node = curve_editor("curve", model)
         .curve_point_horizontal_constraint(CurveEditorModifier::Shift)
+        .curve_point_vertical_constraint(CurveEditorModifier::ShiftOption)
         .curve_segment_move(segment_move)
         .curve_grid(CurveGridConfig {
             emphasized_verticals: vec![0.5],
@@ -250,6 +251,10 @@ fn curve_point_constraint_composes_with_segment_move_and_following_builders() {
     assert_eq!(
         slot.curve_point_horizontal_constraint(),
         Some(CurveEditorModifier::Shift)
+    );
+    assert_eq!(
+        slot.curve_point_vertical_constraint(),
+        Some(CurveEditorModifier::ShiftOption)
     );
     let Node::CurveEditor(curve_editor) = slot.child() else {
         panic!("decorated slot should preserve the curve-editor child");
