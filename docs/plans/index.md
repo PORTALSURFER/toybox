@@ -2,7 +2,7 @@
 
 ## Active
 
-- `docs/plans/active/todo.md`: immediate ordered queue for the next implementation cycle.
+- No active plan files are tracked.
 
 ## Archive
 

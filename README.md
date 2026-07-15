@@ -4,12 +4,12 @@
 
 ## Quick Start
 
-1. Run the handoff preflight:
+1. Run the local preflight:
    - `bash scripts/run_agent_request.sh`
-2. Read active work context:
-   - `docs/plans/active/todo.md`
-   - `MEMORY.md`
-3. Run local validation before handoff:
+2. Read the project context:
+   - `docs/PROJECT.md`
+   - `docs/plans/index.md`
+3. Run local validation before submitting changes:
    - `bash scripts/ci_local.sh`
 
 ## Repository Layout
@@ -24,4 +24,4 @@
 
 - Keep plugin-specific behavior out of `toybox`; framework behavior should be generic and reusable.
 - Prefer `toybox` and `patchbay-gui` APIs over direct host/toolkit coupling in plugins.
-- For planning/handoff standards, see `AGENTS.md` and `docs/README.md`.
+- For project documentation and planning, see `docs/README.md`.
