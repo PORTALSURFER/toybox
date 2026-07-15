@@ -9,7 +9,7 @@ Last Updated (UTC): 2026-07-15 09:34:24Z
 - The `examples/minimal-clap` downstream fixture now depends only on Toybox, imports `PluginLatency` and `PluginLatencyImpl` through `toybox::clack_extensions`, registers `PluginLatency`, and reports a fixed nonzero 124-sample test value.
 - Canonical local and GitHub CI run the minimal CLAP behavior test rather than compile-checking the example only.
 - Validation passes with `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk`: `bash scripts/ci_local.sh`, exact `cargo clippy --all-targets -- -D warnings`, and `cargo test --all`, including 304 Patchbay GUI tests and 128 Toybox VST3-feature tests.
-- The change is validated on the intended ready-for-review PR branch; user review remains required before merge and downstream Kickforge OPT-1152 repin.
+- Commit `a5351a6` is pushed on ready-for-review PR #10 at `https://github.com/PORTALSURFER/toybox/pull/10`; status is `waiting for user review`, and user sign-off remains required before merge and downstream Kickforge OPT-1152 repin.
 
 - Active user-requested task: implement OPT-1174, reusable realtime-safe fixed 2x/4x mono audio oversampling primitives for downstream plugin stages.
 - Branch `wsvasek/opt-1174-toybox-provide-reusable-realtime-2x4x-audio-oversampling` adds a deterministic 111-tap linear-phase half-band FIR with only its 56 nonzero even-phase coefficients evaluated at runtime.
@@ -106,13 +106,12 @@ Last Updated (UTC): 2026-07-15 09:34:24Z
 
 ## Active Mission
 
-- Deliver OPT-1175 as a verified CLAP latency extension re-export without moving plugin latency policy into Toybox.
+- Wait for explicit user review/sign-off on ready-for-review OPT-1175 PR #10.
 
 ## Immediate Next Actions
 
-1. Commit and push the validated OPT-1175 branch.
-2. Open a ready-for-review PR and wait for explicit user review/sign-off before merge.
-3. After explicit sign-off and merge, let Kickforge OPT-1152 repin Toybox and finish plugin-owned 124-sample CLAP/VST3 reporting.
+1. Wait for explicit user review/sign-off on ready-for-review PR #10.
+2. After explicit sign-off and merge, let Kickforge OPT-1152 repin Toybox and finish plugin-owned 124-sample CLAP/VST3 reporting.
 
 ## Constraints And Notes
 

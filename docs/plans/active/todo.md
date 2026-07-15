@@ -5,16 +5,15 @@ Mission: deliver OPT-1175 so downstream plugins can use the CLAP latency extensi
 ## Active PR
 
 - Branch: `wsvasek/opt-1175-toybox-enable-and-verify-the-clap-latency-extension-re`
-- PR: intended ready-for-review OPT-1175 pull request
+- PR: `https://github.com/PORTALSURFER/toybox/pull/10`
 - Scope: enable the existing `clack-extensions` latency feature, verify `PluginLatency` and `PluginLatencyImpl` through a Toybox-only downstream fixture, and keep latency values and oversampling policy plugin-owned
 - Definition of Done: downstream CLAP latency registration through Toybox only; a known nonzero behavior fixture; no direct downstream `clack-extensions` dependency; formatting, warnings-denied clippy, canonical local CI, and all workspace tests pass
-- Status: `validated`
+- Status: `waiting for user review`
 
 ## Immediate Queue
 
-1. Commit and push the validated OPT-1175 change.
-2. Open a ready-for-review PR and wait for explicit user review/sign-off before merge.
-3. After merge, let Kickforge OPT-1152 repin Toybox and report its plugin-owned 124-sample latency in CLAP and VST3.
+1. Wait for explicit user review/sign-off on ready-for-review PR #10.
+2. After merge, let Kickforge OPT-1152 repin Toybox and report its plugin-owned 124-sample latency in CLAP and VST3.
 
 ## Validation Note
 
