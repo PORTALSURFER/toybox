@@ -39,8 +39,8 @@ jobs:
       - name: Validate declarative slot API naming
         run: ./scripts/check_declarative_slot_api.sh
 
-      - name: Build minimal CLAP example
-        run: cargo check -p toybox-minimal-clap
+      - name: Test minimal CLAP example
+        run: cargo test -p toybox-minimal-clap
 
       - name: Check formatting
         run: cargo fmt --all -- --check
