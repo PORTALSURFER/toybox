@@ -6,16 +6,17 @@ Mission: deliver OPT-1176 so Pump can opt into shared Shift+Option vertical curv
 
 - Branch: `wsvasek/opt-1176-toybox-add-opt-in-shiftoption-vertical-constraint-for-curve`
 - PR: `https://github.com/PORTALSURFER/toybox/pull/11`
-- Reviewed head: `9de2f7436bbe8934568f59b29b11c557ac64bb17`
+- Pass-1 reviewed head: `9de2f7436bbe8934568f59b29b11c557ac64bb17`
+- Review-fix code head: `3967799aef3491c9d9b2928bf281f1c76ebe4f45`
 - Scope: add an opt-in Shift+Option vertical point constraint through the reusable Patchbay curve editor, compose it with the existing Shift-only horizontal constraint, and preserve legacy consumers
 - Definition of Done: stable x anchor from press or mid-drag engagement; smooth release to normal or Shift-only motion; precedence over Command x snapping; boundary, cleanup, public API, and platform input coverage; canonical warnings-denied validation
-- Status: `addressing review` after independent pass 1
-- Review: 1 pass; PR-001 (stale status sources) and PR-002 (missing vertical focus-loss regression) are fixed locally and validated, pending push and re-review
+- Status: `reviewing` after independent pass 1
+- Review: 1 pass; PR-001 (stale status sources) and PR-002 (missing vertical focus-loss regression) are resolved in the pushed branch and await fresh complete-diff re-review
 
 ## Immediate Queue
 
-1. Commit and push the validated PR-001 and PR-002 fixes.
-2. Run a fresh complete-diff review at that exact head and wait for GitHub CI.
+1. Run a fresh complete-diff review at the current PR #11 head and wait for GitHub CI.
+2. If clean, move to `waiting for user review`.
 3. Wait for explicit user review/sign-off before merge or downstream Pump repin.
 
 ## Validation Note

@@ -11,7 +11,8 @@ Last Updated (UTC): 2026-07-15 10:22:53Z
 - Focused coverage passes for held-at-start and mid-drag engagement, repeated transitions, release to normal, Option release to Shift-only, Command composition, snap/boundary behavior, coupled endpoints, consecutive gestures, declarative runtime dispatch, public API naming, and legacy exhaustive matches.
 - Validation passes with `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk`: `bash scripts/ci_local.sh`, exact all-target/all-feature warnings-denied clippy, and `cargo test --all`, including 311 Patchbay GUI tests and 128 Toybox VST3-feature tests.
 - Commit `9de2f7436bbe8934568f59b29b11c557ac64bb17` is pushed on ready-for-review PR #11 at `https://github.com/PORTALSURFER/toybox/pull/11`.
-- Current status is `addressing review`: independent pass 1 found stale active-status documentation and missing vertical focus-loss cleanup coverage; both fixes now pass focused and canonical validation and are ready to push for a fresh complete-diff review.
+- Review-fix commit `3967799aef3491c9d9b2928bf281f1c76ebe4f45` is pushed to PR #11; PR-001 and PR-002 are resolved on the branch.
+- Current status is `reviewing`: a fresh complete-diff review and exact-head GitHub CI must pass before user review.
 
 - Active user-requested task: implement OPT-1175, enabling and verifying Toybox's existing `clack_extensions` latency re-export for downstream plugins.
 - Branch `wsvasek/opt-1175-toybox-enable-and-verify-the-clap-latency-extension-re` enables the upstream `latency` feature without adding a Toybox latency abstraction or plugin policy.
@@ -119,8 +120,8 @@ Last Updated (UTC): 2026-07-15 10:22:53Z
 
 ## Immediate Next Actions
 
-1. Resolve review findings PR-001 and PR-002, validate, and push the new exact head.
-2. Run a fresh complete-diff review against the new head and wait for GitHub CI.
+1. Run a fresh complete-diff review against the current PR #11 head and wait for GitHub CI.
+2. If clean, move PR #11 to `waiting for user review` and stop for explicit sign-off.
 3. After explicit sign-off and merge, let Pump OPT-1117 repin Toybox and adopt the shared vertical constraint.
 
 ## Constraints And Notes
