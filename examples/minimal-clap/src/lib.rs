@@ -6,6 +6,7 @@ use std::fmt::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use toybox::clack_extensions::latency::{PluginLatency, PluginLatencyImpl};
 use toybox::clack_plugin::stream::{InputStream, OutputStream};
 use toybox::clap::prelude::*;
 
@@ -18,6 +19,8 @@ const DEFAULT_GAIN: f32 = 1.0;
 const MIN_GAIN: f32 = 0.0;
 /// Maximum gain value.
 const MAX_GAIN: f32 = 2.0;
+/// Fixed nonzero latency used to verify the public CLAP re-export.
+const LATENCY_SAMPLES: u32 = 124;
 /// State payload magic (`MGST`).
 const STATE_MAGIC: u32 = u32::from_le_bytes(*b"MGST");
 /// State payload version.
@@ -36,6 +39,7 @@ impl Plugin for MinimalGainPlugin {
         _shared: Option<&Self::Shared<'_>>,
     ) {
         register_default_extensions(builder);
+        builder.register::<PluginLatency>();
     }
 }
 
@@ -73,6 +77,12 @@ pub struct MinimalGainMainThread<'a> {
 }
 
 impl<'a> PluginMainThread<'a, MinimalGainShared> for MinimalGainMainThread<'a> {}
+
+impl PluginLatencyImpl for MinimalGainMainThread<'_> {
+    fn get(&mut self) -> u32 {
+        LATENCY_SAMPLES
+    }
+}
 
 impl PluginAudioPortsImpl for MinimalGainMainThread<'_> {
     fn count(&mut self, _is_input: bool) -> u32 {
@@ -310,3 +320,22 @@ impl AtomicF32 {
 }
 
 toybox::clap_plugin_entry!(MinimalGainPlugin);
+
+#[cfg(test)]
+mod tests {
+    //! Behavior coverage for the minimal plugin's public extension fixture.
+
+    use super::*;
+
+    /// Verify the latency implementation returns its known nonzero value.
+    #[test]
+    fn reports_fixed_nonzero_latency() {
+        let shared = MinimalGainShared {
+            params: Arc::new(GainParams::new()),
+        };
+        let mut main_thread = MinimalGainMainThread { shared: &shared };
+
+        assert_eq!(PluginLatencyImpl::get(&mut main_thread), LATENCY_SAMPLES);
+        assert_ne!(PluginLatencyImpl::get(&mut main_thread), 0);
+    }
+}

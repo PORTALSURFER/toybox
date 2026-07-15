@@ -3051,8 +3051,6 @@ dependencies = [
 name = "toybox-minimal-clap"
 version = "0.1.0"
 dependencies = [
- "clack-extensions",
- "clack-plugin",
  "toybox",
 ]
 

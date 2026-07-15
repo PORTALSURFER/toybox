@@ -21,7 +21,7 @@ cd "${REPO_ROOT}"
 run_step "Validate pinned git dependencies" ./scripts/check_pinned_git_deps.sh
 run_step "Validate plugin state enforcement" ./scripts/check_clap_state_enforcement.sh
 run_step "Validate declarative slot API naming" ./scripts/check_declarative_slot_api.sh
-run_step "Build minimal CLAP example" cargo check -p toybox-minimal-clap
+run_step "Test minimal CLAP example" cargo test -p toybox-minimal-clap
 run_step "Check formatting" cargo fmt --all -- --check
 run_step "Run clippy (gui feature)" cargo clippy --workspace --all-targets --features gui -- -D warnings
 run_step "Run toybox state helper tests" cargo test -p toybox clap::state
