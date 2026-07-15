@@ -1,6 +1,6 @@
 # MEMORY
 
-Last Updated (UTC): 2026-07-15 10:15:15Z
+Last Updated (UTC): 2026-07-15 10:22:53Z
 
 ## Current State
 
@@ -9,8 +9,9 @@ Last Updated (UTC): 2026-07-15 10:15:15Z
 - `CurveEditorDragMode::MovePoint` now owns independent x/y constraint anchors plus pointer rebases. Shift+Option locks x from press or the currently visible moved point, takes precedence over Shift-only horizontal movement and x snapping, and transitions smoothly to Shift-only or ordinary two-axis movement.
 - The shared origin-snapshot recomputation path still owns snapping, ordering, minimum spacing, sticky drag-through restoration, endpoint coupling, release, focus-loss cleanup, and selected-point remapping.
 - Focused coverage passes for held-at-start and mid-drag engagement, repeated transitions, release to normal, Option release to Shift-only, Command composition, snap/boundary behavior, coupled endpoints, consecutive gestures, declarative runtime dispatch, public API naming, and legacy exhaustive matches.
-- Validation passes with `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk`: `bash scripts/ci_local.sh`, exact all-target/all-feature warnings-denied clippy, and `cargo test --all`, including 310 Patchbay GUI tests and 128 Toybox VST3-feature tests.
-- Current status is `validated`; commit, push, ready PR publication, and the required automated complete-diff review remain before user review.
+- Validation passes with `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk`: `bash scripts/ci_local.sh`, exact all-target/all-feature warnings-denied clippy, and `cargo test --all`, including 311 Patchbay GUI tests and 128 Toybox VST3-feature tests.
+- Commit `9de2f7436bbe8934568f59b29b11c557ac64bb17` is pushed on ready-for-review PR #11 at `https://github.com/PORTALSURFER/toybox/pull/11`.
+- Current status is `addressing review`: independent pass 1 found stale active-status documentation and missing vertical focus-loss cleanup coverage; both fixes now pass focused and canonical validation and are ready to push for a fresh complete-diff review.
 
 - Active user-requested task: implement OPT-1175, enabling and verifying Toybox's existing `clack_extensions` latency re-export for downstream plugins.
 - Branch `wsvasek/opt-1175-toybox-enable-and-verify-the-clap-latency-extension-re` enables the upstream `latency` feature without adding a Toybox latency abstraction or plugin policy.
@@ -118,8 +119,8 @@ Last Updated (UTC): 2026-07-15 10:15:15Z
 
 ## Immediate Next Actions
 
-1. Commit and push the validated OPT-1176 implementation, then open the PR ready for review.
-2. Complete the automated review/fix loop on the exact pushed head.
+1. Resolve review findings PR-001 and PR-002, validate, and push the new exact head.
+2. Run a fresh complete-diff review against the new head and wait for GitHub CI.
 3. After explicit sign-off and merge, let Pump OPT-1117 repin Toybox and adopt the shared vertical constraint.
 
 ## Constraints And Notes

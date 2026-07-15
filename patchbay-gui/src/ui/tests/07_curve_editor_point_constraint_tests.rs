@@ -440,6 +440,76 @@ fn vertical_constraint_preserves_coupled_endpoints_and_clears_between_gestures()
 }
 
 #[test]
+fn vertical_focus_loss_clears_x_anchor_and_pointer_rebase_before_next_gesture() {
+    let interaction = crate::declarative::CurveInteractionOptions {
+        drag_start_threshold_px: 0,
+        ..crate::declarative::CurveInteractionOptions::default()
+    };
+    let mut model = model();
+    let mut ui_state = UiState::default();
+    let start = model.points[1];
+    render_frame_with_constraints(
+        &mut model,
+        &mut ui_state,
+        input_with_modifiers(start, true, true, true, false),
+        interaction.clone(),
+        true,
+        true,
+    );
+    render_constraint_drag_frame(
+        &mut model,
+        &mut ui_state,
+        crate::declarative::CurvePoint::new(0.9, 0.8),
+        true,
+        true,
+        &interaction,
+    );
+    assert_close(model.points[1].x, start.x);
+    assert_close(model.points[1].y, 0.8);
+
+    let focus_loss_pointer = point_for_curve(model.points[1]);
+    render_frame_with_constraints(
+        &mut model,
+        &mut ui_state,
+        InputState {
+            pointer_pos: focus_loss_pointer,
+            mouse_down: false,
+            ..InputState::default()
+        },
+        interaction.clone(),
+        true,
+        true,
+    );
+    assert!(
+        ui_state
+            .curve_editor_runtime
+            .get(&CURVE_ID)
+            .and_then(|runtime| runtime.drag_mode.as_ref())
+            .is_none()
+    );
+
+    let next_start = model.points[1];
+    render_frame_with_constraints(
+        &mut model,
+        &mut ui_state,
+        input_with_modifiers(next_start, true, false, false, false),
+        interaction.clone(),
+        true,
+        true,
+    );
+    render_constraint_drag_frame(
+        &mut model,
+        &mut ui_state,
+        crate::declarative::CurvePoint::new(0.45, 0.25),
+        false,
+        false,
+        &interaction,
+    );
+    assert_close(model.points[1].x, 0.45);
+    assert_close(model.points[1].y, 0.25);
+}
+
+#[test]
 fn shift_from_press_locks_origin_y_while_opt_out_keeps_legacy_two_axis_drag() {
     let interaction = crate::declarative::CurveInteractionOptions {
         drag_start_threshold_px: 0,
