@@ -459,6 +459,7 @@ fn render_curve_editor(
     curve_editor: &CurveEditorSpec,
     segment_move: Option<CurveSegmentMoveOptions>,
     point_horizontal_constraint: Option<CurvePointHorizontalConstraintModifier>,
+    point_vertical_constraint: Option<CurvePointVerticalConstraintModifier>,
     rect: Rect,
     ui: &mut Ui<'_>,
     actions: &mut Vec<UiAction>,
@@ -479,6 +480,11 @@ fn render_curve_editor(
     };
     let request = if let Some(modifier) = point_horizontal_constraint {
         request.point_horizontal_constraint(modifier)
+    } else {
+        request
+    };
+    let request = if let Some(modifier) = point_vertical_constraint {
+        request.point_vertical_constraint(modifier)
     } else {
         request
     };

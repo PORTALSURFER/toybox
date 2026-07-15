@@ -1,8 +1,18 @@
 # MEMORY
 
-Last Updated (UTC): 2026-07-15 09:34:24Z
+Last Updated (UTC): 2026-07-15 10:22:53Z
 
 ## Current State
+
+- Active user-requested task: implement OPT-1176, an opt-in Shift+Option vertical constraint for reusable Patchbay curve-point dragging that blocks Pump OPT-1117.
+- Branch `wsvasek/opt-1176-toybox-add-opt-in-shiftoption-vertical-constraint-for-curve` adds `.curve_point_vertical_constraint(CurveEditorModifier::ShiftOption)` through the existing opaque slot decorator, preserving legacy public struct shapes and exhaustive `CurveEditorModifier` matches.
+- `CurveEditorDragMode::MovePoint` now owns independent x/y constraint anchors plus pointer rebases. Shift+Option locks x from press or the currently visible moved point, takes precedence over Shift-only horizontal movement and x snapping, and transitions smoothly to Shift-only or ordinary two-axis movement.
+- The shared origin-snapshot recomputation path still owns snapping, ordering, minimum spacing, sticky drag-through restoration, endpoint coupling, release, focus-loss cleanup, and selected-point remapping.
+- Focused coverage passes for held-at-start and mid-drag engagement, repeated transitions, release to normal, Option release to Shift-only, Command composition, snap/boundary behavior, coupled endpoints, consecutive gestures, declarative runtime dispatch, public API naming, and legacy exhaustive matches.
+- Validation passes with `VST3_SDK_DIR=/Users/portalsurfer/lib/vst3sdk`: `bash scripts/ci_local.sh`, exact all-target/all-feature warnings-denied clippy, and `cargo test --all`, including 311 Patchbay GUI tests and 128 Toybox VST3-feature tests.
+- Commit `9de2f7436bbe8934568f59b29b11c557ac64bb17` is pushed on ready-for-review PR #11 at `https://github.com/PORTALSURFER/toybox/pull/11`.
+- Review-fix commit `3967799aef3491c9d9b2928bf281f1c76ebe4f45` is pushed to PR #11; PR-001 and PR-002 are resolved on the branch.
+- Current status is `reviewing`: a fresh complete-diff review and exact-head GitHub CI must pass before user review.
 
 - Active user-requested task: implement OPT-1175, enabling and verifying Toybox's existing `clack_extensions` latency re-export for downstream plugins.
 - Branch `wsvasek/opt-1175-toybox-enable-and-verify-the-clap-latency-extension-re` enables the upstream `latency` feature without adding a Toybox latency abstraction or plugin policy.
@@ -106,12 +116,13 @@ Last Updated (UTC): 2026-07-15 09:34:24Z
 
 ## Active Mission
 
-- Wait for explicit user review/sign-off on ready-for-review OPT-1175 PR #10.
+- Deliver OPT-1176 through a validated ready-for-review PR and automated complete-diff review, then wait for explicit user sign-off.
 
 ## Immediate Next Actions
 
-1. Wait for explicit user review/sign-off on ready-for-review PR #10.
-2. After explicit sign-off and merge, let Kickforge OPT-1152 repin Toybox and finish plugin-owned 124-sample CLAP/VST3 reporting.
+1. Run a fresh complete-diff review against the current PR #11 head and wait for GitHub CI.
+2. If clean, move PR #11 to `waiting for user review` and stop for explicit sign-off.
+3. After explicit sign-off and merge, let Pump OPT-1117 repin Toybox and adopt the shared vertical constraint.
 
 ## Constraints And Notes
 

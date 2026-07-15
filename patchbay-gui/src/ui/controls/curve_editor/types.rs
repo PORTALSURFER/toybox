@@ -16,6 +16,9 @@ pub(crate) struct CurveEditorRectRenderRequest {
     /// Optional modifier that constrains point dragging horizontally.
     pub(crate) point_horizontal_constraint:
         Option<crate::declarative::CurvePointHorizontalConstraintModifier>,
+    /// Optional modifier chord that constrains point dragging vertically.
+    pub(crate) point_vertical_constraint:
+        Option<crate::declarative::CurvePointVerticalConstraintModifier>,
     /// Optional normalized playhead x position.
     pub(crate) playhead_x: Option<f32>,
 }
@@ -38,6 +41,7 @@ impl CurveEditorRectRenderRequest {
             interaction,
             segment_move: None,
             point_horizontal_constraint: None,
+            point_vertical_constraint: None,
             playhead_x: playhead_x.map(|value| value.clamp(0.0, 1.0)),
         }
     }
@@ -59,6 +63,15 @@ impl CurveEditorRectRenderRequest {
         self.point_horizontal_constraint = Some(modifier);
         self
     }
+
+    /// Opt into modifier-gated vertical movement for curve-point drags.
+    pub(crate) fn point_vertical_constraint(
+        mut self,
+        modifier: crate::declarative::CurvePointVerticalConstraintModifier,
+    ) -> Self {
+        self.point_vertical_constraint = Some(modifier);
+        self
+    }
 }
 
 /// Response metadata from curve-editor widgets.
@@ -76,6 +89,8 @@ struct CurveEditorInteractionDecorators {
     /// Optional modifier that constrains point dragging horizontally.
     point_horizontal_constraint:
         Option<crate::declarative::CurvePointHorizontalConstraintModifier>,
+    /// Optional modifier chord that constrains point dragging vertically.
+    point_vertical_constraint: Option<crate::declarative::CurvePointVerticalConstraintModifier>,
 }
 
 /// Runtime drag mode for curve-editor interactions.
@@ -99,6 +114,14 @@ enum CurveEditorDragMode {
         vertical_pointer_offset_y: f32,
         /// Whether the vertical pointer path has been rebased during this gesture.
         vertical_pointer_rebased: bool,
+        /// Whether the vertical constraint was active on the prior frame.
+        vertical_constraint_active: bool,
+        /// Stable normalized x captured when the vertical constraint engaged.
+        vertical_constraint_anchor_x: Option<f32>,
+        /// Normalized pointer-to-point x offset established when the constraint released.
+        horizontal_pointer_offset_x: f32,
+        /// Whether the horizontal pointer path has been rebased during this gesture.
+        horizontal_pointer_rebased: bool,
     },
     /// Dragging one segment as a two-point translation.
     MoveSegment {

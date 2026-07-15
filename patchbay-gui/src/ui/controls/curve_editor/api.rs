@@ -13,6 +13,7 @@ impl<'a> Ui<'a> {
         let decorators = CurveEditorInteractionDecorators {
             segment_move: request.segment_move,
             point_horizontal_constraint: request.point_horizontal_constraint,
+            point_vertical_constraint: request.point_vertical_constraint,
         };
         let changed = self.reduce_curve_editor_interaction(
             model,
