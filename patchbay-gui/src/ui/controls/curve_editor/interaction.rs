@@ -573,11 +573,8 @@ fn cyclically_offset_curve_model(
         .windows(2)
         .filter(|window| !offset_interval_matches_origin(&origin, delta, window[0], window[1]))
         .count();
-    let split_subdivision_count = if split_count == 0 {
-        1
-    } else {
-        (max_points.saturating_sub(boundaries.len()) / split_count + 1).max(1)
-    };
+    let split_subdivision_count =
+        (max_points.saturating_sub(boundaries.len()) / split_count.max(1) + 1).max(1);
     let mut positions = Vec::with_capacity(
         boundaries.len() + split_count * split_subdivision_count.saturating_sub(1),
     );
@@ -633,10 +630,12 @@ fn cyclically_offset_curve_model(
     offset.normalized()
 }
 
+/// Sample a curve at a wrapped phase position.
 fn sample_wrapped(model: &crate::declarative::CurveModel, phase: f32) -> f32 {
     model.sample(phase.rem_euclid(1.0))
 }
 
+/// Return the source interval corresponding to one translated output interval.
 fn source_range(delta: f32, left: f32, right: f32) -> (f32, f32) {
     let mut source_left = (left - delta).rem_euclid(1.0);
     if source_left >= 1.0 - 1.0e-5 {
@@ -645,6 +644,7 @@ fn source_range(delta: f32, left: f32, right: f32) -> (f32, f32) {
     (source_left, source_left + right - left)
 }
 
+/// Find the source segment containing a normalized phase.
 fn source_segment(model: &crate::declarative::CurveModel, phase: f32) -> usize {
     let phase = phase.rem_euclid(1.0);
     if phase <= model.points[0].x {
@@ -660,6 +660,7 @@ fn source_segment(model: &crate::declarative::CurveModel, phase: f32) -> usize {
     index.min(model.points.len().saturating_sub(2))
 }
 
+/// Check whether a translated interval exactly matches an original segment.
 fn offset_interval_matches_origin(
     model: &crate::declarative::CurveModel,
     delta: f32,
@@ -672,6 +673,7 @@ fn offset_interval_matches_origin(
         && (source_right - model.points[segment + 1].x).abs() <= 1.0e-5
 }
 
+/// Preserve or approximate tension for a translated output interval.
 fn offset_segment_tension(
     model: &crate::declarative::CurveModel,
     delta: f32,
