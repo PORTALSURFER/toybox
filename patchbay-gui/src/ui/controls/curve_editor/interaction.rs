@@ -512,6 +512,7 @@ impl<'a> Ui<'a> {
                             return false;
                         }
                         dragging = true;
+                        model.clear_phase_metadata();
                         let delta =
                             tension_delta_from_drag(model, index, start_pointer, raw_local_pointer, rect);
                         if let Some(segment) = model.segments.get_mut(index) {
@@ -613,7 +614,23 @@ fn cyclically_offset_curve_model(
             tension: offset_segment_tension(&origin, delta, window[0], window[1]),
         })
         .collect();
-    crate::declarative::CurveModel::new(points, segments)
+    let mut offset = crate::declarative::CurveModel::new(points, segments);
+    let source = origin
+        .phase_source
+        .as_deref()
+        .cloned()
+        .unwrap_or_else(|| crate::declarative::CurveModel::new(
+            origin.points.clone(),
+            origin.segments.clone(),
+        ));
+    offset.phase_source = Some(Box::new(source));
+    offset.phase_offset = (if origin.phase_source.is_some() {
+        origin.phase_offset + delta
+    } else {
+        delta
+    })
+    .rem_euclid(1.0);
+    offset.normalized()
 }
 
 fn sample_wrapped(model: &crate::declarative::CurveModel, phase: f32) -> f32 {
@@ -756,4 +773,51 @@ fn scaled_curve_i32(base: i32, rect: Rect) -> i32 {
 /// Scale one floating-point curve metric by current editor rectangle size.
 fn scaled_curve_f32(base: f32, rect: Rect) -> f32 {
     (base * curve_scale_for_rect(rect)).max(1.0)
+}
+
+#[cfg(test)]
+mod offset_tests {
+    use super::cyclically_offset_curve_model;
+    use crate::declarative::{CurveModel, CurvePoint, CurveSegment};
+
+    #[test]
+    fn cyclic_offset_preserves_nonlinear_shape_across_inverse_and_repeated_gestures() {
+        let origin = CurveModel::new(
+            vec![
+                CurvePoint::new(0.0, 0.2),
+                CurvePoint::new(0.31, 0.9),
+                CurvePoint::new(0.67, 0.1),
+                CurvePoint::new(1.0, 0.2),
+            ],
+            vec![CurveSegment::new(0.9), CurveSegment::new(-0.9), CurveSegment::new(0.8)],
+        );
+        let delta = 0.37;
+        let offset = cyclically_offset_curve_model(&origin, delta, 65);
+        assert!(offset.phase_source.is_some());
+
+        let restored = cyclically_offset_curve_model(&offset, -delta, 65);
+        let mut repeated = origin.clone();
+        for _ in 0..8 {
+            repeated = cyclically_offset_curve_model(&repeated, delta, 65);
+        }
+        for index in 0..=400 {
+            let phase = index as f32 / 400.0;
+            assert!(
+                (restored.sample(phase) - origin.sample(phase)).abs() < 1.0e-6,
+                "restored phase {phase}: {} != {} (offset {})",
+                restored.sample(phase),
+                origin.sample(phase),
+                restored.phase_offset
+            );
+            assert!(
+                (repeated.sample(phase)
+                    - origin.sample((phase - delta * 8.0).rem_euclid(1.0)))
+                    .abs()
+                    < 5.0e-6,
+                "phase {phase}: {} != {}",
+                repeated.sample(phase),
+                origin.sample((phase - delta * 8.0).rem_euclid(1.0))
+            );
+        }
+    }
 }

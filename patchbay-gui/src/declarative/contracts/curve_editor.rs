@@ -43,12 +43,24 @@ pub struct CurveModel {
     pub points: Vec<CurvePoint>,
     /// Segment settings where `segments[i]` connects `points[i] -> points[i + 1]`.
     pub segments: Vec<CurveSegment>,
+    /// Optional unwrapped source used for exact cyclic phase translation.
+    #[doc(hidden)]
+    pub phase_source: Option<Box<CurveModel>>,
+    /// Phase offset applied to `phase_source`, in normalized cycles.
+    #[doc(hidden)]
+    pub phase_offset: f32,
 }
 
 impl CurveModel {
     /// Build one curve model and normalize it for safe interaction/rendering.
     pub fn new(points: Vec<CurvePoint>, segments: Vec<CurveSegment>) -> Self {
-        Self { points, segments }.normalized()
+        Self {
+            points,
+            segments,
+            phase_source: None,
+            phase_offset: 0.0,
+        }
+        .normalized()
     }
 
     /// Return a normalized copy with repaired topology and clamped values.
@@ -61,10 +73,35 @@ impl CurveModel {
     pub fn normalize_in_place(&mut self) {
         self.points = normalize_points(&self.points);
         self.segments = normalize_segments(&self.segments, self.points.len().saturating_sub(1));
+        if let Some(source) = self.phase_source.as_mut() {
+            source.normalize_in_place();
+        }
+        self.phase_offset = if self.phase_source.is_some() {
+            self.phase_offset.rem_euclid(1.0)
+        } else {
+            0.0
+        };
+    }
+
+    /// Drop exact phase-translation metadata before an ordinary edit.
+    pub fn clear_phase_metadata(&mut self) {
+        self.phase_source = None;
+        self.phase_offset = 0.0;
     }
 
     /// Sample the curve at normalized `x` in `[0, 1]`.
     pub fn sample(&self, x: f32) -> f32 {
+        if let Some(source) = self.phase_source.as_deref() {
+            let relative = (x - self.phase_offset).rem_euclid(1.0);
+            let relative = if relative <= CURVE_POINT_X_EPSILON
+                || 1.0 - relative <= CURVE_POINT_X_EPSILON
+            {
+                0.0
+            } else {
+                relative
+            };
+            return source.sample(relative);
+        }
         if self.points.len() < 2 {
             return 1.0;
         }

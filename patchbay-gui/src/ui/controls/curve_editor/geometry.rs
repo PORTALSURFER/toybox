@@ -214,6 +214,7 @@ fn insert_point(
     max_points: usize,
     min_spacing_x: f32,
 ) -> usize {
+    model.clear_phase_metadata();
     if model.points.len() >= max_points.max(2) {
         return find_nearest_point_index(model, point);
     }
@@ -261,6 +262,7 @@ fn remove_interior_point(model: &mut crate::declarative::CurveModel, index: usiz
     if index == 0 || index >= model.points.len().saturating_sub(1) {
         return;
     }
+    model.clear_phase_metadata();
     model.points.remove(index);
     if !model.segments.is_empty() {
         let remove_segment = index
@@ -294,6 +296,7 @@ fn recompute_move_point_from_origin(
     snap: &crate::declarative::CurveSnapConfig,
 ) -> (crate::declarative::CurveModel, usize) {
     let mut recomputed = origin_model.clone();
+    recomputed.clear_phase_metadata();
     let moved_index = move_point_with_push_through(
         &mut recomputed,
         origin_index,
@@ -367,6 +370,7 @@ fn move_segment_translated(
     let (start_left_x, start_left_y) = start_left;
     let (start_right_x, start_right_y) = start_right;
     let (delta_x, delta_y) = delta;
+    model.clear_phase_metadata();
     if model.points.len() < 2 || segment_index >= model.points.len().saturating_sub(1) {
         return;
     }
