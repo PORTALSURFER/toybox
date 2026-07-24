@@ -53,7 +53,7 @@ fn legacy_curve_editor_modifier_matches_remain_exhaustive() {
 #[test]
 fn legacy_curve_option_struct_literals_remain_exhaustive() {
     let interaction = patchbay_gui::CurveInteractionOptions {
-        max_points: 64,
+        max_points: 65,
         min_point_spacing_x: 1.0e-4,
         drag_start_threshold_px: 3,
         push_through_threshold_px: 2,
