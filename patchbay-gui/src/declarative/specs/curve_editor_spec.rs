@@ -96,6 +96,8 @@ pub struct CurveInteractionOptions {
     pub endpoint_mode: EndpointMode,
     /// Whether interior points can be deleted by double click.
     pub double_click_delete_interior: bool,
+    /// Whether Cmd+Shift-dragging empty canvas offsets the complete curve.
+    pub whole_curve_offset: bool,
     /// Snap behavior for curve-point interactions.
     pub snap: CurveSnapConfig,
 }
@@ -103,12 +105,13 @@ pub struct CurveInteractionOptions {
 impl Default for CurveInteractionOptions {
     fn default() -> Self {
         Self {
-            max_points: 64,
+            max_points: 65,
             min_point_spacing_x: 1.0e-4,
             drag_start_threshold_px: 3,
             push_through_threshold_px: 2,
             endpoint_mode: EndpointMode::Independent,
             double_click_delete_interior: true,
+            whole_curve_offset: false,
             snap: CurveSnapConfig::default(),
         }
     }

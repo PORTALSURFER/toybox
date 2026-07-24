@@ -59,6 +59,7 @@ fn legacy_curve_option_struct_literals_remain_exhaustive() {
         push_through_threshold_px: 2,
         endpoint_mode: patchbay_gui::EndpointMode::Independent,
         double_click_delete_interior: true,
+        whole_curve_offset: false,
         snap: patchbay_gui::CurveSnapConfig::default(),
     };
     let style = patchbay_gui::CurveEditorStyle {

@@ -140,6 +140,15 @@ enum CurveEditorDragMode {
         /// True once movement passed drag-start threshold.
         dragging: bool,
     },
+    /// Dragging empty canvas to cyclically offset the complete curve.
+    OffsetCurve {
+        /// Model snapshot at drag start.
+        origin_model: crate::declarative::CurveModel,
+        /// Pointer position at drag start.
+        start_pointer: Point,
+        /// True once movement passed the drag-start threshold.
+        dragging: bool,
+    },
     /// Dragging one segment tension with modifier.
     AdjustSegmentTension {
         /// Segment index.

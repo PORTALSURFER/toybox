@@ -232,6 +232,19 @@ impl<'a> Ui<'a> {
                 ));
                 return false;
             }
+            if interaction.whole_curve_offset
+                && region.command_down
+                && region.shift_down
+                && !region.alt_down
+            {
+                runtime.drag_mode = Some(CurveEditorDragMode::OffsetCurve {
+                    origin_model: model.clone(),
+                    start_pointer: local_pointer,
+                    dragging: false,
+                });
+                runtime.selected_point = None;
+                return false;
+            }
             let inserted_index = insert_point(
                 model,
                 snap_curve_point(normalized_pointer, &interaction.snap),
@@ -252,6 +265,44 @@ impl<'a> Ui<'a> {
 
         if region.dragged && let Some(mut drag_mode) = runtime.drag_mode.take() {
             match drag_mode {
+                    CurveEditorDragMode::OffsetCurve {
+                        origin_model,
+                        start_pointer,
+                        mut dragging,
+                    } => {
+                        if !region.command_down || !region.shift_down || region.alt_down {
+                            return false;
+                        }
+                        if !dragging
+                            && !Self::curve_editor_drag_threshold_reached(
+                                start_pointer,
+                                local_pointer,
+                                interaction.drag_start_threshold_px,
+                            )
+                        {
+                            runtime.drag_mode = Some(CurveEditorDragMode::OffsetCurve {
+                                origin_model,
+                                start_pointer,
+                                dragging,
+                            });
+                            return false;
+                        }
+                        dragging = true;
+                        let width = (rect.size.width.max(2) - 1) as f32;
+                        let delta = (raw_local_pointer.x - start_pointer.x) as f32 / width;
+                        *model = cyclically_offset_curve_model(
+                            &origin_model,
+                            delta,
+                            interaction.max_points,
+                        );
+                        enforce_endpoint_mode(model, interaction.endpoint_mode);
+                        drag_mode = CurveEditorDragMode::OffsetCurve {
+                            origin_model,
+                            start_pointer,
+                            dragging,
+                        };
+                        changed = true;
+                    }
                     CurveEditorDragMode::MovePoint {
                         origin_index,
                         origin_model,
@@ -487,6 +538,160 @@ impl<'a> Ui<'a> {
 
         changed
     }
+}
+
+/// Rebuild a normalized curve after translating its phase around one cycle.
+fn cyclically_offset_curve_model(
+    model: &crate::declarative::CurveModel,
+    delta: f32,
+    max_points: usize,
+) -> crate::declarative::CurveModel {
+    const EPSILON: f32 = 1.0e-5;
+    let origin = model.clone().normalized();
+    if origin.points.len() < 2 || !delta.is_finite() {
+        return origin;
+    }
+    let delta = delta.rem_euclid(1.0);
+    if delta <= EPSILON || 1.0 - delta <= EPSILON {
+        return origin;
+    }
+
+    let last = origin.points.len() - 1;
+    let mut boundaries = vec![0.0_f32];
+    for point in origin.points[..last].iter().copied() {
+        let shifted = (point.x + delta).rem_euclid(1.0);
+        if shifted > EPSILON && shifted < 1.0 - EPSILON {
+            boundaries.push(shifted);
+        }
+    }
+    boundaries.sort_by(f32::total_cmp);
+    boundaries.dedup_by(|left, right| (*left - *right).abs() <= EPSILON);
+    boundaries.push(1.0);
+
+    let split_count = boundaries
+        .windows(2)
+        .filter(|window| !offset_interval_matches_origin(&origin, delta, window[0], window[1]))
+        .count();
+    let split_subdivision_count = if split_count == 0 {
+        1
+    } else {
+        (max_points.saturating_sub(boundaries.len()) / split_count + 1).max(1)
+    };
+    let mut positions = Vec::with_capacity(
+        boundaries.len() + split_count * split_subdivision_count.saturating_sub(1),
+    );
+    for window in boundaries.windows(2) {
+        positions.push(window[0]);
+        if !offset_interval_matches_origin(&origin, delta, window[0], window[1]) {
+            let span = window[1] - window[0];
+            for subdivision in 1..split_subdivision_count {
+                positions.push(
+                    window[0] + span * subdivision as f32 / split_subdivision_count as f32,
+                );
+            }
+        }
+    }
+    positions.push(1.0);
+
+    let seam_y = sample_wrapped(&origin, -delta);
+    let points = positions
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(index, x)| crate::declarative::CurvePoint {
+            x,
+            y: if index == positions.len() - 1 {
+                seam_y
+            } else {
+                sample_wrapped(&origin, x - delta)
+            },
+        })
+        .collect::<Vec<_>>();
+    let segments = positions
+        .windows(2)
+        .map(|window| crate::declarative::CurveSegment {
+            tension: offset_segment_tension(&origin, delta, window[0], window[1]),
+        })
+        .collect();
+    crate::declarative::CurveModel::new(points, segments)
+}
+
+fn sample_wrapped(model: &crate::declarative::CurveModel, phase: f32) -> f32 {
+    model.sample(phase.rem_euclid(1.0))
+}
+
+fn source_range(delta: f32, left: f32, right: f32) -> (f32, f32) {
+    let mut source_left = (left - delta).rem_euclid(1.0);
+    if source_left >= 1.0 - 1.0e-5 {
+        source_left = 0.0;
+    }
+    (source_left, source_left + right - left)
+}
+
+fn source_segment(model: &crate::declarative::CurveModel, phase: f32) -> usize {
+    let phase = phase.rem_euclid(1.0);
+    if phase <= model.points[0].x {
+        return 0;
+    }
+    if phase >= model.points[model.points.len() - 1].x {
+        return model.points.len().saturating_sub(2);
+    }
+    let mut index = 0;
+    while index + 1 < model.points.len() && phase > model.points[index + 1].x {
+        index += 1;
+    }
+    index.min(model.points.len().saturating_sub(2))
+}
+
+fn offset_interval_matches_origin(
+    model: &crate::declarative::CurveModel,
+    delta: f32,
+    left: f32,
+    right: f32,
+) -> bool {
+    let (source_left, source_right) = source_range(delta, left, right);
+    let segment = source_segment(model, source_left + (source_right - source_left) * 0.5);
+    (source_left - model.points[segment].x).abs() <= 1.0e-5
+        && (source_right - model.points[segment + 1].x).abs() <= 1.0e-5
+}
+
+fn offset_segment_tension(
+    model: &crate::declarative::CurveModel,
+    delta: f32,
+    left: f32,
+    right: f32,
+) -> f32 {
+    const EPSILON: f32 = 1.0e-5;
+    let (source_left, source_right) = source_range(delta, left, right);
+    let source_mid = source_left + (source_right - source_left) * 0.5;
+    let segment = source_segment(model, source_mid);
+    if offset_interval_matches_origin(model, delta, left, right) {
+        return model
+            .segments
+            .get(segment)
+            .copied()
+            .unwrap_or(crate::declarative::CurveSegment { tension: 0.0 })
+            .tension;
+    }
+    let left_y = sample_wrapped(model, source_left);
+    let right_y = sample_wrapped(model, source_right);
+    let span = right_y - left_y;
+    if span.abs() <= EPSILON {
+        return model
+            .segments
+            .get(segment)
+            .copied()
+            .unwrap_or(crate::declarative::CurveSegment { tension: 0.0 })
+            .tension;
+    }
+    let midpoint = ((sample_wrapped(model, source_mid) - left_y) / span).clamp(0.0, 1.0);
+    let exponent = if midpoint <= 0.5 {
+        (-midpoint.max(EPSILON).ln() / 2.0_f32.ln()).clamp(1.0, 4.0)
+    } else {
+        (-(1.0 - midpoint).max(EPSILON).ln() / 2.0_f32.ln()).clamp(1.0, 4.0)
+    };
+    let magnitude = ((exponent - 1.0) / 3.0).clamp(0.0, 1.0);
+    if midpoint <= 0.5 { magnitude } else { -magnitude }
 }
 
 /// Return whether the configured curve-editor modifier is held this frame.
