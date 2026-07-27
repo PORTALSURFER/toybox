@@ -1,4 +1,4 @@
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
     unsafe fn isPlatformTypeSupported(&self, r#type: FIDString) -> tresult {
         #[cfg(target_os = "windows")]

@@ -2,13 +2,13 @@
 
 use std::ffi::{CStr, c_char};
 
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 use raw_window_handle::RawWindowHandle;
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 use std::cell::Cell;
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 use std::sync::Mutex;
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 use toybox_vst3_ffi::Class;
 use toybox_vst3_ffi::Steinberg::Vst::TChar;
 #[cfg(target_os = "macos")]
@@ -18,10 +18,12 @@ use toybox_vst3_ffi::Steinberg::kPlatformTypeX11EmbedWindowID;
 use toybox_vst3_ffi::Steinberg::{
     FIDString, ViewRect, kPlatformTypeHWND, kResultFalse, kResultTrue, tresult,
 };
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 use toybox_vst3_ffi::Steinberg::{
-    IPlugFrame, IPlugView, IPlugViewTrait, TBool, char16, int16, kInvalidArgument, kResultOk,
+    IPlugFrame, IPlugView, IPlugViewTrait, TBool, kInvalidArgument, kResultOk,
 };
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
+use toybox_vst3_ffi::Steinberg::{char16, int16};
 
 include!("string_conversion.rs");
 include!("key_input.rs");
@@ -31,9 +33,7 @@ include!("plug_view_impl.rs");
 include!("view_rect_utils.rs");
 
 #[cfg(all(feature = "radiant-vst3", target_os = "macos"))]
-mod radiant_host_macos;
-#[cfg(all(feature = "radiant-vst3", target_os = "macos"))]
-pub use radiant_host_macos::{RadiantVst3Editor, RadiantVst3HostedGui};
+pub use crate::radiant_gui::{RadiantVst3Editor, RadiantVst3HostedGui};
 
 #[cfg(all(test, feature = "gui"))]
 mod tests;

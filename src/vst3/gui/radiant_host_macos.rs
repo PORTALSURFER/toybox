@@ -242,6 +242,40 @@ impl RadiantVst3HostedGui {
             let _: () = msg_send![root_view.as_ptr(), setNeedsDisplay: YES];
         }
     }
+
+    /// Show the native child view without recreating the retained editor.
+    pub fn show(&self) {
+        if let Some(root_view) = self.root_view {
+            unsafe {
+                let _: () = msg_send![root_view.as_ptr(), setHidden: NO];
+                let _: () = msg_send![root_view.as_ptr(), setNeedsDisplay: YES];
+            }
+        }
+    }
+
+    /// Hide the native child view while preserving its retained editor state.
+    pub fn hide(&self) {
+        if let Some(root_view) = self.root_view {
+            unsafe {
+                let _: () = msg_send![root_view.as_ptr(), setHidden: YES];
+            }
+        }
+    }
+
+    /// Refresh renderer state after a host DPI-scale change.
+    pub fn set_scale(&self, _scale: f64) {
+        if let Some(root_view) = self.root_view {
+            unsafe {
+                let bounds: NSRect = msg_send![root_view.as_ptr(), bounds];
+                resize_renderer(
+                    root_view.as_ptr(),
+                    bounds.size.width.max(1.0) as u32,
+                    bounds.size.height.max(1.0) as u32,
+                );
+                let _: () = msg_send![root_view.as_ptr(), setNeedsDisplay: YES];
+            }
+        }
+    }
 }
 
 impl Drop for RadiantVst3HostedGui {
@@ -481,6 +515,10 @@ fn editor_view_class(class_name: &'static str) -> Option<&'static Class> {
                 key_down as extern "C" fn(&Object, Sel, *mut Object),
             );
             decl.add_method(
+                sel!(scrollWheel:),
+                scroll_wheel as extern "C" fn(&Object, Sel, *mut Object),
+            );
+            decl.add_method(
                 sel!(playheadRedrawTick:),
                 playhead_redraw_tick as extern "C" fn(&Object, Sel, *mut Object),
             );
@@ -631,6 +669,24 @@ extern "C" fn key_down(this: &Object, _cmd: Sel, event: *mut Object) {
         } else {
             let _: () = msg_send![super(this, class!(NSView)), keyDown: event];
         }
+    }
+}
+
+extern "C" fn scroll_wheel(this: &Object, _cmd: Sel, event: *mut Object) {
+    unsafe {
+        if event.is_null() {
+            return;
+        }
+        let Some(runtime) = runtime_mut(this) else {
+            return;
+        };
+        let position = event_position(this, event);
+        let delta_x: f64 = msg_send![event, scrollingDeltaX];
+        let delta_y: f64 = msg_send![event, scrollingDeltaY];
+        let delta = Vector2::new(delta_x as f32, delta_y as f32);
+        runtime.dispatch_event(Event::pointer_modifiers_changed(event_modifiers(event)));
+        runtime.dispatch_event(Event::scroll(position, delta));
+        let _: () = msg_send![this, setNeedsDisplay: YES];
     }
 }
 
@@ -797,6 +853,7 @@ fn dispatch_appkit_key_down(
     text.is_some_and(|text| dispatch_key_text(runtime, text, modifiers))
 }
 
+#[cfg(feature = "vst3")]
 fn dispatch_vst3_key_down(
     runtime: &mut dyn RadiantVst3Editor,
     key: u16,
@@ -851,12 +908,14 @@ fn dispatch_vst3_key_down(
     dispatch_key_text(runtime, &character.to_string(), modifiers)
 }
 
+#[cfg(feature = "vst3")]
 fn dispatch_vst3_key_up(runtime: &mut dyn RadiantVst3Editor, modifiers: i16) {
     runtime.dispatch_event(Event::pointer_modifiers_changed(vst3_pointer_modifiers(
         modifiers,
     )));
 }
 
+#[cfg(feature = "vst3")]
 fn vst3_pointer_modifiers(modifiers: i16) -> PointerModifiers {
     use toybox_vst3_ffi::Steinberg::KeyModifier_::{kAlternateKey, kCommandKey, kShiftKey};
 
@@ -866,6 +925,37 @@ fn vst3_pointer_modifiers(modifiers: i16) -> PointerModifiers {
         shift: modifiers & kShiftKey as i64 != 0,
         alt: modifiers & kAlternateKey as i64 != 0,
     }
+}
+
+#[cfg(not(feature = "vst3"))]
+fn dispatch_vst3_key_down(
+    runtime: &mut dyn RadiantVst3Editor,
+    key: u16,
+    key_code: i16,
+    modifiers: i16,
+) -> bool {
+    let modifiers = PointerModifiers {
+        command: i64::from(modifiers) & (1 << 20) != 0,
+        shift: i64::from(modifiers) & (1 << 17) != 0,
+        alt: i64::from(modifiers) & (1 << 19) != 0,
+    };
+    runtime.dispatch_event(Event::pointer_modifiers_changed(modifiers));
+    if modifiers.command {
+        return false;
+    }
+    let Some(character) = vst3_key_down_to_input_char(key, key_code) else {
+        return false;
+    };
+    dispatch_key_character(runtime, character)
+}
+
+#[cfg(not(feature = "vst3"))]
+fn dispatch_vst3_key_up(runtime: &mut dyn RadiantVst3Editor, modifiers: i16) {
+    runtime.dispatch_event(Event::pointer_modifiers_changed(PointerModifiers {
+        command: i64::from(modifiers) & (1 << 20) != 0,
+        shift: i64::from(modifiers) & (1 << 17) != 0,
+        alt: i64::from(modifiers) & (1 << 19) != 0,
+    }));
 }
 
 unsafe fn event_click_count(event: *mut Object) -> usize {
@@ -1216,6 +1306,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "vst3")]
     fn vst3_key_callback_dispatches_text_and_semantic_keys() {
         use toybox_vst3_ffi::Steinberg::VirtualKeyCodes_::KEY_LEFT;
 
@@ -1228,6 +1319,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "vst3")]
     fn vst3_command_modified_text_is_left_for_the_host() {
         use toybox_vst3_ffi::Steinberg::KeyModifier_::kCommandKey;
 
@@ -1244,6 +1336,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "vst3")]
     fn vst3_key_callbacks_preserve_held_modifiers_on_key_up() {
         use toybox_vst3_ffi::Steinberg::KeyModifier_::{kAlternateKey, kShiftKey};
         use toybox_vst3_ffi::Steinberg::VirtualKeyCodes_::KEY_LEFT;

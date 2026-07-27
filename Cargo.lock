@@ -2341,11 +2341,14 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 [[package]]
 name = "radiant"
 version = "0.1.0"
-source = "git+https://github.com/PORTALSURFER/radiant.git?rev=c66659782df30d1ebeeeb16ffca47149969de464#c66659782df30d1ebeeeb16ffca47149969de464"
+source = "git+https://github.com/PORTALSURFER/radiant.git?rev=b21a4caa094294b3eb2b2b87f6c6bc08ced8b137#b21a4caa094294b3eb2b2b87f6c6bc08ced8b137"
 dependencies = [
  "arboard",
  "kurbo",
  "lyon_tessellation",
+ "objc2 0.5.2",
+ "objc2-app-kit 0.2.2",
+ "objc2-foundation 0.2.2",
  "open",
  "pollster 0.4.0",
  "raw-window-handle 0.6.2",
