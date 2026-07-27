@@ -19,6 +19,15 @@ toybox-process-log = { path = "crates/process-log" }
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = { version = "0.2.7", optional = true }
 
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", default-features = false, features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
 [features]
 default = []
 # The legacy `objc` macros probe this cfg internally. Declaring it keeps those
@@ -27,7 +36,16 @@ cargo-clippy = []
 gui = ["dep:patchbay-gui", "dep:raw-window-handle"]
 screenshot-test = ["gui", "dep:image", "patchbay-gui/frame-capture"]
 vst3 = ["dep:toybox-vst3-ffi"]
-radiant-vst3 = ["gui", "vst3", "dep:radiant", "dep:raw-window-handle-06", "dep:objc"]
+radiant-vst3 = ["radiant-gui", "vst3"]
+# Radiant's host-neutral retained editor bridge. This intentionally does not
+# enable the legacy Patchbay `gui` feature; CLAP and VST3 integrations can opt
+# into the same Radiant host surface independently.
+radiant-gui = [
+    "dep:radiant",
+    "dep:raw-window-handle",
+    "dep:raw-window-handle-06",
+    "dep:objc",
+]
 
 [lints]
 workspace = true

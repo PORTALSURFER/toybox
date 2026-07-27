@@ -1,5 +1,5 @@
 /// GUI contract for reusable host-parented VST3 views backed by Patchbay windows.
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 pub trait Vst3HostedGui {
     /// Attach the host-provided raw parent window handle.
     fn set_parent_raw(&mut self, parent: RawWindowHandle);

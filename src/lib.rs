@@ -18,6 +18,9 @@ pub mod events;
 pub mod gui;
 #[cfg(feature = "gui")]
 mod logging;
+/// Host-neutral Radiant editor hosting for embedded CLAP and VST3 views.
+#[cfg(feature = "radiant-gui")]
+pub mod radiant_gui;
 mod state;
 #[cfg(test)]
 mod test_alloc;
@@ -35,5 +38,5 @@ pub use mts_esp;
 pub use toybox_vst3_ffi;
 
 /// Re-export raw-window-handle for host parent integration code.
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-gui"))]
 pub use raw_window_handle;

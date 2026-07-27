@@ -2,7 +2,7 @@
 
 use std::ffi::{CStr, c_char};
 
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 use raw_window_handle::RawWindowHandle;
 #[cfg(feature = "gui")]
 use std::cell::Cell;
@@ -20,8 +20,10 @@ use toybox_vst3_ffi::Steinberg::{
 };
 #[cfg(feature = "gui")]
 use toybox_vst3_ffi::Steinberg::{
-    IPlugFrame, IPlugView, IPlugViewTrait, TBool, char16, int16, kInvalidArgument, kResultOk,
+    IPlugFrame, IPlugView, IPlugViewTrait, TBool, kInvalidArgument, kResultOk,
 };
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
+use toybox_vst3_ffi::Steinberg::{char16, int16};
 
 include!("string_conversion.rs");
 include!("key_input.rs");
