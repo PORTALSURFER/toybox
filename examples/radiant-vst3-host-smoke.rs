@@ -16,7 +16,7 @@ use radiant::theme::ThemeTokens;
 #[cfg(all(target_os = "macos", feature = "radiant-vst3"))]
 use radiant::widgets::WidgetKey;
 #[cfg(all(target_os = "macos", feature = "radiant-vst3"))]
-use toybox::vst3::gui::{RadiantVst3Editor, RadiantVst3HostedGui, Vst3HostedGui};
+use toybox::vst3::gui::{RadiantVst3Editor, RadiantVst3HostedGui};
 
 #[cfg(all(target_os = "macos", feature = "radiant-vst3"))]
 /// Minimal declarative editor used to exercise the embedded renderer.
@@ -106,7 +106,7 @@ fn main() {
             420,
             282,
         );
-        gui.set_parent_raw(toybox::raw_window_handle::RawWindowHandle::AppKit(handle));
+        gui.set_parent(toybox::raw_window_handle::RawWindowHandle::AppKit(handle));
         assert!(gui.open(), "embedded Vello renderer should initialize");
 
         let subviews: *mut Object = msg_send![parent, subviews];
