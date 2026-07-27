@@ -36,7 +36,7 @@ pub trait Vst3HostedGui {
     }
 }
 
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 #[derive(Clone, Copy)]
 /// Ordered logical bounds used by embedded-host resize negotiation.
 struct SizeBounds {
@@ -46,7 +46,7 @@ struct SizeBounds {
     maximum: (i32, i32),
 }
 
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 impl SizeBounds {
     /// Build ordered, non-zero bounds that always contain the default size.
     fn new(default: (i32, i32), minimum: (u32, u32), maximum: (u32, u32)) -> Self {
@@ -63,7 +63,7 @@ impl SizeBounds {
 }
 
 /// Reusable VST3 `IPlugView` implementation for host-parented Patchbay GUIs.
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 pub struct HostedVst3View<G: Vst3HostedGui> {
     /// Latest host-facing rectangle in plugin coordinates used for resize behavior.
     rect: Cell<ViewRect>,
@@ -81,7 +81,7 @@ pub struct HostedVst3View<G: Vst3HostedGui> {
     gui: Mutex<G>,
 }
 
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 impl<G: Vst3HostedGui> HostedVst3View<G> {
     /// Create a new host-parented view with default logical dimensions.
     pub fn new(gui: G, default_width: u32, default_height: u32) -> Self {
@@ -239,13 +239,13 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
     }
 }
 
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 /// Convert a host-provided logical dimension to a positive VST3 coordinate.
 fn logical_dimension(value: u32) -> i32 {
     value.clamp(1, i32::MAX as u32) as i32
 }
 
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 impl<G: Vst3HostedGui> Class for HostedVst3View<G> {
     type Interfaces = (IPlugView,);
 }

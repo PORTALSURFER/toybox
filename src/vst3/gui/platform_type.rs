@@ -53,7 +53,7 @@ pub unsafe fn platform_type_matches(requested: *const c_char, expected: FIDStrin
 ///
 /// `parent` and `platform` must come directly from the host-provided VST3
 /// `IPlugView::attached` callback and remain valid for handle construction.
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 pub unsafe fn parent_to_raw_window_handle(
     parent: *mut std::ffi::c_void,
     platform: FIDString,

@@ -233,9 +233,12 @@ impl RadiantHostedGui {
     }
 
     /// Show an already-created child view.
-    pub fn show(&mut self) {
-        let _ = self.open();
+    pub fn show(&mut self) -> bool {
+        if !self.open() {
+            return false;
+        }
         self.inner.show();
+        true
     }
 
     /// Hide an already-created child view without destroying its editor state.
@@ -277,9 +280,7 @@ impl RadiantHostedGui {
 
 /// Inject the standard CLAP GUI lifecycle callbacks for a [`RadiantHostedGui`].
 ///
-/// Only Cocoa and Win32 are advertised. Linux intentionally returns `false`
-/// until a native child host is available rather than silently falling back to
-/// an unsupported X11 surface.
+/// Only Cocoa is advertised; unsupported platforms return `false`.
 #[macro_export]
 macro_rules! radiant_clap_gui_callbacks {
     (gui = $gui:ident, preferred_size = $preferred:path, show = $show:expr) => {
@@ -372,7 +373,11 @@ macro_rules! radiant_clap_gui_callbacks {
         }
 
         fn show(&mut self) -> Result<(), $crate::clack_plugin::plugin::PluginError> {
-            self.$gui.show();
+            if !self.$gui.show() {
+                return Err($crate::clack_plugin::plugin::PluginError::Message(
+                    "Radiant Cocoa editor could not open its host parent",
+                ));
+            }
             ($show)(self)
         }
 
@@ -411,6 +416,12 @@ mod tests {
         let gui = RadiantHostedGui::new("ToyboxRadiantPreopenContractTest", MockEditor, 420, 282)
             .with_size_contract((720, 540), (912, 684), (1440, 1080));
         assert_eq!(gui.last_size(), Some((912, 684)));
+    }
+
+    #[test]
+    fn show_reports_failure_when_cocoa_parent_is_missing() {
+        let mut gui = RadiantHostedGui::new("ToyboxRadiantShowFailureTest", MockEditor, 420, 282);
+        assert!(!gui.show());
     }
 
     struct MockEditor;

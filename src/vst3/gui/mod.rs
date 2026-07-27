@@ -4,11 +4,11 @@ use std::ffi::{CStr, c_char};
 
 #[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 use raw_window_handle::RawWindowHandle;
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 use std::cell::Cell;
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 use std::sync::Mutex;
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 use toybox_vst3_ffi::Class;
 use toybox_vst3_ffi::Steinberg::Vst::TChar;
 #[cfg(target_os = "macos")]
@@ -18,7 +18,7 @@ use toybox_vst3_ffi::Steinberg::kPlatformTypeX11EmbedWindowID;
 use toybox_vst3_ffi::Steinberg::{
     FIDString, ViewRect, kPlatformTypeHWND, kResultFalse, kResultTrue, tresult,
 };
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
 use toybox_vst3_ffi::Steinberg::{
     IPlugFrame, IPlugView, IPlugViewTrait, TBool, kInvalidArgument, kResultOk,
 };
