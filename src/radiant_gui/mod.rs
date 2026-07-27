@@ -227,7 +227,8 @@ impl RadiantHostedGui {
 
     /// Create and attach the retained native child view.
     pub fn open(&mut self) -> bool {
-        let (width, height) = self.contract.constrain(self.contract.default);
+        let requested = self.last_size().unwrap_or(self.contract.default);
+        let (width, height) = self.contract.constrain(requested);
         <PlatformHostedGui as Vst3HostedGui>::request_resize(&self.inner, width, height);
         <PlatformHostedGui as Vst3HostedGui>::open(&mut self.inner)
     }
@@ -472,6 +473,18 @@ mod tests {
     fn show_reports_failure_when_cocoa_parent_is_missing() {
         let mut gui = RadiantHostedGui::new("ToyboxRadiantShowFailureTest", MockEditor, 420, 282);
         assert!(!gui.show());
+    }
+
+    #[test]
+    fn hide_show_preserves_negotiated_size() {
+        let mut gui = RadiantHostedGui::new("ToyboxRadiantRetainedSizeTest", MockEditor, 420, 282)
+            .with_size_contract((720, 540), (912, 684), (1440, 1080));
+        gui.request_resize(1440, 1080);
+        assert_eq!(gui.last_size(), Some((1440, 1080)));
+
+        gui.hide();
+        assert!(!gui.show(), "show without a host parent should fail");
+        assert_eq!(gui.last_size(), Some((1440, 1080)));
     }
 
     struct MockEditor;
