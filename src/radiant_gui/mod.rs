@@ -278,6 +278,56 @@ impl RadiantHostedGui {
     }
 }
 
+/// Bridge the Radiant facade into the public VST3 host trait without creating
+/// a second lifecycle owner around the same native view.
+#[cfg(all(target_os = "macos", feature = "radiant-vst3"))]
+impl crate::vst3::gui::Vst3HostedGui for RadiantHostedGui {
+    fn set_parent_raw(&mut self, parent: RawWindowHandle) {
+        RadiantHostedGui::set_parent(self, parent);
+    }
+
+    fn open(&mut self) -> bool {
+        RadiantHostedGui::open(self)
+    }
+
+    fn close(&mut self) {
+        RadiantHostedGui::close(self);
+    }
+
+    fn last_size(&self) -> Option<(u32, u32)> {
+        RadiantHostedGui::last_size(self)
+    }
+
+    fn request_resize(&self, width: u32, height: u32) {
+        RadiantHostedGui::request_resize(self, width, height);
+    }
+
+    fn on_key_down(&self, key: u16, key_code: i16, modifiers: i16) -> bool {
+        RadiantHostedGui::on_key_down(self, key, key_code, modifiers)
+    }
+
+    fn on_key_up(&self, key: u16, key_code: i16, modifiers: i16) -> bool {
+        RadiantHostedGui::on_key_up(self, key, key_code, modifiers)
+    }
+}
+
+#[cfg(all(test, target_os = "macos", feature = "radiant-vst3"))]
+mod vst3_trait_contract_tests {
+    use super::RadiantVst3HostedGui;
+    use crate::vst3::gui::{HostedVst3View, Vst3HostedGui};
+
+    fn assert_host_trait<T: Vst3HostedGui>() {}
+    fn assert_view_type<T: Vst3HostedGui>() {
+        let _ = std::marker::PhantomData::<HostedVst3View<T>>;
+    }
+
+    #[test]
+    fn radiant_hosted_gui_satisfies_public_vst3_view_contract() {
+        assert_host_trait::<RadiantVst3HostedGui>();
+        assert_view_type::<RadiantVst3HostedGui>();
+    }
+}
+
 /// Inject the standard CLAP GUI lifecycle callbacks for a [`RadiantHostedGui`].
 ///
 /// Only Cocoa is advertised; unsupported platforms return `false`.
