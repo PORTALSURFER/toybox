@@ -14,6 +14,8 @@ pub use crate::bundle::windows::{
     WindowsBundleFormat, WindowsBundlePaths, windows_bundle_name, windows_bundle_paths,
     windows_rustc_link_arg,
 };
+#[cfg(all(feature = "radiant-vst3", target_os = "macos"))]
+pub use crate::radiant_gui::{RadiantVst3Editor, RadiantVst3HostedGui};
 pub use crate::vst3::component::{
     CATEGORY_AUDIO_MODULE_CLASS, CATEGORY_COMPONENT_CONTROLLER_CLASS, copy_cstring,
     write_class_info, write_class_info_many, write_wide_name,
@@ -25,8 +27,6 @@ pub use crate::vst3::events::{Vst3EventTimeline, Vst3ParameterPoint, collect_vst
 pub use crate::vst3::gui::parent_to_raw_window_handle;
 #[cfg(feature = "gui")]
 pub use crate::vst3::gui::{HostedVst3View, Vst3HostedGui};
-#[cfg(all(feature = "radiant-vst3", target_os = "macos"))]
-pub use crate::vst3::gui::{RadiantVst3Editor, RadiantVst3HostedGui};
 pub use crate::vst3::gui::{
     bool_to_tresult, copy_wstring, default_platform_type, platform_type_matches, tchar_len,
     view_rect,

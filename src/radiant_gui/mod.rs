@@ -119,23 +119,12 @@ impl EditorSizeContract {
 #[cfg(target_os = "macos")]
 #[path = "../vst3/gui/radiant_host_macos.rs"]
 mod host_macos;
-#[cfg(not(target_os = "macos"))]
-#[cfg(not(target_os = "windows"))]
-mod host_stub;
-#[cfg(target_os = "windows")]
-mod host_win32;
 
 #[cfg(target_os = "macos")]
 use host_macos::RadiantVst3HostedGui as PlatformHostedGui;
-#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-use host_stub::RadiantVst3HostedGui as PlatformHostedGui;
-#[cfg(target_os = "windows")]
-use host_win32::RadiantVst3HostedGui as PlatformHostedGui;
 
-#[cfg(target_os = "macos")]
 struct EditorAdapter(Box<dyn RadiantEditor>);
 
-#[cfg(target_os = "macos")]
 impl host_macos::RadiantVst3Editor for EditorAdapter {
     fn resize(&mut self, width: u32, height: u32) {
         self.0.resize(width, height);
@@ -195,22 +184,6 @@ impl RadiantHostedGui {
     }
 
     /// Construct a Win32 host whose editor is created when the child opens.
-    #[cfg(target_os = "windows")]
-    pub fn new_with_factory(
-        class_name: &'static str,
-        factory: impl FnOnce() -> Box<dyn RadiantEditor> + 'static,
-        width: u32,
-        height: u32,
-    ) -> Self {
-        let contract = EditorSizeContract::new((width, height), (1, 1), (u32::MAX, u32::MAX));
-        Self {
-            inner: host_win32::RadiantVst3HostedGui::new_with_factory(
-                class_name, factory, width, height,
-            ),
-            contract,
-        }
-    }
-
     /// Declare minimum, default, and maximum logical sizes for the editor.
     pub fn with_size_contract(
         mut self,
@@ -314,7 +287,7 @@ macro_rules! radiant_clap_gui_callbacks {
             &mut self,
             configuration: $crate::clack_extensions::gui::GuiConfiguration,
         ) -> bool {
-            if !cfg!(any(target_os = "macos", target_os = "windows")) {
+            if !cfg!(target_os = "macos") {
                 return false;
             }
             let Some(api_type) =
@@ -328,7 +301,7 @@ macro_rules! radiant_clap_gui_callbacks {
         fn get_preferred_api(
             &'_ mut self,
         ) -> Option<$crate::clack_extensions::gui::GuiConfiguration<'_>> {
-            if !cfg!(any(target_os = "macos", target_os = "windows")) {
+            if !cfg!(target_os = "macos") {
                 return None;
             }
             let api_type =

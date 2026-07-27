@@ -19,7 +19,7 @@ pub mod gui;
 #[cfg(feature = "gui")]
 mod logging;
 /// Host-neutral Radiant editor hosting for embedded CLAP and VST3 views.
-#[cfg(feature = "radiant-gui")]
+#[cfg(all(feature = "radiant-gui", target_os = "macos"))]
 pub mod radiant_gui;
 mod state;
 #[cfg(test)]
