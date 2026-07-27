@@ -156,7 +156,7 @@ impl RadiantVst3HostedGui {
             default_size: (width.max(1), height.max(1)),
             class_name,
             editor: Some(Box::new(editor)),
-            text_options: NativeTextOptions::default(),
+            text_options: crate::radiant_gui::bundled_text_options(),
         }
     }
 
@@ -1398,6 +1398,19 @@ mod tests {
 
         assert_eq!(gui.text_options.embedded_fonts.len(), 1);
         assert_eq!(gui.text_options.embedded_fonts[0].bytes(), b"font bytes");
+        assert_ne!(gui.text_options, crate::radiant_gui::bundled_text_options());
+    }
+
+    #[test]
+    fn hosted_gui_defaults_to_bundled_text_options() {
+        let gui = RadiantVst3HostedGui::new(
+            "ToyboxRadiantVst3EditorBundledTextOptionsTest",
+            MockEditor::new(),
+            420,
+            282,
+        );
+
+        assert_eq!(gui.text_options, crate::radiant_gui::bundled_text_options());
     }
 
     #[test]
