@@ -19,11 +19,12 @@ use raw_window_handle_06::{
     RawDisplayHandle, RawWindowHandle as RawWindowHandle06, Win32WindowHandle, WindowsDisplayHandle,
 };
 use std::cell::Cell;
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::num::NonZeroIsize;
 use std::os::windows::ffi::OsStrExt;
 use std::ptr::NonNull;
-use std::sync::Once;
+use std::sync::{Mutex, OnceLock};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, PAINTSTRUCT};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -40,6 +41,7 @@ struct Win32EditorState {
     editor: Box<dyn RadiantEditor>,
     renderer: Option<EmbeddedVelloRenderer>,
     size: (u32, u32),
+    scale: DpiScale,
 }
 
 /// Native Win32 Radiant child host.
@@ -51,6 +53,7 @@ pub struct RadiantVst3HostedGui {
     editor_factory: Option<Box<dyn FnOnce() -> Box<dyn RadiantEditor>>>,
     default_size: Cell<(u32, u32)>,
     class_name: &'static str,
+    scale: Cell<f64>,
 }
 
 impl RadiantVst3HostedGui {
@@ -69,6 +72,7 @@ impl RadiantVst3HostedGui {
             editor_factory: None,
             default_size: Cell::new((width.max(1), height.max(1))),
             class_name,
+            scale: Cell::new(1.0),
         }
     }
 
@@ -90,6 +94,7 @@ impl RadiantVst3HostedGui {
             editor_factory: Some(Box::new(factory)),
             default_size: Cell::new((width.max(1), height.max(1))),
             class_name,
+            scale: Cell::new(1.0),
         }
     }
 
@@ -112,7 +117,13 @@ impl RadiantVst3HostedGui {
     }
 
     /// Apply a host DPI change; the renderer reads the current scale on resize.
-    pub fn set_scale(&self, _scale: f64) {
+    pub fn set_scale(&self, scale: f64) {
+        let scale = if scale.is_finite() && scale > 0.0 {
+            scale
+        } else {
+            1.0
+        };
+        self.scale.set(scale);
         let (width, height) = self.default_size.get();
         self.request_resize(width, height);
     }
@@ -128,7 +139,9 @@ impl RadiantVst3HostedGui {
         let Some(parent) = self.parent else {
             return false;
         };
-        register_class(self.class_name);
+        if !register_class(self.class_name) {
+            return false;
+        }
         let editor = self
             .editor
             .take()
@@ -140,6 +153,7 @@ impl RadiantVst3HostedGui {
             editor,
             renderer: None,
             size: self.default_size.get(),
+            scale: DpiScale::new(self.scale.get()),
         });
         let state_ptr = NonNull::from(state.as_mut());
         let title = wide(self.class_name);
@@ -173,7 +187,7 @@ impl RadiantVst3HostedGui {
                     self.default_size.get().0 as f32,
                     self.default_size.get().1 as f32,
                 ),
-                DpiScale::ONE,
+                DpiScale::new(self.scale.get()),
             )
         };
         let Ok(renderer) = renderer else {
@@ -243,7 +257,11 @@ impl HostedGui for RadiantVst3HostedGui {
                 (*state.as_ptr()).size = (width, height);
                 (*state.as_ptr()).editor.resize(width, height);
                 if let Some(renderer) = (*state.as_ptr()).renderer.as_mut() {
-                    renderer.resize(Vector2::new(width as f32, height as f32), DpiScale::ONE);
+                    (*state.as_ptr()).scale = DpiScale::new(self.scale.get());
+                    renderer.resize(
+                        Vector2::new(width as f32, height as f32),
+                        (*state.as_ptr()).scale,
+                    );
                 }
             }
         }
@@ -268,9 +286,16 @@ impl HostedGui for RadiantVst3HostedGui {
     }
 }
 
-fn register_class(class_name: &'static str) {
-    static REGISTER: Once = Once::new();
-    REGISTER.call_once(|| {
+fn register_class(class_name: &'static str) -> bool {
+    static REGISTERED: OnceLock<Mutex<HashSet<&'static str>>> = OnceLock::new();
+    let registered = REGISTERED.get_or_init(|| Mutex::new(HashSet::new()));
+    let mut registered = registered
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if registered.contains(class_name) {
+        return true;
+    }
+    let atom = {
         let name = wide(class_name);
         let instance = unsafe { GetModuleHandleW(None).unwrap_or_default() };
         let class = WNDCLASSW {
@@ -280,10 +305,14 @@ fn register_class(class_name: &'static str) {
             lpszClassName: PCWSTR(name.as_ptr()),
             ..Default::default()
         };
-        unsafe {
-            RegisterClassW(&class);
-        }
-    });
+        unsafe { RegisterClassW(&class) }
+    };
+    if atom.0 != 0 {
+        registered.insert(class_name);
+        true
+    } else {
+        false
+    }
 }
 
 unsafe extern "system" fn window_proc(
@@ -322,7 +351,7 @@ unsafe extern "system" fn window_proc(
             state.size = (width, height);
             state.editor.resize(width, height);
             if let Some(renderer) = state.renderer.as_mut() {
-                renderer.resize(Vector2::new(width as f32, height as f32), DpiScale::ONE);
+                renderer.resize(Vector2::new(width as f32, height as f32), state.scale);
             }
             InvalidateRect(hwnd, None, false);
             LRESULT(0)

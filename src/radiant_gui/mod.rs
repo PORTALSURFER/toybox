@@ -98,19 +98,21 @@ impl EditorSizeContract {
 
     /// Clamp a host request while preserving the contract's default aspect ratio.
     pub fn constrain(&self, requested: (u32, u32)) -> (u32, u32) {
-        let ratio = self.default.0 as f32 / self.default.1.max(1) as f32;
-        let width = requested.0.clamp(self.minimum.0, self.maximum.0);
-        let height = requested.1.clamp(self.minimum.1, self.maximum.1);
-        let width_driven = ((width as f32) / ratio).round() as u32;
-        let height_driven = ((height as f32) * ratio).round() as u32;
-        let preferred = if requested.0 == self.default.0 && requested.1 != self.default.1 {
-            (height_driven, height)
-        } else {
-            (width, width_driven)
-        };
-        let width = preferred.0.clamp(self.minimum.0, self.maximum.0);
-        let height = preferred.1.clamp(self.minimum.1, self.maximum.1);
-        (width.max(1), height.max(1))
+        let default_width = self.default.0 as f64;
+        let default_height = self.default.1 as f64;
+        let min_scale =
+            (self.minimum.0 as f64 / default_width).max(self.minimum.1 as f64 / default_height);
+        let max_scale =
+            (self.maximum.0 as f64 / default_width).min(self.maximum.1 as f64 / default_height);
+        let requested_scale = (requested.0.max(1) as f64 / default_width)
+            .min(requested.1.max(1) as f64 / default_height);
+        let scale = requested_scale.clamp(min_scale, max_scale);
+        let width = (default_width * scale).round() as u32;
+        let height = (default_height * scale).round() as u32;
+        (
+            width.clamp(self.minimum.0, self.maximum.0).max(1),
+            height.clamp(self.minimum.1, self.maximum.1).max(1),
+        )
     }
 }
 
@@ -217,6 +219,8 @@ impl RadiantHostedGui {
         maximum: (u32, u32),
     ) -> Self {
         self.contract = EditorSizeContract::new(default, minimum, maximum);
+        let (width, height) = self.contract.default;
+        <PlatformHostedGui as Vst3HostedGui>::request_resize(&self.inner, width, height);
         self
     }
 
@@ -408,7 +412,9 @@ macro_rules! radiant_clap_gui_callbacks {
 
 #[cfg(test)]
 mod tests {
-    use super::EditorSizeContract;
+    use super::{EditorSizeContract, RadiantEditor, RadiantHostedGui};
+    use radiant::runtime::{Event, SurfacePaintPlan};
+    use radiant::widgets::WidgetKey;
 
     #[test]
     fn size_contract_orders_bounds_and_preserves_default() {
@@ -416,5 +422,43 @@ mod tests {
         assert_eq!(contract.constrain((1, 1)), (720, 540));
         assert_eq!(contract.constrain((912, 684)), (912, 684));
         assert_eq!(contract.constrain((5000, 5000)), (1440, 1080));
+    }
+
+    #[test]
+    fn size_contract_preserves_aspect_with_asymmetric_bounds() {
+        let contract = EditorSizeContract::new((1000, 500), (500, 400), (2000, 1200));
+        assert_eq!(contract.constrain((1, 1)), (800, 400));
+        assert_eq!(contract.constrain((2000, 400)), (800, 400));
+        assert_eq!(contract.constrain((2000, 1000)), (2000, 1000));
+        assert_eq!(contract.constrain((5000, 5000)), (2000, 1000));
+    }
+
+    #[test]
+    fn size_contract_updates_preopen_host_size() {
+        let gui = RadiantHostedGui::new("ToyboxRadiantPreopenContractTest", MockEditor, 420, 282)
+            .with_size_contract((720, 540), (912, 684), (1440, 1080));
+        assert_eq!(gui.last_size(), Some((912, 684)));
+    }
+
+    struct MockEditor;
+
+    impl RadiantEditor for MockEditor {
+        fn resize(&mut self, _width: u32, _height: u32) {}
+        fn dispatch_event(&mut self, _event: Event) {}
+        fn paint_plan(&mut self) -> &SurfacePaintPlan {
+            unreachable!("paint plan is not used by contract tests")
+        }
+        fn needs_realtime_redraw(&self) -> bool {
+            false
+        }
+        fn dispatch_key_press(&mut self, _key: WidgetKey) -> bool {
+            false
+        }
+        fn dispatch_character(&mut self, _character: char) -> bool {
+            false
+        }
+        fn cancel_text_entry(&mut self) -> bool {
+            false
+        }
     }
 }
