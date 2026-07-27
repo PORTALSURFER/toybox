@@ -31,9 +31,9 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
     CS_HREDRAW, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DestroyWindow, GWLP_USERDATA,
     GetWindowLongPtrW, InvalidateRect, RegisterClassW, SW_HIDE, SW_SHOW, ScreenToClient, SetTimer,
-    SetWindowLongPtrW, ShowWindow, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL,
-    WM_NCCREATE, WM_PAINT, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN,
-    WS_CLIPSIBLINGS,
+    SetWindowLongPtrW, ShowWindow, WM_DPICHANGED, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
+    WM_MOUSEWHEEL, WM_NCCREATE, WM_NCDESTROY, WM_PAINT, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD,
+    WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
 };
 use windows::core::PCWSTR;
 
@@ -215,10 +215,12 @@ impl RadiantVst3HostedGui {
     }
 
     fn close_view(&mut self) {
-        if let Some(hwnd) = self.root.take() {
-            unsafe {
-                DestroyWindow(hwnd).ok();
+        if let Some(hwnd) = self.root.get() {
+            let destroyed = unsafe { DestroyWindow(hwnd).is_ok() };
+            if !destroyed {
+                return;
             }
+            self.root.set(None);
         }
         if let Some(state) = self.state.take().filter(|ptr| ptr.as_ptr() as usize > 1) {
             unsafe {
@@ -325,6 +327,10 @@ unsafe extern "system" fn window_proc(
         let create = &*(lparam.0 as *const windows::Win32::UI::WindowsAndMessaging::CREATESTRUCTW);
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, create.lpCreateParams as isize);
     }
+    if message == WM_NCDESTROY {
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+        return DefWindowProcW(hwnd, message, wparam, lparam);
+    }
     let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut Win32EditorState;
     if ptr.is_null() {
         return DefWindowProcW(hwnd, message, wparam, lparam);
@@ -352,6 +358,18 @@ unsafe extern "system" fn window_proc(
             state.editor.resize(width, height);
             if let Some(renderer) = state.renderer.as_mut() {
                 renderer.resize(Vector2::new(width as f32, height as f32), state.scale);
+            }
+            InvalidateRect(hwnd, None, false);
+            LRESULT(0)
+        }
+        WM_DPICHANGED => {
+            let scale = dpi_scale_from_wparam(wparam.0);
+            state.scale = DpiScale::new(scale);
+            if let Some(renderer) = state.renderer.as_mut() {
+                renderer.resize(
+                    Vector2::new(state.size.0 as f32, state.size.1 as f32),
+                    state.scale,
+                );
             }
             InvalidateRect(hwnd, None, false);
             LRESULT(0)
@@ -397,6 +415,22 @@ unsafe extern "system" fn window_proc(
             LRESULT(0)
         }
         _ => DefWindowProcW(hwnd, message, wparam, lparam),
+    }
+}
+
+fn dpi_scale_from_wparam(value: usize) -> f64 {
+    let dpi = ((value >> 16) & 0xffff) as f64;
+    if dpi > 0.0 { dpi / 96.0 } else { 1.0 }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dpi_scale_from_wparam;
+
+    #[test]
+    fn dpi_scale_uses_high_word_of_dpi_message() {
+        assert!((dpi_scale_from_wparam(144usize << 16) - 1.5).abs() < f64::EPSILON);
+        assert_eq!(dpi_scale_from_wparam(0), 1.0);
     }
 }
 
