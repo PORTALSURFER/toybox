@@ -15,23 +15,23 @@ pub const fn view_rect(width: i32, height: i32) -> ViewRect {
 
 /// Build a constrained rectangle while keeping its positive extent representable.
 ///
-/// Host rectangles may carry sentinel-like origins near `i32::MAX`. Shift the
-/// origin back only when necessary so `right - left` and `bottom - top` remain
-/// the requested dimensions instead of silently collapsing through saturation.
+/// VST3 hosts own the rectangle origin. If the requested positive extent cannot
+/// be represented without changing that origin, reject the request instead of
+/// silently shifting or collapsing the rectangle.
 pub fn view_rect_with_origin(
     left: i32,
     top: i32,
     width: i32,
     height: i32,
-) -> ViewRect {
+) -> Option<ViewRect> {
     let width = width.max(1);
     let height = height.max(1);
-    let left = left.min(i32::MAX.saturating_sub(width));
-    let top = top.min(i32::MAX.saturating_sub(height));
-    ViewRect {
+    let right = left.checked_add(width)?;
+    let bottom = top.checked_add(height)?;
+    Some(ViewRect {
         left,
         top,
-        right: left.saturating_add(width),
-        bottom: top.saturating_add(height),
-    }
+        right,
+        bottom,
+    })
 }

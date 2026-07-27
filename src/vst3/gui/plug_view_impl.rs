@@ -95,12 +95,14 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
         let requested_height = requested.bottom.saturating_sub(requested.top).max(1);
         let (constrained_width, constrained_height) =
             self.constrain_uniform_size(requested_width, requested_height);
-        let constrained = view_rect_with_origin(
+        let Some(constrained) = view_rect_with_origin(
             requested.left,
             requested.top,
             constrained_width,
             constrained_height,
-        );
+        ) else {
+            return kResultFalse;
+        };
         unsafe { *new_size = constrained };
         if let Ok(gui) = self.gui.lock() {
             gui.request_resize(constrained_width as u32, constrained_height as u32);
@@ -130,12 +132,15 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
         let requested_height = rect.bottom.saturating_sub(rect.top).max(1);
         let (constrained_width, constrained_height) =
             self.constrain_uniform_size(requested_width, requested_height);
-        *rect = view_rect_with_origin(
+        let Some(constrained) = view_rect_with_origin(
             rect.left,
             rect.top,
             constrained_width,
             constrained_height,
-        );
+        ) else {
+            return kResultFalse;
+        };
+        *rect = constrained;
         kResultOk
     }
 }

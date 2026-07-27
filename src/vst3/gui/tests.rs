@@ -248,7 +248,7 @@ fn hosted_view_on_size_applies_resize_to_hosted_gui() {
 }
 
 #[test]
-fn hosted_view_on_size_keeps_extreme_origin_extent_representable() {
+fn hosted_view_on_size_rejects_unrepresentable_origin_without_mutation() {
     let view = HostedVst3View::new(
         MockHostedGui {
             last_size: Mutex::new(None),
@@ -263,12 +263,47 @@ fn hosted_view_on_size_keeps_extreme_origin_extent_representable() {
         right: i32::MAX,
         bottom: i32::MAX,
     };
+    let original = rect;
     let result = unsafe { view.onSize(&mut rect) };
-    assert_eq!(result, kResultOk);
+    assert_eq!(result, kResultFalse);
+    assert_eq!(rect.left, original.left);
+    assert_eq!(rect.top, original.top);
+    assert_eq!(rect.right, original.right);
+    assert_eq!(rect.bottom, original.bottom);
     assert_eq!(rect.right, i32::MAX);
     assert_eq!(rect.bottom, i32::MAX);
-    assert_eq!(rect.right - rect.left, 320);
-    assert_eq!(rect.bottom - rect.top, 200);
+
+    let gui = view.gui.lock().expect("gui mutex should not be poisoned");
+    let resize = gui
+        .resize_request
+        .lock()
+        .expect("resize mutex should not be poisoned");
+    assert_eq!(*resize, None);
+}
+
+#[test]
+fn hosted_view_constraint_rejects_unrepresentable_origin_without_mutation() {
+    let view = HostedVst3View::new(
+        MockHostedGui {
+            last_size: Mutex::new(None),
+            resize_request: std::sync::Mutex::new(None),
+        },
+        320,
+        200,
+    );
+    let mut rect = ViewRect {
+        left: i32::MAX - 1,
+        top: i32::MAX - 1,
+        right: i32::MAX,
+        bottom: i32::MAX,
+    };
+    let original = rect;
+    let result = unsafe { view.checkSizeConstraint(&mut rect) };
+    assert_eq!(result, kResultFalse);
+    assert_eq!(rect.left, original.left);
+    assert_eq!(rect.top, original.top);
+    assert_eq!(rect.right, original.right);
+    assert_eq!(rect.bottom, original.bottom);
 }
 
 #[test]
