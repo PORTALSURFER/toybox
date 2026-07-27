@@ -11,7 +11,7 @@ image = { version = "0.25", default-features = false, features = ["png"], option
 mts_esp = { git = "https://github.com/PORTALSURFER/mts-esp-rs", rev = "d107a979e44c1b16dcc72dfd47cdd8dac77854ca", package = "mts-esp-rs" }
 patchbay-gui = { path = "patchbay-gui", version = "0.1.0", optional = true }
 raw-window-handle = { version = "0.5.2", optional = true }
-radiant = { git = "https://github.com/PORTALSURFER/radiant.git", rev = "6dd92b80c3a4bd93e1cd78227b2cd70566dacc1a", default-features = false, optional = true }
+radiant = { git = "https://github.com/PORTALSURFER/radiant.git", rev = "4b0d9d5b2962d12e72ad9df162ce72a2a92ef83a", default-features = false, optional = true }
 raw-window-handle-06 = { package = "raw-window-handle", version = "0.6", optional = true }
 toybox-vst3-ffi = { path = "crates/vst3-ffi", optional = true }
 toybox-process-log = { path = "crates/process-log" }
