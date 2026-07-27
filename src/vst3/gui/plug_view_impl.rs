@@ -34,11 +34,10 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
         if !gui.open() {
             return kResultFalse;
         }
-        let (min_width, min_height) = self.minimum_size();
         let (requested_width, requested_height) = if let Some((width, height)) = gui.last_size() {
-            (width as i32, height as i32)
+            (logical_dimension(width), logical_dimension(height))
         } else {
-            (min_width, min_height)
+            self.default_size
         };
         let (constrained_width, constrained_height) =
             self.constrain_uniform_size(requested_width, requested_height);
@@ -92,11 +91,18 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
         }
 
         let requested = unsafe { *new_size };
-        let requested_width = (requested.right - requested.left).max(1);
-        let requested_height = (requested.bottom - requested.top).max(1);
+        let requested_width = requested.right.saturating_sub(requested.left).max(1);
+        let requested_height = requested.bottom.saturating_sub(requested.top).max(1);
         let (constrained_width, constrained_height) =
             self.constrain_uniform_size(requested_width, requested_height);
-        let constrained = view_rect(constrained_width, constrained_height);
+        let Some(constrained) = view_rect_with_origin(
+            requested.left,
+            requested.top,
+            constrained_width,
+            constrained_height,
+        ) else {
+            return kResultFalse;
+        };
         unsafe { *new_size = constrained };
         if let Ok(gui) = self.gui.lock() {
             gui.request_resize(constrained_width as u32, constrained_height as u32);
@@ -122,12 +128,19 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
             return kInvalidArgument;
         }
         let rect = unsafe { &mut *rect };
-        let requested_width = (rect.right - rect.left).max(1);
-        let requested_height = (rect.bottom - rect.top).max(1);
+        let requested_width = rect.right.saturating_sub(rect.left).max(1);
+        let requested_height = rect.bottom.saturating_sub(rect.top).max(1);
         let (constrained_width, constrained_height) =
             self.constrain_uniform_size(requested_width, requested_height);
-        rect.right = rect.left + constrained_width;
-        rect.bottom = rect.top + constrained_height;
+        let Some(constrained) = view_rect_with_origin(
+            rect.left,
+            rect.top,
+            constrained_width,
+            constrained_height,
+        ) else {
+            return kResultFalse;
+        };
+        *rect = constrained;
         kResultOk
     }
 }

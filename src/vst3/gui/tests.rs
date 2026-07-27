@@ -248,6 +248,65 @@ fn hosted_view_on_size_applies_resize_to_hosted_gui() {
 }
 
 #[test]
+fn hosted_view_on_size_rejects_unrepresentable_origin_without_mutation() {
+    let view = HostedVst3View::new(
+        MockHostedGui {
+            last_size: Mutex::new(None),
+            resize_request: std::sync::Mutex::new(None),
+        },
+        320,
+        200,
+    );
+    let mut rect = ViewRect {
+        left: i32::MAX - 1,
+        top: i32::MAX - 1,
+        right: i32::MAX,
+        bottom: i32::MAX,
+    };
+    let original = rect;
+    let result = unsafe { view.onSize(&mut rect) };
+    assert_eq!(result, kResultFalse);
+    assert_eq!(rect.left, original.left);
+    assert_eq!(rect.top, original.top);
+    assert_eq!(rect.right, original.right);
+    assert_eq!(rect.bottom, original.bottom);
+    assert_eq!(rect.right, i32::MAX);
+    assert_eq!(rect.bottom, i32::MAX);
+
+    let gui = view.gui.lock().expect("gui mutex should not be poisoned");
+    let resize = gui
+        .resize_request
+        .lock()
+        .expect("resize mutex should not be poisoned");
+    assert_eq!(*resize, None);
+}
+
+#[test]
+fn hosted_view_constraint_rejects_unrepresentable_origin_without_mutation() {
+    let view = HostedVst3View::new(
+        MockHostedGui {
+            last_size: Mutex::new(None),
+            resize_request: std::sync::Mutex::new(None),
+        },
+        320,
+        200,
+    );
+    let mut rect = ViewRect {
+        left: i32::MAX - 1,
+        top: i32::MAX - 1,
+        right: i32::MAX,
+        bottom: i32::MAX,
+    };
+    let original = rect;
+    let result = unsafe { view.checkSizeConstraint(&mut rect) };
+    assert_eq!(result, kResultFalse);
+    assert_eq!(rect.left, original.left);
+    assert_eq!(rect.top, original.top);
+    assert_eq!(rect.right, original.right);
+    assert_eq!(rect.bottom, original.bottom);
+}
+
+#[test]
 fn hosted_view_attach_rejects_null_parent() {
     let view = HostedVst3View::new(
         MockHostedGui {
@@ -346,6 +405,142 @@ fn hosted_view_host_resize_flow_simulates_vst3_growth_sequence() {
         .lock()
         .expect("resize mutex should not be poisoned");
     assert_eq!(*resize_request, Some((8, 8)));
+}
+
+#[test]
+fn hosted_view_explicit_bounds_allow_a_minimum_below_default() {
+    let view = HostedVst3View::new(
+        MockHostedGui {
+            last_size: Mutex::new(None),
+            resize_request: std::sync::Mutex::new(None),
+        },
+        420,
+        240,
+    )
+    .with_size_bounds(300, 180, 960, 540);
+
+    let mut rect = view_rect(250, 100);
+    assert_eq!(unsafe { view.checkSizeConstraint(&mut rect) }, kResultOk);
+    // The ratio-preserving pair is raised to the minimum height while staying
+    // within the declared minimum width.
+    assert_eq!(rect.right - rect.left, 315);
+    assert_eq!(rect.bottom - rect.top, 180);
+}
+
+#[test]
+fn hosted_view_explicit_bounds_keep_default_size_reporting() {
+    let view = HostedVst3View::new(
+        MockHostedGui {
+            last_size: Mutex::new(None),
+            resize_request: std::sync::Mutex::new(None),
+        },
+        420,
+        240,
+    )
+    .with_size_bounds(300, 180, 960, 540);
+
+    let mut size = view_rect(0, 0);
+    assert_eq!(unsafe { view.getSize(&mut size) }, kResultOk);
+    assert_eq!(size.right - size.left, 420);
+    assert_eq!(size.bottom - size.top, 240);
+}
+
+#[test]
+fn hosted_view_get_size_bounds_gui_reported_dimensions() {
+    let view = HostedVst3View::new(
+        MockHostedGui {
+            last_size: Mutex::new(Some((2_000, 100))),
+            resize_request: std::sync::Mutex::new(None),
+        },
+        420,
+        240,
+    )
+    .with_size_bounds(300, 180, 960, 540);
+
+    let mut size = view_rect(0, 0);
+    assert_eq!(unsafe { view.getSize(&mut size) }, kResultOk);
+    // The GUI-reported size is both above the maximum and off the default
+    // aspect ratio, so getSize exposes the same bounded pair as host resize.
+    assert_eq!(size.right - size.left, 945);
+    assert_eq!(size.bottom - size.top, 540);
+}
+
+#[test]
+fn hosted_view_explicit_bounds_clamp_maximum_size() {
+    let view = HostedVst3View::new(
+        MockHostedGui {
+            last_size: Mutex::new(None),
+            resize_request: std::sync::Mutex::new(None),
+        },
+        420,
+        240,
+    )
+    .with_size_bounds(300, 180, 960, 540);
+
+    let mut rect = view_rect(2_000, 1_600);
+    assert_eq!(unsafe { view.onSize(&mut rect) }, kResultOk);
+    assert_eq!(rect.right - rect.left, 945);
+    assert_eq!(rect.bottom - rect.top, 540);
+}
+
+#[test]
+fn hosted_view_explicit_bounds_normalize_off_aspect_requests() {
+    let view = HostedVst3View::new(
+        MockHostedGui {
+            last_size: Mutex::new(None),
+            resize_request: std::sync::Mutex::new(None),
+        },
+        420,
+        240,
+    )
+    .with_size_bounds(300, 180, 960, 540);
+
+    let mut rect = ViewRect {
+        left: 10,
+        top: 20,
+        right: 610,
+        bottom: 120,
+    };
+    assert_eq!(unsafe { view.checkSizeConstraint(&mut rect) }, kResultOk);
+    assert_eq!(rect.right - rect.left, 600);
+    assert_eq!(rect.bottom - rect.top, 343);
+    assert_eq!((rect.left, rect.top), (10, 20));
+    assert_eq!((rect.right, rect.bottom), (610, 363));
+}
+
+#[test]
+fn hosted_view_legacy_constructor_keeps_unbounded_resize_behavior() {
+    let view = HostedVst3View::new(
+        MockHostedGui {
+            last_size: Mutex::new(None),
+            resize_request: std::sync::Mutex::new(None),
+        },
+        420,
+        240,
+    );
+
+    let mut rect = view_rect(2_000, 100);
+    assert_eq!(unsafe { view.checkSizeConstraint(&mut rect) }, kResultOk);
+    assert_eq!(rect.right - rect.left, 2_000);
+    assert_eq!(rect.bottom - rect.top, 1_143);
+}
+
+#[test]
+fn hosted_view_explicit_bounds_normalize_invalid_zero_and_reversed_values() {
+    let view = HostedVst3View::new(
+        MockHostedGui {
+            last_size: Mutex::new(None),
+            resize_request: std::sync::Mutex::new(None),
+        },
+        420,
+        240,
+    )
+    .with_size_bounds(1_000, 900, 0, 0);
+
+    let mut rect = view_rect(2_000, 2_000);
+    assert_eq!(unsafe { view.checkSizeConstraint(&mut rect) }, kResultOk);
+    assert_eq!(rect.right - rect.left, 420);
+    assert_eq!(rect.bottom - rect.top, 240);
 }
 
 #[cfg(target_os = "windows")]
