@@ -8,6 +8,11 @@ use radiant::runtime::{Event, SurfacePaintPlan};
 use radiant::widgets::WidgetKey;
 use raw_window_handle::RawWindowHandle;
 
+/// Shared bundled-font options for Radiant native text.
+mod typography;
+
+pub use typography::bundled_text_options;
+
 /// Editor implementation consumed by [`RadiantHostedGui`].
 pub trait RadiantEditor: 'static {
     /// Resize the editor's logical viewport.
@@ -32,6 +37,7 @@ pub trait RadiantEditor: 'static {
     fn cancel_text_entry(&mut self) -> bool;
 }
 
+/// Convert a VST3 key callback into the character understood by Radiant.
 pub(crate) fn vst3_key_down_to_input_char(key: u16, key_code: i16) -> Option<char> {
     match key_code {
         8 => Some('\u{8}'),
@@ -56,12 +62,19 @@ pub use RadiantEditor as RadiantVst3Editor;
 
 /// Platform host operations shared by the CLAP and VST3 facades.
 pub(crate) trait HostedGui {
+    /// Attach the host-owned parent window.
     fn set_parent_raw(&mut self, parent: RawWindowHandle);
+    /// Create and attach the native child view.
     fn open(&mut self) -> bool;
+    /// Remove the native child view while retaining host state.
     fn close(&mut self);
+    /// Return the latest negotiated logical size.
     fn last_size(&self) -> Option<(u32, u32)>;
+    /// Request a logical resize from the native child view.
     fn request_resize(&self, width: u32, height: u32);
+    /// Dispatch one host key-down callback.
     fn on_key_down(&self, key: u16, key_code: i16, modifiers: i16) -> bool;
+    /// Dispatch one host key-up callback.
     fn on_key_up(&self, key: u16, key_code: i16, modifiers: i16) -> bool;
 }
 pub(crate) use HostedGui as Vst3HostedGui;
@@ -123,6 +136,7 @@ mod host_macos;
 #[cfg(target_os = "macos")]
 use host_macos::RadiantVst3HostedGui as PlatformHostedGui;
 
+/// Adapt the public host-neutral editor trait to the macOS VST3 bridge.
 struct EditorAdapter(Box<dyn RadiantEditor>);
 
 impl host_macos::RadiantVst3Editor for EditorAdapter {
@@ -157,7 +171,9 @@ impl host_macos::RadiantVst3Editor for EditorAdapter {
 
 /// CLAP/VST3-compatible host facade for a retained Radiant editor.
 pub struct RadiantHostedGui {
+    /// Platform-specific hosted view implementation.
     inner: PlatformHostedGui,
+    /// Logical size contract applied to host resize requests.
     contract: EditorSizeContract,
 }
 
