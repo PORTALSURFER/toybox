@@ -126,6 +126,14 @@ pub trait RadiantVst3Editor: 'static {
     /// Dispatch one text character to the active Radiant editor.
     fn dispatch_character(&mut self, character: char) -> bool;
 
+    /// Dispatch one command-modified textual shortcut.
+    ///
+    /// Returning `true` consumes the shortcut. The default preserves the
+    /// existing host responder-chain behavior for legacy editors.
+    fn dispatch_shortcut(&mut self, _character: char, _modifiers: PointerModifiers) -> bool {
+        false
+    }
+
     /// Cancel the active Radiant text or numeric entry, if any.
     fn cancel_text_entry(&mut self) -> bool;
 }
@@ -837,11 +845,38 @@ fn dispatch_key_text(
     modifiers: PointerModifiers,
 ) -> bool {
     if modifiers.command {
-        return false;
+        return text.chars().fold(false, |handled, ch| {
+            handled | dispatch_command_shortcut(runtime, ch, modifiers)
+        });
     }
     text.chars().fold(false, |handled, ch| {
         handled | dispatch_key_character(runtime, ch)
     })
+}
+
+fn dispatch_command_shortcut(
+    runtime: &mut dyn RadiantVst3Editor,
+    ch: char,
+    modifiers: PointerModifiers,
+) -> bool {
+    if ch.is_control()
+        || matches!(
+            ch,
+            NS_ENTER_CHARACTER
+                | NS_TAB_CHARACTER
+                | NS_BACK_TAB_CHARACTER
+                | NS_UP_ARROW_FUNCTION_KEY
+                | NS_DOWN_ARROW_FUNCTION_KEY
+                | NS_LEFT_ARROW_FUNCTION_KEY
+                | NS_RIGHT_ARROW_FUNCTION_KEY
+                | NS_DELETE_FUNCTION_KEY
+                | NS_HOME_FUNCTION_KEY
+                | NS_END_FUNCTION_KEY
+        )
+    {
+        return false;
+    }
+    runtime.dispatch_shortcut(ch, modifiers)
 }
 
 fn dispatch_appkit_key_down(
@@ -867,10 +902,6 @@ fn dispatch_vst3_key_down(
 
     let modifiers = vst3_pointer_modifiers(modifiers);
     runtime.dispatch_event(Event::pointer_modifiers_changed(modifiers));
-    if modifiers.command {
-        return false;
-    }
-
     let key_code = i64::from(key_code);
     let semantic_key = if key_code == KEY_ENTER as i64 || key_code == KEY_RETURN as i64 {
         Some(WidgetKey::Enter)
@@ -896,9 +927,15 @@ fn dispatch_vst3_key_down(
         None
     };
     if let Some(key) = semantic_key {
+        if modifiers.command {
+            return false;
+        }
         return runtime.dispatch_key_press(key);
     }
     if key_code == KEY_ESCAPE as i64 {
+        if modifiers.command {
+            return false;
+        }
         return runtime.cancel_text_entry();
     }
 
@@ -940,13 +977,10 @@ fn dispatch_vst3_key_down(
         alt: i64::from(modifiers) & (1 << 19) != 0,
     };
     runtime.dispatch_event(Event::pointer_modifiers_changed(modifiers));
-    if modifiers.command {
-        return false;
-    }
     let Some(character) = vst3_key_down_to_input_char(key, key_code) else {
         return false;
     };
-    dispatch_key_character(runtime, character)
+    dispatch_key_text(runtime, &character.to_string(), modifiers)
 }
 
 #[cfg(not(feature = "vst3"))]
@@ -1110,9 +1144,11 @@ mod tests {
         plan: SurfacePaintPlan,
         events: Vec<Event>,
         characters: Vec<char>,
+        shortcuts: Vec<(char, PointerModifiers)>,
         keys: Vec<WidgetKey>,
         operations: Vec<&'static str>,
         canceled: bool,
+        shortcut_result: bool,
     }
 
     impl MockEditor {
@@ -1121,9 +1157,11 @@ mod tests {
                 plan: SurfacePaintPlan::empty(&ThemeTokens::default()),
                 events: Vec::new(),
                 characters: Vec::new(),
+                shortcuts: Vec::new(),
                 keys: Vec::new(),
                 operations: Vec::new(),
                 canceled: false,
+                shortcut_result: false,
             }
         }
     }
@@ -1154,6 +1192,12 @@ mod tests {
             self.operations.push("character");
             self.characters.push(character);
             true
+        }
+
+        fn dispatch_shortcut(&mut self, character: char, modifiers: PointerModifiers) -> bool {
+            self.operations.push("shortcut");
+            self.shortcuts.push((character, modifiers));
+            self.shortcut_result
         }
 
         fn cancel_text_entry(&mut self) -> bool {
@@ -1210,8 +1254,26 @@ mod tests {
             ..PointerModifiers::default()
         };
 
-        assert!(!dispatch_key_text(&mut editor, "z", modifiers));
+        assert!(!dispatch_appkit_key_down(&mut editor, Some("z"), modifiers));
         assert!(editor.characters.is_empty());
+        assert_eq!(editor.shortcuts, vec![('z', modifiers)]);
+        assert_eq!(editor.operations, vec!["event", "shortcut"]);
+    }
+
+    #[test]
+    fn appkit_claimed_command_shortcut_is_consumed_without_text_input() {
+        let mut editor = MockEditor::new();
+        editor.shortcut_result = true;
+        let modifiers = PointerModifiers {
+            command: true,
+            shift: true,
+            ..PointerModifiers::default()
+        };
+
+        assert!(dispatch_appkit_key_down(&mut editor, Some("Z"), modifiers));
+        assert_eq!(editor.shortcuts, vec![('Z', modifiers)]);
+        assert!(editor.characters.is_empty());
+        assert_eq!(editor.operations, vec!["event", "shortcut"]);
     }
 
     #[test]
@@ -1333,6 +1395,45 @@ mod tests {
         ));
         assert!(editor.characters.is_empty());
         assert!(editor.keys.is_empty());
+        assert_eq!(
+            editor.shortcuts,
+            vec![(
+                'z',
+                PointerModifiers {
+                    command: true,
+                    ..PointerModifiers::default()
+                }
+            )]
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "vst3")]
+    fn vst3_claimed_command_shortcut_preserves_shift_without_text_input() {
+        use toybox_vst3_ffi::Steinberg::KeyModifier_::{kCommandKey, kShiftKey};
+
+        let mut editor = MockEditor::new();
+        editor.shortcut_result = true;
+        let modifiers = (kCommandKey | kShiftKey) as i16;
+
+        assert!(dispatch_vst3_key_down(
+            &mut editor,
+            'Z' as u16,
+            0,
+            modifiers
+        ));
+        assert_eq!(
+            editor.shortcuts,
+            vec![(
+                'Z',
+                PointerModifiers {
+                    command: true,
+                    shift: true,
+                    alt: false,
+                }
+            ),]
+        );
+        assert!(editor.characters.is_empty());
     }
 
     #[test]

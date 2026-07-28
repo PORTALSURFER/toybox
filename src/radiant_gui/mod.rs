@@ -5,7 +5,7 @@
 //! from CLAP or VST3 host callbacks.
 
 use radiant::runtime::{Event, SurfacePaintPlan};
-use radiant::widgets::WidgetKey;
+use radiant::widgets::{PointerModifiers, WidgetKey};
 use raw_window_handle::RawWindowHandle;
 
 /// Shared bundled-font options for Radiant native text.
@@ -32,6 +32,14 @@ pub trait RadiantEditor: 'static {
 
     /// Dispatch one text character.
     fn dispatch_character(&mut self, character: char) -> bool;
+
+    /// Dispatch one command-modified textual shortcut.
+    ///
+    /// Returning `true` consumes the shortcut. The default keeps existing
+    /// editors on the host responder-chain path.
+    fn dispatch_shortcut(&mut self, _character: char, _modifiers: PointerModifiers) -> bool {
+        false
+    }
 
     /// Cancel an active text or numeric entry.
     fn cancel_text_entry(&mut self) -> bool;
@@ -162,6 +170,10 @@ impl host_macos::RadiantVst3Editor for EditorAdapter {
 
     fn dispatch_character(&mut self, character: char) -> bool {
         self.0.dispatch_character(character)
+    }
+
+    fn dispatch_shortcut(&mut self, character: char, modifiers: PointerModifiers) -> bool {
+        self.0.dispatch_shortcut(character, modifiers)
     }
 
     fn cancel_text_entry(&mut self) -> bool {
@@ -459,7 +471,7 @@ macro_rules! radiant_clap_gui_callbacks {
 mod tests {
     use super::{EditorSizeContract, RadiantEditor, RadiantHostedGui};
     use radiant::runtime::{Event, SurfacePaintPlan};
-    use radiant::widgets::WidgetKey;
+    use radiant::widgets::{PointerModifiers, WidgetKey};
 
     #[test]
     fn size_contract_orders_bounds_and_preserves_default() {
@@ -501,6 +513,12 @@ mod tests {
         gui.hide();
         assert!(!gui.show(), "show without a host parent should fail");
         assert_eq!(gui.last_size(), Some((1440, 1080)));
+    }
+
+    #[test]
+    fn legacy_editor_uses_unclaimed_shortcut_default() {
+        let mut editor = MockEditor;
+        assert!(!editor.dispatch_shortcut('z', PointerModifiers::default()));
     }
 
     struct MockEditor;
