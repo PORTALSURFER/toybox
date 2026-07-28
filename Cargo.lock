@@ -2341,9 +2341,10 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 [[package]]
 name = "radiant"
 version = "0.1.0"
-source = "git+https://github.com/PORTALSURFER/radiant.git?rev=5b550cc0389c81f003c983a48f53282c85735d7e#5b550cc0389c81f003c983a48f53282c85735d7e"
+source = "git+https://github.com/PORTALSURFER/radiant.git?rev=546af893d7089b67b5b1da7000c5b8369f60cdd3#546af893d7089b67b5b1da7000c5b8369f60cdd3"
 dependencies = [
  "arboard",
+ "block2 0.5.1",
  "kurbo",
  "lyon_tessellation",
  "objc2 0.5.2",
