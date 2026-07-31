@@ -21,6 +21,12 @@ pub fn bundled_text_options() -> radiant::runtime::NativeTextOptions {
 }
 
 /// Create a headless Radiant capture using the live macOS host's font policy.
+///
+/// `logical_size` sets the capture viewport in logical pixels. `dpi_scale` scales
+/// that viewport to physical pixels in the captured RGBA output.
+///
+/// Returns [`radiant::gui_runtime::EmbeddedVelloError`] when the offscreen Vello
+/// renderer cannot initialize, such as when no compatible GPU device is available.
 pub fn bundled_offscreen_capture(
     logical_size: radiant::gui::types::Vector2,
     dpi_scale: radiant::theme::DpiScale,
