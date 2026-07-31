@@ -2341,7 +2341,7 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 [[package]]
 name = "radiant"
 version = "0.1.0"
-source = "git+https://github.com/PORTALSURFER/radiant.git?rev=235d6c22ae947febb6f77a7b25ed42a758c9efa9#235d6c22ae947febb6f77a7b25ed42a758c9efa9"
+source = "git+https://github.com/PORTALSURFER/radiant.git?rev=4b29c3a83120034c02c8dde44fc231ddd40b016c#4b29c3a83120034c02c8dde44fc231ddd40b016c"
 dependencies = [
  "arboard",
  "block2 0.5.1",
