@@ -19,6 +19,17 @@ fn bundled_text_options_exports_stable_face_order() {
 }
 
 #[test]
+fn bundled_offscreen_capture_exports_constructible_public_signature() {
+    let _: fn(
+        radiant::gui::types::Vector2,
+        radiant::theme::DpiScale,
+    ) -> Result<
+        radiant::gui_runtime::OffscreenVelloCapture,
+        radiant::gui_runtime::EmbeddedVelloError,
+    > = toybox::radiant_gui::bundled_offscreen_capture;
+}
+
+#[test]
 fn bundled_faces_are_complementary_for_documented_private_use_scalar() {
     // U+E0FF is deliberately covered by Sometype Mono, but not Ioskeley Mono.
     // Keep this assertion against the actual embedded TTF charmaps so a future
