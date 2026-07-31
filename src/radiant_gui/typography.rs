@@ -19,3 +19,15 @@ pub fn bundled_text_options() -> radiant::runtime::NativeTextOptions {
             "../../assets/Sometype_Mono/static/SometypeMono-Regular.ttf"
         )))
 }
+
+/// Create a headless Radiant capture using the live macOS host's font policy.
+pub fn bundled_offscreen_capture(
+    logical_size: radiant::gui::types::Vector2,
+    dpi_scale: radiant::theme::DpiScale,
+) -> Result<radiant::gui_runtime::OffscreenVelloCapture, radiant::gui_runtime::EmbeddedVelloError> {
+    radiant::gui_runtime::OffscreenVelloCapture::new_with_text_options(
+        logical_size,
+        dpi_scale,
+        &bundled_text_options(),
+    )
+}

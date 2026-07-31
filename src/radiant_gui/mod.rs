@@ -11,7 +11,7 @@ use raw_window_handle::RawWindowHandle;
 /// Shared bundled-font options for Radiant native text.
 mod typography;
 
-pub use typography::bundled_text_options;
+pub use typography::{bundled_offscreen_capture, bundled_text_options};
 
 /// Editor implementation consumed by [`RadiantHostedGui`].
 pub trait RadiantEditor: 'static {
