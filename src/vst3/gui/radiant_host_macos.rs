@@ -33,6 +33,7 @@ use raw_window_handle_06::{
 use super::{Vst3HostedGui, vst3_key_down_to_input_char};
 
 const NSEVENT_MODIFIER_FLAG_SHIFT: u64 = 1 << 17;
+const NSEVENT_MODIFIER_FLAG_CONTROL: u64 = 1 << 18;
 const NSEVENT_MODIFIER_FLAG_OPTION: u64 = 1 << 19;
 const NSEVENT_MODIFIER_FLAG_COMMAND: u64 = 1 << 20;
 const NS_ENTER_CHARACTER: char = '\u{3}';
@@ -51,6 +52,10 @@ const NSTRACKING_ACTIVE_ALWAYS: usize = 0x80;
 const NSTRACKING_IN_VISIBLE_RECT: usize = 0x200;
 const NSTRACKING_ENABLED_DURING_MOUSE_DRAG: usize = 0x400;
 const PLAYHEAD_REDRAW_INTERVAL: Duration = Duration::from_millis(33);
+const ACTIVE_POINTER_BUTTON_NONE: usize = 0;
+const ACTIVE_POINTER_BUTTON_PRIMARY: usize = 1;
+const ACTIVE_POINTER_BUTTON_SECONDARY: usize = 2;
+const ACTIVE_POINTER_BUTTON_AUXILIARY: usize = 3;
 static EDITOR_VIEW_CLASS_REGISTRATION: Mutex<()> = Mutex::new(());
 
 type CFRunLoopRef = *mut c_void;
@@ -382,6 +387,7 @@ unsafe fn new_radiant_view(
     (*view.as_ptr()).set_ivar("runtime", 0_usize);
     (*view.as_ptr()).set_ivar("renderer", 0_usize);
     (*view.as_ptr()).set_ivar("redraw_driver", 0_usize);
+    (*view.as_ptr()).set_ivar("active_pointer_button", ACTIVE_POINTER_BUTTON_NONE);
     Some(view)
 }
 
@@ -473,6 +479,7 @@ fn editor_view_class(class_name: &'static str) -> Option<&'static Class> {
         decl.add_ivar::<usize>("renderer");
         decl.add_ivar::<usize>("tracking_area");
         decl.add_ivar::<usize>("redraw_driver");
+        decl.add_ivar::<usize>("active_pointer_button");
         unsafe {
             decl.add_method(
                 sel!(drawRect:),
@@ -619,19 +626,26 @@ extern "C" fn mouse_exited(this: &Object, _cmd: Sel, event: *mut Object) {
 extern "C" fn mouse_down(this: &Object, _cmd: Sel, event: *mut Object) {
     unsafe {
         make_first_responder(this);
+        let button = primary_pointer_button_for_event(event);
+        set_active_pointer_button(this, button);
+        dispatch_mouse_event(this, event, button, MouseEventKind::Press);
     }
-    dispatch_mouse_event(this, event, PointerButton::Primary, MouseEventKind::Press);
 }
 
 extern "C" fn mouse_dragged(this: &Object, _cmd: Sel, event: *mut Object) {
-    dispatch_mouse_event(this, event, PointerButton::Primary, MouseEventKind::Move);
+    let button = unsafe { active_pointer_button(this).unwrap_or(PointerButton::Primary) };
+    dispatch_mouse_event(this, event, button, MouseEventKind::Move);
 }
 
 extern "C" fn mouse_up(this: &Object, _cmd: Sel, event: *mut Object) {
-    dispatch_mouse_event(this, event, PointerButton::Primary, MouseEventKind::Release);
+    let button = unsafe { take_active_pointer_button(this).unwrap_or(PointerButton::Primary) };
+    dispatch_mouse_event(this, event, button, MouseEventKind::Release);
 }
 
 extern "C" fn right_mouse_down(this: &Object, _cmd: Sel, event: *mut Object) {
+    unsafe {
+        set_active_pointer_button(this, PointerButton::Secondary);
+    }
     dispatch_mouse_event(this, event, PointerButton::Secondary, MouseEventKind::Press);
 }
 
@@ -640,6 +654,9 @@ extern "C" fn right_mouse_dragged(this: &Object, _cmd: Sel, event: *mut Object) 
 }
 
 extern "C" fn right_mouse_up(this: &Object, _cmd: Sel, event: *mut Object) {
+    unsafe {
+        clear_active_pointer_button(this);
+    }
     dispatch_mouse_event(
         this,
         event,
@@ -713,6 +730,7 @@ extern "C" fn playhead_redraw_tick(this: &Object, _cmd: Sel, _timer: *mut Object
 
 extern "C" fn dealloc(this: &Object, _cmd: Sel) {
     unsafe {
+        clear_active_pointer_button(this);
         stop_redraw_driver(this);
         remove_tracking_area(this);
         drop_runtime(this);
@@ -788,8 +806,81 @@ fn pointer_press_event_for_click_count(
     }
 }
 
+unsafe fn event_modifier_flags(event: *mut Object) -> u64 {
+    msg_send![event, modifierFlags]
+}
+
+fn primary_pointer_button(modifier_flags: u64) -> PointerButton {
+    if modifier_flags & NSEVENT_MODIFIER_FLAG_CONTROL != 0 {
+        PointerButton::Secondary
+    } else {
+        PointerButton::Primary
+    }
+}
+
+unsafe fn primary_pointer_button_for_event(event: *mut Object) -> PointerButton {
+    if event.is_null() {
+        PointerButton::Primary
+    } else {
+        primary_pointer_button(event_modifier_flags(event))
+    }
+}
+
+fn pointer_button_to_ivar_value(button: PointerButton) -> usize {
+    match button {
+        PointerButton::Primary => ACTIVE_POINTER_BUTTON_PRIMARY,
+        PointerButton::Secondary => ACTIVE_POINTER_BUTTON_SECONDARY,
+        PointerButton::Auxiliary => ACTIVE_POINTER_BUTTON_AUXILIARY,
+    }
+}
+
+fn pointer_button_from_ivar_value(value: usize) -> Option<PointerButton> {
+    match value {
+        ACTIVE_POINTER_BUTTON_PRIMARY => Some(PointerButton::Primary),
+        ACTIVE_POINTER_BUTTON_SECONDARY => Some(PointerButton::Secondary),
+        ACTIVE_POINTER_BUTTON_AUXILIARY => Some(PointerButton::Auxiliary),
+        _ => None,
+    }
+}
+
+fn take_pointer_button_ivar_value(value: &mut usize) -> Option<PointerButton> {
+    let button = pointer_button_from_ivar_value(*value);
+    *value = ACTIVE_POINTER_BUTTON_NONE;
+    button
+}
+
+unsafe fn set_active_pointer_button(view: *const Object, button: PointerButton) {
+    let Some(view) = view.cast_mut().as_mut() else {
+        return;
+    };
+    view.set_ivar(
+        "active_pointer_button",
+        pointer_button_to_ivar_value(button),
+    );
+}
+
+unsafe fn active_pointer_button(view: *const Object) -> Option<PointerButton> {
+    let view = view.as_ref()?;
+    pointer_button_from_ivar_value(*view.get_ivar::<usize>("active_pointer_button"))
+}
+
+unsafe fn take_active_pointer_button(view: *const Object) -> Option<PointerButton> {
+    let view = view.cast_mut().as_mut()?;
+    let mut value = *view.get_ivar::<usize>("active_pointer_button");
+    let button = take_pointer_button_ivar_value(&mut value);
+    view.set_ivar("active_pointer_button", value);
+    button
+}
+
+unsafe fn clear_active_pointer_button(view: *const Object) {
+    let Some(view) = view.cast_mut().as_mut() else {
+        return;
+    };
+    view.set_ivar("active_pointer_button", ACTIVE_POINTER_BUTTON_NONE);
+}
+
 unsafe fn event_modifiers(event: *mut Object) -> PointerModifiers {
-    let flags: u64 = msg_send![event, modifierFlags];
+    let flags = event_modifier_flags(event);
     PointerModifiers {
         command: flags & NSEVENT_MODIFIER_FLAG_COMMAND != 0,
         shift: flags & NSEVENT_MODIFIER_FLAG_SHIFT != 0,
@@ -1226,6 +1317,48 @@ mod tests {
     }
 
     #[test]
+    fn ordinary_primary_pointer_press_stays_primary() {
+        let button = primary_pointer_button(0);
+
+        assert_eq!(button, PointerButton::Primary);
+        assert_eq!(
+            pointer_button_from_ivar_value(pointer_button_to_ivar_value(button)),
+            Some(PointerButton::Primary)
+        );
+    }
+
+    #[test]
+    fn right_pointer_gesture_stays_secondary() {
+        let button = PointerButton::Secondary;
+
+        assert_eq!(
+            pointer_button_from_ivar_value(pointer_button_to_ivar_value(button)),
+            Some(PointerButton::Secondary)
+        );
+    }
+
+    #[test]
+    fn control_primary_pointer_press_normalizes_to_secondary() {
+        assert_eq!(
+            primary_pointer_button(NSEVENT_MODIFIER_FLAG_CONTROL),
+            PointerButton::Secondary
+        );
+    }
+
+    #[test]
+    fn release_uses_stored_effective_button_and_clears_state() {
+        let mut stored =
+            pointer_button_to_ivar_value(primary_pointer_button(NSEVENT_MODIFIER_FLAG_CONTROL));
+
+        assert_eq!(
+            take_pointer_button_ivar_value(&mut stored),
+            Some(PointerButton::Secondary)
+        );
+        assert_eq!(stored, ACTIVE_POINTER_BUTTON_NONE);
+        assert_eq!(take_pointer_button_ivar_value(&mut stored), None);
+    }
+
+    #[test]
     fn pointer_move_dispatches_modifiers_before_position() {
         let mut editor = MockEditor::new();
         let position = Point::new(24.0, 48.0);
@@ -1573,6 +1706,10 @@ mod tests {
         unsafe {
             let view = new_radiant_view("ToyboxRadiantVst3EditorSelectorTest", 420, 282)
                 .expect("Radiant editor view should be created");
+            assert_eq!(
+                *view.as_ref().get_ivar::<usize>("active_pointer_button"),
+                ACTIVE_POINTER_BUTTON_NONE
+            );
 
             let responds_mouse_moved: BOOL =
                 msg_send![view.as_ptr(), respondsToSelector: sel!(mouseMoved:)];
