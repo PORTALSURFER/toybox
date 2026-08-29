@@ -214,12 +214,16 @@ fn reset_restores_deterministic_interpolator_decimator_and_dry_state() {
 
     let mut source = SourceDecimator4x::new();
     let source_first: Vec<_> = input
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|chunk| source.process([chunk[0], chunk[1], chunk[2], chunk[3]]))
         .collect();
     source.reset();
     let source_second: Vec<_> = input
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|chunk| source.process([chunk[0], chunk[1], chunk[2], chunk[3]]))
         .collect();
     assert_eq!(source_first, source_second);

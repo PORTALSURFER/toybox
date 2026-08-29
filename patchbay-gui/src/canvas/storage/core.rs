@@ -37,7 +37,7 @@ impl Canvas {
 
     /// Fill the entire canvas with a color.
     pub fn clear(&mut self, color: Color) {
-        for chunk in self.pixels.chunks_exact_mut(4) {
+        for chunk in self.pixels.as_chunks_mut::<4>().0 {
             chunk[0] = color.r;
             chunk[1] = color.g;
             chunk[2] = color.b;
