@@ -185,8 +185,8 @@ mod widget_color_role_tests {
     }
 
     fn count_differing_pixels(a: &[u8], b: &[u8]) -> usize {
-        let px_a = a.chunks_exact(4);
-        let px_b = b.chunks_exact(4);
+        let px_a = a.as_chunks::<4>().0.iter();
+        let px_b = b.as_chunks::<4>().0.iter();
         px_a.zip(px_b).filter(|(lhs, rhs)| lhs != rhs).count()
     }
 
