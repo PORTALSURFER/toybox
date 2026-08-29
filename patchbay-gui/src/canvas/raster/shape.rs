@@ -189,7 +189,7 @@ impl Canvas {
             }
 
             intersections.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-            for pair in intersections.chunks_exact(2) {
+            for pair in intersections.as_chunks::<2>().0 {
                 let x0 = max(pair[0].ceil() as i32, 0);
                 let x1 = min(
                     pair[1].floor() as i32,
