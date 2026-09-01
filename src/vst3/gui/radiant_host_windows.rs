@@ -40,11 +40,12 @@ use windows::Win32::UI::WindowsAndMessaging::{
     DefWindowProcW, DestroyWindow, GWLP_USERDATA, GetClientRect, IsWindow, LoadCursorW,
     MA_ACTIVATE, RegisterClassW, SW_HIDE, SW_SHOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER,
     SetParent, SetTimer, SetWindowLongPtrW, SetWindowPos, ShowWindow, WM_CANCELMODE,
-    WM_CAPTURECHANGED, WM_CHAR, WM_DPICHANGED, WM_ERASEBKGND, WM_GETDLGCODE, WM_KEYDOWN, WM_KEYUP,
-    WM_KILLFOCUS, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDBLCLK, WM_MBUTTONDOWN,
-    WM_MBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_NCHITTEST,
-    WM_PAINT, WM_RBUTTONDBLCLK, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SETFOCUS, WM_SIZE, WM_SYSCHAR,
-    WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
+    WM_CAPTURECHANGED, WM_CHAR, WM_DPICHANGED, WM_DPICHANGED_AFTERPARENT, WM_ERASEBKGND,
+    WM_GETDLGCODE, WM_KEYDOWN, WM_KEYUP, WM_KILLFOCUS, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN,
+    WM_LBUTTONUP, WM_MBUTTONDBLCLK, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE,
+    WM_MOUSEWHEEL, WM_NCDESTROY, WM_NCHITTEST, WM_PAINT, WM_RBUTTONDBLCLK, WM_RBUTTONDOWN,
+    WM_RBUTTONUP, WM_SETFOCUS, WM_SIZE, WM_SYSCHAR, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER,
+    WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
 };
 use windows::core::PCWSTR;
 
@@ -81,6 +82,24 @@ impl KeyboardDeliveryMode {
     /// Return whether native keyboard messages must be swallowed.
     const fn suppresses_native_messages(self) -> bool {
         matches!(self, Self::CallbackOnly)
+    }
+}
+
+/// Identify whether a DPI message supplies a scale or requires a window query.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DpiChangeKind {
+    /// The message wParam contains the new DPI.
+    MessageDpi,
+    /// The child window contains the effective DPI after its parent changed.
+    WindowDpi,
+}
+
+/// Classify the DPI messages handled by the embedded child window.
+fn dpi_change_kind(message: u32) -> Option<DpiChangeKind> {
+    match message {
+        WM_DPICHANGED => Some(DpiChangeKind::MessageDpi),
+        WM_DPICHANGED_AFTERPARENT => Some(DpiChangeKind::WindowDpi),
+        _ => None,
     }
 }
 
@@ -540,15 +559,24 @@ impl WindowState {
         self.invalidate();
     }
 
-    /// Update the effective DPI and resize from the host-authoritative client area.
-    fn dpi_changed(&mut self, wparam: WPARAM, _lparam: LPARAM) {
-        let dpi = (wparam.0 as u32 & 0xffff).max(1);
-        self.dpi_scale
-            .set(DpiScale::new(f64::from(dpi) / f64::from(96_u32)));
+    /// Apply an effective DPI and resize from the host-authoritative client area.
+    fn apply_dpi_change(&mut self, dpi_scale: DpiScale) {
+        self.dpi_scale.set(dpi_scale);
         let (width, height) = client_size(self.hwnd)
             .or_else(|| self.size.get())
             .unwrap_or((1, 1));
         self.resize_physical(width, height);
+    }
+
+    /// Update the effective DPI from the DPI supplied by WM_DPICHANGED.
+    fn dpi_changed(&mut self, wparam: WPARAM, _lparam: LPARAM) {
+        let dpi = (wparam.0 as u32 & 0xffff).max(1);
+        self.apply_dpi_change(DpiScale::new(f64::from(dpi) / f64::from(96_u32)));
+    }
+
+    /// Update the effective DPI after the parent has completed its DPI change.
+    fn dpi_changed_after_parent(&mut self) {
+        self.apply_dpi_change(window_dpi(self.hwnd));
     }
 
     /// Process one message on the creating thread and return a handled result.
@@ -559,6 +587,13 @@ impl WindowState {
         lparam: LPARAM,
     ) -> Option<LRESULT> {
         if suppresses_native_keyboard_message(self.keyboard_mode.get(), message) {
+            return Some(LRESULT(0));
+        }
+        if let Some(kind) = dpi_change_kind(message) {
+            match kind {
+                DpiChangeKind::MessageDpi => self.dpi_changed(wparam, lparam),
+                DpiChangeKind::WindowDpi => self.dpi_changed_after_parent(),
+            }
             return Some(LRESULT(0));
         }
         match message {
@@ -588,10 +623,6 @@ impl WindowState {
                     )
                 });
                 self.resize_physical(width, height);
-                Some(LRESULT(0))
-            }
-            WM_DPICHANGED => {
-                self.dpi_changed(wparam, lparam);
                 Some(LRESULT(0))
             }
             WM_MOUSEMOVE => {
@@ -1681,8 +1712,9 @@ mod tests {
     #[cfg(feature = "vst3")]
     use super::host_modifier_bits;
     use super::{
-        KeyboardDeliveryMode, WM_UNICHAR, dialog_code_for_keyboard_mode, state_pointer_matches,
-        suppresses_native_keyboard_message, utf16_surrogate_pair_to_char,
+        DpiChangeKind, KeyboardDeliveryMode, WM_UNICHAR, dialog_code_for_keyboard_mode,
+        dpi_change_kind, state_pointer_matches, suppresses_native_keyboard_message,
+        utf16_surrogate_pair_to_char,
     };
     #[cfg(feature = "vst3")]
     use crate::radiant_gui::RadiantEditor;
@@ -1693,8 +1725,22 @@ mod tests {
     #[cfg(feature = "vst3")]
     use radiant::widgets::{PointerModifiers, WidgetKey};
     use windows::Win32::UI::WindowsAndMessaging::{
-        WM_CHAR, WM_GETDLGCODE, WM_KEYDOWN, WM_KEYUP, WM_SYSCHAR, WM_SYSKEYDOWN, WM_SYSKEYUP,
+        WM_CHAR, WM_DPICHANGED, WM_DPICHANGED_AFTERPARENT, WM_GETDLGCODE, WM_KEYDOWN, WM_KEYUP,
+        WM_SIZE, WM_SYSCHAR, WM_SYSKEYDOWN, WM_SYSKEYUP,
     };
+
+    #[test]
+    fn dpi_dispatch_uses_window_query_after_parent_change() {
+        assert_eq!(
+            dpi_change_kind(WM_DPICHANGED),
+            Some(DpiChangeKind::MessageDpi)
+        );
+        assert_eq!(
+            dpi_change_kind(WM_DPICHANGED_AFTERPARENT),
+            Some(DpiChangeKind::WindowDpi)
+        );
+        assert_eq!(dpi_change_kind(WM_SIZE), None);
+    }
 
     #[cfg(feature = "vst3")]
     struct KeyRecordingEditor {
