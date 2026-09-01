@@ -81,8 +81,8 @@ impl Renderer {
 /// Align row bytes to WGPU's copy alignment requirement.
 #[cfg(feature = "frame-capture")]
 fn align_bytes_per_row(unpadded: u32) -> u32 {
-    let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u32;
-    ((unpadded + alignment - 1) / alignment) * alignment
+    let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+    unpadded.div_ceil(alignment) * alignment
 }
 
 /// Strip row padding from mapped staging bytes into tight RGBA8 rows.

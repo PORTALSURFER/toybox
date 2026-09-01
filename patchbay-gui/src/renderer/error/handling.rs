@@ -14,6 +14,9 @@ pub(crate) fn map_vello_init_error(err: vello::Error) -> GuiError {
 }
 
 /// Return true when the surface should be reconfigured before retrying.
-pub(crate) fn should_reconfigure_surface(err: &wgpu::SurfaceError) -> bool {
-    matches!(err, wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated)
+pub(crate) fn should_reconfigure_surface(err: &wgpu::CurrentSurfaceTexture) -> bool {
+    matches!(
+        err,
+        wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Outdated
+    )
 }

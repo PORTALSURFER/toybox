@@ -26,7 +26,7 @@ pub enum GuiError {
     SurfaceFormat,
     /// Failed to acquire the next swapchain frame.
     #[error("failed to acquire next swapchain texture")]
-    SurfaceAcquire(#[source] wgpu::SurfaceError),
+    SurfaceAcquire,
     /// GUI thread failed to start.
     #[error("failed to spawn GUI thread")]
     ThreadSpawn,

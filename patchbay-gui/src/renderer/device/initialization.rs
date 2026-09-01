@@ -11,9 +11,9 @@ impl RendererDevice {
     /// Create a new device and queue without binding to a specific surface.
     pub fn new() -> Result<Self, GuiError> {
         log_line_safe("renderer_device: create begin");
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::from_env().unwrap_or(wgpu::Backends::PRIMARY),
-            ..Default::default()
+            ..wgpu::InstanceDescriptor::new_without_display_handle()
         });
         log_line_safe("renderer_device: instance created");
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
