@@ -11,16 +11,10 @@ image = { version = "0.25", default-features = false, features = ["png"], option
 mts_esp = { git = "https://github.com/PORTALSURFER/mts-esp-rs", rev = "d107a979e44c1b16dcc72dfd47cdd8dac77854ca", package = "mts-esp-rs" }
 patchbay-gui = { path = "patchbay-gui", version = "0.1.0", optional = true }
 raw-window-handle = { version = "0.5.2", optional = true }
-radiant = { git = "https://github.com/PORTALSURFER/radiant.git", rev = "d2ab423cf418b1687b792c5a0c99f5d4e5b23526", default-features = false, optional = true }
+radiant = { git = "https://github.com/PORTALSURFER/radiant.git", rev = "c1343993c973bdece3e8cd469415b0d08c7f6cf1", default-features = false, optional = true }
 raw-window-handle-06 = { package = "raw-window-handle", version = "0.6", optional = true }
 toybox-vst3-ffi = { path = "crates/vst3-ffi", optional = true }
 toybox-process-log = { path = "crates/process-log" }
-
-# Radiant's embedded renderer uses the matching PORTALSURFER Vello fork. The
-# dependency's own patch section is not applied when Radiant is consumed as a
-# dependency, so keep the SVG helper on the same `vello::Scene` type here.
-[patch.crates-io]
-vello = { git = "https://github.com/PORTALSURFER/vello.git", rev = "a08d1c11641908414e5e273d18e50f0f367095a1" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = { version = "0.2.7", optional = true }
