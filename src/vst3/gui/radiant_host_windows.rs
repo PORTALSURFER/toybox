@@ -335,10 +335,17 @@ impl WindowState {
         &mut self,
         x: i32,
         y: i32,
-        fallback_button: PointerButton,
+        button: PointerButton,
         modifiers: PointerModifiers,
     ) {
-        let button = self.active_button.take().unwrap_or(fallback_button);
+        // Native button-up messages can arrive out of order when another
+        // button is pressed while this child owns capture. Only the button
+        // that established the current gesture may end it; an unmatched
+        // release must leave the active gesture and capture untouched.
+        if self.active_button != Some(button) {
+            return;
+        }
+        self.active_button = None;
         self.dispatch_modifiers(modifiers);
         let position = self.logical_point(x, y);
         if let Some(editor) = self.editor.as_mut() {
@@ -1768,6 +1775,8 @@ mod tests {
     #[cfg(feature = "vst3")]
     use crate::radiant_gui::RadiantEditor;
     #[cfg(feature = "vst3")]
+    use radiant::gui::types::Point;
+    #[cfg(feature = "vst3")]
     use radiant::runtime::{Event, SurfacePaintPlan};
     #[cfg(feature = "vst3")]
     use radiant::theme::DpiScale;
@@ -1914,6 +1923,46 @@ mod tests {
         assert_eq!(
             *events.borrow(),
             vec![Event::pointer_capture_cancelled(), Event::clear_focus()]
+        );
+    }
+
+    #[cfg(feature = "vst3")]
+    #[test]
+    fn unmatched_button_up_does_not_end_the_current_capture() {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let mut state = test_window_state(Rc::clone(&events));
+        let modifiers = PointerModifiers::default();
+
+        state.pointer_press(10, 20, PointerButton::Primary, modifiers, false);
+        state.pointer_press(30, 40, PointerButton::Secondary, modifiers, false);
+        state.pointer_release(50, 60, PointerButton::Primary, modifiers);
+
+        assert_eq!(state.active_button, Some(PointerButton::Secondary));
+        assert_eq!(
+            *events.borrow(),
+            vec![
+                Event::pointer_modifiers_changed(modifiers),
+                Event::pointer_press(Point::new(10.0, 20.0), PointerButton::Primary, modifiers,),
+                Event::pointer_capture_cancelled(),
+                Event::pointer_modifiers_changed(modifiers),
+                Event::pointer_press(Point::new(30.0, 40.0), PointerButton::Secondary, modifiers,),
+            ]
+        );
+
+        state.pointer_release(50, 60, PointerButton::Secondary, modifiers);
+
+        assert!(state.active_button.is_none());
+        assert_eq!(
+            *events.borrow(),
+            vec![
+                Event::pointer_modifiers_changed(modifiers),
+                Event::pointer_press(Point::new(10.0, 20.0), PointerButton::Primary, modifiers,),
+                Event::pointer_capture_cancelled(),
+                Event::pointer_modifiers_changed(modifiers),
+                Event::pointer_press(Point::new(30.0, 40.0), PointerButton::Secondary, modifiers,),
+                Event::pointer_modifiers_changed(modifiers),
+                Event::pointer_release(Point::new(50.0, 60.0), PointerButton::Secondary, modifiers,),
+            ]
         );
     }
 
