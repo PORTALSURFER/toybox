@@ -115,6 +115,7 @@ struct WindowState {
     keyboard_mode: Rc<Cell<KeyboardDeliveryMode>>,
     active_button: Option<PointerButton>,
     tracking_mouse: bool,
+    cancellation_in_progress: bool,
     pending_high_surrogate: Option<u16>,
     last_renderer_size: Option<(u32, u32, DpiScale)>,
 }
@@ -141,6 +142,7 @@ impl WindowState {
             keyboard_mode,
             active_button: None,
             tracking_mouse: false,
+            cancellation_in_progress: false,
             pending_high_surrogate: None,
             last_renderer_size: None,
         }
@@ -305,6 +307,11 @@ impl WindowState {
         modifiers: PointerModifiers,
         double_click: bool,
     ) {
+        // A new press must not orphan the previous native gesture if a host
+        // delivered an overlapping button-down sequence.
+        if self.active_button.is_some() {
+            self.cancel_native_interaction(false);
+        }
         self.active_button = Some(button);
         unsafe {
             let _ = SetFocus(Some(self.hwnd));
@@ -548,15 +555,38 @@ impl WindowState {
 
     /// Cancel Radiant pointer/focus state when Windows revokes native focus or capture.
     fn cancel_native_interaction(&mut self, clear_runtime_focus: bool) {
+        self.cancel_native_interaction_with_redraw(clear_runtime_focus, true);
+    }
+
+    /// Cancel native interaction without invalidating a window being torn down.
+    fn cancel_before_teardown(&mut self) {
+        self.cancel_native_interaction_with_redraw(true, false);
+    }
+
+    /// Dispatch the cancellation contract before releasing native capture.
+    fn cancel_native_interaction_with_redraw(&mut self, clear_runtime_focus: bool, redraw: bool) {
+        if self.cancellation_in_progress {
+            return;
+        }
+        self.cancellation_in_progress = true;
         let had_active_button = self.active_button.take().is_some();
         self.tracking_mouse = false;
-        self.release_capture_if_owned();
-        if (clear_runtime_focus || had_active_button)
-            && let Some(editor) = self.editor.as_mut()
-        {
-            editor.dispatch_event(Event::clear_focus());
+        if let Some(editor) = self.editor.as_mut() {
+            if had_active_button {
+                // Radiant must see cancellation while native capture still
+                // belongs to this child; releasing it first can re-enter the
+                // window procedure and lose the active gesture's owner.
+                editor.dispatch_event(Event::pointer_capture_cancelled());
+            }
+            if clear_runtime_focus {
+                editor.dispatch_event(Event::clear_focus());
+            }
         }
-        self.invalidate();
+        self.release_capture_if_owned();
+        if redraw {
+            self.invalidate();
+        }
+        self.cancellation_in_progress = false;
     }
 
     /// Apply an effective DPI and resize from the host-authoritative client area.
@@ -740,10 +770,13 @@ impl WindowState {
 impl Drop for WindowState {
     /// Stop native timer/capture before dropping the renderer and editor.
     fn drop(&mut self) {
+        // Parent destruction and WM_NCDESTROY can bypass the normal close
+        // path. Cancel while the editor is still retained so an abandoned
+        // gesture cannot survive into a later reopen.
+        self.cancel_before_teardown();
         unsafe {
             let _ = windows::Win32::UI::WindowsAndMessaging::KillTimer(Some(self.hwnd), TIMER_ID);
         }
-        self.release_capture_if_owned();
         self.state_token.set(None);
         drop(self.renderer.take());
         if let Some(editor) = self.editor.take() {
@@ -892,7 +925,12 @@ impl RadiantWindowsHostedGui {
         // Never dereference the raw pointer unless the owner fence still names
         // this exact allocation.
         let owns_state = self.state_token.get() == Some(state_pointer);
-        let editor = owns_state.then(|| unsafe { (*state_pointer).editor.take() });
+        let editor = owns_state.then(|| unsafe {
+            // Keep the editor present while cancellation is dispatched; the
+            // state is about to be retained or destroyed after this failure.
+            (*state_pointer).cancel_before_teardown();
+            (*state_pointer).editor.take()
+        });
         let state_destroyed = if owns_state {
             self.reclaim_dead_state(Some(hwnd))
         } else {
@@ -1109,7 +1147,13 @@ impl RadiantWindowsHostedGui {
             return;
         };
         self.hwnd = None;
-        let editor = unsafe { (*pointer).editor.take() };
+        // DestroyWindow may synchronously deliver capture/focus/NCDestroy
+        // messages. Dispatch cancellation before taking the editor so those
+        // messages cannot strand a Radiant pointer gesture.
+        let editor = unsafe {
+            (*pointer).cancel_before_teardown();
+            (*pointer).editor.take()
+        };
         let destroyed = unsafe { DestroyWindow(hwnd).is_ok() };
         if destroyed {
             // DestroyWindow normally synchronously delivers WM_NCDESTROY. Keep
@@ -1708,6 +1752,11 @@ unsafe extern "system" fn window_proc(
 #[cfg(test)]
 mod tests {
     #[cfg(feature = "vst3")]
+    use std::cell::{Cell, RefCell};
+    #[cfg(feature = "vst3")]
+    use std::rc::Rc;
+
+    #[cfg(feature = "vst3")]
     use super::dispatch_vst3_key_down;
     #[cfg(feature = "vst3")]
     use super::host_modifier_bits;
@@ -1721,9 +1770,13 @@ mod tests {
     #[cfg(feature = "vst3")]
     use radiant::runtime::{Event, SurfacePaintPlan};
     #[cfg(feature = "vst3")]
+    use radiant::theme::DpiScale;
+    #[cfg(feature = "vst3")]
     use radiant::theme::ThemeTokens;
     #[cfg(feature = "vst3")]
-    use radiant::widgets::{PointerModifiers, WidgetKey};
+    use radiant::widgets::{PointerButton, PointerModifiers, WidgetKey};
+    #[cfg(feature = "vst3")]
+    use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{
         WM_CHAR, WM_DPICHANGED, WM_DPICHANGED_AFTERPARENT, WM_GETDLGCODE, WM_KEYDOWN, WM_KEYUP,
         WM_SIZE, WM_SYSCHAR, WM_SYSKEYDOWN, WM_SYSKEYUP,
@@ -1749,17 +1802,23 @@ mod tests {
         shortcuts: Vec<(char, PointerModifiers)>,
         keys: Vec<WidgetKey>,
         canceled: bool,
+        events: Rc<RefCell<Vec<Event>>>,
     }
 
     #[cfg(feature = "vst3")]
     impl KeyRecordingEditor {
         fn new() -> Self {
+            Self::with_events(Rc::new(RefCell::new(Vec::new())))
+        }
+
+        fn with_events(events: Rc<RefCell<Vec<Event>>>) -> Self {
             Self {
                 plan: SurfacePaintPlan::empty(&ThemeTokens::default()),
                 characters: Vec::new(),
                 shortcuts: Vec::new(),
                 keys: Vec::new(),
                 canceled: false,
+                events,
             }
         }
     }
@@ -1768,7 +1827,9 @@ mod tests {
     impl RadiantEditor for KeyRecordingEditor {
         fn resize(&mut self, _width: u32, _height: u32) {}
 
-        fn dispatch_event(&mut self, _event: Event) {}
+        fn dispatch_event(&mut self, event: Event) {
+            self.events.borrow_mut().push(event);
+        }
 
         fn paint_plan(&mut self) -> &SurfacePaintPlan {
             &self.plan
@@ -1797,6 +1858,63 @@ mod tests {
             self.canceled = true;
             true
         }
+    }
+
+    #[cfg(feature = "vst3")]
+    fn test_window_state(events: Rc<RefCell<Vec<Event>>>) -> super::WindowState {
+        super::WindowState::new(
+            HWND(std::ptr::null_mut()),
+            Box::new(KeyRecordingEditor::with_events(events)),
+            Rc::new(RefCell::new(None)),
+            Rc::new(Cell::new(None)),
+            Rc::new(Cell::new(None)),
+            Rc::new(Cell::new(DpiScale::ONE)),
+            Rc::new(Cell::new(KeyboardDeliveryMode::Native)),
+        )
+    }
+
+    #[cfg(feature = "vst3")]
+    #[test]
+    fn pointer_cancellation_is_idempotent_and_preserves_focus_without_clear() {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let mut state = test_window_state(Rc::clone(&events));
+        state.active_button = Some(PointerButton::Primary);
+
+        state.cancel_native_interaction(false);
+        state.cancel_native_interaction(false);
+
+        assert_eq!(*events.borrow(), vec![Event::pointer_capture_cancelled()]);
+        assert!(state.active_button.is_none());
+    }
+
+    #[cfg(feature = "vst3")]
+    #[test]
+    fn focus_loss_cancels_pointer_before_clearing_focus() {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let mut state = test_window_state(Rc::clone(&events));
+        state.active_button = Some(PointerButton::Primary);
+
+        state.cancel_native_interaction(true);
+
+        assert_eq!(
+            *events.borrow(),
+            vec![Event::pointer_capture_cancelled(), Event::clear_focus()]
+        );
+    }
+
+    #[cfg(feature = "vst3")]
+    #[test]
+    fn teardown_cancels_before_retaining_the_editor() {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        {
+            let mut state = test_window_state(Rc::clone(&events));
+            state.active_button = Some(PointerButton::Primary);
+        }
+
+        assert_eq!(
+            *events.borrow(),
+            vec![Event::pointer_capture_cancelled(), Event::clear_focus()]
+        );
     }
 
     #[cfg(feature = "vst3")]
