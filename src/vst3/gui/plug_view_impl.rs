@@ -30,21 +30,42 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
         let Ok(mut gui) = self.gui.lock() else {
             return kResultFalse;
         };
+        gui.set_callback_keyboard_mode(true);
         gui.set_parent_raw(parent_handle);
         if !gui.open() {
             return kResultFalse;
         }
-        let (requested_width, requested_height) = if let Some((width, height)) = gui.last_size() {
-            (logical_dimension(width), logical_dimension(height))
-        } else {
-            self.default_size
-        };
-        let (constrained_width, constrained_height) =
-            self.constrain_uniform_size(requested_width, requested_height);
-        if constrained_width != requested_width || constrained_height != requested_height {
-            gui.request_resize(constrained_width as u32, constrained_height as u32);
+        let (requested_host_width, requested_host_height) =
+            if let Some((width, height)) = gui.last_size() {
+                (width, height)
+            } else {
+                gui.host_size_from_logical(self.default_size.0 as u32, self.default_size.1 as u32)
+            };
+        let (requested_width, requested_height) =
+            gui.logical_size_from_host(requested_host_width, requested_host_height);
+        let current = self.current_logical_size_for_gui(&gui);
+        let (constrained_width, constrained_height) = self.constrain_uniform_size_from_current(
+            logical_dimension(requested_width),
+            logical_dimension(requested_height),
+            current,
+        );
+        let (constrained_host_width, constrained_host_height) = gui.host_size_from_logical(
+            constrained_width as u32,
+            constrained_height as u32,
+        );
+        if constrained_host_width != requested_host_width
+            || constrained_host_height != requested_host_height
+        {
+            gui.request_resize(constrained_host_width, constrained_host_height);
         }
-        self.rect.set(view_rect(constrained_width, constrained_height));
+        self.rect.set(view_rect(
+            logical_dimension(constrained_host_width),
+            logical_dimension(constrained_host_height),
+        ));
+        if !gui.show() {
+            gui.close();
+            return kResultFalse;
+        }
 
         self.attached.set(true);
         kResultOk
@@ -53,6 +74,7 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
     unsafe fn removed(&self) -> tresult {
         if let Ok(mut gui) = self.gui.lock() {
             gui.close();
+            gui.set_callback_keyboard_mode(false);
         }
         self.attached.set(false);
         kResultOk
@@ -91,28 +113,46 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
         }
 
         let requested = unsafe { *new_size };
-        let requested_width = requested.right.saturating_sub(requested.left).max(1);
-        let requested_height = requested.bottom.saturating_sub(requested.top).max(1);
-        let (constrained_width, constrained_height) =
-            self.constrain_uniform_size(requested_width, requested_height);
+        let requested_host_width = requested.right.saturating_sub(requested.left).max(1);
+        let requested_host_height = requested.bottom.saturating_sub(requested.top).max(1);
+        let Ok(gui) = self.gui.lock() else {
+            return kResultFalse;
+        };
+        let (requested_width, requested_height) =
+            gui.logical_size_from_host(requested_host_width as u32, requested_host_height as u32);
+        let current = self.current_logical_size_for_gui(&gui);
+        let (constrained_width, constrained_height) = self.constrain_uniform_size_from_current(
+            logical_dimension(requested_width),
+            logical_dimension(requested_height),
+            current,
+        );
+        let (constrained_host_width, constrained_host_height) = gui.host_size_from_logical(
+            constrained_width as u32,
+            constrained_height as u32,
+        );
         let Some(constrained) = view_rect_with_origin(
             requested.left,
             requested.top,
-            constrained_width,
-            constrained_height,
+            logical_dimension(constrained_host_width),
+            logical_dimension(constrained_host_height),
         ) else {
             return kResultFalse;
         };
         unsafe { *new_size = constrained };
-        if let Ok(gui) = self.gui.lock() {
-            gui.request_resize(constrained_width as u32, constrained_height as u32);
-        }
+        gui.request_resize(constrained_host_width, constrained_host_height);
         self.rect.set(constrained);
         kResultOk
     }
 
-    unsafe fn onFocus(&self, _state: TBool) -> tresult {
-        kResultOk
+    unsafe fn onFocus(&self, state: TBool) -> tresult {
+        let Ok(gui) = self.gui.lock() else {
+            return kResultFalse;
+        };
+        if gui.on_focus(state != 0) {
+            kResultOk
+        } else {
+            kResultFalse
+        }
     }
 
     unsafe fn setFrame(&self, _frame: *mut IPlugFrame) -> tresult {
@@ -128,15 +168,28 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
             return kInvalidArgument;
         }
         let rect = unsafe { &mut *rect };
-        let requested_width = rect.right.saturating_sub(rect.left).max(1);
-        let requested_height = rect.bottom.saturating_sub(rect.top).max(1);
-        let (constrained_width, constrained_height) =
-            self.constrain_uniform_size(requested_width, requested_height);
+        let requested_host_width = rect.right.saturating_sub(rect.left).max(1);
+        let requested_host_height = rect.bottom.saturating_sub(rect.top).max(1);
+        let Ok(gui) = self.gui.lock() else {
+            return kResultFalse;
+        };
+        let (requested_width, requested_height) =
+            gui.logical_size_from_host(requested_host_width as u32, requested_host_height as u32);
+        let current = self.current_logical_size_for_gui(&gui);
+        let (constrained_width, constrained_height) = self.constrain_uniform_size_from_current(
+            logical_dimension(requested_width),
+            logical_dimension(requested_height),
+            current,
+        );
+        let (constrained_host_width, constrained_host_height) = gui.host_size_from_logical(
+            constrained_width as u32,
+            constrained_height as u32,
+        );
         let Some(constrained) = view_rect_with_origin(
             rect.left,
             rect.top,
-            constrained_width,
-            constrained_height,
+            logical_dimension(constrained_host_width),
+            logical_dimension(constrained_host_height),
         ) else {
             return kResultFalse;
         };

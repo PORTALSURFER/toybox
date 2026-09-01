@@ -71,7 +71,7 @@ pub unsafe fn parent_to_raw_window_handle(
         let mut handle = raw_window_handle::Win32WindowHandle::empty();
         handle.hwnd = parent;
         handle.hinstance = std::ptr::null_mut();
-        return Some(raw_window_handle::RawWindowHandle::Win32(handle));
+        Some(raw_window_handle::RawWindowHandle::Win32(handle))
     }
 
     #[cfg(target_os = "macos")]

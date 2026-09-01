@@ -32,8 +32,11 @@ include!("hosted_view_types.rs");
 include!("plug_view_impl.rs");
 include!("view_rect_utils.rs");
 
-#[cfg(all(feature = "radiant-vst3", target_os = "macos"))]
+#[cfg(all(
+    feature = "radiant-vst3",
+    any(target_os = "macos", target_os = "windows")
+))]
 pub use crate::radiant_gui::{RadiantVst3Editor, RadiantVst3HostedGui};
 
-#[cfg(all(test, feature = "gui"))]
+#[cfg(all(test, any(feature = "gui", feature = "radiant-vst3")))]
 mod tests;

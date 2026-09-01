@@ -152,6 +152,7 @@ pub struct RadiantVst3HostedGui {
     class_name: &'static str,
     editor: Option<Box<dyn RadiantVst3Editor>>,
     text_options: NativeTextOptions,
+    callback_keyboard_only: bool,
 }
 
 impl RadiantVst3HostedGui {
@@ -170,6 +171,7 @@ impl RadiantVst3HostedGui {
             class_name,
             editor: Some(Box::new(editor)),
             text_options: crate::radiant_gui::bundled_text_options(),
+            callback_keyboard_only: false,
         }
     }
 
@@ -204,6 +206,7 @@ impl RadiantVst3HostedGui {
                 width,
                 height,
                 &self.text_options,
+                self.callback_keyboard_only,
             )
         } {
             Ok(root_view) => root_view,
@@ -221,6 +224,7 @@ impl RadiantVst3HostedGui {
         unsafe {
             if let Some(root_view) = self.root_view.take() {
                 stop_redraw_driver(root_view.as_ptr());
+                cancel_native_interaction(root_view.as_ptr());
                 drop_renderer(root_view.as_ptr());
                 self.editor = take_runtime(root_view.as_ptr());
                 let view = root_view.as_ptr();
@@ -257,13 +261,15 @@ impl RadiantVst3HostedGui {
     }
 
     /// Show the native child view without recreating the retained editor.
-    pub fn show(&self) {
-        if let Some(root_view) = self.root_view {
-            unsafe {
-                let _: () = msg_send![root_view.as_ptr(), setHidden: NO];
-                let _: () = msg_send![root_view.as_ptr(), setNeedsDisplay: YES];
-            }
+    pub fn show(&self) -> bool {
+        let Some(root_view) = self.root_view else {
+            return false;
+        };
+        unsafe {
+            let _: () = msg_send![root_view.as_ptr(), setHidden: NO];
+            let _: () = msg_send![root_view.as_ptr(), setNeedsDisplay: YES];
         }
+        true
     }
 
     /// Hide the native child view while preserving its retained editor state.
@@ -314,6 +320,34 @@ impl Vst3HostedGui for RadiantVst3HostedGui {
         self.hosted_size()
     }
 
+    fn show(&self) -> bool {
+        RadiantVst3HostedGui::show(self)
+    }
+
+    fn set_callback_keyboard_mode(&mut self, callback_only: bool) {
+        self.callback_keyboard_only = callback_only;
+        if let Some(root_view) = self.root_view {
+            unsafe {
+                set_callback_keyboard_mode_for_view(root_view.as_ptr(), callback_only);
+            }
+        }
+    }
+
+    fn set_default_size(&mut self, width: u32, height: u32) {
+        self.default_size = (width.max(1), height.max(1));
+        if self.root_view.is_none() {
+            self.size.set(None);
+        }
+    }
+
+    fn host_size_from_logical(&self, width: u32, height: u32) -> (u32, u32) {
+        (width.max(1), height.max(1))
+    }
+
+    fn logical_size_from_host(&self, width: u32, height: u32) -> (u32, u32) {
+        (width.max(1), height.max(1))
+    }
+
     fn request_resize(&self, width: u32, height: u32) {
         self.resize_view(width, height);
     }
@@ -345,6 +379,18 @@ impl Vst3HostedGui for RadiantVst3HostedGui {
         }
         false
     }
+
+    fn on_focus(&self, focused: bool) -> bool {
+        let Some(root_view) = self.root_view else {
+            return false;
+        };
+        unsafe {
+            if !focused {
+                cancel_native_interaction(root_view.as_ptr());
+            }
+            set_first_responder(root_view.as_ptr(), focused)
+        }
+    }
 }
 
 unsafe fn create_editor_view(
@@ -354,10 +400,12 @@ unsafe fn create_editor_view(
     width: u32,
     height: u32,
     text_options: &NativeTextOptions,
+    callback_keyboard_only: bool,
 ) -> Result<NonNull<Object>, Box<dyn RadiantVst3Editor>> {
     let Some(root_view) = new_radiant_view(class_name, width, height) else {
         return Err(editor);
     };
+    set_callback_keyboard_mode_for_view(root_view.as_ptr(), callback_keyboard_only);
     let parent = parent.as_ptr().cast::<Object>();
     let _: () = msg_send![parent, addSubview: root_view.as_ptr()];
     let _: () = msg_send![root_view.as_ptr(), setWantsLayer: YES];
@@ -388,6 +436,7 @@ unsafe fn new_radiant_view(
     (*view.as_ptr()).set_ivar("renderer", 0_usize);
     (*view.as_ptr()).set_ivar("redraw_driver", 0_usize);
     (*view.as_ptr()).set_ivar("active_pointer_button", ACTIVE_POINTER_BUTTON_NONE);
+    (*view.as_ptr()).set_ivar("callback_keyboard_only", 0_usize);
     Some(view)
 }
 
@@ -480,6 +529,7 @@ fn editor_view_class(class_name: &'static str) -> Option<&'static Class> {
         decl.add_ivar::<usize>("tracking_area");
         decl.add_ivar::<usize>("redraw_driver");
         decl.add_ivar::<usize>("active_pointer_button");
+        decl.add_ivar::<usize>("callback_keyboard_only");
         unsafe {
             decl.add_method(
                 sel!(drawRect:),
@@ -667,6 +717,9 @@ extern "C" fn right_mouse_up(this: &Object, _cmd: Sel, event: *mut Object) {
 
 extern "C" fn flags_changed(this: &Object, _cmd: Sel, event: *mut Object) {
     unsafe {
+        if native_keyboard_dispatch_suppressed(this) {
+            return;
+        }
         if event.is_null() {
             return;
         }
@@ -680,6 +733,9 @@ extern "C" fn flags_changed(this: &Object, _cmd: Sel, event: *mut Object) {
 
 extern "C" fn key_down(this: &Object, _cmd: Sel, event: *mut Object) {
     unsafe {
+        if native_keyboard_dispatch_suppressed(this) {
+            return;
+        }
         if event.is_null() {
             return;
         }
@@ -730,7 +786,7 @@ extern "C" fn playhead_redraw_tick(this: &Object, _cmd: Sel, _timer: *mut Object
 
 extern "C" fn dealloc(this: &Object, _cmd: Sel) {
     unsafe {
-        clear_active_pointer_button(this);
+        cancel_native_interaction(this);
         stop_redraw_driver(this);
         remove_tracking_area(this);
         drop_runtime(this);
@@ -879,6 +935,21 @@ unsafe fn clear_active_pointer_button(view: *const Object) {
     view.set_ivar("active_pointer_button", ACTIVE_POINTER_BUTTON_NONE);
 }
 
+/// Cancel any native pointer gesture before clearing Radiant focus.
+///
+/// The active-button ivar is consumed before dispatch so repeated focus or
+/// teardown callbacks cannot deliver a second pointer-capture cancellation.
+unsafe fn cancel_native_interaction(view: *const Object) {
+    let had_active_button = take_active_pointer_button(view).is_some();
+    let Some(runtime) = runtime_mut(view) else {
+        return;
+    };
+    if had_active_button {
+        runtime.dispatch_event(Event::pointer_capture_cancelled());
+    }
+    runtime.dispatch_event(Event::clear_focus());
+}
+
 unsafe fn event_modifiers(event: *mut Object) -> PointerModifiers {
     let flags = event_modifier_flags(event);
     PointerModifiers {
@@ -905,10 +976,42 @@ unsafe fn ns_string_to_string(string: *mut Object) -> Option<String> {
 }
 
 unsafe fn make_first_responder(this: &Object) {
-    let window: *mut Object = msg_send![this, window];
-    if !window.is_null() {
-        let _: BOOL = msg_send![window, makeFirstResponder: this];
+    let _ = set_first_responder(this as *const Object as *mut Object, true);
+}
+
+unsafe fn set_first_responder(view: *mut Object, focused: bool) -> bool {
+    if view.is_null() {
+        return false;
     }
+    let window: *mut Object = msg_send![view, window];
+    if window.is_null() {
+        return false;
+    }
+    if focused {
+        let result: BOOL = msg_send![window, makeFirstResponder: view];
+        result == YES
+    } else {
+        let first_responder: *mut Object = msg_send![window, firstResponder];
+        if first_responder != view {
+            return true;
+        }
+        let result: BOOL = msg_send![view, resignFirstResponder];
+        result == YES
+    }
+}
+
+unsafe fn set_callback_keyboard_mode_for_view(view: *mut Object, callback_only: bool) {
+    if let Some(view) = view.as_mut() {
+        view.set_ivar(
+            "callback_keyboard_only",
+            if callback_only { 1_usize } else { 0_usize },
+        );
+    }
+}
+
+unsafe fn native_keyboard_dispatch_suppressed(view: *const Object) -> bool {
+    view.as_ref()
+        .is_some_and(|view| *view.get_ivar::<usize>("callback_keyboard_only") != 0)
 }
 
 fn dispatch_key_character(runtime: &mut dyn RadiantVst3Editor, ch: char) -> bool {
@@ -1240,6 +1343,9 @@ mod tests {
         operations: Vec<&'static str>,
         canceled: bool,
         shortcut_result: bool,
+        event_count: Option<Arc<Mutex<usize>>>,
+        character_count: Option<Arc<Mutex<usize>>>,
+        event_sink: Option<Arc<Mutex<Vec<Event>>>>,
     }
 
     impl MockEditor {
@@ -1253,6 +1359,9 @@ mod tests {
                 operations: Vec::new(),
                 canceled: false,
                 shortcut_result: false,
+                event_count: None,
+                character_count: None,
+                event_sink: None,
             }
         }
     }
@@ -1263,6 +1372,12 @@ mod tests {
         fn dispatch_event(&mut self, event: Event) {
             self.operations.push("event");
             self.events.push(event);
+            if let Some(event_sink) = &self.event_sink {
+                event_sink.lock().unwrap().push(event);
+            }
+            if let Some(event_count) = &self.event_count {
+                *event_count.lock().unwrap() += 1;
+            }
         }
 
         fn paint_plan(&mut self) -> &SurfacePaintPlan {
@@ -1282,6 +1397,9 @@ mod tests {
         fn dispatch_character(&mut self, character: char) -> bool {
             self.operations.push("character");
             self.characters.push(character);
+            if let Some(character_count) = &self.character_count {
+                *character_count.lock().unwrap() += 1;
+            }
             true
         }
 
@@ -1296,6 +1414,61 @@ mod tests {
             self.canceled = true;
             true
         }
+    }
+
+    const TEST_EVENT_CLASS_NAME: &str = "ToyboxRadiantVst3KeyboardTestEvent";
+
+    extern "C" fn test_event_modifier_flags(this: &Object, _cmd: Sel) -> u64 {
+        unsafe { *this.get_ivar::<u64>("modifier_flags") }
+    }
+
+    extern "C" fn test_event_characters(this: &Object, _cmd: Sel) -> *mut Object {
+        unsafe { *this.get_ivar::<usize>("characters") as *mut Object }
+    }
+
+    fn test_event_class() -> &'static Class {
+        if let Some(class) = Class::get(TEST_EVENT_CLASS_NAME) {
+            return class;
+        }
+
+        let _registration = EDITOR_VIEW_CLASS_REGISTRATION
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(class) = Class::get(TEST_EVENT_CLASS_NAME) {
+            return class;
+        }
+
+        let mut decl = ClassDecl::new(TEST_EVENT_CLASS_NAME, class!(NSObject))
+            .expect("test event class should be declared");
+        decl.add_ivar::<u64>("modifier_flags");
+        decl.add_ivar::<usize>("characters");
+        unsafe {
+            decl.add_method(
+                sel!(modifierFlags),
+                test_event_modifier_flags as extern "C" fn(&Object, Sel) -> u64,
+            );
+            decl.add_method(
+                sel!(characters),
+                test_event_characters as extern "C" fn(&Object, Sel) -> *mut Object,
+            );
+        }
+        decl.register()
+    }
+
+    unsafe fn new_test_key_event(modifier_flags: u64) -> (NonNull<Object>, *mut Object) {
+        let event: *mut Object = msg_send![test_event_class(), alloc];
+        let event: *mut Object = msg_send![event, init];
+        let event = NonNull::new(event).expect("test event should initialize");
+        let characters: *mut Object = msg_send![class!(NSString), alloc];
+        let characters: *mut Object = msg_send![characters, initWithUTF8String: c"a".as_ptr()];
+        assert!(!characters.is_null(), "test event text should initialize");
+        (*event.as_ptr()).set_ivar("modifier_flags", modifier_flags);
+        (*event.as_ptr()).set_ivar("characters", characters as usize);
+        (event, characters)
+    }
+
+    unsafe fn install_test_runtime(view: NonNull<Object>, editor: Box<dyn RadiantVst3Editor>) {
+        (*view.as_ptr()).set_ivar("runtime", Box::into_raw(Box::new(editor)) as usize);
     }
 
     #[test]
@@ -1661,6 +1834,159 @@ mod tests {
 
         assert_eq!(gui.last_size(), Some((640, 480)));
         assert_eq!(gui.initial_open_size(), (640, 480));
+    }
+
+    #[test]
+    fn host_focus_loss_cancels_pointer_before_clearing_focus_once() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let mut gui = RadiantVst3HostedGui::new(
+            "ToyboxRadiantVst3EditorFocusCancellationTest",
+            MockEditor::new(),
+            420,
+            282,
+        );
+
+        unsafe {
+            let view =
+                new_radiant_view("ToyboxRadiantVst3EditorFocusCancellationViewTest", 420, 282)
+                    .expect("Radiant editor view should be created");
+            gui.root_view = Some(view);
+            let mut editor = MockEditor::new();
+            editor.event_sink = Some(Arc::clone(&events));
+            install_test_runtime(view, Box::new(editor));
+            set_active_pointer_button(view.as_ptr(), PointerButton::Primary);
+
+            assert!(!Vst3HostedGui::on_focus(&gui, false));
+            assert!(!Vst3HostedGui::on_focus(&gui, false));
+
+            let events = events.lock().unwrap().clone();
+            assert_eq!(events[0], Event::pointer_capture_cancelled());
+            assert_eq!(events[1], Event::clear_focus());
+            assert_eq!(
+                events
+                    .iter()
+                    .filter(|event| **event == Event::pointer_capture_cancelled())
+                    .count(),
+                1
+            );
+            assert_eq!(
+                *view.as_ref().get_ivar::<usize>("active_pointer_button"),
+                ACTIVE_POINTER_BUTTON_NONE
+            );
+
+            drop_runtime(view.as_ptr());
+            gui.root_view = None;
+            let _: () = msg_send![view.as_ptr(), release];
+        }
+    }
+
+    #[test]
+    fn close_reopen_cancels_pointer_before_retaining_editor_once() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let mut gui = RadiantVst3HostedGui::new(
+            "ToyboxRadiantVst3EditorCloseReopenCancellationTest",
+            MockEditor::new(),
+            420,
+            282,
+        );
+
+        unsafe {
+            let view =
+                new_radiant_view("ToyboxRadiantVst3EditorCloseCancellationViewTest", 420, 282)
+                    .expect("Radiant editor view should be created");
+            gui.root_view = Some(view);
+            let mut editor = MockEditor::new();
+            editor.event_sink = Some(Arc::clone(&events));
+            install_test_runtime(view, Box::new(editor));
+            set_active_pointer_button(view.as_ptr(), PointerButton::Primary);
+
+            gui.close_view();
+
+            assert!(gui.root_view.is_none());
+            assert!(gui.editor.is_some());
+            let events_after_close = events.lock().unwrap().clone();
+            assert_eq!(
+                events_after_close,
+                vec![Event::pointer_capture_cancelled(), Event::clear_focus()]
+            );
+
+            let reopened = new_radiant_view(
+                "ToyboxRadiantVst3EditorCloseReopenCancellationViewTest",
+                420,
+                282,
+            )
+            .expect("reopened Radiant editor view should be created");
+            let editor = gui.editor.take().expect("editor should survive close");
+            install_test_runtime(reopened, editor);
+            gui.root_view = Some(reopened);
+            assert_eq!(
+                *reopened.as_ref().get_ivar::<usize>("active_pointer_button"),
+                ACTIVE_POINTER_BUTTON_NONE
+            );
+
+            gui.close_view();
+            let events_after_reopen_close = events.lock().unwrap().clone();
+            assert_eq!(
+                events_after_reopen_close
+                    .iter()
+                    .filter(|event| **event == Event::pointer_capture_cancelled())
+                    .count(),
+                1
+            );
+        }
+    }
+
+    #[test]
+    fn callback_only_mode_controls_appkit_paths_without_affecting_vst3_callbacks() {
+        let event_count = Arc::new(Mutex::new(0));
+        let character_count = Arc::new(Mutex::new(0));
+        let mut gui = RadiantVst3HostedGui::new(
+            "ToyboxRadiantVst3EditorKeyboardModeTest",
+            MockEditor::new(),
+            420,
+            282,
+        );
+        Vst3HostedGui::set_callback_keyboard_mode(&mut gui, true);
+        assert!(gui.callback_keyboard_only);
+
+        unsafe {
+            let view = new_radiant_view("ToyboxRadiantVst3EditorKeyboardModeViewTest", 420, 282)
+                .expect("Radiant editor view should be created");
+            gui.root_view = Some(view);
+            let mut editor = MockEditor::new();
+            editor.event_count = Some(Arc::clone(&event_count));
+            editor.character_count = Some(Arc::clone(&character_count));
+            let editor: Box<dyn RadiantVst3Editor> = Box::new(editor);
+            (*view.as_ptr()).set_ivar("runtime", Box::into_raw(Box::new(editor)) as usize);
+            let (event, characters) = new_test_key_event(NSEVENT_MODIFIER_FLAG_SHIFT);
+
+            Vst3HostedGui::set_callback_keyboard_mode(&mut gui, true);
+            flags_changed(view.as_ref(), sel!(flagsChanged:), event.as_ptr());
+            key_down(view.as_ref(), sel!(keyDown:), event.as_ptr());
+            assert_eq!(*event_count.lock().unwrap(), 0);
+            assert_eq!(*character_count.lock().unwrap(), 0);
+
+            Vst3HostedGui::set_callback_keyboard_mode(&mut gui, false);
+            assert!(!native_keyboard_dispatch_suppressed(view.as_ptr()));
+            flags_changed(view.as_ref(), sel!(flagsChanged:), event.as_ptr());
+            key_down(view.as_ref(), sel!(keyDown:), event.as_ptr());
+            let native_event_count = *event_count.lock().unwrap();
+            let native_character_count = *character_count.lock().unwrap();
+            assert_eq!(native_event_count, 2);
+            assert_eq!(native_character_count, 1);
+
+            Vst3HostedGui::set_callback_keyboard_mode(&mut gui, true);
+            assert!(Vst3HostedGui::on_key_down(&gui, 'b' as u16, 0, 0));
+            assert!(!Vst3HostedGui::on_key_up(&gui, 0, 0, 0));
+            assert_eq!(*event_count.lock().unwrap(), native_event_count + 2);
+            assert_eq!(*character_count.lock().unwrap(), native_character_count + 1);
+
+            drop_runtime(view.as_ptr());
+            gui.root_view = None;
+            let _: () = msg_send![characters, release];
+            let _: () = msg_send![event.as_ptr(), release];
+            let _: () = msg_send![view.as_ptr(), release];
+        }
     }
 
     #[test]

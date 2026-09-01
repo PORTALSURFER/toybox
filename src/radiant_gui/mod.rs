@@ -5,6 +5,8 @@
 //! from CLAP or VST3 host callbacks.
 
 use radiant::runtime::{Event, SurfacePaintPlan};
+#[cfg(target_os = "windows")]
+use radiant::theme::DpiScale;
 use radiant::widgets::{PointerModifiers, WidgetKey};
 use raw_window_handle::RawWindowHandle;
 
@@ -48,22 +50,68 @@ pub trait RadiantEditor: 'static {
 /// Convert a VST3 key callback into the character understood by Radiant.
 pub(crate) fn vst3_key_down_to_input_char(key: u16, key_code: i16) -> Option<char> {
     match key_code {
-        8 => Some('\u{8}'),
-        9 => Some('\t'),
-        13 => Some('\r'),
-        27 => Some('\u{1b}'),
-        32 => Some(' '),
-        37 => Some('\u{1c}'),
-        38 => Some('\u{1e}'),
-        39 => Some('\u{1d}'),
-        40 => Some('\u{1f}'),
-        46 => Some('\u{7f}'),
+        // VST3's `VirtualKeyCodes` are deliberately not Win32 virtual-key
+        // values. Keep this fallback dependency-free so the Radiant CLAP
+        // build can still compile the Windows host without enabling VST3.
+        1 => Some('\u{8}'),     // KEY_BACK
+        2 => Some('\t'),        // KEY_TAB
+        4 | 19 => Some('\r'),   // KEY_RETURN / KEY_ENTER
+        6 => Some('\u{1b}'),    // KEY_ESCAPE
+        7 => Some(' '),         // KEY_SPACE
+        9 => Some('\u{f72b}'),  // KEY_END
+        10 => Some('\u{f729}'), // KEY_HOME
+        11 => Some('\u{1c}'),   // KEY_LEFT
+        12 => Some('\u{1e}'),   // KEY_UP
+        13 => Some('\u{1d}'),   // KEY_RIGHT
+        14 => Some('\u{1f}'),   // KEY_DOWN
+        22 => Some('\u{7f}'),   // KEY_DELETE
         _ => char::from_u32(key as u32).or_else(|| {
             (0x20..=0x7e)
                 .contains(&(key_code as u32))
                 .then_some(key_code as u8 as char)
         }),
     }
+}
+
+/// Convert logical editor dimensions to the physical pixels required by a
+/// native host window.
+#[cfg(target_os = "windows")]
+pub(crate) fn logical_size_to_physical(
+    logical_width: u32,
+    logical_height: u32,
+    dpi_scale: DpiScale,
+) -> (u32, u32) {
+    fn dimension(value: f32) -> u32 {
+        if !value.is_finite() {
+            return 1;
+        }
+        value.ceil().clamp(1.0, u32::MAX as f32) as u32
+    }
+
+    (
+        dimension(dpi_scale.logical_to_physical(logical_width.max(1) as f32)),
+        dimension(dpi_scale.logical_to_physical(logical_height.max(1) as f32)),
+    )
+}
+
+/// Convert physical host pixels to integer logical editor dimensions.
+#[cfg(target_os = "windows")]
+pub(crate) fn physical_size_to_logical(
+    physical_width: u32,
+    physical_height: u32,
+    dpi_scale: DpiScale,
+) -> (u32, u32) {
+    fn dimension(value: f32) -> u32 {
+        if !value.is_finite() {
+            return 1;
+        }
+        value.floor().clamp(1.0, u32::MAX as f32) as u32
+    }
+
+    (
+        dimension(dpi_scale.physical_to_logical(physical_width.max(1) as f32)),
+        dimension(dpi_scale.physical_to_logical(physical_height.max(1) as f32)),
+    )
 }
 /// Compatibility trait name retained for existing Radiant VST3 callers.
 pub use RadiantEditor as RadiantVst3Editor;
@@ -78,12 +126,24 @@ pub(crate) trait HostedGui {
     fn close(&mut self);
     /// Return the latest negotiated logical size.
     fn last_size(&self) -> Option<(u32, u32)>;
-    /// Request a logical resize from the native child view.
+    /// Show the already-open native child view.
+    fn show(&self) -> bool;
+    /// Replace the default logical size used before the child opens.
+    fn set_default_size(&mut self, width: u32, height: u32);
+    /// Select callback-only keyboard delivery for VST3, or native delivery for CLAP.
+    fn set_callback_keyboard_mode(&mut self, _callback_only: bool) {}
+    /// Convert logical dimensions to the host-facing dimensions.
+    fn host_size_from_logical(&self, width: u32, height: u32) -> (u32, u32);
+    /// Convert host-facing dimensions to logical editor dimensions.
+    fn logical_size_from_host(&self, width: u32, height: u32) -> (u32, u32);
+    /// Request a host-facing resize from the native child view.
     fn request_resize(&self, width: u32, height: u32);
     /// Dispatch one host key-down callback.
     fn on_key_down(&self, key: u16, key_code: i16, modifiers: i16) -> bool;
     /// Dispatch one host key-up callback.
     fn on_key_up(&self, key: u16, key_code: i16, modifiers: i16) -> bool;
+    /// Apply focus requested by the host to the native child view.
+    fn on_focus(&self, focused: bool) -> bool;
 }
 pub(crate) use HostedGui as Vst3HostedGui;
 
@@ -144,9 +204,18 @@ mod host_macos;
 #[cfg(target_os = "macos")]
 use host_macos::RadiantVst3HostedGui as PlatformHostedGui;
 
+#[cfg(target_os = "windows")]
+#[path = "../vst3/gui/radiant_host_windows.rs"]
+mod host_windows;
+
+#[cfg(target_os = "windows")]
+use host_windows::RadiantWindowsHostedGui as PlatformHostedGui;
+
 /// Adapt the public host-neutral editor trait to the macOS VST3 bridge.
+#[cfg(target_os = "macos")]
 struct EditorAdapter(Box<dyn RadiantEditor>);
 
+#[cfg(target_os = "macos")]
 impl host_macos::RadiantVst3Editor for EditorAdapter {
     fn resize(&mut self, width: u32, height: u32) {
         self.0.resize(width, height);
@@ -221,14 +290,21 @@ impl RadiantHostedGui {
     ) -> Self {
         self.contract = EditorSizeContract::new(default, minimum, maximum);
         let (width, height) = self.contract.default;
-        <PlatformHostedGui as Vst3HostedGui>::request_resize(&self.inner, width, height);
+        <PlatformHostedGui as Vst3HostedGui>::set_default_size(&mut self.inner, width, height);
         self
     }
 
-    /// Configure embedded font options for the AppKit renderer.
-    #[cfg(target_os = "macos")]
+    /// Configure embedded font options for the native renderer.
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     pub fn with_text_options(mut self, options: radiant::runtime::NativeTextOptions) -> Self {
-        self.inner = self.inner.with_text_options(options);
+        #[cfg(target_os = "macos")]
+        {
+            self.inner = self.inner.with_text_options(options);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            self.inner = self.inner.with_text_options(options);
+        }
         self
     }
 
@@ -248,17 +324,34 @@ impl RadiantHostedGui {
         self.set_parent(window.raw_window_handle());
     }
 
-    /// Constrain one host resize request using the shared editor contract.
+    /// Constrain one host-facing resize request using the shared editor contract.
     pub fn constrain_size(&self, size: (u32, u32)) -> (u32, u32) {
-        self.contract.constrain(size)
+        let logical = <PlatformHostedGui as Vst3HostedGui>::logical_size_from_host(
+            &self.inner,
+            size.0,
+            size.1,
+        );
+        let logical = self.contract.constrain(logical);
+        <PlatformHostedGui as Vst3HostedGui>::host_size_from_logical(
+            &self.inner,
+            logical.0,
+            logical.1,
+        )
     }
 
     /// Create and attach the retained native child view.
     pub fn open(&mut self) -> bool {
         let requested = self.last_size().unwrap_or(self.contract.default);
-        let (width, height) = self.contract.constrain(requested);
-        <PlatformHostedGui as Vst3HostedGui>::request_resize(&self.inner, width, height);
+        let (width, height) = self.constrain_size(requested);
+        if Some((width, height)) != self.last_size() {
+            <PlatformHostedGui as Vst3HostedGui>::request_resize(&self.inner, width, height);
+        }
         <PlatformHostedGui as Vst3HostedGui>::open(&mut self.inner)
+    }
+
+    /// Show a child that has already been opened by the lifecycle owner.
+    fn show_open(&self) -> bool {
+        <PlatformHostedGui as Vst3HostedGui>::show(&self.inner)
     }
 
     /// Show an already-created child view.
@@ -266,8 +359,7 @@ impl RadiantHostedGui {
         if !self.open() {
             return false;
         }
-        self.inner.show();
-        true
+        self.show_open()
     }
 
     /// Hide an already-created child view without destroying its editor state.
@@ -280,20 +372,28 @@ impl RadiantHostedGui {
         <PlatformHostedGui as Vst3HostedGui>::close(&mut self.inner);
     }
 
-    /// Return the most recent logical size.
+    /// Return the most recent host-facing size.
     pub fn last_size(&self) -> Option<(u32, u32)> {
         <PlatformHostedGui as Vst3HostedGui>::last_size(&self.inner)
     }
 
     /// Apply a constrained host resize without host callback feedback.
     pub fn request_resize(&self, width: u32, height: u32) {
-        let (width, height) = self.contract.constrain((width, height));
+        let (width, height) = self.constrain_size((width, height));
         <PlatformHostedGui as Vst3HostedGui>::request_resize(&self.inner, width, height);
     }
 
     /// Apply host DPI scale; platform renderers also refresh backing scale on draw.
     pub fn set_scale(&self, scale: f64) {
         self.inner.set_scale(scale);
+    }
+
+    /// Select callback-only keyboard delivery for VST3 host callbacks.
+    pub fn set_callback_keyboard_mode(&mut self, callback_only: bool) {
+        <PlatformHostedGui as Vst3HostedGui>::set_callback_keyboard_mode(
+            &mut self.inner,
+            callback_only,
+        );
     }
 
     /// Forward one semantic key press from a VST3 host.
@@ -305,11 +405,19 @@ impl RadiantHostedGui {
     pub fn on_key_up(&self, key: u16, key_code: i16, modifiers: i16) -> bool {
         <PlatformHostedGui as Vst3HostedGui>::on_key_up(&self.inner, key, key_code, modifiers)
     }
+
+    /// Forward a host focus change to the native child view.
+    pub fn on_focus(&self, focused: bool) -> bool {
+        <PlatformHostedGui as Vst3HostedGui>::on_focus(&self.inner, focused)
+    }
 }
 
 /// Bridge the Radiant facade into the public VST3 host trait without creating
 /// a second lifecycle owner around the same native view.
-#[cfg(all(target_os = "macos", feature = "radiant-vst3"))]
+#[cfg(all(
+    feature = "radiant-vst3",
+    any(target_os = "macos", target_os = "windows")
+))]
 impl crate::vst3::gui::Vst3HostedGui for RadiantHostedGui {
     fn set_parent_raw(&mut self, parent: RawWindowHandle) {
         RadiantHostedGui::set_parent(self, parent);
@@ -327,8 +435,24 @@ impl crate::vst3::gui::Vst3HostedGui for RadiantHostedGui {
         RadiantHostedGui::last_size(self)
     }
 
+    fn show(&self) -> bool {
+        RadiantHostedGui::show_open(self)
+    }
+
+    fn set_callback_keyboard_mode(&mut self, callback_only: bool) {
+        RadiantHostedGui::set_callback_keyboard_mode(self, callback_only);
+    }
+
     fn request_resize(&self, width: u32, height: u32) {
         RadiantHostedGui::request_resize(self, width, height);
+    }
+
+    fn host_size_from_logical(&self, width: u32, height: u32) -> (u32, u32) {
+        <PlatformHostedGui as Vst3HostedGui>::host_size_from_logical(&self.inner, width, height)
+    }
+
+    fn logical_size_from_host(&self, width: u32, height: u32) -> (u32, u32) {
+        <PlatformHostedGui as Vst3HostedGui>::logical_size_from_host(&self.inner, width, height)
     }
 
     fn on_key_down(&self, key: u16, key_code: i16, modifiers: i16) -> bool {
@@ -338,9 +462,17 @@ impl crate::vst3::gui::Vst3HostedGui for RadiantHostedGui {
     fn on_key_up(&self, key: u16, key_code: i16, modifiers: i16) -> bool {
         RadiantHostedGui::on_key_up(self, key, key_code, modifiers)
     }
+
+    fn on_focus(&self, focused: bool) -> bool {
+        RadiantHostedGui::on_focus(self, focused)
+    }
 }
 
-#[cfg(all(test, target_os = "macos", feature = "radiant-vst3"))]
+#[cfg(all(
+    test,
+    feature = "radiant-vst3",
+    any(target_os = "macos", target_os = "windows")
+))]
 mod vst3_trait_contract_tests {
     use super::RadiantVst3HostedGui;
     use crate::vst3::gui::{HostedVst3View, Vst3HostedGui};
@@ -359,7 +491,8 @@ mod vst3_trait_contract_tests {
 
 /// Inject the standard CLAP GUI lifecycle callbacks for a [`RadiantHostedGui`].
 ///
-/// Only Cocoa is advertised; unsupported platforms return `false`.
+/// Only the native macOS or Windows embedded API is advertised; unsupported
+/// platforms return `false`.
 #[macro_export]
 macro_rules! radiant_clap_gui_callbacks {
     (gui = $gui:ident, preferred_size = $preferred:path, show = $show:expr) => {
@@ -367,7 +500,7 @@ macro_rules! radiant_clap_gui_callbacks {
             &mut self,
             configuration: $crate::clack_extensions::gui::GuiConfiguration,
         ) -> bool {
-            if !cfg!(target_os = "macos") {
+            if !cfg!(any(target_os = "macos", target_os = "windows")) {
                 return false;
             }
             let Some(api_type) =
@@ -381,7 +514,7 @@ macro_rules! radiant_clap_gui_callbacks {
         fn get_preferred_api(
             &'_ mut self,
         ) -> Option<$crate::clack_extensions::gui::GuiConfiguration<'_>> {
-            if !cfg!(target_os = "macos") {
+            if !cfg!(any(target_os = "macos", target_os = "windows")) {
                 return None;
             }
             let api_type =
@@ -396,6 +529,7 @@ macro_rules! radiant_clap_gui_callbacks {
             &mut self,
             _configuration: $crate::clack_extensions::gui::GuiConfiguration,
         ) -> Result<(), $crate::clack_plugin::plugin::PluginError> {
+            self.$gui.set_callback_keyboard_mode(false);
             Ok(())
         }
 
@@ -454,7 +588,7 @@ macro_rules! radiant_clap_gui_callbacks {
         fn show(&mut self) -> Result<(), $crate::clack_plugin::plugin::PluginError> {
             if !self.$gui.show() {
                 return Err($crate::clack_plugin::plugin::PluginError::Message(
-                    "Radiant Cocoa editor could not open its host parent",
+                    "Radiant editor could not open its host parent",
                 ));
             }
             ($show)(self)
@@ -469,7 +603,7 @@ macro_rules! radiant_clap_gui_callbacks {
 
 #[cfg(test)]
 mod tests {
-    use super::{EditorSizeContract, RadiantEditor, RadiantHostedGui};
+    use super::{EditorSizeContract, RadiantEditor, RadiantHostedGui, vst3_key_down_to_input_char};
     use radiant::runtime::{Event, SurfacePaintPlan};
     use radiant::widgets::{PointerModifiers, WidgetKey};
 
@@ -490,6 +624,40 @@ mod tests {
         assert_eq!(contract.constrain((5000, 5000)), (2000, 1000));
     }
 
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn physical_size_helpers_apply_dpi_once_and_round_renderer_bounds_up() {
+        use super::{logical_size_to_physical, physical_size_to_logical};
+        use radiant::theme::DpiScale;
+
+        let scale = DpiScale::new(1.5);
+        assert_eq!(logical_size_to_physical(912, 684, scale), (1368, 1026));
+        assert_eq!(physical_size_to_logical(1368, 1026, scale), (912, 684));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn physical_size_helpers_keep_fractional_pixels_inside_the_host_surface() {
+        use super::{logical_size_to_physical, physical_size_to_logical};
+        use radiant::theme::DpiScale;
+
+        let scale = DpiScale::new(1.5);
+        assert_eq!(logical_size_to_physical(911, 683, scale), (1367, 1025));
+        assert_eq!(physical_size_to_logical(1367, 1025, scale), (911, 683));
+    }
+
+    #[test]
+    fn vst3_callback_translation_uses_vst3_virtual_key_codes() {
+        assert_eq!(vst3_key_down_to_input_char(0, 1), Some('\u{8}'));
+        assert_eq!(vst3_key_down_to_input_char(0, 11), Some('\u{1c}'));
+        assert_eq!(vst3_key_down_to_input_char(0, 12), Some('\u{1e}'));
+        assert_eq!(vst3_key_down_to_input_char(0, 13), Some('\u{1d}'));
+        assert_eq!(vst3_key_down_to_input_char(0, 14), Some('\u{1f}'));
+        assert_eq!(vst3_key_down_to_input_char(0, 10), Some('\u{f729}'));
+        assert_eq!(vst3_key_down_to_input_char(0, 9), Some('\u{f72b}'));
+        assert_eq!(vst3_key_down_to_input_char(0, 22), Some('\u{7f}'));
+    }
+
     #[test]
     fn size_contract_updates_preopen_host_size() {
         let gui = RadiantHostedGui::new("ToyboxRadiantPreopenContractTest", MockEditor, 420, 282)
@@ -498,9 +666,15 @@ mod tests {
     }
 
     #[test]
-    fn show_reports_failure_when_cocoa_parent_is_missing() {
+    fn show_reports_failure_when_host_parent_is_missing() {
         let mut gui = RadiantHostedGui::new("ToyboxRadiantShowFailureTest", MockEditor, 420, 282);
         assert!(!gui.show());
+    }
+
+    #[test]
+    fn focus_reports_failure_before_a_native_child_is_open() {
+        let gui = RadiantHostedGui::new("ToyboxRadiantFocusFailureTest", MockEditor, 420, 282);
+        assert!(!gui.on_focus(true));
     }
 
     #[test]
