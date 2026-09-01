@@ -22,9 +22,9 @@ pub trait Vst3HostedGui {
 
     /// Select callback-only keyboard delivery for VST3 callbacks.
     ///
-    /// The default preserves existing hosted GUI implementations. Windows
-    /// Radiant hosts use the flag to suppress native keyboard messages while
-    /// CLAP continues to use native delivery.
+    /// The default preserves existing hosted GUI implementations. Radiant
+    /// hosts use the flag to suppress native keyboard messages while CLAP
+    /// continues to use native delivery.
     fn set_callback_keyboard_mode(&mut self, _callback_only: bool) {}
 
     /// Convert logical editor dimensions to host-facing dimensions.
