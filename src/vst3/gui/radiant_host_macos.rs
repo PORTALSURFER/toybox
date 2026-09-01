@@ -257,13 +257,15 @@ impl RadiantVst3HostedGui {
     }
 
     /// Show the native child view without recreating the retained editor.
-    pub fn show(&self) {
-        if let Some(root_view) = self.root_view {
-            unsafe {
-                let _: () = msg_send![root_view.as_ptr(), setHidden: NO];
-                let _: () = msg_send![root_view.as_ptr(), setNeedsDisplay: YES];
-            }
+    pub fn show(&self) -> bool {
+        let Some(root_view) = self.root_view else {
+            return false;
+        };
+        unsafe {
+            let _: () = msg_send![root_view.as_ptr(), setHidden: NO];
+            let _: () = msg_send![root_view.as_ptr(), setNeedsDisplay: YES];
         }
+        true
     }
 
     /// Hide the native child view while preserving its retained editor state.
@@ -314,6 +316,25 @@ impl Vst3HostedGui for RadiantVst3HostedGui {
         self.hosted_size()
     }
 
+    fn show(&self) -> bool {
+        RadiantVst3HostedGui::show(self)
+    }
+
+    fn set_default_size(&mut self, width: u32, height: u32) {
+        self.default_size = (width.max(1), height.max(1));
+        if self.root_view.is_none() {
+            self.size.set(None);
+        }
+    }
+
+    fn host_size_from_logical(&self, width: u32, height: u32) -> (u32, u32) {
+        (width.max(1), height.max(1))
+    }
+
+    fn logical_size_from_host(&self, width: u32, height: u32) -> (u32, u32) {
+        (width.max(1), height.max(1))
+    }
+
     fn request_resize(&self, width: u32, height: u32) {
         self.resize_view(width, height);
     }
@@ -344,6 +365,13 @@ impl Vst3HostedGui for RadiantVst3HostedGui {
             let _: () = msg_send![root_view.as_ptr(), setNeedsDisplay: YES];
         }
         false
+    }
+
+    fn on_focus(&self, focused: bool) -> bool {
+        let Some(root_view) = self.root_view else {
+            return false;
+        };
+        unsafe { set_first_responder(root_view.as_ptr(), focused) }
     }
 }
 
@@ -905,9 +933,27 @@ unsafe fn ns_string_to_string(string: *mut Object) -> Option<String> {
 }
 
 unsafe fn make_first_responder(this: &Object) {
-    let window: *mut Object = msg_send![this, window];
-    if !window.is_null() {
-        let _: BOOL = msg_send![window, makeFirstResponder: this];
+    let _ = set_first_responder(this as *const Object as *mut Object, true);
+}
+
+unsafe fn set_first_responder(view: *mut Object, focused: bool) -> bool {
+    if view.is_null() {
+        return false;
+    }
+    let window: *mut Object = msg_send![view, window];
+    if window.is_null() {
+        return false;
+    }
+    if focused {
+        let result: BOOL = msg_send![window, makeFirstResponder: view];
+        result == YES
+    } else {
+        let first_responder: *mut Object = msg_send![window, firstResponder];
+        if first_responder != view {
+            return true;
+        }
+        let result: BOOL = msg_send![view, resignFirstResponder];
+        result == YES
     }
 }
 

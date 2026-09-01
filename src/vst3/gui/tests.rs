@@ -32,6 +32,88 @@ impl Vst3HostedGui for MockHostedGui {
     }
 }
 
+struct RecordingHostedGui {
+    events: Mutex<Vec<&'static str>>,
+}
+
+impl RecordingHostedGui {
+    fn record(&self, event: &'static str) {
+        self.events
+            .lock()
+            .expect("event mutex should not be poisoned")
+            .push(event);
+    }
+}
+
+impl Vst3HostedGui for RecordingHostedGui {
+    fn set_parent_raw(&mut self, _parent: RawWindowHandle) {
+        self.record("set-parent");
+    }
+
+    fn open(&mut self) -> bool {
+        self.record("open");
+        true
+    }
+
+    fn close(&mut self) {
+        self.record("close");
+    }
+
+    fn last_size(&self) -> Option<(u32, u32)> {
+        None
+    }
+
+    fn show(&self) -> bool {
+        self.record("show");
+        true
+    }
+
+    fn set_callback_keyboard_mode(&mut self, callback_only: bool) {
+        self.record(if callback_only {
+            "callback-only"
+        } else {
+            "native"
+        });
+    }
+
+    fn request_resize(&self, _width: u32, _height: u32) {
+        self.record("resize");
+    }
+}
+
+struct ScaledHostedGui {
+    resize_request: Mutex<Option<(u32, u32)>>,
+}
+
+impl Vst3HostedGui for ScaledHostedGui {
+    fn set_parent_raw(&mut self, _parent: RawWindowHandle) {}
+
+    fn open(&mut self) -> bool {
+        true
+    }
+
+    fn close(&mut self) {}
+
+    fn last_size(&self) -> Option<(u32, u32)> {
+        None
+    }
+
+    fn host_size_from_logical(&self, width: u32, height: u32) -> (u32, u32) {
+        (width.saturating_mul(2), height.saturating_mul(2))
+    }
+
+    fn logical_size_from_host(&self, width: u32, height: u32) -> (u32, u32) {
+        ((width / 2).max(1), (height / 2).max(1))
+    }
+
+    fn request_resize(&self, width: u32, height: u32) {
+        *self
+            .resize_request
+            .lock()
+            .expect("resize mutex should not be poisoned") = Some((width, height));
+    }
+}
+
 #[test]
 fn platform_type_matches_expected_constant() {
     assert!(unsafe { platform_type_matches(kPlatformTypeHWND, kPlatformTypeHWND) });
@@ -122,6 +204,86 @@ fn hosted_view_reports_default_size_before_attach() {
     assert_eq!(result, kResultOk);
     assert_eq!(size.right - size.left, 420);
     assert_eq!(size.bottom - size.top, 240);
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[test]
+fn hosted_view_enables_callback_keyboard_before_open_and_shows_child() {
+    let view = HostedVst3View::new(
+        RecordingHostedGui {
+            events: Mutex::new(Vec::new()),
+        },
+        420,
+        240,
+    );
+    let parent = std::ptr::dangling_mut::<std::ffi::c_void>();
+    #[cfg(target_os = "macos")]
+    let platform = kPlatformTypeNSView;
+    #[cfg(target_os = "windows")]
+    let platform = kPlatformTypeHWND;
+
+    assert_eq!(unsafe { view.attached(parent, platform) }, kResultOk);
+    assert_eq!(
+        *view
+            .gui
+            .lock()
+            .expect("gui mutex should not be poisoned")
+            .events
+            .lock()
+            .expect("event mutex should not be poisoned"),
+        vec!["callback-only", "set-parent", "open", "show"]
+    );
+
+    assert_eq!(unsafe { view.removed() }, kResultOk);
+    assert_eq!(
+        *view
+            .gui
+            .lock()
+            .expect("gui mutex should not be poisoned")
+            .events
+            .lock()
+            .expect("event mutex should not be poisoned"),
+        vec![
+            "callback-only",
+            "set-parent",
+            "open",
+            "show",
+            "close",
+            "native"
+        ]
+    );
+}
+
+#[test]
+fn hosted_view_keeps_view_rect_in_host_pixels_when_gui_scales_logical_sizes() {
+    let view = HostedVst3View::new(
+        ScaledHostedGui {
+            resize_request: Mutex::new(None),
+        },
+        420,
+        240,
+    );
+
+    let mut size = view_rect(0, 0);
+    assert_eq!(unsafe { view.getSize(&mut size) }, kResultOk);
+    assert_eq!((size.right - size.left, size.bottom - size.top), (840, 480));
+
+    let mut requested = view_rect(1_000, 600);
+    assert_eq!(unsafe { view.onSize(&mut requested) }, kResultOk);
+    assert_eq!(
+        (
+            requested.right - requested.left,
+            requested.bottom - requested.top
+        ),
+        (1_000, 572)
+    );
+    let gui = view.gui.lock().expect("gui mutex should not be poisoned");
+    assert_eq!(
+        *gui.resize_request
+            .lock()
+            .expect("resize mutex should not be poisoned"),
+        Some((1_000, 572))
+    );
 }
 
 #[test]

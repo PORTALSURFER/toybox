@@ -19,6 +19,19 @@ toybox-process-log = { path = "crates/process-log" }
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = { version = "0.2.7", optional = true }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", default-features = false, optional = true, features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_Controls",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
 [features]
 default = []
 # The legacy `objc` macros probe this cfg internally. Declaring it keeps those
@@ -36,6 +49,7 @@ radiant-gui = [
     "dep:raw-window-handle",
     "dep:raw-window-handle-06",
     "dep:objc",
+    "dep:windows",
 ]
 
 [lints]

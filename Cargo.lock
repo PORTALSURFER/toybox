@@ -3049,6 +3049,7 @@ dependencies = [
  "raw-window-handle 0.6.2",
  "toybox-process-log",
  "toybox-vst3-ffi",
+ "windows 0.62.2",
 ]
 
 [[package]]

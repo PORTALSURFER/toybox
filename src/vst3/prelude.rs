@@ -14,7 +14,10 @@ pub use crate::bundle::windows::{
     WindowsBundleFormat, WindowsBundlePaths, windows_bundle_name, windows_bundle_paths,
     windows_rustc_link_arg,
 };
-#[cfg(all(feature = "radiant-vst3", target_os = "macos"))]
+#[cfg(all(
+    feature = "radiant-vst3",
+    any(target_os = "macos", target_os = "windows")
+))]
 pub use crate::radiant_gui::{RadiantVst3Editor, RadiantVst3HostedGui};
 pub use crate::vst3::component::{
     CATEGORY_AUDIO_MODULE_CLASS, CATEGORY_COMPONENT_CONTROLLER_CLASS, copy_cstring,

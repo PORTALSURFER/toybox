@@ -97,11 +97,17 @@ jobs:
       - name: Build toybox with GUI feature
         run: cargo check -p toybox --features gui
 
+      - name: Build toybox with Radiant GUI feature
+        run: cargo check -p toybox --features radiant-gui
+
       - name: Test patchbay-gui
         run: cargo test -p patchbay-gui
 
       - name: Test toybox with GUI feature
         run: cargo test -p toybox --features gui
+
+      - name: Test toybox with Radiant GUI feature
+        run: cargo test -p toybox --features radiant-gui
 
       - name: Lint toybox VST3 feature (SDK optional)
         if: ${{ vars.VST3_SDK_DIR != '' }}
@@ -114,3 +120,15 @@ jobs:
         env:
           VST3_SDK_DIR: ${{ vars.VST3_SDK_DIR }}
         run: cargo test -p toybox --features vst3
+
+      - name: Lint toybox Radiant VST3 feature (SDK optional)
+        if: ${{ vars.VST3_SDK_DIR != '' }}
+        env:
+          VST3_SDK_DIR: ${{ vars.VST3_SDK_DIR }}
+        run: cargo clippy -p toybox --all-targets --features radiant-vst3 -- -D warnings
+
+      - name: Test toybox Radiant VST3 feature (SDK optional)
+        if: ${{ vars.VST3_SDK_DIR != '' }}
+        env:
+          VST3_SDK_DIR: ${{ vars.VST3_SDK_DIR }}
+        run: cargo test -p toybox --features radiant-vst3

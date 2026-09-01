@@ -1,6 +1,9 @@
 //! External compile coverage for the shared Radiant GUI adoption surface.
 
-#![cfg(all(feature = "radiant-gui", target_os = "macos"))]
+#![cfg(all(
+    feature = "radiant-gui",
+    any(target_os = "macos", target_os = "windows")
+))]
 
 #[test]
 fn bundled_text_options_exports_stable_face_order() {

@@ -10,8 +10,32 @@ pub trait Vst3HostedGui {
     /// Close the GUI if it is currently open.
     fn close(&mut self);
 
-    /// Return the latest known GUI logical size.
+    /// Return the latest known host-facing size.
     fn last_size(&self) -> Option<(u32, u32)>;
+
+    /// Show the already-open native child view.
+    ///
+    /// Implementations that show the child from `open` can retain the default.
+    fn show(&self) -> bool {
+        true
+    }
+
+    /// Select callback-only keyboard delivery for VST3 callbacks.
+    ///
+    /// The default preserves existing hosted GUI implementations. Windows
+    /// Radiant hosts use the flag to suppress native keyboard messages while
+    /// CLAP continues to use native delivery.
+    fn set_callback_keyboard_mode(&mut self, _callback_only: bool) {}
+
+    /// Convert logical editor dimensions to host-facing dimensions.
+    fn host_size_from_logical(&self, width: u32, height: u32) -> (u32, u32) {
+        (width.max(1), height.max(1))
+    }
+
+    /// Convert host-facing dimensions to logical editor dimensions.
+    fn logical_size_from_host(&self, width: u32, height: u32) -> (u32, u32) {
+        (width.max(1), height.max(1))
+    }
 
     /// Apply a host-provided GUI size to the hosted native view.
     ///
@@ -33,6 +57,13 @@ pub trait Vst3HostedGui {
     /// not be handled by the host.
     fn on_key_up(&self, _key: char16, _key_code: int16, _modifiers: int16) -> bool {
         false
+    }
+
+    /// Forward a host focus change to the native child view.
+    fn on_focus(&self, _focused: bool) -> bool {
+        // Preserve the historical IPlugView result for existing GUI
+        // implementations that do not need native focus management.
+        true
     }
 }
 
@@ -87,8 +118,12 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
     pub fn new(gui: G, default_width: u32, default_height: u32) -> Self {
         let width = logical_dimension(default_width);
         let height = logical_dimension(default_height);
+        let (host_width, host_height) = gui.host_size_from_logical(width as u32, height as u32);
         Self {
-            rect: Cell::new(view_rect(width, height)),
+            rect: Cell::new(view_rect(
+                logical_dimension(host_width),
+                logical_dimension(host_height),
+            )),
             attached: Cell::new(false),
             default_size: (width, height),
             size_bounds: None,
@@ -142,12 +177,30 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
         let Ok(gui) = self.gui.lock() else {
             return;
         };
-        if let Some((width, height)) = gui.last_size() {
-            let requested_width = logical_dimension(width);
-            let requested_height = logical_dimension(height);
-            let (width, height) = self.constrain_uniform_size(requested_width, requested_height);
-            self.rect.set(view_rect(width, height));
+        if let Some((host_width, host_height)) = gui.last_size() {
+            let (requested_width, requested_height) =
+                gui.logical_size_from_host(host_width, host_height);
+            let current = self.current_logical_size_for_gui(&gui);
+            let (width, height) = self.constrain_uniform_size_from_current(
+                logical_dimension(requested_width),
+                logical_dimension(requested_height),
+                current,
+            );
+            let (host_width, host_height) = gui.host_size_from_logical(width as u32, height as u32);
+            self.rect.set(view_rect(
+                logical_dimension(host_width),
+                logical_dimension(host_height),
+            ));
         }
+    }
+
+    /// Convert the cached host-facing rectangle to logical dimensions.
+    fn current_logical_size_for_gui(&self, gui: &G) -> (i32, i32) {
+        let rect = self.rect.get();
+        let host_width = (rect.right - rect.left).max(1) as u32;
+        let host_height = (rect.bottom - rect.top).max(1) as u32;
+        let (width, height) = gui.logical_size_from_host(host_width, host_height);
+        (logical_dimension(width), logical_dimension(height))
     }
 
     /// Return the logical bounds used for resize negotiation.
@@ -210,8 +263,13 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
         )
     }
 
-    /// Constrain a requested resize while preserving aspect ratio and minimum size.
-    fn constrain_uniform_size(&self, requested_width: i32, requested_height: i32) -> (i32, i32) {
+    /// Constrain a logical request using an already-resolved current size.
+    fn constrain_uniform_size_from_current(
+        &self,
+        requested_width: i32,
+        requested_height: i32,
+        current: (i32, i32),
+    ) -> (i32, i32) {
         let ((min_width, min_height), (max_width, max_height)) = self.resize_bounds();
         let ratio = self.uniform_ratio();
         let clamped_width = requested_width.clamp(min_width, max_width);
@@ -219,9 +277,8 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
         if !self.preserve_aspect_ratio {
             return (clamped_width, clamped_height);
         }
-        let current = self.rect.get();
-        let current_width = (current.right - current.left).max(1);
-        let current_height = (current.bottom - current.top).max(1);
+        let current_width = current.0.max(1);
+        let current_height = current.1.max(1);
         let width_delta = (clamped_width - current_width).abs();
         let height_delta = (clamped_height - current_height).abs();
 
