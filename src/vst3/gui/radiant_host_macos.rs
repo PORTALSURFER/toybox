@@ -224,6 +224,7 @@ impl RadiantVst3HostedGui {
         unsafe {
             if let Some(root_view) = self.root_view.take() {
                 stop_redraw_driver(root_view.as_ptr());
+                cancel_native_interaction(root_view.as_ptr());
                 drop_renderer(root_view.as_ptr());
                 self.editor = take_runtime(root_view.as_ptr());
                 let view = root_view.as_ptr();
@@ -383,7 +384,12 @@ impl Vst3HostedGui for RadiantVst3HostedGui {
         let Some(root_view) = self.root_view else {
             return false;
         };
-        unsafe { set_first_responder(root_view.as_ptr(), focused) }
+        unsafe {
+            if !focused {
+                cancel_native_interaction(root_view.as_ptr());
+            }
+            set_first_responder(root_view.as_ptr(), focused)
+        }
     }
 }
 
@@ -780,7 +786,7 @@ extern "C" fn playhead_redraw_tick(this: &Object, _cmd: Sel, _timer: *mut Object
 
 extern "C" fn dealloc(this: &Object, _cmd: Sel) {
     unsafe {
-        clear_active_pointer_button(this);
+        cancel_native_interaction(this);
         stop_redraw_driver(this);
         remove_tracking_area(this);
         drop_runtime(this);
@@ -927,6 +933,21 @@ unsafe fn clear_active_pointer_button(view: *const Object) {
         return;
     };
     view.set_ivar("active_pointer_button", ACTIVE_POINTER_BUTTON_NONE);
+}
+
+/// Cancel any native pointer gesture before clearing Radiant focus.
+///
+/// The active-button ivar is consumed before dispatch so repeated focus or
+/// teardown callbacks cannot deliver a second pointer-capture cancellation.
+unsafe fn cancel_native_interaction(view: *const Object) {
+    let had_active_button = take_active_pointer_button(view).is_some();
+    let Some(runtime) = runtime_mut(view) else {
+        return;
+    };
+    if had_active_button {
+        runtime.dispatch_event(Event::pointer_capture_cancelled());
+    }
+    runtime.dispatch_event(Event::clear_focus());
 }
 
 unsafe fn event_modifiers(event: *mut Object) -> PointerModifiers {
@@ -1324,6 +1345,7 @@ mod tests {
         shortcut_result: bool,
         event_count: Option<Arc<Mutex<usize>>>,
         character_count: Option<Arc<Mutex<usize>>>,
+        event_sink: Option<Arc<Mutex<Vec<Event>>>>,
     }
 
     impl MockEditor {
@@ -1339,6 +1361,7 @@ mod tests {
                 shortcut_result: false,
                 event_count: None,
                 character_count: None,
+                event_sink: None,
             }
         }
     }
@@ -1349,6 +1372,9 @@ mod tests {
         fn dispatch_event(&mut self, event: Event) {
             self.operations.push("event");
             self.events.push(event);
+            if let Some(event_sink) = &self.event_sink {
+                event_sink.lock().unwrap().push(event);
+            }
             if let Some(event_count) = &self.event_count {
                 *event_count.lock().unwrap() += 1;
             }
@@ -1439,6 +1465,10 @@ mod tests {
         (*event.as_ptr()).set_ivar("modifier_flags", modifier_flags);
         (*event.as_ptr()).set_ivar("characters", characters as usize);
         (event, characters)
+    }
+
+    unsafe fn install_test_runtime(view: NonNull<Object>, editor: Box<dyn RadiantVst3Editor>) {
+        (*view.as_ptr()).set_ivar("runtime", Box::into_raw(Box::new(editor)) as usize);
     }
 
     #[test]
@@ -1804,6 +1834,106 @@ mod tests {
 
         assert_eq!(gui.last_size(), Some((640, 480)));
         assert_eq!(gui.initial_open_size(), (640, 480));
+    }
+
+    #[test]
+    fn host_focus_loss_cancels_pointer_before_clearing_focus_once() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let mut gui = RadiantVst3HostedGui::new(
+            "ToyboxRadiantVst3EditorFocusCancellationTest",
+            MockEditor::new(),
+            420,
+            282,
+        );
+
+        unsafe {
+            let view =
+                new_radiant_view("ToyboxRadiantVst3EditorFocusCancellationViewTest", 420, 282)
+                    .expect("Radiant editor view should be created");
+            gui.root_view = Some(view);
+            let mut editor = MockEditor::new();
+            editor.event_sink = Some(Arc::clone(&events));
+            install_test_runtime(view, Box::new(editor));
+            set_active_pointer_button(view.as_ptr(), PointerButton::Primary);
+
+            assert!(!Vst3HostedGui::on_focus(&gui, false));
+            assert!(!Vst3HostedGui::on_focus(&gui, false));
+
+            let events = events.lock().unwrap().clone();
+            assert_eq!(events[0], Event::pointer_capture_cancelled());
+            assert_eq!(events[1], Event::clear_focus());
+            assert_eq!(
+                events
+                    .iter()
+                    .filter(|event| **event == Event::pointer_capture_cancelled())
+                    .count(),
+                1
+            );
+            assert_eq!(
+                *view.as_ref().get_ivar::<usize>("active_pointer_button"),
+                ACTIVE_POINTER_BUTTON_NONE
+            );
+
+            drop_runtime(view.as_ptr());
+            gui.root_view = None;
+            let _: () = msg_send![view.as_ptr(), release];
+        }
+    }
+
+    #[test]
+    fn close_reopen_cancels_pointer_before_retaining_editor_once() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let mut gui = RadiantVst3HostedGui::new(
+            "ToyboxRadiantVst3EditorCloseReopenCancellationTest",
+            MockEditor::new(),
+            420,
+            282,
+        );
+
+        unsafe {
+            let view =
+                new_radiant_view("ToyboxRadiantVst3EditorCloseCancellationViewTest", 420, 282)
+                    .expect("Radiant editor view should be created");
+            gui.root_view = Some(view);
+            let mut editor = MockEditor::new();
+            editor.event_sink = Some(Arc::clone(&events));
+            install_test_runtime(view, Box::new(editor));
+            set_active_pointer_button(view.as_ptr(), PointerButton::Primary);
+
+            gui.close_view();
+
+            assert!(gui.root_view.is_none());
+            assert!(gui.editor.is_some());
+            let events_after_close = events.lock().unwrap().clone();
+            assert_eq!(
+                events_after_close,
+                vec![Event::pointer_capture_cancelled(), Event::clear_focus()]
+            );
+
+            let reopened = new_radiant_view(
+                "ToyboxRadiantVst3EditorCloseReopenCancellationViewTest",
+                420,
+                282,
+            )
+            .expect("reopened Radiant editor view should be created");
+            let editor = gui.editor.take().expect("editor should survive close");
+            install_test_runtime(reopened, editor);
+            gui.root_view = Some(reopened);
+            assert_eq!(
+                *reopened.as_ref().get_ivar::<usize>("active_pointer_button"),
+                ACTIVE_POINTER_BUTTON_NONE
+            );
+
+            gui.close_view();
+            let events_after_reopen_close = events.lock().unwrap().clone();
+            assert_eq!(
+                events_after_reopen_close
+                    .iter()
+                    .filter(|event| **event == Event::pointer_capture_cancelled())
+                    .count(),
+                1
+            );
+        }
     }
 
     #[test]
