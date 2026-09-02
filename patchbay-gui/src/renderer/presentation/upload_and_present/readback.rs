@@ -1,3 +1,6 @@
+#[cfg(feature = "frame-capture")]
+use std::time::Duration;
+
 impl Renderer {
     /// Read back the final render target texture as RGBA8 pixels.
     #[cfg(feature = "frame-capture")]
@@ -56,9 +59,15 @@ impl Renderer {
         });
 
         crate::renderer::frame_capture_trace("readback: map requested; polling");
-        let _ = self.device.device.poll(wgpu::PollType::wait_indefinitely());
+        self.device
+            .device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: Some(Duration::from_secs(5)),
+            })
+            .map_err(|err| format!("device poll failed: {err}"))?;
         let map_result = rx
-            .recv()
+            .recv_timeout(Duration::from_millis(100))
             .map_err(|err| format!("map callback channel failed: {err}"))?;
         map_result.map_err(|err| format!("buffer map failed: {err}"))?;
         crate::renderer::frame_capture_trace("readback: map completed");
