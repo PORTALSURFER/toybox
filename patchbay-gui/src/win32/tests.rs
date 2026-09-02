@@ -93,19 +93,17 @@ mod tests {
     #[cfg(feature = "frame-capture")]
     #[test]
     fn changing_canvas_capture_updates_vello_image_atlas() {
-        eprintln!("[frame-capture-probe] test begin");
         let (test_window, hinstance) = create_test_surface_window();
-        eprintln!("[frame-capture-probe] window ready");
         let device = match RendererDevice::new_for_frame_capture() {
-            Ok(device) => {
-                eprintln!("[frame-capture-probe] device ready");
-                Arc::new(device)
-            }
+            Ok(device) => Arc::new(device),
             Err(GuiError::AdapterNotFound) => {
                 panic!(
                     "FRAME_CAPTURE_UNAVAILABLE: no GPU adapter; Windows frame-capture regression requires an executable GPU runtime"
                 );
             }
+            Err(GuiError::FrameCaptureUnavailable) => panic!(
+                "FRAME_CAPTURE_UNAVAILABLE: WGPU DX12 frame capture is unsafe on the Microsoft Basic Render Driver software adapter"
+            ),
             Err(error) => panic!("create renderer device: {error:?}"),
         };
         let size = Size {
@@ -121,27 +119,20 @@ mod tests {
             size,
         )
         .expect("create test renderer");
-        eprintln!("[frame-capture-probe] renderer ready");
 
         let first_pixels = [255, 0, 0, 255].repeat(4);
         renderer.upload(size, &first_pixels);
-        eprintln!("[frame-capture-probe] first upload ready");
         renderer.render().expect("render first frame");
-        eprintln!("[frame-capture-probe] first render ready");
         let first = renderer
             .readback_render_target_rgba8()
             .expect("capture first frame");
-        eprintln!("[frame-capture-probe] first readback ready");
 
         let second_pixels = [0, 0, 255, 255].repeat(4);
         renderer.upload(size, &second_pixels);
-        eprintln!("[frame-capture-probe] second upload ready");
         renderer.render().expect("render second frame");
-        eprintln!("[frame-capture-probe] second render ready");
         let second = renderer
             .readback_render_target_rgba8()
             .expect("capture second frame");
-        eprintln!("[frame-capture-probe] second readback ready");
 
         assert_eq!((first.width, first.height), (2, 2));
         assert_eq!((second.width, second.height), (2, 2));

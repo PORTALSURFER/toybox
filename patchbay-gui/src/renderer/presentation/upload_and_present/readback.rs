@@ -13,7 +13,6 @@ impl Renderer {
     pub(crate) fn readback_render_target_rgba8(
         &self,
     ) -> Result<crate::CapturedWindowFrame, String> {
-        eprintln!("[frame-capture-probe] readback begin");
         let size = crate::canvas::Size {
             width: self.config.width.max(1),
             height: self.config.height.max(1),
@@ -34,9 +33,6 @@ impl Renderer {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("patchbay-gui-readback-encoder"),
                 });
-        eprintln!("[frame-capture-probe] pre-readback wait begin");
-        self.device.instance.poll_all(true);
-        eprintln!("[frame-capture-probe] pre-readback wait returned");
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
                 texture: &self.render_target_texture,
@@ -58,22 +54,13 @@ impl Renderer {
                 depth_or_array_layers: 1,
             },
         );
-        eprintln!("[frame-capture-probe] readback submit");
         let (tx, rx) = std::sync::mpsc::channel();
-        encoder.map_buffer_on_submit(
-            &staging,
-            wgpu::MapMode::Read,
-            ..,
-            move |result| {
-            eprintln!("[frame-capture-probe] map callback result={result:?}");
-            let _ = tx.send(result);
-            },
-        );
-        eprintln!("[frame-capture-probe] map scheduled");
         self.device.queue.submit(Some(encoder.finish()));
-        eprintln!("[frame-capture-probe] readback submitted");
 
         let slice = staging.slice(..);
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = tx.send(result);
+        });
 
         let deadline = Instant::now() + READBACK_TIMEOUT;
         loop {
@@ -83,9 +70,7 @@ impl Renderer {
                 ));
             }
 
-            eprintln!("[frame-capture-probe] poll begin");
             self.device.instance.poll_all(false);
-            eprintln!("[frame-capture-probe] poll returned");
 
             if Instant::now() >= deadline {
                 return Err(format!(
@@ -112,7 +97,6 @@ impl Renderer {
             }
             std::thread::sleep(remaining.min(READBACK_POLL_INTERVAL));
         }
-        eprintln!("[frame-capture-probe] map completed");
 
         let mapped = slice.get_mapped_range();
         let pixels = copy_unpadded_rows(
