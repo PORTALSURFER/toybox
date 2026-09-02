@@ -56,24 +56,21 @@ impl Renderer {
             },
         );
         eprintln!("[frame-capture-probe] readback submit");
-        let submission = self.device.queue.submit(Some(encoder.finish()));
-        eprintln!("[frame-capture-probe] readback submitted");
-        self.device
-            .device
-            .poll(wgpu::PollType::Wait {
-                submission_index: Some(submission),
-                timeout: Some(READBACK_TIMEOUT),
-            })
-            .map_err(|err| format!("readback submission wait failed: {err}"))?;
-        eprintln!("[frame-capture-probe] submission wait returned");
-
-        let slice = staging.slice(..);
         let (tx, rx) = std::sync::mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |result| {
+        encoder.map_buffer_on_submit(
+            &staging,
+            wgpu::MapMode::Read,
+            ..,
+            move |result| {
             eprintln!("[frame-capture-probe] map callback result={result:?}");
             let _ = tx.send(result);
-        });
-        eprintln!("[frame-capture-probe] map requested");
+            },
+        );
+        eprintln!("[frame-capture-probe] map scheduled");
+        self.device.queue.submit(Some(encoder.finish()));
+        eprintln!("[frame-capture-probe] readback submitted");
+
+        let slice = staging.slice(..);
 
         let deadline = Instant::now() + READBACK_TIMEOUT;
         loop {
