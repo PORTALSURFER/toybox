@@ -91,6 +91,9 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Build minimal CLAP cdylib
+        run: cargo build -p toybox-minimal-clap
+
       - name: Build patchbay-gui
         run: cargo check -p patchbay-gui
 
@@ -134,6 +137,12 @@ jobs:
         env:
           VST3_SDK_DIR: ${{ vars.VST3_SDK_DIR }}
         run: cargo test -p toybox --features vst3
+
+      - name: Build minimal VST3 cdylib (SDK optional)
+        if: ${{ vars.VST3_SDK_DIR != '' }}
+        env:
+          VST3_SDK_DIR: ${{ vars.VST3_SDK_DIR }}
+        run: cargo build -p toybox-minimal-vst3
 
       - name: Lint toybox Radiant VST3 feature (SDK optional)
         if: ${{ vars.VST3_SDK_DIR != '' }}
