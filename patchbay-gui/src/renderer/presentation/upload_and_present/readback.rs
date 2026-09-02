@@ -34,6 +34,9 @@ impl Renderer {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("patchbay-gui-readback-encoder"),
                 });
+        eprintln!("[frame-capture-probe] pre-readback wait begin");
+        self.device.instance.poll_all(true);
+        eprintln!("[frame-capture-probe] pre-readback wait returned");
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
                 texture: &self.render_target_texture,
