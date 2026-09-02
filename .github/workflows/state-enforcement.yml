@@ -103,6 +103,20 @@ jobs:
       - name: Test patchbay-gui
         run: cargo test -p patchbay-gui
 
+      - name: Test patchbay-gui frame-capture regression
+        shell: bash
+        run: |
+          set +e
+          output="$(cargo test -p patchbay-gui --features frame-capture changing_canvas_capture_updates_vello_image_atlas -- --nocapture 2>&1)"
+          status=$?
+          set -e
+          printf '%s\n' "${output}"
+          if [[ "${status}" -ne 0 && "${output}" == *"FRAME_CAPTURE_UNAVAILABLE"* ]]; then
+            echo "::warning::Windows frame-capture regression unavailable: no executable GPU runtime"
+            exit 0
+          fi
+          exit "${status}"
+
       - name: Test toybox with GUI feature
         run: cargo test -p toybox --features gui
 

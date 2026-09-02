@@ -97,8 +97,9 @@ mod tests {
         let device = match RendererDevice::new() {
             Ok(device) => Arc::new(device),
             Err(GuiError::AdapterNotFound) => {
-                eprintln!("skipping Vello frame-capture regression: no GPU adapter");
-                return;
+                panic!(
+                    "FRAME_CAPTURE_UNAVAILABLE: no GPU adapter; Windows frame-capture regression requires an executable GPU runtime"
+                );
             }
             Err(error) => panic!("create renderer device: {error:?}"),
         };
