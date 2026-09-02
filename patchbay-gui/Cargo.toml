@@ -16,7 +16,7 @@ toybox-process-log = { path = "../crates/process-log" }
 
 [features]
 default = []
-frame-capture = ["wgpu/dx12"]
+frame-capture = ["wgpu/gles"]
 layout-debug-borders = []
 layout-overflow-warnings = []
 
