@@ -5,15 +5,24 @@ impl Renderer {
         window: SurfaceWindow,
         size: Size,
     ) -> Result<Self, GuiError> {
+        crate::renderer::frame_capture_trace("Renderer::new_with_device: begin");
         log_line_safe("renderer: new begin");
         let surface = Self::create_surface(&device, window)?;
+        crate::renderer::frame_capture_trace("Renderer::new_with_device: surface created");
         log_line_safe("renderer: surface created");
         let config = Self::build_surface_config(&surface, &device, size);
         surface.configure(&device.device, &config);
+        crate::renderer::frame_capture_trace("Renderer::new_with_device: surface configured");
         log_line_safe("renderer: surface configured");
 
+        crate::renderer::frame_capture_trace(
+            "Renderer::new_with_device: Vello resources begin",
+        );
         let resources = Self::initialize_renderer_resources(&device, &config, size)
             .map_err(map_vello_init_error)?;
+        crate::renderer::frame_capture_trace(
+            "Renderer::new_with_device: Vello resources created",
+        );
         Ok(Self::build_renderer_instance(
             device, surface, config, resources,
         ))

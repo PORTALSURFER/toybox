@@ -1,7 +1,9 @@
 impl Renderer {
     /// Render the uploaded canvas texture to the current surface frame.
     pub fn render(&mut self) -> Result<(), GuiError> {
+        crate::renderer::frame_capture_trace("Renderer::render: begin");
         let output = self.acquire_surface_texture()?;
+        crate::renderer::frame_capture_trace("Renderer::render: surface texture acquired");
         let surface_view = Self::surface_view(&output);
         self.scene.reset();
         let scene_transform = self.resolve_scene_transform();
@@ -12,8 +14,11 @@ impl Renderer {
             scene_transform,
         );
 
+        crate::renderer::frame_capture_trace("Renderer::render: Vello render begin");
         self.render_scene_to_target()?;
+        crate::renderer::frame_capture_trace("Renderer::render: Vello render completed");
         self.present_output(&surface_view, output);
+        crate::renderer::frame_capture_trace("Renderer::render: presented");
         Ok(())
     }
 

@@ -4,6 +4,7 @@ impl Renderer {
     pub(crate) fn readback_render_target_rgba8(
         &self,
     ) -> Result<crate::CapturedWindowFrame, String> {
+        crate::renderer::frame_capture_trace("readback: begin");
         let size = crate::canvas::Size {
             width: self.config.width.max(1),
             height: self.config.height.max(1),
@@ -46,6 +47,7 @@ impl Renderer {
             },
         );
         self.device.queue.submit(Some(encoder.finish()));
+        crate::renderer::frame_capture_trace("readback: copy submitted");
 
         let slice = staging.slice(..);
         let (tx, rx) = std::sync::mpsc::channel();
@@ -53,11 +55,13 @@ impl Renderer {
             let _ = tx.send(result);
         });
 
+        crate::renderer::frame_capture_trace("readback: map requested; polling");
         let _ = self.device.device.poll(wgpu::PollType::wait_indefinitely());
         let map_result = rx
             .recv()
             .map_err(|err| format!("map callback channel failed: {err}"))?;
         map_result.map_err(|err| format!("buffer map failed: {err}"))?;
+        crate::renderer::frame_capture_trace("readback: map completed");
 
         let mapped = slice.get_mapped_range();
         let pixels = copy_unpadded_rows(
@@ -69,6 +73,7 @@ impl Renderer {
         )?;
         drop(mapped);
         staging.unmap();
+        crate::renderer::frame_capture_trace("readback: completed");
 
         Ok(crate::CapturedWindowFrame {
             width: size.width,

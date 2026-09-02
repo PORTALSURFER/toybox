@@ -8,6 +8,16 @@ use vello::{Renderer as VelloRenderer, Scene};
 use crate::canvas::Size;
 use crate::vector::scene::{VectorCommand, VectorScenePainter};
 
+/// Emit visible frame-capture diagnostics only from the Windows test binary.
+#[cfg(all(test, feature = "frame-capture", target_os = "windows"))]
+pub(crate) fn frame_capture_trace(message: &str) {
+    eprintln!("[frame-capture] {message}");
+}
+
+/// Keep the production renderer free of frame-capture test diagnostics.
+#[cfg(not(all(test, feature = "frame-capture", target_os = "windows")))]
+pub(crate) fn frame_capture_trace(_message: &str) {}
+
 #[path = "error/handling.rs"]
 mod error_handling;
 #[path = "device/initialization.rs"]
