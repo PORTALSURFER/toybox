@@ -17,8 +17,8 @@ impl RendererDevice {
     /// Create the device used by the Windows frame-capture regression.
     #[cfg(all(test, feature = "frame-capture", target_os = "windows"))]
     pub(crate) fn new_for_frame_capture() -> Result<Self, GuiError> {
-        eprintln!("[frame-capture-probe] backend=GL");
-        Self::new_with_backends(wgpu::Backends::GL)
+        eprintln!("[frame-capture-probe] backend=DX12");
+        Self::new_with_backends(wgpu::Backends::DX12)
     }
 
     /// Initialize a device using the supplied WGPU backend set.
