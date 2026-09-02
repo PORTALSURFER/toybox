@@ -73,10 +73,7 @@ impl Renderer {
                 ));
             }
 
-            self.device
-                .device
-                .poll(wgpu::PollType::Poll)
-                .map_err(|err| format!("device poll failed: {err}"))?;
+            self.device.instance.poll_all(false);
 
             if Instant::now() >= deadline {
                 return Err(format!(
