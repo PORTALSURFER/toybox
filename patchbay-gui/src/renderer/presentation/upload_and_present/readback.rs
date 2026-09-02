@@ -13,6 +13,7 @@ impl Renderer {
     pub(crate) fn readback_render_target_rgba8(
         &self,
     ) -> Result<crate::CapturedWindowFrame, String> {
+        eprintln!("[frame-capture-probe] readback begin");
         let size = crate::canvas::Size {
             width: self.config.width.max(1),
             height: self.config.height.max(1),
@@ -54,13 +55,17 @@ impl Renderer {
                 depth_or_array_layers: 1,
             },
         );
+        eprintln!("[frame-capture-probe] readback submit");
         self.device.queue.submit(Some(encoder.finish()));
+        eprintln!("[frame-capture-probe] readback submitted");
 
         let slice = staging.slice(..);
         let (tx, rx) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |result| {
+            eprintln!("[frame-capture-probe] map callback result={result:?}");
             let _ = tx.send(result);
         });
+        eprintln!("[frame-capture-probe] map requested");
 
         let deadline = Instant::now() + READBACK_TIMEOUT;
         loop {
@@ -70,7 +75,9 @@ impl Renderer {
                 ));
             }
 
+            eprintln!("[frame-capture-probe] poll begin");
             self.device.instance.poll_all(false);
+            eprintln!("[frame-capture-probe] poll returned");
 
             if Instant::now() >= deadline {
                 return Err(format!(
@@ -97,6 +104,7 @@ impl Renderer {
             }
             std::thread::sleep(remaining.min(READBACK_POLL_INTERVAL));
         }
+        eprintln!("[frame-capture-probe] map completed");
 
         let mapped = slice.get_mapped_range();
         let pixels = copy_unpadded_rows(

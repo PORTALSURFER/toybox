@@ -17,6 +17,7 @@ impl RendererDevice {
     /// Create the device used by the Windows frame-capture regression.
     #[cfg(all(test, feature = "frame-capture", target_os = "windows"))]
     pub(crate) fn new_for_frame_capture() -> Result<Self, GuiError> {
+        eprintln!("[frame-capture-probe] backend=DX12");
         Self::new_with_backends(wgpu::Backends::DX12)
     }
 
@@ -37,6 +38,8 @@ impl RendererDevice {
             log_line_safe(&format!("renderer_device: request_adapter error: {err:?}"));
             GuiError::AdapterNotFound
         })?;
+        #[cfg(all(test, feature = "frame-capture", target_os = "windows"))]
+        eprintln!("[frame-capture-probe] adapter={:?}", adapter.get_info());
         log_line_safe("renderer_device: adapter acquired");
 
         let required_features =
