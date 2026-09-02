@@ -1,5 +1,11 @@
 #[cfg(feature = "frame-capture")]
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+#[cfg(feature = "frame-capture")]
+const READBACK_TIMEOUT: Duration = Duration::from_secs(5);
+
+#[cfg(feature = "frame-capture")]
+const READBACK_POLL_INTERVAL: Duration = Duration::from_millis(1);
 
 impl Renderer {
     /// Read back the final render target texture as RGBA8 pixels.
@@ -59,17 +65,44 @@ impl Renderer {
         });
 
         crate::renderer::frame_capture_trace("readback: map requested; polling");
-        self.device
-            .device
-            .poll(wgpu::PollType::Wait {
-                submission_index: None,
-                timeout: Some(Duration::from_secs(5)),
-            })
-            .map_err(|err| format!("device poll failed: {err}"))?;
-        let map_result = rx
-            .recv_timeout(Duration::from_millis(100))
-            .map_err(|err| format!("map callback channel failed: {err}"))?;
-        map_result.map_err(|err| format!("buffer map failed: {err}"))?;
+        let deadline = Instant::now() + READBACK_TIMEOUT;
+        loop {
+            if Instant::now() >= deadline {
+                return Err(format!(
+                    "buffer map timed out after {READBACK_TIMEOUT:?}"
+                ));
+            }
+
+            self.device
+                .device
+                .poll(wgpu::PollType::Poll)
+                .map_err(|err| format!("device poll failed: {err}"))?;
+
+            if Instant::now() >= deadline {
+                return Err(format!(
+                    "buffer map timed out after {READBACK_TIMEOUT:?}"
+                ));
+            }
+
+            match rx.try_recv() {
+                Ok(map_result) => {
+                    map_result.map_err(|err| format!("buffer map failed: {err}"))?;
+                    break;
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    return Err("map callback channel disconnected".to_string());
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            }
+
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(format!(
+                    "buffer map timed out after {READBACK_TIMEOUT:?}"
+                ));
+            }
+            std::thread::sleep(remaining.min(READBACK_POLL_INTERVAL));
+        }
         crate::renderer::frame_capture_trace("readback: map completed");
 
         let mapped = slice.get_mapped_range();
