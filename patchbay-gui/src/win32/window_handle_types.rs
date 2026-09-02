@@ -118,7 +118,8 @@ impl WindowHandle {
 unsafe impl Send for WindowHandle {}
 unsafe impl Sync for WindowHandle {}
 
-/// A window type that exposes raw window handles for wgpu surfaces.
+/// A non-owning window handle pair that exposes raw handles for wgpu surfaces.
+#[derive(Clone)]
 pub struct SurfaceWindow {
     hwnd: HWND,
     hinstance: HINSTANCE,

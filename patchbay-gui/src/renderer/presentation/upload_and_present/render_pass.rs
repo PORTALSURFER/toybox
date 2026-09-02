@@ -49,7 +49,7 @@ impl Renderer {
             )
             .map_err(|err| {
                 log_line_safe(&format!("renderer: vello render_to_texture error: {err:?}"));
-                GuiError::SurfaceAcquire(wgpu::SurfaceError::Other)
+                GuiError::SurfaceAcquire
             })
     }
 }

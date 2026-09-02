@@ -15,7 +15,7 @@ pub(super) fn map_gui_error(err: GuiError) -> PluginError {
         GuiError::Surface(_) => "Failed to create GPU surface",
         GuiError::Device(_) => "Failed to create GPU device",
         GuiError::SurfaceFormat => "No compatible swapchain format",
-        GuiError::SurfaceAcquire(_) => "Failed to acquire swapchain texture",
+        GuiError::SurfaceAcquire => "Failed to acquire swapchain texture",
         GuiError::ThreadSpawn => "Failed to spawn GUI thread",
         GuiError::DeviceCachePoison => "GUI device cache was poisoned",
         GuiError::FrameCaptureUnavailable => "GUI frame capture is unavailable",

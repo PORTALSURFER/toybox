@@ -1,6 +1,6 @@
 impl Renderer {
     /// Create a WGPU surface for the given window and map errors to GUI errors.
-    fn create_surface(
+    pub(super) fn create_surface(
         device: &RendererDevice,
         window: SurfaceWindow,
     ) -> Result<wgpu::Surface<'static>, GuiError> {

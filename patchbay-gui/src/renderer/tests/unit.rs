@@ -1,7 +1,7 @@
 //! Unit tests for renderer upload and surface recovery helpers.
 
 #[cfg(feature = "frame-capture")]
-use super::copy_unpadded_rows;
+use super::upload_and_present::copy_unpadded_rows;
 use super::{Renderer, should_reconfigure_surface};
 
 #[test]
@@ -9,8 +9,8 @@ fn pad_rows_rgba_zeroes_padding_bytes() {
     let width = 3u32;
     let height = 2u32;
     let bytes_per_row = width * 4;
-    let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u32;
-    let padded_bytes_per_row = ((bytes_per_row + alignment - 1) / alignment) * alignment;
+    let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+    let padded_bytes_per_row = bytes_per_row.div_ceil(alignment) * alignment;
     assert!(padded_bytes_per_row > bytes_per_row);
 
     let pixels = vec![1u8; (width * height * 4) as usize];
@@ -39,8 +39,8 @@ fn pad_rows_rgba_overwrites_old_padding() {
     let width = 5u32;
     let height = 3u32;
     let bytes_per_row = width * 4;
-    let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u32;
-    let padded_bytes_per_row = ((bytes_per_row + alignment - 1) / alignment) * alignment;
+    let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+    let padded_bytes_per_row = bytes_per_row.div_ceil(alignment) * alignment;
     assert!(padded_bytes_per_row > bytes_per_row);
 
     let pixels = vec![2u8; (width * height * 4) as usize];
@@ -66,13 +66,21 @@ fn pad_rows_rgba_overwrites_old_padding() {
 
 #[test]
 fn surface_errors_trigger_reconfigure() {
-    assert!(should_reconfigure_surface(&wgpu::SurfaceError::Lost));
-    assert!(should_reconfigure_surface(&wgpu::SurfaceError::Outdated));
-    assert!(!should_reconfigure_surface(&wgpu::SurfaceError::Timeout));
-    assert!(!should_reconfigure_surface(
-        &wgpu::SurfaceError::OutOfMemory
+    assert!(should_reconfigure_surface(
+        &wgpu::CurrentSurfaceTexture::Lost
     ));
-    assert!(!should_reconfigure_surface(&wgpu::SurfaceError::Other));
+    assert!(should_reconfigure_surface(
+        &wgpu::CurrentSurfaceTexture::Outdated
+    ));
+    assert!(!should_reconfigure_surface(
+        &wgpu::CurrentSurfaceTexture::Timeout
+    ));
+    assert!(!should_reconfigure_surface(
+        &wgpu::CurrentSurfaceTexture::Occluded
+    ));
+    assert!(!should_reconfigure_surface(
+        &wgpu::CurrentSurfaceTexture::Validation
+    ));
 }
 
 #[cfg(feature = "frame-capture")]

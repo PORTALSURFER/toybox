@@ -1,3 +1,12 @@
+#[cfg(feature = "frame-capture")]
+use std::time::{Duration, Instant};
+
+#[cfg(feature = "frame-capture")]
+const READBACK_TIMEOUT: Duration = Duration::from_secs(5);
+
+#[cfg(feature = "frame-capture")]
+const READBACK_POLL_INTERVAL: Duration = Duration::from_millis(1);
+
 impl Renderer {
     /// Read back the final render target texture as RGBA8 pixels.
     #[cfg(feature = "frame-capture")]
@@ -45,19 +54,49 @@ impl Renderer {
                 depth_or_array_layers: 1,
             },
         );
+        let (tx, rx) = std::sync::mpsc::channel();
         self.device.queue.submit(Some(encoder.finish()));
 
         let slice = staging.slice(..);
-        let (tx, rx) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |result| {
             let _ = tx.send(result);
         });
 
-        let _ = self.device.device.poll(wgpu::PollType::wait_indefinitely());
-        let map_result = rx
-            .recv()
-            .map_err(|err| format!("map callback channel failed: {err}"))?;
-        map_result.map_err(|err| format!("buffer map failed: {err}"))?;
+        let deadline = Instant::now() + READBACK_TIMEOUT;
+        loop {
+            if Instant::now() >= deadline {
+                return Err(format!(
+                    "buffer map timed out after {READBACK_TIMEOUT:?}"
+                ));
+            }
+
+            self.device.instance.poll_all(false);
+
+            if Instant::now() >= deadline {
+                return Err(format!(
+                    "buffer map timed out after {READBACK_TIMEOUT:?}"
+                ));
+            }
+
+            match rx.try_recv() {
+                Ok(map_result) => {
+                    map_result.map_err(|err| format!("buffer map failed: {err}"))?;
+                    break;
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    return Err("map callback channel disconnected".to_string());
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            }
+
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(format!(
+                    "buffer map timed out after {READBACK_TIMEOUT:?}"
+                ));
+            }
+            std::thread::sleep(remaining.min(READBACK_POLL_INTERVAL));
+        }
 
         let mapped = slice.get_mapped_range();
         let pixels = copy_unpadded_rows(
@@ -81,8 +120,8 @@ impl Renderer {
 /// Align row bytes to WGPU's copy alignment requirement.
 #[cfg(feature = "frame-capture")]
 fn align_bytes_per_row(unpadded: u32) -> u32 {
-    let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u32;
-    ((unpadded + alignment - 1) / alignment) * alignment
+    let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+    unpadded.div_ceil(alignment) * alignment
 }
 
 /// Strip row padding from mapped staging bytes into tight RGBA8 rows.

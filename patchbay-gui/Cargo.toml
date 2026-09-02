@@ -7,16 +7,16 @@ description = "Minimal CLAP plugin GUI toolkit with a Vello-backed renderer"
 [dependencies]
 raw-window-handle = "0.5.2"
 raw-window-handle-06 = { package = "raw-window-handle", version = "0.6" }
-wgpu = { version = "27.0.1", default-features = false, features = ["std", "parking_lot", "wgsl", "vulkan"] }
-vello = "0.7.0"
+wgpu = { version = "29.0.4", default-features = false, features = ["std", "parking_lot", "wgsl", "vulkan"] }
+vello = "0.9.0"
 pollster = "0.3"
 thiserror = "1.0"
-skrifa = "0.40"
+skrifa = "0.42.1"
 toybox-process-log = { path = "../crates/process-log" }
 
 [features]
 default = []
-frame-capture = []
+frame-capture = ["wgpu/dx12"]
 layout-debug-borders = []
 layout-overflow-warnings = []
 

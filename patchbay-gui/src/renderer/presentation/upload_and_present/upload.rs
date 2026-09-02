@@ -9,11 +9,19 @@ impl Renderer {
 
         let bytes_per_pixel = 4u32;
         let bytes_per_row = bytes_per_pixel * size.width;
-        let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u32;
-        let padded_bytes_per_row = ((bytes_per_row + alignment - 1) / alignment) * alignment;
+        let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let padded_bytes_per_row = bytes_per_row.div_ceil(alignment) * alignment;
 
         if padded_bytes_per_row == bytes_per_row {
-            self.write_canvas_texture(size, pixels, bytes_per_row);
+            Self::write_canvas_texture(
+                &self.device.queue,
+                &self.canvas_texture,
+                &mut self.vello_renderer,
+                &self.canvas_image,
+                size,
+                pixels,
+                bytes_per_row,
+            );
             return;
         }
 
@@ -27,14 +35,30 @@ impl Renderer {
             required,
         );
 
-        self.write_canvas_texture(size, &self.upload_scratch, padded_bytes_per_row);
+        Self::write_canvas_texture(
+            &self.device.queue,
+            &self.canvas_texture,
+            &mut self.vello_renderer,
+            &self.canvas_image,
+            size,
+            &self.upload_scratch,
+            padded_bytes_per_row,
+        );
     }
 
     /// Write pixels into the canvas texture using the given row stride.
-    fn write_canvas_texture(&self, size: Size, pixels: &[u8], bytes_per_row: u32) {
-        self.device.queue.write_texture(
+    fn write_canvas_texture(
+        queue: &wgpu::Queue,
+        canvas_texture: &wgpu::Texture,
+        vello_renderer: &mut vello::Renderer,
+        canvas_image: &vello::peniko::ImageData,
+        size: Size,
+        pixels: &[u8],
+        bytes_per_row: u32,
+    ) {
+        queue.write_texture(
             wgpu::TexelCopyTextureInfo {
-                texture: &self.canvas_texture,
+                texture: canvas_texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
@@ -51,6 +75,7 @@ impl Renderer {
                 depth_or_array_layers: 1,
             },
         );
+        vello_renderer.mark_override_image_dirty(canvas_image);
     }
 
     /// Pad tightly packed RGBA rows to WGPU's row alignment requirement.

@@ -9,6 +9,136 @@ mod tests {
     };
     use crate::canvas::Size;
 
+    #[cfg(feature = "frame-capture")]
+    use crate::host::GuiError;
+    #[cfg(feature = "frame-capture")]
+    use crate::renderer::{Renderer, RendererDevice};
+    #[cfg(feature = "frame-capture")]
+    use std::sync::Arc;
+    #[cfg(feature = "frame-capture")]
+    use windows::Win32::Foundation::{HINSTANCE, HWND};
+    #[cfg(feature = "frame-capture")]
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CW_USEDEFAULT, CreateWindowExW, DefWindowProcW, DestroyWindow, RegisterClassW, SW_HIDE,
+        ShowWindow, WNDCLASSW, WS_OVERLAPPEDWINDOW,
+    };
+    #[cfg(feature = "frame-capture")]
+    use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+    #[cfg(feature = "frame-capture")]
+    use windows::core::PCWSTR;
+
+    #[cfg(feature = "frame-capture")]
+    struct TestSurfaceWindow {
+        hwnd: HWND,
+    }
+
+    #[cfg(feature = "frame-capture")]
+    impl Drop for TestSurfaceWindow {
+        fn drop(&mut self) {
+            unsafe {
+                let _ = DestroyWindow(self.hwnd);
+            }
+        }
+    }
+
+    #[cfg(feature = "frame-capture")]
+    fn create_test_surface_window() -> (TestSurfaceWindow, HINSTANCE) {
+        let hinstance: HINSTANCE = unsafe {
+            GetModuleHandleW(None)
+                .expect("test process module handle")
+                .into()
+        };
+        let class_name: Vec<u16> = "PatchbayGuiFrameCaptureTest"
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        unsafe {
+            let window_class = WNDCLASSW {
+                lpfnWndProc: Some(test_window_proc),
+                hInstance: hinstance,
+                lpszClassName: PCWSTR(class_name.as_ptr()),
+                ..Default::default()
+            };
+            let _ = RegisterClassW(&window_class);
+            let hwnd = CreateWindowExW(
+                Default::default(),
+                PCWSTR(class_name.as_ptr()),
+                PCWSTR(class_name.as_ptr()),
+                WS_OVERLAPPEDWINDOW,
+                CW_USEDEFAULT,
+                CW_USEDEFAULT,
+                2,
+                2,
+                None,
+                None,
+                Some(hinstance),
+                None,
+            )
+            .expect("test surface window");
+            let _ = ShowWindow(hwnd, SW_HIDE);
+            (TestSurfaceWindow { hwnd }, hinstance)
+        }
+    }
+
+    #[cfg(feature = "frame-capture")]
+    unsafe extern "system" fn test_window_proc(
+        hwnd: HWND,
+        message: u32,
+        wparam: windows::Win32::Foundation::WPARAM,
+        lparam: windows::Win32::Foundation::LPARAM,
+    ) -> windows::Win32::Foundation::LRESULT {
+        unsafe { DefWindowProcW(hwnd, message, wparam, lparam) }
+    }
+
+    #[cfg(feature = "frame-capture")]
+    #[test]
+    fn changing_canvas_capture_updates_vello_image_atlas() {
+        let (test_window, hinstance) = create_test_surface_window();
+        let device = match RendererDevice::new_for_frame_capture() {
+            Ok(device) => Arc::new(device),
+            Err(GuiError::AdapterNotFound) => {
+                panic!(
+                    "FRAME_CAPTURE_UNAVAILABLE: no GPU adapter; Windows frame-capture regression requires an executable GPU runtime"
+                );
+            }
+            Err(GuiError::FrameCaptureUnavailable) => panic!(
+                "FRAME_CAPTURE_UNAVAILABLE: WGPU DX12 frame capture is unsafe on the Microsoft Basic Render Driver software adapter"
+            ),
+            Err(error) => panic!("create renderer device: {error:?}"),
+        };
+        let size = Size {
+            width: 2,
+            height: 2,
+        };
+        let mut renderer = Renderer::new_with_device(
+            Arc::clone(&device),
+            super::SurfaceWindow {
+                hwnd: test_window.hwnd,
+                hinstance,
+            },
+            size,
+        )
+        .expect("create test renderer");
+
+        let first_pixels = [255, 0, 0, 255].repeat(4);
+        renderer.upload(size, &first_pixels);
+        renderer.render().expect("render first frame");
+        let first = renderer
+            .readback_render_target_rgba8()
+            .expect("capture first frame");
+
+        let second_pixels = [0, 0, 255, 255].repeat(4);
+        renderer.upload(size, &second_pixels);
+        renderer.render().expect("render second frame");
+        let second = renderer
+            .readback_render_target_rgba8()
+            .expect("capture second frame");
+
+        assert_eq!((first.width, first.height), (2, 2));
+        assert_eq!((second.width, second.height), (2, 2));
+        assert_ne!(first.pixels, second.pixels);
+    }
+
     #[test]
     fn aspect_enforces_min_dimensions() {
         let (w, h) = enforce_aspect_min(400, 300, 1.5);

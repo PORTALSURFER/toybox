@@ -7,6 +7,7 @@ use vello::{Renderer as VelloRenderer, Scene};
 
 use crate::canvas::Size;
 use crate::vector::scene::{VectorCommand, VectorScenePainter};
+use crate::win32::SurfaceWindow;
 
 #[path = "error/handling.rs"]
 mod error_handling;
@@ -20,7 +21,9 @@ mod tests;
 #[path = "presentation/upload_and_present.rs"]
 mod upload_and_present;
 
-pub(crate) use error_handling::{map_vello_init_error, should_reconfigure_surface};
+pub(crate) use error_handling::{
+    map_vello_init_error, should_reconfigure_surface, should_recreate_surface,
+};
 
 /// Surface-space transform used to present the CPU canvas.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -64,6 +67,8 @@ pub struct RendererDevice {
 pub struct Renderer {
     /// Shared device and queue resources.
     device: Arc<RendererDevice>,
+    /// Win32 handles used to recreate the surface after it is lost.
+    surface_window: SurfaceWindow,
     /// Window surface used for swapchain presentation.
     surface: wgpu::Surface<'static>,
     /// Surface configuration for resize/present operations.

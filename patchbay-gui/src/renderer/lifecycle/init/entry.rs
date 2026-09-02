@@ -6,6 +6,7 @@ impl Renderer {
         size: Size,
     ) -> Result<Self, GuiError> {
         log_line_safe("renderer: new begin");
+        let surface_window = window.clone();
         let surface = Self::create_surface(&device, window)?;
         log_line_safe("renderer: surface created");
         let config = Self::build_surface_config(&surface, &device, size);
@@ -15,19 +16,25 @@ impl Renderer {
         let resources = Self::initialize_renderer_resources(&device, &config, size)
             .map_err(map_vello_init_error)?;
         Ok(Self::build_renderer_instance(
-            device, surface, config, resources,
+            device,
+            surface_window,
+            surface,
+            config,
+            resources,
         ))
     }
 
     /// Build a renderer instance from fully-initialized rendering resources.
     fn build_renderer_instance(
         device: Arc<RendererDevice>,
+        surface_window: SurfaceWindow,
         surface: wgpu::Surface<'static>,
         config: wgpu::SurfaceConfiguration,
         resources: RendererInitResources,
     ) -> Self {
         Self {
             device,
+            surface_window,
             surface,
             config,
             vello_renderer: resources.vello_renderer,
