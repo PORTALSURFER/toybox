@@ -98,7 +98,10 @@ pub fn windows_bundle_paths(
 
 /// Build the rustc link-arg used to emit a Windows plugin bundle payload.
 pub fn windows_rustc_link_arg(output_path: &Path) -> String {
-    format!("/OUT:\"{}\"", output_path.display())
+    // `cargo:rustc-cdylib-link-arg` forwards this value directly to `link.exe`.
+    // Quoting here can become part of the literal argument and break path parsing.
+    let normalized = output_path.to_string_lossy().replace('/', "\\");
+    format!("/OUT:{normalized}")
 }
 
 /// Resolve bundle paths from explicit root/target/profile inputs.
@@ -208,9 +211,20 @@ mod tests {
     }
 
     #[test]
-    fn link_arg_uses_out_prefix() {
+    fn link_arg_uses_exact_out_format_without_quotes() {
         let arg = windows_rustc_link_arg(Path::new("dist/plugin.vst3"));
-        assert!(arg.starts_with("/OUT:"));
+        assert_eq!(arg, r"/OUT:dist\plugin.vst3");
+    }
+
+    #[test]
+    fn link_arg_normalizes_windows_like_path_separators() {
+        let arg = windows_rustc_link_arg(Path::new(
+            "D:/workspace/toybox/dist/toybox-minimal-v0.1.0.vst3",
+        ));
+        assert_eq!(
+            arg,
+            r"/OUT:D:\workspace\toybox\dist\toybox-minimal-v0.1.0.vst3"
+        );
     }
 
     #[test]
