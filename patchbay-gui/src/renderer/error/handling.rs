@@ -37,6 +37,11 @@ pub(crate) fn should_reconfigure_surface(err: &wgpu::CurrentSurfaceTexture) -> b
     should_reconfigure_surface_status(classify_surface_status(err))
 }
 
+/// Return true when the surface handle must be recreated before retrying.
+pub(crate) fn should_recreate_surface(err: &wgpu::CurrentSurfaceTexture) -> bool {
+    should_recreate_surface_status(classify_surface_status(err))
+}
+
 /// Classify a WGPU surface acquisition result without consuming a texture.
 fn classify_surface_status(status: &wgpu::CurrentSurfaceTexture) -> SurfaceAcquireStatus {
     match status {
@@ -60,9 +65,16 @@ fn should_reconfigure_surface_status(status: SurfaceAcquireStatus) -> bool {
     )
 }
 
+/// Return true only for the WGPU status whose old surface is no longer usable.
+fn should_recreate_surface_status(status: SurfaceAcquireStatus) -> bool {
+    matches!(status, SurfaceAcquireStatus::Lost)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{SurfaceAcquireStatus, should_reconfigure_surface_status};
+    use super::{
+        SurfaceAcquireStatus, should_reconfigure_surface_status, should_recreate_surface_status,
+    };
 
     #[test]
     fn recoverable_surface_statuses_reconfigure_once() {
@@ -84,6 +96,22 @@ mod tests {
             SurfaceAcquireStatus::Validation,
         ] {
             assert!(!should_reconfigure_surface_status(status));
+        }
+    }
+
+    #[test]
+    fn only_lost_surface_status_recreates_surface() {
+        assert!(should_recreate_surface_status(SurfaceAcquireStatus::Lost));
+
+        for status in [
+            SurfaceAcquireStatus::Success,
+            SurfaceAcquireStatus::Suboptimal,
+            SurfaceAcquireStatus::Timeout,
+            SurfaceAcquireStatus::Occluded,
+            SurfaceAcquireStatus::Outdated,
+            SurfaceAcquireStatus::Validation,
+        ] {
+            assert!(!should_recreate_surface_status(status));
         }
     }
 }

@@ -8,7 +8,7 @@ use crate::canvas::Size;
 use crate::host::GuiError;
 use crate::logging::log_line_safe;
 
-use super::{PresentationTransform, Renderer, should_reconfigure_surface};
+use super::{PresentationTransform, Renderer, should_reconfigure_surface, should_recreate_surface};
 
 include!("upload_and_present/upload.rs");
 include!("upload_and_present/surface_acquire.rs");

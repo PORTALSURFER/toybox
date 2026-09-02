@@ -1,12 +1,7 @@
 impl Renderer {
     /// Create the shared Vello renderer instance.
     fn create_vello_renderer(device: &RendererDevice) -> Result<vello::Renderer, vello::Error> {
-        crate::renderer::frame_capture_trace("Vello::Renderer::new: begin");
-        let result = vello::Renderer::new(&device.device, RendererOptions::default());
-        if result.is_ok() {
-            crate::renderer::frame_capture_trace("Vello::Renderer::new: completed");
-        }
-        result
+        vello::Renderer::new(&device.device, RendererOptions::default())
     }
 
     /// Create the initial offscreen render target from the surface config.

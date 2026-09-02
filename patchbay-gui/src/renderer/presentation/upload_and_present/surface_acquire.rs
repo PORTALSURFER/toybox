@@ -1,6 +1,6 @@
 impl Renderer {
     /// Acquire the next surface frame, reconfiguring once on recoverable errors.
-    fn acquire_surface_texture(&self) -> Result<wgpu::SurfaceTexture, GuiError> {
+    fn acquire_surface_texture(&mut self) -> Result<wgpu::SurfaceTexture, GuiError> {
         match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(output) => Ok(output),
             status => self.acquire_surface_texture_after_error(status),
@@ -9,10 +9,11 @@ impl Renderer {
 
     /// Retry surface acquisition after an initial get-current-texture failure.
     fn acquire_surface_texture_after_error(
-        &self,
+        &mut self,
         err: wgpu::CurrentSurfaceTexture,
     ) -> Result<wgpu::SurfaceTexture, GuiError> {
         if should_reconfigure_surface(&err) {
+            let recreate_surface = should_recreate_surface(&err);
             let was_suboptimal = matches!(&err, wgpu::CurrentSurfaceTexture::Suboptimal(_));
             drop(err);
             if was_suboptimal {
@@ -20,7 +21,13 @@ impl Renderer {
                     "renderer: discarded suboptimal surface texture before reconfigure",
                 );
             }
-            self.surface.configure(&self.device.device, &self.config);
+            if recreate_surface {
+                let surface = Self::create_surface(&self.device, self.surface_window.clone())?;
+                surface.configure(&self.device.device, &self.config);
+                self.surface = surface;
+            } else {
+                self.surface.configure(&self.device.device, &self.config);
+            }
             return self.acquire_surface_texture_after_reconfigure();
         }
         log_line_safe(&format!("renderer: get_current_texture error: {err:?}"));

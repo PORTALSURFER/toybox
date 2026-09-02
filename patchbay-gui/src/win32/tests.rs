@@ -43,19 +43,16 @@ mod tests {
 
     #[cfg(feature = "frame-capture")]
     fn create_test_surface_window() -> (TestSurfaceWindow, HINSTANCE) {
-        eprintln!("[frame-capture] window: GetModuleHandleW begin");
         let hinstance: HINSTANCE = unsafe {
             GetModuleHandleW(None)
                 .expect("test process module handle")
                 .into()
         };
-        eprintln!("[frame-capture] window: module handle acquired");
         let class_name: Vec<u16> = "PatchbayGuiFrameCaptureTest"
             .encode_utf16()
             .chain(std::iter::once(0))
             .collect();
         unsafe {
-            eprintln!("[frame-capture] window: RegisterClassW begin");
             let window_class = WNDCLASSW {
                 lpfnWndProc: Some(test_window_proc),
                 hInstance: hinstance,
@@ -63,8 +60,6 @@ mod tests {
                 ..Default::default()
             };
             let _ = RegisterClassW(&window_class);
-            eprintln!("[frame-capture] window: RegisterClassW completed");
-            eprintln!("[frame-capture] window: CreateWindowExW begin");
             let hwnd = CreateWindowExW(
                 Default::default(),
                 PCWSTR(class_name.as_ptr()),
@@ -80,9 +75,7 @@ mod tests {
                 None,
             )
             .expect("test surface window");
-            eprintln!("[frame-capture] window: CreateWindowExW completed hwnd={hwnd:?}");
             let _ = ShowWindow(hwnd, SW_HIDE);
-            eprintln!("[frame-capture] window: hidden window ready");
             (TestSurfaceWindow { hwnd }, hinstance)
         }
     }
@@ -100,14 +93,9 @@ mod tests {
     #[cfg(feature = "frame-capture")]
     #[test]
     fn changing_canvas_capture_updates_vello_image_atlas() {
-        eprintln!("[frame-capture] test: begin");
         let (test_window, hinstance) = create_test_surface_window();
-        eprintln!("[frame-capture] test: device creation begin");
-        let device = match RendererDevice::new() {
-            Ok(device) => {
-                eprintln!("[frame-capture] test: device creation completed");
-                Arc::new(device)
-            }
+        let device = match RendererDevice::new_for_frame_capture() {
+            Ok(device) => Arc::new(device),
             Err(GuiError::AdapterNotFound) => {
                 panic!(
                     "FRAME_CAPTURE_UNAVAILABLE: no GPU adapter; Windows frame-capture regression requires an executable GPU runtime"
@@ -119,7 +107,6 @@ mod tests {
             width: 2,
             height: 2,
         };
-        eprintln!("[frame-capture] test: renderer creation begin");
         let mut renderer = Renderer::new_with_device(
             Arc::clone(&device),
             super::SurfaceWindow {
@@ -129,33 +116,20 @@ mod tests {
             size,
         )
         .expect("create test renderer");
-        eprintln!("[frame-capture] test: renderer creation completed");
 
         let first_pixels = [255, 0, 0, 255].repeat(4);
-        eprintln!("[frame-capture] test: first upload begin");
         renderer.upload(size, &first_pixels);
-        eprintln!("[frame-capture] test: first upload completed");
-        eprintln!("[frame-capture] test: first render begin");
         renderer.render().expect("render first frame");
-        eprintln!("[frame-capture] test: first render completed");
-        eprintln!("[frame-capture] test: first readback begin");
         let first = renderer
             .readback_render_target_rgba8()
             .expect("capture first frame");
-        eprintln!("[frame-capture] test: first readback completed");
 
         let second_pixels = [0, 0, 255, 255].repeat(4);
-        eprintln!("[frame-capture] test: second upload begin");
         renderer.upload(size, &second_pixels);
-        eprintln!("[frame-capture] test: second upload completed");
-        eprintln!("[frame-capture] test: second render begin");
         renderer.render().expect("render second frame");
-        eprintln!("[frame-capture] test: second render completed");
-        eprintln!("[frame-capture] test: second readback begin");
         let second = renderer
             .readback_render_target_rgba8()
             .expect("capture second frame");
-        eprintln!("[frame-capture] test: second readback completed");
 
         assert_eq!((first.width, first.height), (2, 2));
         assert_eq!((second.width, second.height), (2, 2));

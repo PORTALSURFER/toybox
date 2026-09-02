@@ -10,15 +10,24 @@ use super::RendererDevice;
 impl RendererDevice {
     /// Create a new device and queue without binding to a specific surface.
     pub fn new() -> Result<Self, GuiError> {
-        crate::renderer::frame_capture_trace("RendererDevice::new: begin");
+        let backends = wgpu::Backends::from_env().unwrap_or(wgpu::Backends::PRIMARY);
+        Self::new_with_backends(backends)
+    }
+
+    /// Create the device used by the Windows frame-capture regression.
+    #[cfg(all(test, feature = "frame-capture", target_os = "windows"))]
+    pub(crate) fn new_for_frame_capture() -> Result<Self, GuiError> {
+        Self::new_with_backends(wgpu::Backends::DX12)
+    }
+
+    /// Initialize a device using the supplied WGPU backend set.
+    fn new_with_backends(backends: wgpu::Backends) -> Result<Self, GuiError> {
         log_line_safe("renderer_device: create begin");
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::from_env().unwrap_or(wgpu::Backends::PRIMARY),
+            backends,
             ..wgpu::InstanceDescriptor::new_without_display_handle()
         });
-        crate::renderer::frame_capture_trace("RendererDevice::new: instance created");
         log_line_safe("renderer_device: instance created");
-        crate::renderer::frame_capture_trace("RendererDevice::new: request_adapter begin");
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: None,
@@ -28,12 +37,10 @@ impl RendererDevice {
             log_line_safe(&format!("renderer_device: request_adapter error: {err:?}"));
             GuiError::AdapterNotFound
         })?;
-        crate::renderer::frame_capture_trace("RendererDevice::new: adapter acquired");
         log_line_safe("renderer_device: adapter acquired");
 
         let required_features =
             adapter.features() & (wgpu::Features::CLEAR_TEXTURE | wgpu::Features::PIPELINE_CACHE);
-        crate::renderer::frame_capture_trace("RendererDevice::new: request_device begin");
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("patchbay-gui-device"),
             required_features,
@@ -46,7 +53,6 @@ impl RendererDevice {
             log_line_safe(&format!("renderer_device: request_device error: {err:?}"));
             GuiError::Device(err)
         })?;
-        crate::renderer::frame_capture_trace("RendererDevice::new: device created");
         log_line_safe("renderer_device: device created");
         device.on_uncaptured_error(Arc::new(|error| {
             log_line_safe(&format!("renderer_device: uncaptured wgpu error: {error}"));

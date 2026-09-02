@@ -1,15 +1,12 @@
 impl Renderer {
     /// Create a WGPU surface for the given window and map errors to GUI errors.
-    fn create_surface(
+    pub(super) fn create_surface(
         device: &RendererDevice,
         window: SurfaceWindow,
     ) -> Result<wgpu::Surface<'static>, GuiError> {
-        crate::renderer::frame_capture_trace("Renderer::create_surface: begin");
         device.instance.create_surface(window).map_err(|err| {
             log_line_safe(&format!("renderer: create_surface error: {err:?}"));
             GuiError::Surface(err)
-        }).inspect(|_| {
-            crate::renderer::frame_capture_trace("Renderer::create_surface: completed");
         })
     }
 
