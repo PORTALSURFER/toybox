@@ -17,7 +17,7 @@ use radiant::runtime::{
     SurfacePaintPlan,
 };
 use radiant::theme::DpiScale;
-use radiant::widgets::{PointerButton, PointerModifiers, WidgetKey};
+use radiant::widgets::{KeyboardModifiers, PointerButton, PointerModifiers, WidgetKey};
 use raw_window_handle_06::{
     RawDisplayHandle as RawDisplayHandle06, RawWindowHandle as RawWindowHandle06,
     Win32WindowHandle as Win32WindowHandle06, WindowsDisplayHandle,
@@ -263,6 +263,16 @@ impl WindowState {
         }
     }
 
+    /// Read native keyboard modifiers without projecting Control into command.
+    fn native_keyboard_modifiers(pointer_modifiers: PointerModifiers) -> KeyboardModifiers {
+        KeyboardModifiers {
+            command: false,
+            control: pointer_modifiers.command,
+            shift: pointer_modifiers.shift,
+            alt: pointer_modifiers.alt,
+        }
+    }
+
     /// Read the signed client coordinates encoded in a mouse LPARAM.
     fn mouse_position(lparam: LPARAM) -> (i32, i32) {
         let value = lparam.0 as u64;
@@ -418,8 +428,9 @@ impl WindowState {
 
     /// Dispatch one native semantic key-down message.
     fn native_key_down(&mut self, virtual_key: u16) -> bool {
-        let modifiers = Self::keyboard_modifiers();
-        self.dispatch_modifiers(modifiers);
+        let pointer_modifiers = Self::keyboard_modifiers();
+        let keyboard_modifiers = Self::native_keyboard_modifiers(pointer_modifiers);
+        self.dispatch_modifiers(pointer_modifiers);
         let handled = if virtual_key == VK_ESCAPE.0 {
             self.editor
                 .as_mut()
@@ -427,7 +438,7 @@ impl WindowState {
         } else if let Some(key) = Self::widget_key(virtual_key) {
             self.editor
                 .as_mut()
-                .is_some_and(|editor| editor.dispatch_key_press(key))
+                .is_some_and(|editor| editor.dispatch_key_press(key, keyboard_modifiers))
         } else {
             false
         };
@@ -458,7 +469,12 @@ impl WindowState {
     }
 
     /// Dispatch one VST3 UTF-16 callback unit after assembling surrogate pairs.
-    fn callback_character_unit(&mut self, unit: u16, modifiers: PointerModifiers) -> bool {
+    fn callback_character_unit(
+        &mut self,
+        unit: u16,
+        pointer_modifiers: PointerModifiers,
+        keyboard_modifiers: KeyboardModifiers,
+    ) -> bool {
         if (WM_CHAR_SURROGATE_MIN..=WM_CHAR_SURROGATE_MAX).contains(&unit) {
             if unit <= WM_CHAR_HIGH_SURROGATE_MAX {
                 self.pending_high_surrogate = Some(unit);
@@ -467,24 +483,35 @@ impl WindowState {
             if let Some(high) = self.pending_high_surrogate.take()
                 && let Some(character) = utf16_surrogate_pair_to_char(high, unit)
             {
-                return self.dispatch_callback_character(character, modifiers);
+                return self.dispatch_callback_character(
+                    character,
+                    pointer_modifiers,
+                    keyboard_modifiers,
+                );
             }
             return false;
         }
         self.pending_high_surrogate = None;
-        char::from_u32(u32::from(unit))
-            .is_some_and(|character| self.dispatch_callback_character(character, modifiers))
+        char::from_u32(u32::from(unit)).is_some_and(|character| {
+            self.dispatch_callback_character(character, pointer_modifiers, keyboard_modifiers)
+        })
     }
 
     /// Dispatch a complete VST3 callback character with host-provided modifiers.
     fn dispatch_callback_character(
         &mut self,
         character: char,
-        modifiers: PointerModifiers,
+        pointer_modifiers: PointerModifiers,
+        keyboard_modifiers: KeyboardModifiers,
     ) -> bool {
-        self.editor
-            .as_mut()
-            .is_some_and(|editor| dispatch_key_character(editor.as_mut(), character, modifiers))
+        self.editor.as_mut().is_some_and(|editor| {
+            dispatch_key_character(
+                editor.as_mut(),
+                character,
+                pointer_modifiers,
+                keyboard_modifiers,
+            )
+        })
     }
 
     /// Dispatch one native character or command shortcut.
@@ -514,9 +541,10 @@ impl WindowState {
             return false;
         }
         let pointer_modifiers = vst3_pointer_modifiers(modifiers);
+        let keyboard_modifiers = vst3_keyboard_modifiers(modifiers);
         if key_code == 0 {
             self.dispatch_modifiers(pointer_modifiers);
-            let handled = self.callback_character_unit(key, pointer_modifiers);
+            let handled = self.callback_character_unit(key, pointer_modifiers, keyboard_modifiers);
             self.invalidate();
             return handled;
         }
@@ -1616,8 +1644,9 @@ fn dispatch_vst3_key_down(
     let Some(editor) = editor else {
         return false;
     };
-    let modifiers = vst3_pointer_modifiers(modifiers);
-    editor.dispatch_event(Event::pointer_modifiers_changed(modifiers));
+    let pointer_modifiers = vst3_pointer_modifiers(modifiers);
+    let keyboard_modifiers = vst3_keyboard_modifiers(modifiers);
+    editor.dispatch_event(Event::pointer_modifiers_changed(pointer_modifiers));
 
     #[cfg(feature = "vst3")]
     {
@@ -1644,13 +1673,13 @@ fn dispatch_vst3_key_down(
             _ => None,
         };
         if let Some(key) = semantic_key {
-            if modifiers.command {
+            if pointer_modifiers.command {
                 return false;
             }
-            return editor.dispatch_key_press(key);
+            return editor.dispatch_key_press(key, keyboard_modifiers);
         }
         if key_code == KEY_ESCAPE as i64 {
-            if modifiers.command {
+            if pointer_modifiers.command {
                 return false;
             }
             return editor.cancel_text_entry();
@@ -1661,14 +1690,15 @@ fn dispatch_vst3_key_down(
     let Some(character) = character else {
         return false;
     };
-    dispatch_key_character(editor, character, modifiers)
+    dispatch_key_character(editor, character, pointer_modifiers, keyboard_modifiers)
 }
 
 /// Dispatch one VST3 callback character as a semantic or text intent.
 fn dispatch_key_character(
     editor: &mut dyn RadiantEditor,
     character: char,
-    modifiers: PointerModifiers,
+    pointer_modifiers: PointerModifiers,
+    keyboard_modifiers: KeyboardModifiers,
 ) -> bool {
     let semantic_key = match character {
         '\u{8}' => Some(WidgetKey::Backspace),
@@ -1683,7 +1713,7 @@ fn dispatch_key_character(
         '\u{f729}' => Some(WidgetKey::Home),
         '\u{f72b}' => Some(WidgetKey::End),
         '\u{1b}' => {
-            if modifiers.command {
+            if pointer_modifiers.command {
                 return false;
             }
             return editor.cancel_text_entry();
@@ -1691,16 +1721,16 @@ fn dispatch_key_character(
         _ => None,
     };
     if let Some(key) = semantic_key {
-        if modifiers.command {
+        if pointer_modifiers.command {
             return false;
         }
-        return editor.dispatch_key_press(key);
+        return editor.dispatch_key_press(key, keyboard_modifiers);
     }
     if character.is_control() {
         return false;
     }
-    if modifiers.command {
-        editor.dispatch_shortcut(character, modifiers)
+    if pointer_modifiers.command {
+        editor.dispatch_shortcut(character, pointer_modifiers)
     } else {
         editor.dispatch_character(character)
     }
@@ -1729,6 +1759,33 @@ fn vst3_pointer_modifiers(modifiers: i16) -> PointerModifiers {
         command: modifiers & 1 != 0,
         shift: modifiers & 2 != 0,
         alt: modifiers & 4 != 0,
+    }
+}
+
+/// Convert VST3 modifiers into lossless semantic-key modifier state.
+fn vst3_keyboard_modifiers(modifiers: i16) -> KeyboardModifiers {
+    #[cfg(feature = "vst3")]
+    {
+        use toybox_vst3_ffi::Steinberg::KeyModifier_::{
+            kAlternateKey, kCommandKey, kControlKey, kShiftKey,
+        };
+        let modifiers = i64::from(modifiers);
+        KeyboardModifiers {
+            command: modifiers & kCommandKey as i64 != 0,
+            control: modifiers & kControlKey as i64 != 0,
+            shift: modifiers & kShiftKey as i64 != 0,
+            alt: modifiers & kAlternateKey as i64 != 0,
+        }
+    }
+    #[cfg(not(feature = "vst3"))]
+    {
+        let modifiers = i64::from(modifiers);
+        KeyboardModifiers {
+            command: modifiers & 4 != 0,
+            control: modifiers & 8 != 0,
+            shift: modifiers & 1 != 0,
+            alt: modifiers & 2 != 0,
+        }
     }
 }
 
@@ -1810,6 +1867,7 @@ mod tests {
         characters: Vec<char>,
         shortcuts: Vec<(char, PointerModifiers)>,
         keys: Vec<WidgetKey>,
+        key_modifiers: Vec<KeyboardModifiers>,
         canceled: bool,
         events: Rc<RefCell<Vec<Event>>>,
     }
@@ -1826,6 +1884,7 @@ mod tests {
                 characters: Vec::new(),
                 shortcuts: Vec::new(),
                 keys: Vec::new(),
+                key_modifiers: Vec::new(),
                 canceled: false,
                 events,
             }
@@ -1848,8 +1907,9 @@ mod tests {
             false
         }
 
-        fn dispatch_key_press(&mut self, key: WidgetKey) -> bool {
+        fn dispatch_key_press(&mut self, key: WidgetKey, modifiers: KeyboardModifiers) -> bool {
             self.keys.push(key);
+            self.key_modifiers.push(modifiers);
             true
         }
 
@@ -2012,6 +2072,50 @@ mod tests {
 
     #[cfg(feature = "vst3")]
     #[test]
+    fn vst3_key_down_preserves_shift_and_unshifted_keyboard_modifiers() {
+        use toybox_vst3_ffi::Steinberg::KeyModifier_::kShiftKey;
+        use toybox_vst3_ffi::Steinberg::VirtualKeyCodes_::KEY_UP;
+
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let mut editor = KeyRecordingEditor::with_events(Rc::clone(&events));
+
+        assert!(dispatch_vst3_key_down(
+            Some(&mut editor),
+            0,
+            KEY_UP as i16,
+            kShiftKey as i16,
+        ));
+        assert!(dispatch_vst3_key_down(
+            Some(&mut editor),
+            0,
+            KEY_UP as i16,
+            0
+        ));
+
+        assert_eq!(
+            editor.key_modifiers,
+            vec![
+                KeyboardModifiers {
+                    shift: true,
+                    ..KeyboardModifiers::default()
+                },
+                KeyboardModifiers::default(),
+            ]
+        );
+        assert_eq!(
+            *events.borrow(),
+            vec![
+                Event::pointer_modifiers_changed(PointerModifiers {
+                    shift: true,
+                    ..PointerModifiers::default()
+                }),
+                Event::pointer_modifiers_changed(PointerModifiers::default()),
+            ]
+        );
+    }
+
+    #[cfg(feature = "vst3")]
+    #[test]
     fn vst3_callback_falls_back_to_unicode_text_and_command_shortcuts() {
         use toybox_vst3_ffi::Steinberg::KeyModifier_::{kCommandKey, kShiftKey};
         use toybox_vst3_ffi::Steinberg::VirtualKeyCodes_::{KEY_ESCAPE, KEY_LEFT};
@@ -2041,6 +2145,7 @@ mod tests {
 
         assert_eq!(editor.characters, vec!['ß']);
         assert!(editor.keys.is_empty());
+        assert!(editor.key_modifiers.is_empty());
         assert_eq!(
             editor.shortcuts,
             vec![(

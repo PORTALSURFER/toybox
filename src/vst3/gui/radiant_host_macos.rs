@@ -24,7 +24,7 @@ use radiant::runtime::{
     SurfacePaintPlan,
 };
 use radiant::theme::DpiScale;
-use radiant::widgets::{PointerButton, PointerModifiers, WidgetKey};
+use radiant::widgets::{KeyboardModifiers, PointerButton, PointerModifiers, WidgetKey};
 use raw_window_handle_06::{
     AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle as RawDisplayHandle06,
     RawWindowHandle as RawWindowHandle06,
@@ -126,7 +126,7 @@ pub trait RadiantVst3Editor: 'static {
     fn needs_realtime_redraw(&self) -> bool;
 
     /// Dispatch a semantic key press to the active Radiant editor.
-    fn dispatch_key_press(&mut self, key: WidgetKey) -> bool;
+    fn dispatch_key_press(&mut self, key: WidgetKey, modifiers: KeyboardModifiers) -> bool;
 
     /// Dispatch one text character to the active Radiant editor.
     fn dispatch_character(&mut self, character: char) -> bool;
@@ -742,8 +742,10 @@ extern "C" fn key_down(this: &Object, _cmd: Sel, event: *mut Object) {
         let mut handled = false;
         if let Some(runtime) = runtime_mut(this) {
             let modifiers = event_modifiers(event);
+            let keyboard_modifiers = event_keyboard_modifiers(event);
             let text = event_characters(event);
-            handled = dispatch_appkit_key_down(runtime, text.as_deref(), modifiers);
+            handled =
+                dispatch_appkit_key_down(runtime, text.as_deref(), modifiers, keyboard_modifiers);
         }
         if handled {
             let _: () = msg_send![this, setNeedsDisplay: YES];
@@ -959,6 +961,16 @@ unsafe fn event_modifiers(event: *mut Object) -> PointerModifiers {
     }
 }
 
+unsafe fn event_keyboard_modifiers(event: *mut Object) -> KeyboardModifiers {
+    let flags = event_modifier_flags(event);
+    KeyboardModifiers {
+        command: flags & NSEVENT_MODIFIER_FLAG_COMMAND != 0,
+        control: flags & NSEVENT_MODIFIER_FLAG_CONTROL != 0,
+        shift: flags & NSEVENT_MODIFIER_FLAG_SHIFT != 0,
+        alt: flags & NSEVENT_MODIFIER_FLAG_OPTION != 0,
+    }
+}
+
 unsafe fn event_characters(event: *mut Object) -> Option<String> {
     let characters: *mut Object = msg_send![event, characters];
     ns_string_to_string(characters)
@@ -1014,20 +1026,36 @@ unsafe fn native_keyboard_dispatch_suppressed(view: *const Object) -> bool {
         .is_some_and(|view| *view.get_ivar::<usize>("callback_keyboard_only") != 0)
 }
 
-fn dispatch_key_character(runtime: &mut dyn RadiantVst3Editor, ch: char) -> bool {
+fn dispatch_key_character(
+    runtime: &mut dyn RadiantVst3Editor,
+    ch: char,
+    keyboard_modifiers: KeyboardModifiers,
+) -> bool {
     match ch {
         '\u{1b}' => runtime.cancel_text_entry(),
-        NS_ENTER_CHARACTER | '\r' | '\n' => runtime.dispatch_key_press(WidgetKey::Enter),
-        NS_TAB_CHARACTER | NS_BACK_TAB_CHARACTER => runtime.dispatch_key_press(WidgetKey::Tab),
-        '\u{8}' => runtime.dispatch_key_press(WidgetKey::Backspace),
-        '\u{7f}' => runtime.dispatch_key_press(WidgetKey::Backspace),
-        NS_UP_ARROW_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::ArrowUp),
-        NS_DOWN_ARROW_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::ArrowDown),
-        NS_LEFT_ARROW_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::ArrowLeft),
-        NS_RIGHT_ARROW_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::ArrowRight),
-        NS_DELETE_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::Delete),
-        NS_HOME_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::Home),
-        NS_END_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::End),
+        NS_ENTER_CHARACTER | '\r' | '\n' => {
+            runtime.dispatch_key_press(WidgetKey::Enter, keyboard_modifiers)
+        }
+        NS_TAB_CHARACTER | NS_BACK_TAB_CHARACTER => {
+            runtime.dispatch_key_press(WidgetKey::Tab, keyboard_modifiers)
+        }
+        '\u{8}' => runtime.dispatch_key_press(WidgetKey::Backspace, keyboard_modifiers),
+        '\u{7f}' => runtime.dispatch_key_press(WidgetKey::Backspace, keyboard_modifiers),
+        NS_UP_ARROW_FUNCTION_KEY => {
+            runtime.dispatch_key_press(WidgetKey::ArrowUp, keyboard_modifiers)
+        }
+        NS_DOWN_ARROW_FUNCTION_KEY => {
+            runtime.dispatch_key_press(WidgetKey::ArrowDown, keyboard_modifiers)
+        }
+        NS_LEFT_ARROW_FUNCTION_KEY => {
+            runtime.dispatch_key_press(WidgetKey::ArrowLeft, keyboard_modifiers)
+        }
+        NS_RIGHT_ARROW_FUNCTION_KEY => {
+            runtime.dispatch_key_press(WidgetKey::ArrowRight, keyboard_modifiers)
+        }
+        NS_DELETE_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::Delete, keyboard_modifiers),
+        NS_HOME_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::Home, keyboard_modifiers),
+        NS_END_FUNCTION_KEY => runtime.dispatch_key_press(WidgetKey::End, keyboard_modifiers),
         _ if !ch.is_control() => runtime.dispatch_character(ch),
         _ => false,
     }
@@ -1036,15 +1064,16 @@ fn dispatch_key_character(runtime: &mut dyn RadiantVst3Editor, ch: char) -> bool
 fn dispatch_key_text(
     runtime: &mut dyn RadiantVst3Editor,
     text: &str,
-    modifiers: PointerModifiers,
+    pointer_modifiers: PointerModifiers,
+    keyboard_modifiers: KeyboardModifiers,
 ) -> bool {
-    if modifiers.command {
+    if pointer_modifiers.command {
         return text.chars().fold(false, |handled, ch| {
-            handled | dispatch_command_shortcut(runtime, ch, modifiers)
+            handled | dispatch_command_shortcut(runtime, ch, pointer_modifiers)
         });
     }
     text.chars().fold(false, |handled, ch| {
-        handled | dispatch_key_character(runtime, ch)
+        handled | dispatch_key_character(runtime, ch, keyboard_modifiers)
     })
 }
 
@@ -1076,10 +1105,11 @@ fn dispatch_command_shortcut(
 fn dispatch_appkit_key_down(
     runtime: &mut dyn RadiantVst3Editor,
     text: Option<&str>,
-    modifiers: PointerModifiers,
+    pointer_modifiers: PointerModifiers,
+    keyboard_modifiers: KeyboardModifiers,
 ) -> bool {
-    runtime.dispatch_event(Event::pointer_modifiers_changed(modifiers));
-    text.is_some_and(|text| dispatch_key_text(runtime, text, modifiers))
+    runtime.dispatch_event(Event::pointer_modifiers_changed(pointer_modifiers));
+    text.is_some_and(|text| dispatch_key_text(runtime, text, pointer_modifiers, keyboard_modifiers))
 }
 
 #[cfg(feature = "vst3")]
@@ -1094,8 +1124,9 @@ fn dispatch_vst3_key_down(
         KEY_RETURN, KEY_RIGHT, KEY_TAB, KEY_UP,
     };
 
-    let modifiers = vst3_pointer_modifiers(modifiers);
-    runtime.dispatch_event(Event::pointer_modifiers_changed(modifiers));
+    let pointer_modifiers = vst3_pointer_modifiers(modifiers);
+    let keyboard_modifiers = vst3_keyboard_modifiers(modifiers);
+    runtime.dispatch_event(Event::pointer_modifiers_changed(pointer_modifiers));
     let key_code = i64::from(key_code);
     let semantic_key = if key_code == KEY_ENTER as i64 || key_code == KEY_RETURN as i64 {
         Some(WidgetKey::Enter)
@@ -1121,13 +1152,13 @@ fn dispatch_vst3_key_down(
         None
     };
     if let Some(key) = semantic_key {
-        if modifiers.command {
+        if pointer_modifiers.command {
             return false;
         }
-        return runtime.dispatch_key_press(key);
+        return runtime.dispatch_key_press(key, keyboard_modifiers);
     }
     if key_code == KEY_ESCAPE as i64 {
-        if modifiers.command {
+        if pointer_modifiers.command {
             return false;
         }
         return runtime.cancel_text_entry();
@@ -1136,7 +1167,12 @@ fn dispatch_vst3_key_down(
     let Some(character) = vst3_key_down_to_input_char(key, key_code as i16) else {
         return false;
     };
-    dispatch_key_text(runtime, &character.to_string(), modifiers)
+    dispatch_key_text(
+        runtime,
+        &character.to_string(),
+        pointer_modifiers,
+        keyboard_modifiers,
+    )
 }
 
 #[cfg(feature = "vst3")]
@@ -1158,6 +1194,33 @@ fn vst3_pointer_modifiers(modifiers: i16) -> PointerModifiers {
     }
 }
 
+fn vst3_keyboard_modifiers(modifiers: i16) -> KeyboardModifiers {
+    #[cfg(feature = "vst3")]
+    {
+        use toybox_vst3_ffi::Steinberg::KeyModifier_::{
+            kAlternateKey, kCommandKey, kControlKey, kShiftKey,
+        };
+
+        let modifiers = i64::from(modifiers);
+        KeyboardModifiers {
+            command: modifiers & kCommandKey as i64 != 0,
+            control: modifiers & kControlKey as i64 != 0,
+            shift: modifiers & kShiftKey as i64 != 0,
+            alt: modifiers & kAlternateKey as i64 != 0,
+        }
+    }
+    #[cfg(not(feature = "vst3"))]
+    {
+        let modifiers = i64::from(modifiers);
+        KeyboardModifiers {
+            command: modifiers & NSEVENT_MODIFIER_FLAG_COMMAND as i64 != 0,
+            control: modifiers & NSEVENT_MODIFIER_FLAG_CONTROL as i64 != 0,
+            shift: modifiers & NSEVENT_MODIFIER_FLAG_SHIFT as i64 != 0,
+            alt: modifiers & NSEVENT_MODIFIER_FLAG_OPTION as i64 != 0,
+        }
+    }
+}
+
 #[cfg(not(feature = "vst3"))]
 fn dispatch_vst3_key_down(
     runtime: &mut dyn RadiantVst3Editor,
@@ -1165,16 +1228,22 @@ fn dispatch_vst3_key_down(
     key_code: i16,
     modifiers: i16,
 ) -> bool {
-    let modifiers = PointerModifiers {
+    let pointer_modifiers = PointerModifiers {
         command: i64::from(modifiers) & (1 << 20) != 0,
         shift: i64::from(modifiers) & (1 << 17) != 0,
         alt: i64::from(modifiers) & (1 << 19) != 0,
     };
-    runtime.dispatch_event(Event::pointer_modifiers_changed(modifiers));
+    let keyboard_modifiers = vst3_keyboard_modifiers(modifiers);
+    runtime.dispatch_event(Event::pointer_modifiers_changed(pointer_modifiers));
     let Some(character) = vst3_key_down_to_input_char(key, key_code) else {
         return false;
     };
-    dispatch_key_text(runtime, &character.to_string(), modifiers)
+    dispatch_key_text(
+        runtime,
+        &character.to_string(),
+        pointer_modifiers,
+        keyboard_modifiers,
+    )
 }
 
 #[cfg(not(feature = "vst3"))]
@@ -1340,6 +1409,7 @@ mod tests {
         characters: Vec<char>,
         shortcuts: Vec<(char, PointerModifiers)>,
         keys: Vec<WidgetKey>,
+        key_modifiers: Vec<KeyboardModifiers>,
         operations: Vec<&'static str>,
         canceled: bool,
         shortcut_result: bool,
@@ -1356,6 +1426,7 @@ mod tests {
                 characters: Vec::new(),
                 shortcuts: Vec::new(),
                 keys: Vec::new(),
+                key_modifiers: Vec::new(),
                 operations: Vec::new(),
                 canceled: false,
                 shortcut_result: false,
@@ -1388,9 +1459,10 @@ mod tests {
             false
         }
 
-        fn dispatch_key_press(&mut self, key: WidgetKey) -> bool {
+        fn dispatch_key_press(&mut self, key: WidgetKey, modifiers: KeyboardModifiers) -> bool {
             self.operations.push("key");
             self.keys.push(key);
+            self.key_modifiers.push(modifiers);
             true
         }
 
@@ -1559,8 +1631,17 @@ mod tests {
             command: true,
             ..PointerModifiers::default()
         };
+        let keyboard_modifiers = KeyboardModifiers {
+            command: true,
+            ..KeyboardModifiers::default()
+        };
 
-        assert!(!dispatch_appkit_key_down(&mut editor, Some("z"), modifiers));
+        assert!(!dispatch_appkit_key_down(
+            &mut editor,
+            Some("z"),
+            modifiers,
+            keyboard_modifiers,
+        ));
         assert!(editor.characters.is_empty());
         assert_eq!(editor.shortcuts, vec![('z', modifiers)]);
         assert_eq!(editor.operations, vec!["event", "shortcut"]);
@@ -1575,8 +1656,18 @@ mod tests {
             shift: true,
             ..PointerModifiers::default()
         };
+        let keyboard_modifiers = KeyboardModifiers {
+            command: true,
+            shift: true,
+            ..KeyboardModifiers::default()
+        };
 
-        assert!(dispatch_appkit_key_down(&mut editor, Some("Z"), modifiers));
+        assert!(dispatch_appkit_key_down(
+            &mut editor,
+            Some("Z"),
+            modifiers,
+            keyboard_modifiers,
+        ));
         assert_eq!(editor.shortcuts, vec![('Z', modifiers)]);
         assert!(editor.characters.is_empty());
         assert_eq!(editor.operations, vec!["event", "shortcut"]);
@@ -1589,11 +1680,16 @@ mod tests {
             shift: true,
             ..PointerModifiers::default()
         };
+        let keyboard_modifiers = KeyboardModifiers {
+            shift: true,
+            ..KeyboardModifiers::default()
+        };
 
         assert!(dispatch_appkit_key_down(
             &mut editor,
             Some(&NS_LEFT_ARROW_FUNCTION_KEY.to_string()),
             modifiers,
+            keyboard_modifiers,
         ));
 
         assert_eq!(editor.operations, vec!["event", "key"]);
@@ -1602,6 +1698,7 @@ mod tests {
             vec![Event::pointer_modifiers_changed(modifiers)]
         );
         assert_eq!(editor.keys, vec![WidgetKey::ArrowLeft]);
+        assert_eq!(editor.key_modifiers, vec![keyboard_modifiers]);
     }
 
     #[test]
@@ -1612,7 +1709,15 @@ mod tests {
             ..PointerModifiers::default()
         };
 
-        assert!(dispatch_key_text(&mut editor, "å", modifiers));
+        assert!(dispatch_key_text(
+            &mut editor,
+            "å",
+            modifiers,
+            KeyboardModifiers {
+                alt: true,
+                ..KeyboardModifiers::default()
+            },
+        ));
         assert_eq!(editor.characters, vec!['å']);
     }
 
@@ -1629,7 +1734,11 @@ mod tests {
             NS_HOME_FUNCTION_KEY,
             NS_END_FUNCTION_KEY,
         ] {
-            assert!(dispatch_key_character(&mut editor, character));
+            assert!(dispatch_key_character(
+                &mut editor,
+                character,
+                KeyboardModifiers::default()
+            ));
         }
 
         assert_eq!(
@@ -1651,8 +1760,16 @@ mod tests {
     fn appkit_delete_character_and_forward_delete_dispatch_distinct_keys() {
         let mut editor = MockEditor::new();
 
-        assert!(dispatch_key_character(&mut editor, '\u{7f}'));
-        assert!(dispatch_key_character(&mut editor, NS_DELETE_FUNCTION_KEY));
+        assert!(dispatch_key_character(
+            &mut editor,
+            '\u{7f}',
+            KeyboardModifiers::default()
+        ));
+        assert!(dispatch_key_character(
+            &mut editor,
+            NS_DELETE_FUNCTION_KEY,
+            KeyboardModifiers::default()
+        ));
 
         assert_eq!(editor.keys, vec![WidgetKey::Backspace, WidgetKey::Delete]);
         assert!(editor.characters.is_empty());
@@ -1663,7 +1780,11 @@ mod tests {
         let mut editor = MockEditor::new();
 
         for character in [NS_TAB_CHARACTER, NS_BACK_TAB_CHARACTER, NS_ENTER_CHARACTER] {
-            assert!(dispatch_key_character(&mut editor, character));
+            assert!(dispatch_key_character(
+                &mut editor,
+                character,
+                KeyboardModifiers::default()
+            ));
         }
 
         assert_eq!(
@@ -1688,8 +1809,37 @@ mod tests {
 
     #[test]
     #[cfg(feature = "vst3")]
+    fn vst3_semantic_key_preserves_shift_and_unshifted_keyboard_modifiers() {
+        use toybox_vst3_ffi::Steinberg::KeyModifier_::kShiftKey;
+        use toybox_vst3_ffi::Steinberg::VirtualKeyCodes_::KEY_UP;
+
+        let mut editor = MockEditor::new();
+
+        assert!(dispatch_vst3_key_down(
+            &mut editor,
+            0,
+            KEY_UP as i16,
+            kShiftKey as i16,
+        ));
+        assert!(dispatch_vst3_key_down(&mut editor, 0, KEY_UP as i16, 0));
+
+        assert_eq!(
+            editor.key_modifiers,
+            vec![
+                KeyboardModifiers {
+                    shift: true,
+                    ..KeyboardModifiers::default()
+                },
+                KeyboardModifiers::default(),
+            ]
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "vst3")]
     fn vst3_command_modified_text_is_left_for_the_host() {
         use toybox_vst3_ffi::Steinberg::KeyModifier_::kCommandKey;
+        use toybox_vst3_ffi::Steinberg::VirtualKeyCodes_::KEY_UP;
 
         let mut editor = MockEditor::new();
 
@@ -1699,8 +1849,15 @@ mod tests {
             0,
             kCommandKey as i16
         ));
+        assert!(!dispatch_vst3_key_down(
+            &mut editor,
+            0,
+            KEY_UP as i16,
+            kCommandKey as i16,
+        ));
         assert!(editor.characters.is_empty());
         assert!(editor.keys.is_empty());
+        assert!(editor.key_modifiers.is_empty());
         assert_eq!(
             editor.shortcuts,
             vec![(
