@@ -7,7 +7,7 @@
 use radiant::runtime::{Event, SurfacePaintPlan};
 #[cfg(target_os = "windows")]
 use radiant::theme::DpiScale;
-use radiant::widgets::{PointerModifiers, WidgetKey};
+use radiant::widgets::{KeyboardModifiers, PointerModifiers, WidgetKey};
 use raw_window_handle::RawWindowHandle;
 
 /// Shared bundled-font options for Radiant native text.
@@ -30,7 +30,7 @@ pub trait RadiantEditor: 'static {
     fn needs_realtime_redraw(&self) -> bool;
 
     /// Dispatch a semantic key press.
-    fn dispatch_key_press(&mut self, key: WidgetKey) -> bool;
+    fn dispatch_key_press(&mut self, key: WidgetKey, modifiers: KeyboardModifiers) -> bool;
 
     /// Dispatch one text character.
     fn dispatch_character(&mut self, character: char) -> bool;
@@ -233,8 +233,8 @@ impl host_macos::RadiantVst3Editor for EditorAdapter {
         self.0.needs_realtime_redraw()
     }
 
-    fn dispatch_key_press(&mut self, key: WidgetKey) -> bool {
-        self.0.dispatch_key_press(key)
+    fn dispatch_key_press(&mut self, key: WidgetKey, modifiers: KeyboardModifiers) -> bool {
+        self.0.dispatch_key_press(key, modifiers)
     }
 
     fn dispatch_character(&mut self, character: char) -> bool {
@@ -605,7 +605,7 @@ macro_rules! radiant_clap_gui_callbacks {
 mod tests {
     use super::{EditorSizeContract, RadiantEditor, RadiantHostedGui, vst3_key_down_to_input_char};
     use radiant::runtime::{Event, SurfacePaintPlan};
-    use radiant::widgets::{PointerModifiers, WidgetKey};
+    use radiant::widgets::{KeyboardModifiers, PointerModifiers, WidgetKey};
 
     #[test]
     fn size_contract_orders_bounds_and_preserves_default() {
@@ -706,7 +706,7 @@ mod tests {
         fn needs_realtime_redraw(&self) -> bool {
             false
         }
-        fn dispatch_key_press(&mut self, _key: WidgetKey) -> bool {
+        fn dispatch_key_press(&mut self, _key: WidgetKey, _modifiers: KeyboardModifiers) -> bool {
             false
         }
         fn dispatch_character(&mut self, _character: char) -> bool {

@@ -14,7 +14,7 @@ use radiant::runtime::{
 #[cfg(all(target_os = "macos", feature = "radiant-vst3"))]
 use radiant::theme::ThemeTokens;
 #[cfg(all(target_os = "macos", feature = "radiant-vst3"))]
-use radiant::widgets::WidgetKey;
+use radiant::widgets::{KeyboardModifiers, WidgetKey};
 #[cfg(all(target_os = "macos", feature = "radiant-vst3"))]
 use toybox::vst3::gui::{RadiantVst3Editor, RadiantVst3HostedGui, Vst3HostedGui};
 
@@ -78,7 +78,7 @@ impl RadiantVst3Editor for SmokeEditor {
         false
     }
 
-    fn dispatch_key_press(&mut self, _key: WidgetKey) -> bool {
+    fn dispatch_key_press(&mut self, _key: WidgetKey, _modifiers: KeyboardModifiers) -> bool {
         false
     }
 
