@@ -25,6 +25,8 @@ struct SmokeEditor {
     plan: SurfacePaintPlan,
     /// Last logical size supplied by the host lifecycle.
     size: Option<(u32, u32)>,
+    /// Latest effective visibility observation from the native host.
+    visible: std::rc::Rc<std::cell::Cell<Option<bool>>>,
 }
 
 #[cfg(all(target_os = "macos", feature = "radiant-vst3"))]
@@ -53,12 +55,17 @@ impl SmokeEditor {
                 primitives: vec![PaintPrimitive::FillPath(fill)],
             },
             size: None,
+            visible: Default::default(),
         }
     }
 }
 
 #[cfg(all(target_os = "macos", feature = "radiant-vst3"))]
 impl RadiantVst3Editor for SmokeEditor {
+    fn set_visible(&mut self, visible: bool) {
+        self.visible.set(Some(visible));
+    }
+
     fn resize(&mut self, width: u32, height: u32) {
         self.size = Some((width, height));
     }
@@ -98,14 +105,15 @@ fn main() {
         let parent: *mut Object = msg_send![class!(NSView), new];
         assert!(!parent.is_null(), "NSView allocation should succeed");
 
+        let window: *mut Object = msg_send![class!(NSWindow), new];
+        let _: () = msg_send![window, setContentView: parent];
+        let _: () = msg_send![window, orderFront: std::ptr::null_mut::<Object>()];
+        let editor = SmokeEditor::new();
+        let visible = std::rc::Rc::clone(&editor.visible);
         let mut handle = toybox::raw_window_handle::AppKitWindowHandle::empty();
         handle.ns_view = parent.cast();
-        let mut gui = RadiantVst3HostedGui::new(
-            "ToyboxRadiantVst3EditorSmokeHost",
-            SmokeEditor::new(),
-            420,
-            282,
-        );
+        let mut gui =
+            RadiantVst3HostedGui::new("ToyboxRadiantVst3EditorSmokeHost", editor, 420, 282);
         gui.set_parent_raw(toybox::raw_window_handle::RawWindowHandle::AppKit(handle));
         assert!(gui.open(), "embedded Vello renderer should initialize");
 
@@ -115,11 +123,31 @@ fn main() {
         let child: *mut Object = msg_send![subviews, objectAtIndex: 0_usize];
         let _: () = msg_send![child, display];
 
+        assert!(gui.show());
+        let _: () = msg_send![child, playheadRedrawTick: std::ptr::null_mut::<Object>()];
+        assert_eq!(visible.get(), Some(true));
+        let _ = gui.on_focus(false);
+        assert_eq!(visible.get(), Some(true), "focus must not hide an editor");
+        let _: () = msg_send![parent, setHidden: objc::runtime::YES];
+        let _: () = msg_send![child, playheadRedrawTick: std::ptr::null_mut::<Object>()];
+        assert_eq!(
+            visible.get(),
+            Some(false),
+            "ancestor hiding must be observed"
+        );
+        let _: () = msg_send![parent, setHidden: objc::runtime::NO];
+        let _: () = msg_send![child, playheadRedrawTick: std::ptr::null_mut::<Object>()];
+        assert_eq!(visible.get(), Some(true));
+        let _: () = msg_send![window, orderOut: std::ptr::null_mut::<Object>()];
+        let _: () = msg_send![child, playheadRedrawTick: std::ptr::null_mut::<Object>()];
+        assert_eq!(visible.get(), Some(false), "window hiding must be observed");
         gui.close();
+        assert_eq!(visible.get(), Some(false));
         let subviews: *mut Object = msg_send![parent, subviews];
         let count: usize = msg_send![subviews, count];
         assert_eq!(count, 0, "hosted view should detach its child");
         let _: () = msg_send![parent, release];
+        let _: () = msg_send![window, release];
     }
 }
 

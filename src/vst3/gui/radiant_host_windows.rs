@@ -37,15 +37,16 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CS_DBLCLKS, CS_HREDRAW, CS_VREDRAW, CreateWindowExW, DLGC_WANTALLKEYS, DLGC_WANTCHARS,
-    DefWindowProcW, DestroyWindow, GWLP_USERDATA, GetClientRect, IsWindow, LoadCursorW,
-    MA_ACTIVATE, RegisterClassW, SW_HIDE, SW_SHOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER,
-    SetParent, SetTimer, SetWindowLongPtrW, SetWindowPos, ShowWindow, WM_CANCELMODE,
-    WM_CAPTURECHANGED, WM_CHAR, WM_DPICHANGED, WM_DPICHANGED_AFTERPARENT, WM_ERASEBKGND,
-    WM_GETDLGCODE, WM_KEYDOWN, WM_KEYUP, WM_KILLFOCUS, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN,
-    WM_LBUTTONUP, WM_MBUTTONDBLCLK, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE,
-    WM_MOUSEWHEEL, WM_NCDESTROY, WM_NCHITTEST, WM_PAINT, WM_RBUTTONDBLCLK, WM_RBUTTONDOWN,
-    WM_RBUTTONUP, WM_SETFOCUS, WM_SIZE, WM_SYSCHAR, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER,
-    WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
+    DefWindowProcW, DestroyWindow, GA_ROOT, GWLP_USERDATA, GetAncestor, GetClientRect, IsIconic,
+    IsWindow, IsWindowVisible, LoadCursorW, MA_ACTIVATE, RegisterClassW, SW_HIDE, SW_SHOW,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER, SetParent, SetTimer, SetWindowLongPtrW, SetWindowPos,
+    ShowWindow, WM_CANCELMODE, WM_CAPTURECHANGED, WM_CHAR, WM_DPICHANGED,
+    WM_DPICHANGED_AFTERPARENT, WM_ERASEBKGND, WM_GETDLGCODE, WM_KEYDOWN, WM_KEYUP, WM_KILLFOCUS,
+    WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDBLCLK, WM_MBUTTONDOWN, WM_MBUTTONUP,
+    WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_NCHITTEST, WM_PAINT,
+    WM_RBUTTONDBLCLK, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SETFOCUS, WM_SHOWWINDOW, WM_SIZE,
+    WM_SYSCHAR, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN,
+    WS_CLIPSIBLINGS,
 };
 use windows::core::PCWSTR;
 
@@ -674,7 +675,20 @@ impl WindowState {
                 Some(LRESULT(0))
             }
             WM_ERASEBKGND => Some(LRESULT(1)),
+            WM_SHOWWINDOW if wparam.0 == 0 => {
+                if let Some(editor) = self.editor.as_mut() {
+                    editor.set_visible(false);
+                }
+                None
+            }
             WM_TIMER if wparam.0 == TIMER_ID => {
+                let visible = unsafe {
+                    IsWindowVisible(self.hwnd).as_bool()
+                        && !IsIconic(GetAncestor(self.hwnd, GA_ROOT)).as_bool()
+                };
+                if let Some(editor) = self.editor.as_mut() {
+                    editor.set_visible(visible);
+                }
                 if self.needs_realtime_redraw() {
                     self.invalidate();
                 }
@@ -809,6 +823,9 @@ impl Drop for WindowState {
         // path. Cancel while the editor is still retained so an abandoned
         // gesture cannot survive into a later reopen.
         self.cancel_before_teardown();
+        if let Some(editor) = self.editor.as_mut() {
+            editor.set_visible(false);
+        }
         unsafe {
             let _ = windows::Win32::UI::WindowsAndMessaging::KillTimer(Some(self.hwnd), TIMER_ID);
         }
@@ -1187,6 +1204,9 @@ impl RadiantWindowsHostedGui {
         // messages cannot strand a Radiant pointer gesture.
         let editor = unsafe {
             (*pointer).cancel_before_teardown();
+            if let Some(editor) = (*pointer).editor.as_mut() {
+                editor.set_visible(false);
+            }
             (*pointer).editor.take()
         };
         let destroyed = unsafe { DestroyWindow(hwnd).is_ok() };
@@ -1815,9 +1835,7 @@ unsafe extern "system" fn window_proc(
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "vst3")]
     use std::cell::{Cell, RefCell};
-    #[cfg(feature = "vst3")]
     use std::rc::Rc;
 
     #[cfg(feature = "vst3")]
@@ -1829,19 +1847,15 @@ mod tests {
         dpi_change_kind, state_pointer_matches, suppresses_native_keyboard_message,
         utf16_surrogate_pair_to_char,
     };
-    #[cfg(feature = "vst3")]
     use crate::radiant_gui::RadiantEditor;
     #[cfg(feature = "vst3")]
     use radiant::gui::types::Point;
-    #[cfg(feature = "vst3")]
     use radiant::runtime::{Event, SurfacePaintPlan};
-    #[cfg(feature = "vst3")]
     use radiant::theme::DpiScale;
-    #[cfg(feature = "vst3")]
     use radiant::theme::ThemeTokens;
     #[cfg(feature = "vst3")]
-    use radiant::widgets::{PointerButton, PointerModifiers, WidgetKey};
-    #[cfg(feature = "vst3")]
+    use radiant::widgets::PointerButton;
+    use radiant::widgets::{KeyboardModifiers, PointerModifiers, WidgetKey};
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{
         WM_CHAR, WM_DPICHANGED, WM_DPICHANGED_AFTERPARENT, WM_GETDLGCODE, WM_KEYDOWN, WM_KEYUP,
@@ -1861,7 +1875,6 @@ mod tests {
         assert_eq!(dpi_change_kind(WM_SIZE), None);
     }
 
-    #[cfg(feature = "vst3")]
     struct KeyRecordingEditor {
         plan: SurfacePaintPlan,
         characters: Vec<char>,
@@ -1870,9 +1883,9 @@ mod tests {
         key_modifiers: Vec<KeyboardModifiers>,
         canceled: bool,
         events: Rc<RefCell<Vec<Event>>>,
+        visibility: Rc<RefCell<Vec<bool>>>,
     }
 
-    #[cfg(feature = "vst3")]
     impl KeyRecordingEditor {
         fn new() -> Self {
             Self::with_events(Rc::new(RefCell::new(Vec::new())))
@@ -1887,12 +1900,16 @@ mod tests {
                 key_modifiers: Vec::new(),
                 canceled: false,
                 events,
+                visibility: Rc::default(),
             }
         }
     }
 
-    #[cfg(feature = "vst3")]
     impl RadiantEditor for KeyRecordingEditor {
+        fn set_visible(&mut self, visible: bool) {
+            self.visibility.borrow_mut().push(visible);
+        }
+
         fn resize(&mut self, _width: u32, _height: u32) {}
 
         fn dispatch_event(&mut self, event: Event) {
@@ -1929,7 +1946,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "vst3")]
     fn test_window_state(events: Rc<RefCell<Vec<Event>>>) -> super::WindowState {
         super::WindowState::new(
             HWND(std::ptr::null_mut()),
@@ -1940,6 +1956,24 @@ mod tests {
             Rc::new(Cell::new(DpiScale::ONE)),
             Rc::new(Cell::new(KeyboardDeliveryMode::Native)),
         )
+    }
+
+    #[test]
+    fn hiding_and_native_teardown_report_visibility_without_using_focus() {
+        let editor = KeyRecordingEditor::new();
+        let visibility = Rc::clone(&editor.visibility);
+        let mut state = test_window_state(Rc::default());
+        state.editor = Some(Box::new(editor));
+        unsafe {
+            state.handle_message(super::WM_KILLFOCUS, super::WPARAM(0), super::LPARAM(0));
+        }
+        assert!(visibility.borrow().is_empty());
+        unsafe {
+            state.handle_message(super::WM_SHOWWINDOW, super::WPARAM(0), super::LPARAM(0));
+        }
+        assert_eq!(*visibility.borrow(), vec![false]);
+        drop(state);
+        assert_eq!(*visibility.borrow(), vec![false, false]);
     }
 
     #[cfg(feature = "vst3")]

@@ -17,6 +17,12 @@ pub use typography::{bundled_offscreen_capture, bundled_text_options};
 
 /// Editor implementation consumed by [`RadiantHostedGui`].
 pub trait RadiantEditor: 'static {
+    /// Observe whether the native editor is visible, including its ancestors.
+    ///
+    /// Delivered on the UI thread on hide/close and periodically while attached.
+    /// Observations may repeat. Focus and occlusion do not affect visibility.
+    fn set_visible(&mut self, _visible: bool) {}
+
     /// Resize the editor's logical viewport.
     fn resize(&mut self, width: u32, height: u32);
 
@@ -217,6 +223,10 @@ struct EditorAdapter(Box<dyn RadiantEditor>);
 
 #[cfg(target_os = "macos")]
 impl host_macos::RadiantVst3Editor for EditorAdapter {
+    fn set_visible(&mut self, visible: bool) {
+        self.0.set_visible(visible);
+    }
+
     fn resize(&mut self, width: u32, height: u32) {
         self.0.resize(width, height);
     }

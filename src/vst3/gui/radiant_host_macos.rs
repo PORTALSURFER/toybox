@@ -113,6 +113,9 @@ struct RedrawDriver {
 
 /// Radiant editor contract consumed by Toybox's hosted VST3 view.
 pub trait RadiantVst3Editor: 'static {
+    /// Observe native visibility on the UI thread; repeated observations are allowed.
+    fn set_visible(&mut self, _visible: bool) {}
+
     /// Resize the declarative editor to a new logical host size.
     fn resize(&mut self, width: u32, height: u32);
 
@@ -223,6 +226,9 @@ impl RadiantVst3HostedGui {
     fn close_view(&mut self) {
         unsafe {
             if let Some(root_view) = self.root_view.take() {
+                if let Some(runtime) = runtime_mut(root_view.as_ptr()) {
+                    runtime.set_visible(false);
+                }
                 stop_redraw_driver(root_view.as_ptr());
                 cancel_native_interaction(root_view.as_ptr());
                 drop_renderer(root_view.as_ptr());
@@ -277,6 +283,9 @@ impl RadiantVst3HostedGui {
         if let Some(root_view) = self.root_view {
             unsafe {
                 let _: () = msg_send![root_view.as_ptr(), setHidden: YES];
+                if let Some(runtime) = runtime_mut(root_view.as_ptr()) {
+                    runtime.set_visible(false);
+                }
             }
         }
     }
@@ -773,11 +782,30 @@ extern "C" fn scroll_wheel(this: &Object, _cmd: Sel, event: *mut Object) {
     }
 }
 
+/// Query effective visibility without treating another window or focus as hiding.
+unsafe fn editor_is_visible(view: &Object) -> bool {
+    unsafe {
+        let hidden: BOOL = msg_send![view, isHiddenOrHasHiddenAncestor];
+        let window: *mut Object = msg_send![view, window];
+        if hidden != NO || window.is_null() {
+            return false;
+        }
+        let visible: BOOL = msg_send![window, isVisible];
+        let minimized: BOOL = msg_send![window, isMiniaturized];
+        let app: *mut Object = msg_send![class!(NSApplication), sharedApplication];
+        let app_hidden: BOOL = msg_send![app, isHidden];
+        visible != NO && minimized == NO && app_hidden == NO
+    }
+}
+
 extern "C" fn playhead_redraw_tick(this: &Object, _cmd: Sel, _timer: *mut Object) {
     unsafe {
         complete_pending_redraw_tick(this);
         if runtime_mut(this)
-            .map(|runtime| runtime.needs_realtime_redraw())
+            .map(|runtime| {
+                runtime.set_visible(editor_is_visible(this));
+                runtime.needs_realtime_redraw()
+            })
             .unwrap_or(false)
         {
             let _: () = msg_send![this, setNeedsDisplay: YES];
@@ -788,6 +816,9 @@ extern "C" fn playhead_redraw_tick(this: &Object, _cmd: Sel, _timer: *mut Object
 
 extern "C" fn dealloc(this: &Object, _cmd: Sel) {
     unsafe {
+        if let Some(runtime) = runtime_mut(this) {
+            runtime.set_visible(false);
+        }
         cancel_native_interaction(this);
         stop_redraw_driver(this);
         remove_tracking_area(this);
@@ -1416,6 +1447,7 @@ mod tests {
         event_count: Option<Arc<Mutex<usize>>>,
         character_count: Option<Arc<Mutex<usize>>>,
         event_sink: Option<Arc<Mutex<Vec<Event>>>>,
+        visibility: Arc<Mutex<Vec<bool>>>,
     }
 
     impl MockEditor {
@@ -1433,11 +1465,16 @@ mod tests {
                 event_count: None,
                 character_count: None,
                 event_sink: None,
+                visibility: Arc::default(),
             }
         }
     }
 
     impl RadiantVst3Editor for MockEditor {
+        fn set_visible(&mut self, visible: bool) {
+            self.visibility.lock().unwrap().push(visible);
+        }
+
         fn resize(&mut self, _width: u32, _height: u32) {}
 
         fn dispatch_event(&mut self, event: Event) {
@@ -2034,6 +2071,25 @@ mod tests {
             drop_runtime(view.as_ptr());
             gui.root_view = None;
             let _: () = msg_send![view.as_ptr(), release];
+        }
+    }
+
+    #[test]
+    fn native_hide_and_close_report_visibility_without_using_focus() {
+        let editor = MockEditor::new();
+        let visibility = Arc::clone(&editor.visibility);
+        let mut gui =
+            RadiantVst3HostedGui::new("ToyboxVisibilityTest", MockEditor::new(), 420, 282);
+        unsafe {
+            let view = new_radiant_view("ToyboxVisibilityViewTest", 420, 282).unwrap();
+            install_test_runtime(view, Box::new(editor));
+            gui.root_view = Some(view);
+            let _ = Vst3HostedGui::on_focus(&gui, false);
+            assert!(visibility.lock().unwrap().is_empty());
+            gui.hide();
+            assert_eq!(*visibility.lock().unwrap(), vec![false]);
+            gui.close_view();
+            assert_eq!(*visibility.lock().unwrap(), vec![false, false]);
         }
     }
 
