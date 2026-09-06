@@ -25,6 +25,8 @@ struct SmokeEditor {
     plan: SurfacePaintPlan,
     /// Last logical size supplied by the host lifecycle.
     size: Option<(u32, u32)>,
+    /// Optional failure injected by the subprocess regression.
+    failure: Option<String>,
 }
 
 #[cfg(all(target_os = "macos", feature = "radiant-vst3"))]
@@ -53,6 +55,7 @@ impl SmokeEditor {
                 primitives: vec![PaintPrimitive::FillPath(fill)],
             },
             size: None,
+            failure: None,
         }
     }
 }
@@ -60,6 +63,11 @@ impl SmokeEditor {
 #[cfg(all(target_os = "macos", feature = "radiant-vst3"))]
 impl RadiantVst3Editor for SmokeEditor {
     fn resize(&mut self, width: u32, height: u32) {
+        assert_ne!(
+            self.failure.as_deref(),
+            Some("resize"),
+            "injected initialization panic"
+        );
         self.size = Some((width, height));
     }
 
@@ -75,6 +83,11 @@ impl RadiantVst3Editor for SmokeEditor {
     }
 
     fn needs_realtime_redraw(&self) -> bool {
+        assert_ne!(
+            self.failure.as_deref(),
+            Some("redraw"),
+            "injected redraw panic"
+        );
         false
     }
 
@@ -100,25 +113,46 @@ fn main() {
 
         let mut handle = toybox::raw_window_handle::AppKitWindowHandle::empty();
         handle.ns_view = parent.cast();
-        let mut gui = RadiantVst3HostedGui::new(
-            "ToyboxRadiantVst3EditorSmokeHost",
-            SmokeEditor::new(),
-            420,
-            282,
-        );
-        gui.set_parent_raw(toybox::raw_window_handle::RawWindowHandle::AppKit(handle));
-        assert!(gui.open(), "embedded Vello renderer should initialize");
-
-        let subviews: *mut Object = msg_send![parent, subviews];
-        let count: usize = msg_send![subviews, count];
-        assert_eq!(count, 1, "hosted view should attach one child");
-        let child: *mut Object = msg_send![subviews, objectAtIndex: 0_usize];
-        let _: () = msg_send![child, display];
-
-        gui.close();
-        let subviews: *mut Object = msg_send![parent, subviews];
-        let count: usize = msg_send![subviews, count];
-        assert_eq!(count, 0, "hosted view should detach its child");
+        let failure = std::env::args().nth(1);
+        assert!(objc::runtime::Class::get("RawWindowMetalLayer").is_none());
+        for iteration in 0..3 {
+            let mut editor = SmokeEditor::new();
+            if iteration == 0 {
+                editor.failure = failure.clone();
+            }
+            let mut gui =
+                RadiantVst3HostedGui::new("ToyboxRadiantVst3EditorSmokeHost", editor, 420, 282);
+            gui.set_parent_raw(toybox::raw_window_handle::RawWindowHandle::AppKit(handle));
+            let fail_open = iteration == 0 && failure.as_deref() == Some("resize");
+            assert_eq!(gui.open(), !fail_open, "initialization result");
+            if !fail_open {
+                let subviews: *mut Object = msg_send![parent, subviews];
+                let count: usize = msg_send![subviews, count];
+                assert_eq!(count, 1, "hosted view attaches one child");
+                let child: *mut Object = msg_send![subviews, objectAtIndex: 0_usize];
+                let layer: *mut Object = msg_send![child, layer];
+                let sublayers: *mut Object = msg_send![layer, sublayers];
+                let count: usize = msg_send![sublayers, count];
+                assert_eq!(count, 1, "one owned Metal sublayer");
+                let metal: *mut Object = msg_send![sublayers, objectAtIndex: 0_usize];
+                let is_metal: objc::runtime::BOOL =
+                    msg_send![metal, isKindOfClass: class!(CAMetalLayer)];
+                assert_eq!(is_metal, objc::runtime::YES);
+                let _: () = msg_send![child, display];
+                let _: () = msg_send![child, playheadRedrawTick: std::ptr::null_mut::<Object>()];
+                let _: () = msg_send![child, playheadRedrawTick: std::ptr::null_mut::<Object>()];
+                gui.request_resize(600, 400);
+                gui.set_scale(2.0);
+            }
+            gui.close();
+            let subviews: *mut Object = msg_send![parent, subviews];
+            let count: usize = msg_send![subviews, count];
+            assert_eq!(count, 0, "close rolls back all child views");
+            if iteration == 0 && failure.is_some() {
+                assert!(!gui.open(), "failed editor is quarantined");
+            }
+            assert!(objc::runtime::Class::get("RawWindowMetalLayer").is_none());
+        }
         let _: () = msg_send![parent, release];
     }
 }

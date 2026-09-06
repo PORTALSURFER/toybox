@@ -780,21 +780,16 @@ impl WindowState {
             ))),
             WM_KEYDOWN | WM_SYSKEYDOWN => {
                 let virtual_key = wparam.0 as u16;
-                let _ = self.native_key_down(virtual_key);
-                Some(LRESULT(0))
+                self.native_key_down(virtual_key).then_some(LRESULT(0))
             }
-            WM_KEYUP | WM_SYSKEYUP => Some(LRESULT(0)),
-            WM_CHAR | WM_SYSCHAR => {
-                let _ = self.native_character_unit(wparam.0 as u16);
-                Some(LRESULT(0))
-            }
+            WM_KEYUP | WM_SYSKEYUP => None,
+            WM_CHAR | WM_SYSCHAR => self
+                .native_character_unit(wparam.0 as u16)
+                .then_some(LRESULT(0)),
             WM_UNICHAR if wparam.0 == UNICODE_NOCHAR => Some(LRESULT(1)),
-            WM_UNICHAR => {
-                if let Some(character) = char::from_u32(wparam.0 as u32) {
-                    let _ = self.native_character(character);
-                }
-                Some(LRESULT(0))
-            }
+            WM_UNICHAR => char::from_u32(wparam.0 as u32)
+                .is_some_and(|character| self.native_character(character))
+                .then_some(LRESULT(0)),
             WM_MOUSEACTIVATE => Some(LRESULT(MA_ACTIVATE as isize)),
             WM_NCHITTEST => Some(LRESULT(1)),
             _ => None,

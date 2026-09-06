@@ -16,6 +16,8 @@ pub mod dsp;
 pub mod events;
 #[cfg(feature = "gui")]
 pub mod gui;
+#[cfg(any(feature = "radiant-gui", all(feature = "gui", feature = "vst3")))]
+mod gui_panic;
 #[cfg(feature = "gui")]
 mod logging;
 /// Host-neutral Radiant editor hosting for embedded CLAP and VST3 views.
