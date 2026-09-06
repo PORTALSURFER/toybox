@@ -30,7 +30,10 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
         let Ok(mut gui) = self.gui.lock() else {
             return kResultFalse;
         };
-        gui.set_callback_keyboard_mode(true);
+        // AppKit hosts deliver keys through the focused NSView responder.
+        // Suppressing that path loses input in hosts such as Ableton Live.
+        // Windows uses IPlugView callbacks to avoid duplicate native delivery.
+        gui.set_callback_keyboard_mode(cfg!(target_os = "windows"));
         gui.set_parent_raw(parent_handle);
         if !gui.open() {
             return kResultFalse;
