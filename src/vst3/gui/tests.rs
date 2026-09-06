@@ -208,7 +208,7 @@ fn hosted_view_reports_default_size_before_attach() {
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 #[test]
-fn hosted_view_enables_callback_keyboard_before_open_and_shows_child() {
+fn hosted_view_selects_platform_keyboard_delivery_before_open_and_shows_child() {
     let view = HostedVst3View::new(
         RecordingHostedGui {
             events: Mutex::new(Vec::new()),
@@ -221,6 +221,10 @@ fn hosted_view_enables_callback_keyboard_before_open_and_shows_child() {
     let platform = kPlatformTypeNSView;
     #[cfg(target_os = "windows")]
     let platform = kPlatformTypeHWND;
+    #[cfg(target_os = "macos")]
+    let keyboard_mode = "native";
+    #[cfg(target_os = "windows")]
+    let keyboard_mode = "callback-only";
 
     assert_eq!(unsafe { view.attached(parent, platform) }, kResultOk);
     assert_eq!(
@@ -231,7 +235,7 @@ fn hosted_view_enables_callback_keyboard_before_open_and_shows_child() {
             .events
             .lock()
             .expect("event mutex should not be poisoned"),
-        vec!["callback-only", "set-parent", "open", "show"]
+        vec![keyboard_mode, "set-parent", "open", "show"]
     );
 
     assert_eq!(unsafe { view.removed() }, kResultOk);
@@ -244,7 +248,7 @@ fn hosted_view_enables_callback_keyboard_before_open_and_shows_child() {
             .lock()
             .expect("event mutex should not be poisoned"),
         vec![
-            "callback-only",
+            keyboard_mode,
             "set-parent",
             "open",
             "show",
