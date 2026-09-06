@@ -732,3 +732,69 @@ fn parent_handle_conversion_maps_ns_view() {
         _ => panic!("expected AppKit raw window handle"),
     }
 }
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[test]
+fn vst3_abi_contains_attach_panic_and_quarantines_failed_view() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    use toybox_vst3_ffi::ComWrapper;
+
+    struct PanickingGui {
+        closes: Arc<AtomicUsize>,
+    }
+    impl Vst3HostedGui for PanickingGui {
+        fn set_parent_raw(&mut self, _: RawWindowHandle) {}
+        fn open(&mut self) -> bool {
+            panic!("injected editor initialization failure");
+        }
+        fn close(&mut self) {
+            self.closes.fetch_add(1, Ordering::SeqCst);
+        }
+        fn last_size(&self) -> Option<(u32, u32)> {
+            None
+        }
+        fn request_resize(&self, _: u32, _: u32) {
+            panic!("quarantined editor was reused");
+        }
+    }
+    let closes = Arc::new(AtomicUsize::new(0));
+    let view = ComWrapper::new(HostedVst3View::new(
+        PanickingGui {
+            closes: closes.clone(),
+        },
+        420,
+        240,
+    ))
+    .to_com_ptr::<IPlugView>()
+    .expect("view interface");
+    #[cfg(target_os = "macos")]
+    let platform = kPlatformTypeNSView;
+    #[cfg(target_os = "windows")]
+    let platform = kPlatformTypeHWND;
+    let parent = std::ptr::dangling_mut::<std::ffi::c_void>();
+    // These calls cross the generated extern ABI, not just the Rust trait method.
+    assert_eq!(unsafe { view.attached(parent, platform) }, kResultFalse);
+    assert_eq!(closes.load(Ordering::SeqCst), 1);
+    assert_eq!(unsafe { view.attached(parent, platform) }, kResultFalse);
+    assert_eq!(
+        unsafe { view.onSize(&mut view_rect(600, 400)) },
+        kResultFalse
+    );
+    assert_eq!(unsafe { view.removed() }, kResultFalse);
+    assert_eq!(closes.load(Ordering::SeqCst), 1);
+
+    let fresh = ComWrapper::new(HostedVst3View::new(
+        RecordingHostedGui {
+            events: Mutex::new(Vec::new()),
+        },
+        420,
+        240,
+    ))
+    .to_com_ptr::<IPlugView>()
+    .expect("fresh view interface");
+    assert_eq!(unsafe { fresh.attached(parent, platform) }, kResultOk);
+    assert_eq!(unsafe { fresh.removed() }, kResultOk);
+}

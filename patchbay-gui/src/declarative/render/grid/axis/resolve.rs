@@ -122,7 +122,7 @@ fn emit_grid_axis_overflow_warning(
             GridAxis::Rows => "rows",
         };
         eprintln!(
-            "patchbay-gui warning: grid {axis} axis has total percent tracks { _total_percent } and { _axis_count } tracks; assigning percent tracks into { _available_for_percent } px after absolute tracks and gaps",
+            "patchbay-gui warning: grid {axis} axis has total percent tracks {_total_percent} and {_axis_count} tracks; assigning percent tracks into {_available_for_percent} px after absolute tracks and gaps",
         );
         if _used_before_percent > _available_for_tracks {
             eprintln!(
