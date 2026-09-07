@@ -1894,7 +1894,6 @@ mod tests {
     use radiant::runtime::{Event, SurfacePaintPlan};
     use radiant::theme::DpiScale;
     use radiant::theme::ThemeTokens;
-    #[cfg(feature = "vst3")]
     use radiant::widgets::PointerButton;
     use radiant::widgets::{KeyboardModifiers, PointerModifiers, WidgetKey};
     use windows::Win32::Foundation::HWND;
