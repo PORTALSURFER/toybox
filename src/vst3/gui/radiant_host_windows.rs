@@ -2039,14 +2039,13 @@ mod tests {
         assert!(state.active_button.is_none());
         assert!(!state.tracking_mouse);
         assert_eq!(state.pending_high_surrogate, None);
-        let result =
-            unsafe {
-                state.handle_message(
-                    super::WM_TIMER,
-                    super::WPARAM(super::TIMER_ID),
-                    super::LPARAM(0),
-                )
-            };
+        let result = unsafe {
+            state.handle_message(
+                super::WM_TIMER,
+                super::WPARAM(super::TIMER_ID),
+                super::LPARAM(0),
+            )
+        };
         assert_eq!(result, Some(super::LRESULT(0)));
         assert!(events.borrow().is_empty());
     }
