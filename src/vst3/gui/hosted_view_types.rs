@@ -100,6 +100,8 @@ pub struct HostedVst3View<G: Vst3HostedGui> {
     rect: Cell<ViewRect>,
     /// Tracks whether a native host parent has already been attached.
     attached: Cell<bool>,
+    /// Quarantines a view after a GUI callback unwinds.
+    failed: Cell<bool>,
     /// Default logical size exposed by `getSize` before host resize negotiation.
     default_size: (i32, i32),
     /// Optional explicit logical size bounds for embedded-host resize negotiation.
@@ -125,12 +127,32 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
                 logical_dimension(host_height),
             )),
             attached: Cell::new(false),
+            failed: Cell::new(false),
             default_size: (width, height),
             size_bounds: None,
             preserve_aspect_ratio: true,
             enforce_minimum_size: false,
             gui: Mutex::new(gui),
         }
+    }
+
+    /// Contain GUI failures before returning through the non-unwinding VST3 ABI.
+    fn guarded_callback(&self, operation: &str, callback: impl FnOnce() -> tresult) -> tresult {
+        if self.failed.get() {
+            return kResultFalse;
+        }
+        if let Some(result) = crate::gui_panic::contain(operation, callback) {
+            return result;
+        }
+        self.failed.set(true);
+        self.attached.set(false);
+        // The failing callback may have poisoned the mutex. Recover it only for
+        // cleanup, never for further editor input or rendering.
+        let _ = crate::gui_panic::contain("failed VST3 view cleanup", || {
+            let mut gui = self.gui.lock().unwrap_or_else(|error| error.into_inner());
+            gui.close();
+        });
+        kResultFalse
     }
 
     /// Declare the supported logical size range for an embedded view.

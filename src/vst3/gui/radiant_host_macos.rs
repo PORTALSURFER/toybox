@@ -25,12 +25,10 @@ use radiant::runtime::{
 };
 use radiant::theme::DpiScale;
 use radiant::widgets::{KeyboardModifiers, PointerButton, PointerModifiers, WidgetKey};
-use raw_window_handle_06::{
-    AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle as RawDisplayHandle06,
-    RawWindowHandle as RawWindowHandle06,
-};
 
 use super::{Vst3HostedGui, vst3_key_down_to_input_char};
+
+include!("metal_layer.rs");
 
 const NSEVENT_MODIFIER_FLAG_SHIFT: u64 = 1 << 17;
 const NSEVENT_MODIFIER_FLAG_CONTROL: u64 = 1 << 18;
@@ -214,7 +212,7 @@ impl RadiantVst3HostedGui {
         } {
             Ok(root_view) => root_view,
             Err(editor) => {
-                self.editor = Some(editor);
+                self.editor = editor;
                 return false;
             }
         };
@@ -223,19 +221,37 @@ impl RadiantVst3HostedGui {
         true
     }
 
+    /// Stop native callbacks after a host-facing Rust operation panics.
+    pub(crate) fn quarantine(&self) {
+        if let Some(view) = self.root_view {
+            unsafe {
+                quarantine_view(view.as_ptr());
+            }
+        }
+    }
+
     fn close_view(&mut self) {
-        unsafe {
-            if let Some(root_view) = self.root_view.take() {
-                if let Some(runtime) = runtime_mut(root_view.as_ptr()) {
-                    runtime.set_visible(false);
+        if let Some(view) = self.root_view.take() {
+            unsafe {
+                let failed = view_failed(view.as_ptr());
+                let visibility_reported = if !failed {
+                    runtime_mut(view.as_ptr()).is_none_or(|runtime| {
+                        crate::gui_panic::contain("editor visibility", || {
+                            runtime.set_visible(false);
+                        })
+                        .is_some()
+                    })
+                } else {
+                    false
+                };
+                let canceled = crate::gui_panic::contain("cancel editor interaction", || {
+                    cancel_native_interaction(view.as_ptr())
+                })
+                .is_some();
+                if !failed && visibility_reported && canceled && !view_failed(view.as_ptr()) {
+                    self.editor = take_runtime(view.as_ptr());
                 }
-                stop_redraw_driver(root_view.as_ptr());
-                cancel_native_interaction(root_view.as_ptr());
-                drop_renderer(root_view.as_ptr());
-                self.editor = take_runtime(root_view.as_ptr());
-                let view = root_view.as_ptr();
-                let _: () = msg_send![view, removeFromSuperview];
-                let _: () = msg_send![view, release];
+                cleanup_editor_view(view.as_ptr());
             }
         }
     }
@@ -405,29 +421,34 @@ impl Vst3HostedGui for RadiantVst3HostedGui {
 unsafe fn create_editor_view(
     parent: NonNull<c_void>,
     class_name: &'static str,
-    mut editor: Box<dyn RadiantVst3Editor>,
+    editor: Box<dyn RadiantVst3Editor>,
     width: u32,
     height: u32,
     text_options: &NativeTextOptions,
     callback_keyboard_only: bool,
-) -> Result<NonNull<Object>, Box<dyn RadiantVst3Editor>> {
+) -> Result<NonNull<Object>, Option<Box<dyn RadiantVst3Editor>>> {
     let Some(root_view) = new_radiant_view(class_name, width, height) else {
-        return Err(editor);
+        return Err(Some(editor));
     };
     set_callback_keyboard_mode_for_view(root_view.as_ptr(), callback_keyboard_only);
+    let mut pending = PendingEditorView(Some(root_view));
     let parent = parent.as_ptr().cast::<Object>();
     let _: () = msg_send![parent, addSubview: root_view.as_ptr()];
     let _: () = msg_send![root_view.as_ptr(), setWantsLayer: YES];
     let Some(renderer) = embedded_renderer_for_view(root_view, width, height, text_options) else {
-        let _: () = msg_send![root_view.as_ptr(), removeFromSuperview];
-        let _: () = msg_send![root_view.as_ptr(), release];
-        return Err(editor);
+        return Err(Some(editor));
     };
-    editor.resize(width, height);
-    (*root_view.as_ptr()).set_ivar("runtime", Box::into_raw(Box::new(editor)) as usize);
     (*root_view.as_ptr()).set_ivar("renderer", Box::into_raw(Box::new(renderer)) as usize);
+    (*root_view.as_ptr()).set_ivar("runtime", Box::into_raw(Box::new(editor)) as usize);
+    if let Some(runtime) = runtime_mut(root_view.as_ptr()) {
+        runtime.resize(width, height);
+    }
     start_redraw_driver(root_view.as_ptr());
     let _: () = msg_send![root_view.as_ptr(), updateTrackingAreas];
+    if view_failed(root_view.as_ptr()) {
+        return Err(None);
+    }
+    pending.0 = None;
     Ok(root_view)
 }
 
@@ -443,6 +464,8 @@ unsafe fn new_radiant_view(
     let view = NonNull::new(view)?;
     (*view.as_ptr()).set_ivar("runtime", 0_usize);
     (*view.as_ptr()).set_ivar("renderer", 0_usize);
+    (*view.as_ptr()).set_ivar("metal_layer", 0_usize);
+    (*view.as_ptr()).set_ivar("failed", 0_usize);
     (*view.as_ptr()).set_ivar("redraw_driver", 0_usize);
     (*view.as_ptr()).set_ivar("active_pointer_button", ACTIVE_POINTER_BUTTON_NONE);
     (*view.as_ptr()).set_ivar("callback_keyboard_only", 0_usize);
@@ -455,12 +478,8 @@ unsafe fn embedded_renderer_for_view(
     height: u32,
     text_options: &NativeTextOptions,
 ) -> Option<EmbeddedVelloRenderer> {
-    let window_handle = AppKitWindowHandle::new(view.cast());
-    let display_handle = AppKitDisplayHandle::new();
-    let handle = EmbeddedVelloSurfaceHandle::from_raw(
-        RawDisplayHandle06::AppKit(display_handle),
-        RawWindowHandle06::AppKit(window_handle),
-    );
+    let layer = create_metal_layer(view.as_ptr())?;
+    let handle = EmbeddedVelloSurfaceHandle::from_metal_layer(layer.cast());
     EmbeddedVelloRenderer::new_with_text_options(
         handle,
         Vector2::new(width.max(1) as f32, height.max(1) as f32),
@@ -485,6 +504,7 @@ unsafe fn render_paint_plan(
     view: *mut Object,
     bounds: NSRect,
 ) {
+    sync_metal_layer(view);
     renderer.resize(
         Vector2::new(
             bounds.size.width.max(1.0) as f32,
@@ -496,6 +516,7 @@ unsafe fn render_paint_plan(
 }
 
 unsafe fn resize_renderer(view: *mut Object, width: u32, height: u32) {
+    sync_metal_layer(view);
     let scale = view_dpi_scale(view);
     if let Some(renderer) = renderer_mut(view) {
         renderer.resize(
@@ -517,6 +538,11 @@ fn ns_rect(x: f64, y: f64, width: f64, height: f64) -> NSRect {
 }
 
 fn editor_view_class(class_name: &'static str) -> Option<&'static Class> {
+    let class_name = format!(
+        "{class_name}_Metal_{:x}",
+        editor_view_class as *const () as usize
+    );
+    let class_name = class_name.as_str();
     if let Some(existing) = Class::get(class_name) {
         return Some(existing);
     }
@@ -535,6 +561,8 @@ fn editor_view_class(class_name: &'static str) -> Option<&'static Class> {
         };
         decl.add_ivar::<usize>("runtime");
         decl.add_ivar::<usize>("renderer");
+        decl.add_ivar::<usize>("metal_layer");
+        decl.add_ivar::<usize>("failed");
         decl.add_ivar::<usize>("tracking_area");
         decl.add_ivar::<usize>("redraw_driver");
         decl.add_ivar::<usize>("active_pointer_button");
@@ -608,6 +636,10 @@ fn editor_view_class(class_name: &'static str) -> Option<&'static Class> {
                 sel!(acceptsFirstMouse:),
                 accepts_first_mouse as extern "C" fn(&Object, Sel, *mut Object) -> BOOL,
             );
+            decl.add_method(
+                sel!(viewDidChangeBackingProperties),
+                backing_properties_changed as extern "C" fn(&Object, Sel),
+            );
             decl.add_method(sel!(dealloc), dealloc as extern "C" fn(&Object, Sel));
         }
         Some(decl.register())
@@ -615,7 +647,7 @@ fn editor_view_class(class_name: &'static str) -> Option<&'static Class> {
 }
 
 extern "C" fn update_tracking_areas(this: &Object, _cmd: Sel) {
-    unsafe {
+    native_callback(this, "update_tracking_areas", || unsafe {
         let superclass = class!(NSView);
         let _: () = msg_send![super(this, superclass), updateTrackingAreas];
         remove_tracking_area(this);
@@ -640,7 +672,7 @@ extern "C" fn update_tracking_areas(this: &Object, _cmd: Sel) {
             };
             view.set_ivar("tracking_area", area as usize);
         }
-    }
+    });
 }
 
 extern "C" fn is_flipped(_this: &Object, _cmd: Sel) -> BOOL {
@@ -656,21 +688,23 @@ extern "C" fn accepts_first_mouse(_this: &Object, _cmd: Sel, _event: *mut Object
 }
 
 extern "C" fn draw_rect(this: &Object, _cmd: Sel, _dirty: NSRect) {
-    unsafe {
+    native_callback(this, "draw_rect", || unsafe {
         let bounds: NSRect = msg_send![this, bounds];
         let view = this as *const Object as *mut Object;
         if let (Some(runtime), Some(renderer)) = (runtime_mut(this), renderer_mut(this)) {
             render_paint_plan(renderer, runtime.paint_plan(), view, bounds);
         }
-    }
+    });
 }
 
 extern "C" fn mouse_moved(this: &Object, _cmd: Sel, event: *mut Object) {
-    dispatch_mouse_event(this, event, PointerButton::Primary, MouseEventKind::Move);
+    native_callback(this, "mouse_moved", || {
+        dispatch_mouse_event(this, event, PointerButton::Primary, MouseEventKind::Move);
+    });
 }
 
 extern "C" fn mouse_exited(this: &Object, _cmd: Sel, event: *mut Object) {
-    unsafe {
+    native_callback(this, "mouse_exited", || unsafe {
         let Some(runtime) = runtime_mut(this) else {
             return;
         };
@@ -679,53 +713,63 @@ extern "C" fn mouse_exited(this: &Object, _cmd: Sel, event: *mut Object) {
         }
         runtime.dispatch_event(Event::pointer_move(Point::new(-1.0, -1.0)));
         let _: () = msg_send![this, setNeedsDisplay: YES];
-    }
+    });
 }
 
 extern "C" fn mouse_down(this: &Object, _cmd: Sel, event: *mut Object) {
-    unsafe {
+    native_callback(this, "mouse_down", || unsafe {
         make_first_responder(this);
         let button = primary_pointer_button_for_event(event);
         set_active_pointer_button(this, button);
         dispatch_mouse_event(this, event, button, MouseEventKind::Press);
-    }
+    });
 }
 
 extern "C" fn mouse_dragged(this: &Object, _cmd: Sel, event: *mut Object) {
-    let button = unsafe { active_pointer_button(this).unwrap_or(PointerButton::Primary) };
-    dispatch_mouse_event(this, event, button, MouseEventKind::Move);
+    native_callback(this, "mouse_dragged", || {
+        let button = unsafe { active_pointer_button(this).unwrap_or(PointerButton::Primary) };
+        dispatch_mouse_event(this, event, button, MouseEventKind::Move);
+    });
 }
 
 extern "C" fn mouse_up(this: &Object, _cmd: Sel, event: *mut Object) {
-    let button = unsafe { take_active_pointer_button(this).unwrap_or(PointerButton::Primary) };
-    dispatch_mouse_event(this, event, button, MouseEventKind::Release);
+    native_callback(this, "mouse_up", || {
+        let button = unsafe { take_active_pointer_button(this).unwrap_or(PointerButton::Primary) };
+        dispatch_mouse_event(this, event, button, MouseEventKind::Release);
+    });
 }
 
 extern "C" fn right_mouse_down(this: &Object, _cmd: Sel, event: *mut Object) {
-    unsafe {
-        set_active_pointer_button(this, PointerButton::Secondary);
-    }
-    dispatch_mouse_event(this, event, PointerButton::Secondary, MouseEventKind::Press);
+    native_callback(this, "right_mouse_down", || {
+        unsafe {
+            set_active_pointer_button(this, PointerButton::Secondary);
+        }
+        dispatch_mouse_event(this, event, PointerButton::Secondary, MouseEventKind::Press);
+    });
 }
 
 extern "C" fn right_mouse_dragged(this: &Object, _cmd: Sel, event: *mut Object) {
-    dispatch_mouse_event(this, event, PointerButton::Secondary, MouseEventKind::Move);
+    native_callback(this, "right_mouse_dragged", || {
+        dispatch_mouse_event(this, event, PointerButton::Secondary, MouseEventKind::Move);
+    });
 }
 
 extern "C" fn right_mouse_up(this: &Object, _cmd: Sel, event: *mut Object) {
-    unsafe {
-        clear_active_pointer_button(this);
-    }
-    dispatch_mouse_event(
-        this,
-        event,
-        PointerButton::Secondary,
-        MouseEventKind::Release,
-    );
+    native_callback(this, "right_mouse_up", || {
+        unsafe {
+            clear_active_pointer_button(this);
+        }
+        dispatch_mouse_event(
+            this,
+            event,
+            PointerButton::Secondary,
+            MouseEventKind::Release,
+        );
+    });
 }
 
 extern "C" fn flags_changed(this: &Object, _cmd: Sel, event: *mut Object) {
-    unsafe {
+    native_callback(this, "flags_changed", || unsafe {
         if native_keyboard_dispatch_suppressed(this) {
             return;
         }
@@ -737,19 +781,18 @@ extern "C" fn flags_changed(this: &Object, _cmd: Sel, event: *mut Object) {
         };
         runtime.dispatch_event(Event::pointer_modifiers_changed(event_modifiers(event)));
         let _: () = msg_send![this, setNeedsDisplay: YES];
-    }
+    });
 }
 
 extern "C" fn key_down(this: &Object, _cmd: Sel, event: *mut Object) {
-    unsafe {
-        if native_keyboard_dispatch_suppressed(this) {
-            return;
-        }
+    native_callback(this, "key_down", || unsafe {
         if event.is_null() {
             return;
         }
         let mut handled = false;
-        if let Some(runtime) = runtime_mut(this) {
+        if !native_keyboard_dispatch_suppressed(this)
+            && let Some(runtime) = runtime_mut(this)
+        {
             let modifiers = event_modifiers(event);
             let keyboard_modifiers = event_keyboard_modifiers(event);
             let text = event_characters(event);
@@ -759,13 +802,16 @@ extern "C" fn key_down(this: &Object, _cmd: Sel, event: *mut Object) {
         if handled {
             let _: () = msg_send![this, setNeedsDisplay: YES];
         } else {
-            let _: () = msg_send![super(this, class!(NSView)), keyDown: event];
+            // Forward to the host responder, without NSView interpreting the
+            // event as plugin text input or redispatching it to this view.
+            let next: *mut Object = msg_send![this, nextResponder];
+            let _: () = msg_send![next, keyDown: event];
         }
-    }
+    });
 }
 
 extern "C" fn scroll_wheel(this: &Object, _cmd: Sel, event: *mut Object) {
-    unsafe {
+    native_callback(this, "scroll_wheel", || unsafe {
         if event.is_null() {
             return;
         }
@@ -779,7 +825,7 @@ extern "C" fn scroll_wheel(this: &Object, _cmd: Sel, event: *mut Object) {
         runtime.dispatch_event(Event::pointer_modifiers_changed(event_modifiers(event)));
         runtime.dispatch_event(Event::scroll(position, delta));
         let _: () = msg_send![this, setNeedsDisplay: YES];
-    }
+    });
 }
 
 /// Query effective visibility without treating another window or focus as hiding.
@@ -799,7 +845,7 @@ unsafe fn editor_is_visible(view: &Object) -> bool {
 }
 
 extern "C" fn playhead_redraw_tick(this: &Object, _cmd: Sel, _timer: *mut Object) {
-    unsafe {
+    native_callback(this, "playhead_redraw_tick", || unsafe {
         complete_pending_redraw_tick(this);
         if runtime_mut(this)
             .map(|runtime| {
@@ -811,22 +857,31 @@ extern "C" fn playhead_redraw_tick(this: &Object, _cmd: Sel, _timer: *mut Object
             let _: () = msg_send![this, setNeedsDisplay: YES];
             let _: () = msg_send![this, displayIfNeeded];
         }
-    }
+    });
 }
 
 extern "C" fn dealloc(this: &Object, _cmd: Sel) {
     unsafe {
         if let Some(runtime) = runtime_mut(this) {
-            runtime.set_visible(false);
+            let _ = crate::gui_panic::contain("editor visibility", || {
+                runtime.set_visible(false);
+            });
         }
-        cancel_native_interaction(this);
-        stop_redraw_driver(this);
-        remove_tracking_area(this);
-        drop_runtime(this);
-        drop_renderer(this);
-        let superclass = class!(NSView);
-        let _: () = msg_send![super(this, superclass), dealloc];
+        cleanup_editor_resources(this);
+        let _: () = msg_send![super(this, class!(NSView)), dealloc];
     }
+}
+
+extern "C" fn backing_properties_changed(this: &Object, _cmd: Sel) {
+    native_callback(this, "backing properties", || unsafe {
+        let bounds: NSRect = msg_send![this, bounds];
+        resize_renderer(
+            this as *const Object as *mut Object,
+            bounds.size.width.max(1.0) as u32,
+            bounds.size.height.max(1.0) as u32,
+        );
+        let _: () = msg_send![this, setNeedsDisplay: YES];
+    });
 }
 
 #[derive(Clone, Copy)]
@@ -1329,10 +1384,6 @@ unsafe fn start_redraw_driver(view: *mut Object) {
             }
             thread::sleep(PLAYHEAD_REDRAW_INTERVAL);
         }
-        let view = view_addr as *mut Object;
-        unsafe {
-            let _: () = msg_send![view, release];
-        }
     });
     (*driver).handle = Some(handle);
 }
@@ -1375,6 +1426,7 @@ unsafe fn stop_redraw_driver(view: *const Object) {
     if let Some(handle) = driver.handle.take() {
         let _ = handle.join();
     }
+    let _: () = msg_send![view, release];
 }
 
 unsafe fn remove_tracking_area(view: *const Object) {
@@ -1393,6 +1445,9 @@ unsafe fn remove_tracking_area(view: *const Object) {
 }
 
 unsafe fn runtime_mut(view: *const Object) -> Option<&'static mut dyn RadiantVst3Editor> {
+    if view_failed(view) {
+        return None;
+    }
     let runtime = *(view.as_ref()?.get_ivar::<usize>("runtime")) as *mut Box<dyn RadiantVst3Editor>;
     runtime.as_mut().map(Box::as_mut)
 }
@@ -1444,6 +1499,7 @@ mod tests {
         operations: Vec<&'static str>,
         canceled: bool,
         shortcut_result: bool,
+        character_result: bool,
         event_count: Option<Arc<Mutex<usize>>>,
         character_count: Option<Arc<Mutex<usize>>>,
         event_sink: Option<Arc<Mutex<Vec<Event>>>>,
@@ -1462,6 +1518,7 @@ mod tests {
                 operations: Vec::new(),
                 canceled: false,
                 shortcut_result: false,
+                character_result: true,
                 event_count: None,
                 character_count: None,
                 event_sink: None,
@@ -1509,7 +1566,7 @@ mod tests {
             if let Some(character_count) = &self.character_count {
                 *character_count.lock().unwrap() += 1;
             }
-            true
+            self.character_result
         }
 
         fn dispatch_shortcut(&mut self, character: char, modifiers: PointerModifiers) -> bool {
@@ -1523,6 +1580,54 @@ mod tests {
             self.canceled = true;
             true
         }
+    }
+
+    extern "C" fn host_key_down(this: &mut Object, _cmd: Sel, _event: *mut Object) {
+        unsafe {
+            let count = *this.get_ivar::<usize>("key_count");
+            this.set_ivar("key_count", count + 1);
+        }
+    }
+
+    unsafe fn new_test_host_responder() -> *mut Object {
+        const NAME: &str = "ToyboxKeyboardPassthroughResponder";
+        let class = Class::get(NAME).unwrap_or_else(|| {
+            let mut decl = ClassDecl::new(NAME, class!(NSResponder)).unwrap();
+            decl.add_ivar::<usize>("key_count");
+            unsafe {
+                decl.add_method(
+                    sel!(keyDown:),
+                    host_key_down as extern "C" fn(&mut Object, Sel, *mut Object),
+                );
+            }
+            decl.register()
+        });
+        unsafe {
+            let responder: *mut Object = msg_send![class, new];
+            (*responder).set_ivar("key_count", 0usize);
+            responder
+        }
+    }
+
+    #[test]
+    fn unclaimed_space_is_returned_to_host_by_both_keyboard_routes() {
+        let mut editor = MockEditor::new();
+        editor.character_result = false;
+        assert!(!dispatch_appkit_key_down(
+            &mut editor,
+            Some(" "),
+            PointerModifiers::default(),
+            KeyboardModifiers::default()
+        ));
+        assert!(!dispatch_vst3_key_down(&mut editor, ' ' as u16, 0, 0));
+        editor.character_result = true;
+        assert!(dispatch_appkit_key_down(
+            &mut editor,
+            Some(" "),
+            PointerModifiers::default(),
+            KeyboardModifiers::default()
+        ));
+        assert!(dispatch_vst3_key_down(&mut editor, ' ' as u16, 0, 0));
     }
 
     const TEST_EVENT_CLASS_NAME: &str = "ToyboxRadiantVst3KeyboardTestEvent";
@@ -2173,11 +2278,14 @@ mod tests {
             (*view.as_ptr()).set_ivar("runtime", Box::into_raw(Box::new(editor)) as usize);
             let (event, characters) = new_test_key_event(NSEVENT_MODIFIER_FLAG_SHIFT);
 
+            let host = new_test_host_responder();
+            let _: () = msg_send![view.as_ptr(), setNextResponder: host];
             Vst3HostedGui::set_callback_keyboard_mode(&mut gui, true);
             flags_changed(view.as_ref(), sel!(flagsChanged:), event.as_ptr());
             key_down(view.as_ref(), sel!(keyDown:), event.as_ptr());
             assert_eq!(*event_count.lock().unwrap(), 0);
             assert_eq!(*character_count.lock().unwrap(), 0);
+            assert_eq!(*(*host).get_ivar::<usize>("key_count"), 1);
 
             Vst3HostedGui::set_callback_keyboard_mode(&mut gui, false);
             assert!(!native_keyboard_dispatch_suppressed(view.as_ptr()));
@@ -2187,6 +2295,7 @@ mod tests {
             let native_character_count = *character_count.lock().unwrap();
             assert_eq!(native_event_count, 2);
             assert_eq!(native_character_count, 1);
+            assert_eq!(*(*host).get_ivar::<usize>("key_count"), 1);
 
             Vst3HostedGui::set_callback_keyboard_mode(&mut gui, true);
             assert!(Vst3HostedGui::on_key_down(&gui, 'b' as u16, 0, 0));
@@ -2194,6 +2303,8 @@ mod tests {
             assert_eq!(*event_count.lock().unwrap(), native_event_count + 2);
             assert_eq!(*character_count.lock().unwrap(), native_character_count + 1);
 
+            let _: () = msg_send![view.as_ptr(), setNextResponder: std::ptr::null_mut::<Object>()];
+            let _: () = msg_send![host, release];
             drop_runtime(view.as_ptr());
             gui.root_view = None;
             let _: () = msg_send![characters, release];

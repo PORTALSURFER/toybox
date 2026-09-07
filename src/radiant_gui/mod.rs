@@ -36,9 +36,14 @@ pub trait RadiantEditor: 'static {
     fn needs_realtime_redraw(&self) -> bool;
 
     /// Dispatch a semantic key press.
+    /// Return true only when the editor owns this key in its current state.
+    /// For SurfaceRuntime adapters, use `dispatch_keyboard_event`; the target
+    /// returned by `dispatch_event` does not mean the key was consumed.
     fn dispatch_key_press(&mut self, key: WidgetKey, modifiers: KeyboardModifiers) -> bool;
 
     /// Dispatch one text character.
+    /// Return false for unused characters so DAW shortcuts (such as Space)
+    /// remain available. Active text fields may consume printable characters.
     fn dispatch_character(&mut self, character: char) -> bool;
 
     /// Dispatch one command-modified textual shortcut.
@@ -266,12 +271,21 @@ pub struct RadiantHostedGui {
     inner: PlatformHostedGui,
     /// Logical size contract applied to host resize requests.
     contract: EditorSizeContract,
+    /// Prevents reuse after an editor callback unwinds.
+    failed: std::cell::Cell<bool>,
 }
 
 /// Compatibility alias for callers that still name the VST3 host explicitly.
 pub type RadiantVst3HostedGui = RadiantHostedGui;
 
 impl RadiantHostedGui {
+    /// Disable callbacks after a partial editor failure.
+    fn quarantine(&self) {
+        self.failed.set(true);
+        #[cfg(target_os = "macos")]
+        self.inner.quarantine();
+    }
+
     /// Create a host facade with an explicit default logical size.
     pub fn new(
         class_name: &'static str,
@@ -287,6 +301,7 @@ impl RadiantHostedGui {
         Self {
             inner: PlatformHostedGui::new(class_name, platform_editor, width, height),
             contract,
+            failed: std::cell::Cell::new(false),
         }
     }
 
@@ -351,35 +366,84 @@ impl RadiantHostedGui {
 
     /// Create and attach the retained native child view.
     pub fn open(&mut self) -> bool {
-        let requested = self.last_size().unwrap_or(self.contract.default);
-        let (width, height) = self.constrain_size(requested);
-        if Some((width, height)) != self.last_size() {
-            <PlatformHostedGui as Vst3HostedGui>::request_resize(&self.inner, width, height);
+        if self.failed.get() {
+            return false;
         }
-        <PlatformHostedGui as Vst3HostedGui>::open(&mut self.inner)
+        match crate::gui_panic::contain("Radiant open", || {
+            let requested = self.last_size().unwrap_or(self.contract.default);
+            let (width, height) = self.constrain_size(requested);
+            if Some((width, height)) != self.last_size() {
+                <PlatformHostedGui as Vst3HostedGui>::request_resize(&self.inner, width, height);
+            }
+            <PlatformHostedGui as Vst3HostedGui>::open(&mut self.inner)
+        }) {
+            Some(result) => result,
+            None => {
+                self.quarantine();
+                false
+            }
+        }
     }
 
     /// Show a child that has already been opened by the lifecycle owner.
     fn show_open(&self) -> bool {
-        <PlatformHostedGui as Vst3HostedGui>::show(&self.inner)
+        if self.failed.get() {
+            return false;
+        }
+        match crate::gui_panic::contain("Radiant show_open", || {
+            <PlatformHostedGui as Vst3HostedGui>::show(&self.inner)
+        }) {
+            Some(result) => result,
+            None => {
+                self.quarantine();
+                false
+            }
+        }
     }
 
     /// Show an already-created child view.
     pub fn show(&mut self) -> bool {
-        if !self.open() {
+        if self.failed.get() {
             return false;
         }
-        self.show_open()
+        match crate::gui_panic::contain("Radiant show", || {
+            if !self.open() {
+                return false;
+            }
+            self.show_open()
+        }) {
+            Some(result) => result,
+            None => {
+                self.quarantine();
+                false
+            }
+        }
     }
 
     /// Hide an already-created child view without destroying its editor state.
     pub fn hide(&mut self) {
-        self.inner.hide();
+        if self.failed.get() {
+            return;
+        }
+        match crate::gui_panic::contain("Radiant hide", || {
+            self.inner.hide();
+        }) {
+            Some(result) => result,
+            None => {
+                self.quarantine();
+            }
+        }
     }
 
     /// Destroy the native child view while retaining the editor for a later open.
     pub fn close(&mut self) {
-        <PlatformHostedGui as Vst3HostedGui>::close(&mut self.inner);
+        if crate::gui_panic::contain("Radiant close", || {
+            <PlatformHostedGui as Vst3HostedGui>::close(&mut self.inner);
+        })
+        .is_none()
+        {
+            self.failed.set(true);
+        }
     }
 
     /// Return the most recent host-facing size.
@@ -389,13 +453,33 @@ impl RadiantHostedGui {
 
     /// Apply a constrained host resize without host callback feedback.
     pub fn request_resize(&self, width: u32, height: u32) {
-        let (width, height) = self.constrain_size((width, height));
-        <PlatformHostedGui as Vst3HostedGui>::request_resize(&self.inner, width, height);
+        if self.failed.get() {
+            return;
+        }
+        match crate::gui_panic::contain("Radiant request_resize", || {
+            let (width, height) = self.constrain_size((width, height));
+            <PlatformHostedGui as Vst3HostedGui>::request_resize(&self.inner, width, height);
+        }) {
+            Some(result) => result,
+            None => {
+                self.quarantine();
+            }
+        }
     }
 
     /// Apply host DPI scale; platform renderers also refresh backing scale on draw.
     pub fn set_scale(&self, scale: f64) {
-        self.inner.set_scale(scale);
+        if self.failed.get() {
+            return;
+        }
+        match crate::gui_panic::contain("Radiant set_scale", || {
+            self.inner.set_scale(scale);
+        }) {
+            Some(result) => result,
+            None => {
+                self.quarantine();
+            }
+        }
     }
 
     /// Select callback-only keyboard delivery for VST3 host callbacks.
@@ -408,17 +492,50 @@ impl RadiantHostedGui {
 
     /// Forward one semantic key press from a VST3 host.
     pub fn on_key_down(&self, key: u16, key_code: i16, modifiers: i16) -> bool {
-        <PlatformHostedGui as Vst3HostedGui>::on_key_down(&self.inner, key, key_code, modifiers)
+        if self.failed.get() {
+            return false;
+        }
+        match crate::gui_panic::contain("Radiant on_key_down", || {
+            <PlatformHostedGui as Vst3HostedGui>::on_key_down(&self.inner, key, key_code, modifiers)
+        }) {
+            Some(result) => result,
+            None => {
+                self.quarantine();
+                false
+            }
+        }
     }
 
     /// Forward one semantic key release from a VST3 host.
     pub fn on_key_up(&self, key: u16, key_code: i16, modifiers: i16) -> bool {
-        <PlatformHostedGui as Vst3HostedGui>::on_key_up(&self.inner, key, key_code, modifiers)
+        if self.failed.get() {
+            return false;
+        }
+        match crate::gui_panic::contain("Radiant on_key_up", || {
+            <PlatformHostedGui as Vst3HostedGui>::on_key_up(&self.inner, key, key_code, modifiers)
+        }) {
+            Some(result) => result,
+            None => {
+                self.quarantine();
+                false
+            }
+        }
     }
 
     /// Forward a host focus change to the native child view.
     pub fn on_focus(&self, focused: bool) -> bool {
-        <PlatformHostedGui as Vst3HostedGui>::on_focus(&self.inner, focused)
+        if self.failed.get() {
+            return false;
+        }
+        match crate::gui_panic::contain("Radiant on_focus", || {
+            <PlatformHostedGui as Vst3HostedGui>::on_focus(&self.inner, focused)
+        }) {
+            Some(result) => result,
+            None => {
+                self.quarantine();
+                false
+            }
+        }
     }
 }
 

@@ -1,16 +1,14 @@
 impl Canvas {
     /// Draw a filled rectangle.
     pub fn fill_rect(&mut self, rect: Rect, color: Color) {
-        let x0 = max(rect.origin.x, 0) as u32;
-        let y0 = max(rect.origin.y, 0) as u32;
-        let x1 = min(
-            rect.origin.x + rect.size.width as i32,
-            self.size.width as i32,
-        ) as u32;
-        let y1 = min(
-            rect.origin.y + rect.size.height as i32,
-            self.size.height as i32,
-        ) as u32;
+        // Clamp signed endpoints before conversion; a fully clipped negative
+        // rectangle must not wrap into a huge unsigned raster range.
+        let x0 = i64::from(rect.origin.x).clamp(0, i64::from(self.size.width)) as u32;
+        let y0 = i64::from(rect.origin.y).clamp(0, i64::from(self.size.height)) as u32;
+        let x1 = (i64::from(rect.origin.x) + i64::from(rect.size.width))
+            .clamp(0, i64::from(self.size.width)) as u32;
+        let y1 = (i64::from(rect.origin.y) + i64::from(rect.size.height))
+            .clamp(0, i64::from(self.size.height)) as u32;
 
         for y in y0..y1 {
             for x in x0..x1 {

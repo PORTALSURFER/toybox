@@ -119,6 +119,7 @@ struct WindowState {
     cancellation_in_progress: bool,
     pending_high_surrogate: Option<u16>,
     last_renderer_size: Option<(u32, u32, DpiScale)>,
+    quarantined: bool,
 }
 
 impl WindowState {
@@ -146,6 +147,7 @@ impl WindowState {
             cancellation_in_progress: false,
             pending_high_surrogate: None,
             last_renderer_size: None,
+            quarantined: false,
         }
     }
 
@@ -215,6 +217,28 @@ impl WindowState {
         self.editor
             .as_ref()
             .is_some_and(|editor| editor.needs_realtime_redraw())
+    }
+
+    /// Deliver native visibility without allowing an editor panic to unwind
+    /// through the Win32 callback ABI.
+    fn set_visible(&mut self, visible: bool) {
+        if self.quarantined {
+            return;
+        }
+        let failed = self.editor.as_mut().is_some_and(|editor| {
+            crate::gui_panic::contain("Windows editor visibility", || {
+                editor.set_visible(visible);
+            })
+            .is_none()
+        });
+        if failed {
+            self.quarantined = true;
+            self.editor = None;
+            unsafe {
+                let _ =
+                    windows::Win32::UI::WindowsAndMessaging::KillTimer(Some(self.hwnd), TIMER_ID);
+            }
+        }
     }
 
     /// Schedule one native paint without creating a worker thread.
@@ -652,6 +676,9 @@ impl WindowState {
         wparam: WPARAM,
         lparam: LPARAM,
     ) -> Option<LRESULT> {
+        if self.quarantined && message != WM_NCDESTROY {
+            return Some(LRESULT(0));
+        }
         if suppresses_native_keyboard_message(self.keyboard_mode.get(), message) {
             return Some(LRESULT(0));
         }
@@ -676,9 +703,7 @@ impl WindowState {
             }
             WM_ERASEBKGND => Some(LRESULT(1)),
             WM_SHOWWINDOW if wparam.0 == 0 => {
-                if let Some(editor) = self.editor.as_mut() {
-                    editor.set_visible(false);
-                }
+                self.set_visible(false);
                 None
             }
             WM_TIMER if wparam.0 == TIMER_ID => {
@@ -686,9 +711,7 @@ impl WindowState {
                     IsWindowVisible(self.hwnd).as_bool()
                         && !IsIconic(GetAncestor(self.hwnd, GA_ROOT)).as_bool()
                 };
-                if let Some(editor) = self.editor.as_mut() {
-                    editor.set_visible(visible);
-                }
+                self.set_visible(visible);
                 if self.needs_realtime_redraw() {
                     self.invalidate();
                 }
@@ -794,21 +817,16 @@ impl WindowState {
             ))),
             WM_KEYDOWN | WM_SYSKEYDOWN => {
                 let virtual_key = wparam.0 as u16;
-                let _ = self.native_key_down(virtual_key);
-                Some(LRESULT(0))
+                self.native_key_down(virtual_key).then_some(LRESULT(0))
             }
-            WM_KEYUP | WM_SYSKEYUP => Some(LRESULT(0)),
-            WM_CHAR | WM_SYSCHAR => {
-                let _ = self.native_character_unit(wparam.0 as u16);
-                Some(LRESULT(0))
-            }
+            WM_KEYUP | WM_SYSKEYUP => None,
+            WM_CHAR | WM_SYSCHAR => self
+                .native_character_unit(wparam.0 as u16)
+                .then_some(LRESULT(0)),
             WM_UNICHAR if wparam.0 == UNICODE_NOCHAR => Some(LRESULT(1)),
-            WM_UNICHAR => {
-                if let Some(character) = char::from_u32(wparam.0 as u32) {
-                    let _ = self.native_character(character);
-                }
-                Some(LRESULT(0))
-            }
+            WM_UNICHAR => char::from_u32(wparam.0 as u32)
+                .is_some_and(|character| self.native_character(character))
+                .then_some(LRESULT(0)),
             WM_MOUSEACTIVATE => Some(LRESULT(MA_ACTIVATE as isize)),
             WM_NCHITTEST => Some(LRESULT(1)),
             _ => None,
@@ -823,9 +841,7 @@ impl Drop for WindowState {
         // path. Cancel while the editor is still retained so an abandoned
         // gesture cannot survive into a later reopen.
         self.cancel_before_teardown();
-        if let Some(editor) = self.editor.as_mut() {
-            editor.set_visible(false);
-        }
+        self.set_visible(false);
         unsafe {
             let _ = windows::Win32::UI::WindowsAndMessaging::KillTimer(Some(self.hwnd), TIMER_ID);
         }
@@ -1204,9 +1220,7 @@ impl RadiantWindowsHostedGui {
         // messages cannot strand a Radiant pointer gesture.
         let editor = unsafe {
             (*pointer).cancel_before_teardown();
-            if let Some(editor) = (*pointer).editor.as_mut() {
-                editor.set_visible(false);
-            }
+            (*pointer).set_visible(false);
             (*pointer).editor.take()
         };
         let destroyed = unsafe { DestroyWindow(hwnd).is_ok() };
