@@ -232,12 +232,24 @@ impl WindowState {
             .is_none()
         });
         if failed {
-            self.quarantined = true;
-            self.editor = None;
-            unsafe {
-                let _ =
-                    windows::Win32::UI::WindowsAndMessaging::KillTimer(Some(self.hwnd), TIMER_ID);
-            }
+            self.quarantine();
+        }
+    }
+
+    /// Fence the native editor after a callback failure without reentering it.
+    fn quarantine(&mut self) {
+        if self.quarantined {
+            return;
+        }
+        self.quarantined = true;
+        self.active_button = None;
+        self.tracking_mouse = false;
+        self.pending_high_surrogate = None;
+        self.cancellation_in_progress = false;
+        self.release_capture_if_owned();
+        self.editor = None;
+        unsafe {
+            let _ = windows::Win32::UI::WindowsAndMessaging::KillTimer(Some(self.hwnd), TIMER_ID);
         }
     }
 
@@ -1262,6 +1274,21 @@ impl RadiantWindowsHostedGui {
         true
     }
 
+    /// Fence the current child after a GUI callback failure.
+    pub(crate) fn quarantine(&self) {
+        if !self.is_owner_thread() {
+            return;
+        }
+        let Some(hwnd) = self.hwnd else {
+            return;
+        };
+        if let Some(pointer) = self.state_ptr_matches(hwnd) {
+            unsafe {
+                (*pointer).quarantine();
+            }
+        }
+    }
+
     /// Hide the existing child while retaining editor and renderer state.
     pub(crate) fn hide(&self) {
         if !self.is_owner_thread() {
@@ -1898,6 +1925,7 @@ mod tests {
         canceled: bool,
         events: Rc<RefCell<Vec<Event>>>,
         visibility: Rc<RefCell<Vec<bool>>>,
+        panic_on_visibility: bool,
     }
 
     impl KeyRecordingEditor {
@@ -1915,12 +1943,16 @@ mod tests {
                 canceled: false,
                 events,
                 visibility: Rc::default(),
+                panic_on_visibility: false,
             }
         }
     }
 
     impl RadiantEditor for KeyRecordingEditor {
         fn set_visible(&mut self, visible: bool) {
+            if self.panic_on_visibility {
+                panic!("injected visibility panic");
+            }
             self.visibility.borrow_mut().push(visible);
         }
 
@@ -1988,6 +2020,29 @@ mod tests {
         assert_eq!(*visibility.borrow(), vec![false]);
         drop(state);
         assert_eq!(*visibility.borrow(), vec![false, false]);
+    }
+
+    #[test]
+    fn visibility_panic_quarantines_native_state_without_later_callbacks() {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let mut editor = KeyRecordingEditor::with_events(Rc::clone(&events));
+        editor.panic_on_visibility = true;
+        let mut state = test_window_state(events.clone());
+        state.editor = Some(Box::new(editor));
+        state.active_button = Some(PointerButton::Primary);
+        state.tracking_mouse = true;
+
+        state.set_visible(true);
+
+        assert!(state.quarantined);
+        assert!(state.editor.is_none());
+        assert!(state.active_button.is_none());
+        assert!(!state.tracking_mouse);
+        assert_eq!(state.pending_high_surrogate, None);
+        let result =
+            unsafe { state.handle_message(super::WM_TIMER, super::WPARAM(0), super::LPARAM(0)) };
+        assert_eq!(result, Some(super::LRESULT(0)));
+        assert!(events.borrow().is_empty());
     }
 
     #[cfg(feature = "vst3")]

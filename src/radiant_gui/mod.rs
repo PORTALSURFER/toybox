@@ -284,6 +284,8 @@ impl RadiantHostedGui {
         self.failed.set(true);
         #[cfg(target_os = "macos")]
         self.inner.quarantine();
+        #[cfg(target_os = "windows")]
+        self.inner.quarantine();
     }
 
     /// Create a host facade with an explicit default logical size.
