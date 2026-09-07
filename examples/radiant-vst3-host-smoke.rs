@@ -25,6 +25,8 @@ struct SmokeEditor {
     plan: SurfacePaintPlan,
     /// Last logical size supplied by the host lifecycle.
     size: Option<(u32, u32)>,
+    /// Latest effective visibility observation from the native host.
+    visible: std::rc::Rc<std::cell::Cell<Option<bool>>>,
     /// Optional failure injected by the subprocess regression.
     failure: Option<String>,
 }
@@ -55,6 +57,7 @@ impl SmokeEditor {
                 primitives: vec![PaintPrimitive::FillPath(fill)],
             },
             size: None,
+            visible: Default::default(),
             failure: None,
         }
     }
@@ -62,6 +65,10 @@ impl SmokeEditor {
 
 #[cfg(all(target_os = "macos", feature = "radiant-vst3"))]
 impl RadiantVst3Editor for SmokeEditor {
+    fn set_visible(&mut self, visible: bool) {
+        self.visible.set(Some(visible));
+    }
+
     fn resize(&mut self, width: u32, height: u32) {
         assert_ne!(
             self.failure.as_deref(),
@@ -111,6 +118,9 @@ fn main() {
         let parent: *mut Object = msg_send![class!(NSView), new];
         assert!(!parent.is_null(), "NSView allocation should succeed");
 
+        let window: *mut Object = msg_send![class!(NSWindow), new];
+        let _: () = msg_send![window, setContentView: parent];
+        let _: () = msg_send![window, orderFront: std::ptr::null_mut::<Object>()];
         let mut handle = toybox::raw_window_handle::AppKitWindowHandle::empty();
         handle.ns_view = parent.cast();
         let failure = std::env::args().nth(1);
@@ -120,6 +130,7 @@ fn main() {
             if iteration == 0 {
                 editor.failure = failure.clone();
             }
+            let visible = std::rc::Rc::clone(&editor.visible);
             let mut gui =
                 RadiantVst3HostedGui::new("ToyboxRadiantVst3EditorSmokeHost", editor, 420, 282);
             gui.set_parent_raw(toybox::raw_window_handle::RawWindowHandle::AppKit(handle));
@@ -139,12 +150,38 @@ fn main() {
                     msg_send![metal, isKindOfClass: class!(CAMetalLayer)];
                 assert_eq!(is_metal, objc::runtime::YES);
                 let _: () = msg_send![child, display];
+                assert!(gui.show());
                 let _: () = msg_send![child, playheadRedrawTick: std::ptr::null_mut::<Object>()];
+                if iteration == 0 && failure.is_none() {
+                    assert_eq!(visible.get(), Some(true));
+                    let _ = gui.on_focus(false);
+                    assert_eq!(visible.get(), Some(true), "focus must not hide an editor");
+                    let _: () = msg_send![parent, setHidden: objc::runtime::YES];
+                    let _: () =
+                        msg_send![child, playheadRedrawTick: std::ptr::null_mut::<Object>()];
+                    assert_eq!(
+                        visible.get(),
+                        Some(false),
+                        "ancestor hiding must be observed"
+                    );
+                    let _: () = msg_send![parent, setHidden: objc::runtime::NO];
+                    let _: () =
+                        msg_send![child, playheadRedrawTick: std::ptr::null_mut::<Object>()];
+                    assert_eq!(visible.get(), Some(true));
+                    let _: () = msg_send![window, orderOut: std::ptr::null_mut::<Object>()];
+                    let _: () =
+                        msg_send![child, playheadRedrawTick: std::ptr::null_mut::<Object>()];
+                    assert_eq!(visible.get(), Some(false), "window hiding must be observed");
+                    let _: () = msg_send![window, orderFront: std::ptr::null_mut::<Object>()];
+                }
                 let _: () = msg_send![child, playheadRedrawTick: std::ptr::null_mut::<Object>()];
                 gui.request_resize(600, 400);
                 gui.set_scale(2.0);
             }
             gui.close();
+            if iteration == 0 && failure.is_none() {
+                assert_eq!(visible.get(), Some(false));
+            }
             let subviews: *mut Object = msg_send![parent, subviews];
             let count: usize = msg_send![subviews, count];
             assert_eq!(count, 0, "close rolls back all child views");
@@ -154,6 +191,7 @@ fn main() {
             assert!(objc::runtime::Class::get("RawWindowMetalLayer").is_none());
         }
         let _: () = msg_send![parent, release];
+        let _: () = msg_send![window, release];
     }
 }
 
