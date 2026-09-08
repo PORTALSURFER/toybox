@@ -189,7 +189,10 @@ macro_rules! gpui_clap_gui_callbacks {
         }
 
         fn get_size(&mut self) -> Option<$crate::clack_extensions::gui::GuiSize> {
-            let (width, height) = self.$gui.last_size().unwrap_or_else($preferred);
+            let (width, height) = self.$gui.last_size().unwrap_or_else(|| {
+                let (width, height) = $preferred();
+                self.$gui.host_size_from_logical(width, height)
+            });
             Some($crate::clack_extensions::gui::GuiSize { width, height })
         }
 
@@ -201,13 +204,25 @@ macro_rules! gpui_clap_gui_callbacks {
             &mut self,
             size: $crate::clack_extensions::gui::GuiSize,
         ) -> Option<$crate::clack_extensions::gui::GuiSize> {
-            Some(size)
+            let (width, height) = self.$gui.constrain_host_size(size.width, size.height);
+            (width <= size.width && height <= size.height)
+                .then_some($crate::clack_extensions::gui::GuiSize { width, height })
+        }
+
+        fn get_resize_hints(&mut self) -> Option<$crate::clack_extensions::gui::GuiResizeHints> {
+            Some(self.$gui.resize_hints())
         }
 
         fn set_size(
             &mut self,
             size: $crate::clack_extensions::gui::GuiSize,
         ) -> Result<(), $crate::clack_plugin::plugin::PluginError> {
+            let constrained = self.$gui.constrain_host_size(size.width, size.height);
+            if constrained != (size.width, size.height) {
+                return Err($crate::clack_plugin::plugin::PluginError::Message(
+                    "GPUI editor rejected an unsupported host size",
+                ));
+            }
             self.$gui.request_resize(size.width, size.height);
             Ok(())
         }
@@ -242,4 +257,154 @@ macro_rules! gpui_clap_gui_callbacks {
             Ok(())
         }
     };
+}
+
+#[cfg(all(test, feature = "gpui-gui"))]
+mod gpui_callback_tests {
+    use crate::clack_extensions::gui::{AspectRatioStrategy, GuiSize, PluginGuiImpl};
+    use crate::clack_plugin::plugin::PluginError;
+    use crate::gpui_gui::GpuiHostedGui;
+
+    struct DummyPlugin {
+        gui: GpuiHostedGui,
+    }
+
+    impl DummyPlugin {
+        fn new(fixed_aspect_ratio: bool) -> Self {
+            let mut gui = GpuiHostedGui::new(
+                "toybox-gpui-size-test",
+                |_window, _cx| panic!("size tests never open a native editor"),
+                800,
+                500,
+            )
+            .with_size_contract((400, 250), (800, 500), (1200, 750));
+            if fixed_aspect_ratio {
+                gui = gui.with_fixed_aspect_ratio();
+            }
+            Self { gui }
+        }
+    }
+
+    fn preferred_size() -> (u32, u32) {
+        (800, 500)
+    }
+
+    fn show(_plugin: &mut DummyPlugin) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    impl PluginGuiImpl for DummyPlugin {
+        gpui_clap_gui_callbacks!(gui = gui, preferred_size = preferred_size, show = show);
+    }
+
+    #[test]
+    fn fixed_ratio_clap_callbacks_constrain_sizes_and_reject_invalid_set_size() {
+        let mut plugin = DummyPlugin::new(true);
+        assert_eq!(
+            plugin.get_resize_hints().unwrap().strategy,
+            AspectRatioStrategy::Preserve {
+                width: 800,
+                height: 500,
+            }
+        );
+        assert_eq!(
+            plugin.adjust_size(GuiSize {
+                width: 800,
+                height: 700,
+            }),
+            Some(GuiSize {
+                width: 800,
+                height: 500,
+            })
+        );
+        assert_eq!(
+            plugin.adjust_size(GuiSize {
+                width: 300,
+                height: 200,
+            }),
+            None
+        );
+        assert_eq!(
+            plugin.adjust_size(GuiSize {
+                width: 2_000,
+                height: 2_000,
+            }),
+            Some(GuiSize {
+                width: 1_200,
+                height: 750,
+            })
+        );
+
+        let initial_size = plugin.get_size();
+        assert!(
+            plugin
+                .set_size(GuiSize {
+                    width: 801,
+                    height: 500,
+                })
+                .is_err()
+        );
+        assert_eq!(plugin.get_size(), initial_size);
+
+        assert!(
+            plugin
+                .set_size(GuiSize {
+                    width: 960,
+                    height: 600,
+                })
+                .is_ok()
+        );
+        assert_eq!(
+            plugin.get_size(),
+            Some(GuiSize {
+                width: 960,
+                height: 600,
+            })
+        );
+
+        for width in (1..=1_600).step_by(37) {
+            for height in (1..=1_000).step_by(29) {
+                let requested = GuiSize { width, height };
+                if let Some(adjusted) = plugin.adjust_size(requested) {
+                    assert!(adjusted.width <= width && adjusted.height <= height);
+                    assert!(plugin.set_size(adjusted).is_ok());
+                    assert_eq!(plugin.get_size(), Some(adjusted));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn default_clap_callbacks_remain_free_aspect_ratio() {
+        let mut plugin = DummyPlugin::new(false);
+        assert_eq!(
+            plugin.get_resize_hints().unwrap().strategy,
+            AspectRatioStrategy::Disregard
+        );
+        assert_eq!(
+            plugin.adjust_size(GuiSize {
+                width: 800,
+                height: 700,
+            }),
+            Some(GuiSize {
+                width: 800,
+                height: 700,
+            })
+        );
+        assert!(
+            plugin
+                .set_size(GuiSize {
+                    width: 800,
+                    height: 700,
+                })
+                .is_ok()
+        );
+        assert_eq!(
+            plugin.get_size(),
+            Some(GuiSize {
+                width: 800,
+                height: 700,
+            })
+        );
+    }
 }

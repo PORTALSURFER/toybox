@@ -44,6 +44,73 @@ impl GpuiSizeContract {
             requested.1.clamp(self.minimum.1, self.maximum.1).max(1),
         )
     }
+
+    fn constrain_fixed_aspect(self, requested: (u32, u32)) -> (u32, u32) {
+        let common = gcd(self.preferred.0, self.preferred.1);
+        let unit_width = self.preferred.0 / common;
+        let unit_height = self.preferred.1 / common;
+        let minimum_multiplier =
+            ceil_div(self.minimum.0, unit_width).max(ceil_div(self.minimum.1, unit_height));
+        let maximum_multiplier =
+            u64::from(self.maximum.0 / unit_width).min(u64::from(self.maximum.1 / unit_height));
+        let requested_multiplier = u64::from(requested.0.max(1) / unit_width)
+            .min(u64::from(requested.1.max(1) / unit_height));
+        let multiplier = requested_multiplier.clamp(minimum_multiplier, maximum_multiplier);
+        (
+            (u64::from(unit_width) * multiplier) as u32,
+            (u64::from(unit_height) * multiplier) as u32,
+        )
+    }
+}
+
+fn gcd(mut left: u32, mut right: u32) -> u32 {
+    while right != 0 {
+        let remainder = left % right;
+        left = right;
+        right = remainder;
+    }
+    left.max(1)
+}
+
+fn ceil_div(value: u32, divisor: u32) -> u64 {
+    u64::from(value).div_ceil(u64::from(divisor))
+}
+
+fn max_logical_dimension_for_host(host_size: u32, scale: f32) -> u32 {
+    let fits = |logical_size| platform::logical_to_host_size(logical_size, 1, scale).0 <= host_size;
+    if !fits(1) {
+        return 1;
+    }
+    let mut lower = 1_u32;
+    let mut upper = u32::MAX;
+    while lower < upper {
+        let candidate = lower + (upper - lower).div_ceil(2);
+        if fits(candidate) {
+            lower = candidate;
+        } else {
+            upper = candidate - 1;
+        }
+    }
+    lower
+}
+
+fn constrain_host_size_at_scale(
+    contract: GpuiSizeContract,
+    fixed_aspect_ratio: bool,
+    width: u32,
+    height: u32,
+    scale: f32,
+) -> (u32, u32) {
+    let logical_budget = (
+        max_logical_dimension_for_host(width, scale),
+        max_logical_dimension_for_host(height, scale),
+    );
+    let logical_size = if fixed_aspect_ratio {
+        contract.constrain_fixed_aspect(logical_budget)
+    } else {
+        contract.constrain(logical_budget)
+    };
+    platform::logical_to_host_size(logical_size.0, logical_size.1, scale)
 }
 
 struct AnyRoot {
@@ -87,6 +154,7 @@ pub struct GpuiHostedGui {
     parent: Option<RawWindowHandle>,
     size: Cell<Option<(u32, u32)>>,
     contract: GpuiSizeContract,
+    fixed_aspect_ratio: bool,
     visibility_callback: platform::VisibilityCallback,
     runtime: Option<Runtime>,
     callback_keyboard_only: bool,
@@ -107,6 +175,7 @@ impl GpuiHostedGui {
             parent: None,
             size: Cell::new(Some(preferred)),
             contract: GpuiSizeContract::new(preferred, (1, 1), (u32::MAX, u32::MAX)),
+            fixed_aspect_ratio: false,
             visibility_callback: Rc::new(RefCell::new(None)),
             runtime: None,
             callback_keyboard_only: false,
@@ -122,6 +191,12 @@ impl GpuiHostedGui {
     ) -> Self {
         self.contract = GpuiSizeContract::new(preferred, minimum, maximum);
         self.size.set(Some(self.contract.preferred));
+        self
+    }
+
+    /// Preserve the preferred width-to-height ratio during host resizing.
+    pub fn with_fixed_aspect_ratio(mut self) -> Self {
+        self.fixed_aspect_ratio = true;
         self
     }
 
@@ -179,7 +254,7 @@ impl GpuiHostedGui {
         let (width, height) = self
             .size
             .get()
-            .map(|size| self.contract.constrain(size))
+            .map(|size| self.constrain_logical_size(size))
             .unwrap_or(self.contract.preferred);
         let application = Application::with_platform(platform.clone());
         let Some(handle) = crate::gui_panic::contain("GPUI open", || {
@@ -266,6 +341,35 @@ impl GpuiHostedGui {
         Some(self.host_size_from_logical(width, height))
     }
 
+    /// Constrain a host-facing size to the logical contract and convert it
+    /// back to the host's units.
+    pub fn constrain_host_size(&self, width: u32, height: u32) -> (u32, u32) {
+        constrain_host_size_at_scale(
+            self.contract,
+            self.fixed_aspect_ratio,
+            width,
+            height,
+            self.host_scale_factor(),
+        )
+    }
+
+    /// Return CLAP resize hints for this editor's resize policy.
+    pub fn resize_hints(&self) -> clack_extensions::gui::GuiResizeHints {
+        let strategy = if self.fixed_aspect_ratio {
+            clack_extensions::gui::AspectRatioStrategy::Preserve {
+                width: self.contract.preferred.0,
+                height: self.contract.preferred.1,
+            }
+        } else {
+            clack_extensions::gui::AspectRatioStrategy::Disregard
+        };
+        clack_extensions::gui::GuiResizeHints {
+            can_resize_horizontally: true,
+            can_resize_vertically: true,
+            strategy,
+        }
+    }
+
     /// Show the already-open view.
     pub fn show(&self) -> bool {
         let open = self.runtime.is_some();
@@ -303,7 +407,7 @@ impl GpuiHostedGui {
     pub fn request_resize(&self, width: u32, height: u32) {
         let (width, height) = self.logical_size_from_host(width, height);
         self.size
-            .set(Some(self.contract.constrain((width, height))));
+            .set(Some(self.constrain_logical_size((width, height))));
         if let Some(runtime) = &self.runtime {
             let (width, height) = self.size.get().expect("size was just set");
             runtime
@@ -351,10 +455,88 @@ impl GpuiHostedGui {
             |runtime| runtime.platform.scale_factor(),
         )
     }
+
+    fn constrain_logical_size(&self, size: (u32, u32)) -> (u32, u32) {
+        if self.fixed_aspect_ratio {
+            self.contract.constrain_fixed_aspect(size)
+        } else {
+            self.contract.constrain(size)
+        }
+    }
 }
 
 impl Drop for GpuiHostedGui {
     fn drop(&mut self) {
         self.close();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        GpuiHostedGui, GpuiSizeContract, constrain_host_size_at_scale,
+        max_logical_dimension_for_host, platform,
+    };
+
+    #[test]
+    fn size_contract_keeps_free_aspect_requests_independent() {
+        let contract = GpuiSizeContract::new((800, 500), (400, 250), (1200, 750));
+        assert_eq!(contract.constrain((900, 700)), (900, 700));
+        assert_eq!(contract.constrain((200, 1)), (400, 250));
+        assert_eq!(contract.constrain((2000, 2000)), (1200, 750));
+    }
+
+    #[test]
+    fn fixed_aspect_contract_uses_preferred_ratio_inside_bounds() {
+        let contract = GpuiSizeContract::new((800, 500), (400, 250), (1200, 750));
+        assert_eq!(contract.constrain_fixed_aspect((800, 700)), (800, 500));
+        assert_eq!(contract.constrain_fixed_aspect((300, 200)), (400, 250));
+        assert_eq!(contract.constrain_fixed_aspect((2000, 2000)), (1200, 750));
+        let adjusted = contract.constrain_fixed_aspect((407, 255));
+        assert_eq!(adjusted, (400, 250));
+        assert_eq!(contract.constrain_fixed_aspect(adjusted), adjusted);
+    }
+
+    #[test]
+    fn host_budget_uses_largest_roundtrip_safe_logical_dimension() {
+        assert_eq!(max_logical_dimension_for_host(1002, 1.25), 801);
+        assert_eq!(platform::logical_to_host_size(801, 1, 1.25).0, 1001);
+        assert!(platform::logical_to_host_size(802, 1, 1.25).0 > 1002);
+
+        let contract = GpuiSizeContract::new((800, 500), (400, 250), (1200, 750));
+        for (width, height) in [(1001, 625), (1002, 627), (1252, 782), (1600, 1000)] {
+            let adjusted = constrain_host_size_at_scale(contract, true, width, height, 1.25);
+            assert!(adjusted.0 <= width && adjusted.1 <= height);
+            assert_eq!(
+                constrain_host_size_at_scale(contract, true, adjusted.0, adjusted.1, 1.25,),
+                adjusted
+            );
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn mac_host_size_conversion_stays_in_logical_points() {
+        let gui = GpuiHostedGui::new(
+            "toybox-gpui-size-test",
+            |_window, _cx| panic!("size tests never open a native editor"),
+            800,
+            500,
+        );
+        assert_eq!(gui.host_size_from_logical(800, 500), (800, 500));
+        assert_eq!(gui.logical_size_from_host(800, 500), (800, 500));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_host_size_helpers_apply_fractional_dpi_once() {
+        assert_eq!(
+            super::platform::logical_to_host_size(800, 500, 1.25),
+            (1000, 625)
+        );
+        assert_eq!(
+            super::platform::host_to_logical_size(1000, 625, 1.25),
+            (800, 500)
+        );
     }
 }

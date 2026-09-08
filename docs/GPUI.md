@@ -18,6 +18,12 @@ The factory receives `&mut gpui::Window` and `&mut gpui::App` and returns an
 preferred, maximum)` and optional visibility notifications with
 `with_visibility_callback`.
 
+Use `with_fixed_aspect_ratio()` when the editor must keep its preferred
+width-to-height ratio while resizing. Without that opt-in, width and height
+are constrained independently. GPUI sizes are logical points; the CLAP
+adapter reports host-facing units, including physical pixels for Windows DPI,
+and converts accepted resize requests back to logical dimensions.
+
 The host supplies a native parent before opening. Keep the parent alive until
 the facade closes. Open, resize, input, frame pumping, and close all belong on
 the host UI thread. The host owns its event loop: never call GPUI's desktop
