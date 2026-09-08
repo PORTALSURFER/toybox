@@ -1462,7 +1462,8 @@ impl WindowState {
             self.pending_frame.set(true);
             return;
         }
-        self.request_frame_one();
+        // Deliver any queued layout change before drawing the resized surface.
+        self.pending_frame.set(true);
         self.drain_gateway();
     }
 
@@ -2481,6 +2482,14 @@ mod tests {
         let callback_observed = Rc::clone(&observed);
         state.resize_callback.borrow_mut().value = Some(Box::new(move |size, _| {
             callback_observed.borrow_mut().push(size);
+        }));
+        let frame_observed = Rc::clone(&observed);
+        state.request_frame_callback.borrow_mut().value = Some(Box::new(move |_| {
+            assert_eq!(
+                *frame_observed.borrow(),
+                vec![size(px(1280.0), px(800.0))],
+                "layout must update before the first resized frame"
+            );
         }));
         state.resize(size(px(800.0), px(500.0)));
         state.resize(size(px(1280.0), px(800.0)));
