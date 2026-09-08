@@ -1207,6 +1207,9 @@ impl WindowState {
     }
 
     pub(crate) fn resize(&self, size: Size<Pixels>) {
+        if self.closed.get() {
+            return;
+        }
         self.bounds.set(Bounds::new(self.bounds.get().origin, size));
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         if let Some(native) = self.native.borrow_mut().as_mut() {
@@ -1214,6 +1217,11 @@ impl WindowState {
             native.resize(size);
             self.suppress_resize_callback.set(false);
         }
+        // Native resize callbacks are suppressed while the child is borrowed.
+        // Queue the layout notification as this can also be called from inside
+        // GPUI's App update, where synchronously invoking its callback reenters
+        // the App borrow. The next gateway drain delivers the latest size.
+        self.pending_resize.set(Some(size));
     }
 
     fn with_input_handler<R>(
@@ -2464,6 +2472,29 @@ mod tests {
 
         assert_eq!(old_count.get(), 1);
         assert_eq!(replacement_count.get(), 1);
+    }
+
+    #[test]
+    fn programmatic_resize_defers_and_coalesces_layout_notification() {
+        let state = test_window_state();
+        let observed = Rc::new(RefCell::new(Vec::new()));
+        let callback_observed = Rc::clone(&observed);
+        state.resize_callback.borrow_mut().value = Some(Box::new(move |size, _| {
+            callback_observed.borrow_mut().push(size);
+        }));
+        state.resize(size(px(800.0), px(500.0)));
+        state.resize(size(px(1280.0), px(800.0)));
+        assert!(
+            observed.borrow().is_empty(),
+            "must not reenter a GPUI update"
+        );
+        state.request_frame();
+        assert_eq!(*observed.borrow(), vec![size(px(1280.0), px(800.0))]);
+        state.request_frame();
+        assert_eq!(observed.borrow().len(), 1);
+        state.quarantine_native();
+        state.resize(size(px(640.0), px(400.0)));
+        assert!(state.pending_resize.get().is_none());
     }
 
     #[test]
