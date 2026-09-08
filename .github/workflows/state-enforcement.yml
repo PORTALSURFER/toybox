@@ -67,6 +67,12 @@ jobs:
       - name: Run toybox state helper tests
         run: cargo test -p toybox clap::state
 
+      - name: Lint embedded GPUI platform
+        run: cargo clippy -p toybox --all-targets --features gpui-gui -- -D warnings
+
+      - name: Test embedded GPUI platform
+        run: cargo test -p toybox --features gpui-gui
+
       - name: Run toybox docs tests
         run: cargo test -p toybox --doc
 
@@ -103,6 +109,9 @@ jobs:
       - name: Build toybox with Radiant GUI feature
         run: cargo check -p toybox --features radiant-gui
 
+      - name: Build toybox with GPUI GUI feature
+        run: cargo check -p toybox --features gpui-gui
+
       - name: Test patchbay-gui
         run: cargo test -p patchbay-gui
 
@@ -125,6 +134,9 @@ jobs:
 
       - name: Test toybox with Radiant GUI feature
         run: cargo test -p toybox --features radiant-gui
+
+      - name: Test toybox with GPUI GUI feature
+        run: cargo test -p toybox --features gpui-gui
 
       - name: Lint toybox VST3 feature (SDK optional)
         if: ${{ vars.VST3_SDK_DIR != '' }}
@@ -155,3 +167,39 @@ jobs:
         env:
           VST3_SDK_DIR: ${{ vars.VST3_SDK_DIR }}
         run: cargo test -p toybox --features radiant-vst3
+
+      - name: Test toybox GPUI VST3 feature (SDK optional)
+        if: ${{ vars.VST3_SDK_DIR != '' }}
+        env:
+          VST3_SDK_DIR: ${{ vars.VST3_SDK_DIR }}
+        run: cargo test -p toybox --features gpui-vst3
+
+  gpui-build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure private git dependencies
+        shell: bash
+        env:
+          RADIANT_REPO_TOKEN: ${{ secrets.RADIANT_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${RADIANT_REPO_TOKEN}" ]]; then
+            echo "::error::RADIANT_REPO_TOKEN is required to fetch private git dependencies"
+            exit 1
+          fi
+          git config --global url."https://x-access-token:${RADIANT_REPO_TOKEN}@github.com/".insteadOf "https://github.com/"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Lint embedded GPUI platform
+        run: cargo clippy -p toybox --all-targets --features gpui-gui -- -D warnings
+
+      - name: Test embedded GPUI platform
+        run: cargo test -p toybox --features gpui-gui
+
+      - name: Exercise native GPUI child on the main thread
+        run: cargo run -p toybox --example gpui-embedded-smoke --features gpui-gui

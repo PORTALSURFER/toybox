@@ -2,7 +2,7 @@
 
 ## Active
 
-- No active plan files are tracked.
+- [Embedded GPUI migration](active/gpui-embedded-migration.md): GainSnap migration, shared native hosting, and acceptance gates.
 
 ## Archive
 

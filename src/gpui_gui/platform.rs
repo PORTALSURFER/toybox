@@ -1,0 +1,1741 @@
+//! Host-loop and GPUI platform plumbing for the embedded editor.
+
+#![allow(missing_docs)]
+
+use std::borrow::Cow;
+use std::cell::{Cell, RefCell};
+use std::collections::{HashMap, VecDeque};
+use std::ops::Range;
+use std::path::{Path, PathBuf};
+use std::rc::{Rc, Weak};
+use std::sync::{Arc, Condvar, Mutex};
+use std::thread::{self, ThreadId};
+use std::time::{Duration, Instant};
+
+use anyhow::Result;
+use futures::channel::oneshot;
+use gpui::{
+    AnyWindowHandle, AtlasKey, AtlasTextureId, AtlasTextureKind, AtlasTile, BackgroundExecutor,
+    Bounds, Capslock, ClipboardItem, CursorStyle, DevicePixels, DispatchEventResult,
+    DummyKeyboardMapper, ForegroundExecutor, GpuSpecs, KeyDownEvent, KeyUpEvent, Keymap,
+    Keystroke, Modifiers, PathPromptOptions, Pixels, Platform, PlatformAtlas, PlatformDisplay,
+    PlatformInput, PlatformInputHandler, PlatformKeyboardLayout, PlatformKeyboardMapper,
+    PlatformTextSystem, PlatformWindow, Point, Priority, PromptButton, RequestFrameOptions, Scene,
+    Size, Task, ThermalState, TileId, WindowAppearance, WindowBackgroundAppearance, WindowBounds,
+    WindowControlArea, WindowParams, point, px, size,
+};
+use gpui_wgpu::CosmicTextSystem;
+use raw_window_handle_06::{
+    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, WindowHandle,
+};
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[path = "native.rs"]
+mod native;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use native::NativeChild;
+
+pub(crate) fn parent_scale_factor(parent: raw_window_handle::RawWindowHandle) -> f32 {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        native::parent_scale_factor(parent).max(0.01)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = parent;
+        1.0
+    }
+}
+
+pub(crate) fn logical_to_host_size(width: u32, height: u32, scale: f32) -> (u32, u32) {
+    let scale = scale.max(0.01);
+    (
+        ((width.max(1) as f32 * scale).round() as u32).max(1),
+        ((height.max(1) as f32 * scale).round() as u32).max(1),
+    )
+}
+
+pub(crate) fn host_to_logical_size(width: u32, height: u32, scale: f32) -> (u32, u32) {
+    let scale = scale.max(0.01);
+    (
+        ((width.max(1) as f32 / scale).round() as u32).max(1),
+        ((height.max(1) as f32 / scale).round() as u32).max(1),
+    )
+}
+
+/// A foreground/background dispatcher driven by the host's UI thread.
+///
+/// GPUI never starts an application-owned event loop here. Main-thread tasks
+/// are queued until [`EmbeddedPlatform::pump`] is called by the native child
+/// view or by the plugin host's UI callback.
+pub(crate) struct EmbeddedDispatcher {
+    state: Arc<DispatcherState>,
+}
+
+struct DispatcherState {
+    main_thread: ThreadId,
+    stopped: std::sync::atomic::AtomicBool,
+    failed: std::sync::atomic::AtomicBool,
+    main_queue: Mutex<VecDeque<gpui::RunnableVariant>>,
+    background_queue: Mutex<VecDeque<WorkItem>>,
+    timers: Mutex<VecDeque<(Instant, gpui::RunnableVariant)>>,
+    worker_wakeup: Condvar,
+    worker: Mutex<Option<thread::JoinHandle<()>>>,
+}
+
+enum WorkItem {
+    Runnable(gpui::RunnableVariant),
+    Realtime(Box<dyn FnOnce() + Send>),
+}
+
+impl EmbeddedDispatcher {
+    pub(crate) fn new() -> Arc<Self> {
+        let state = Arc::new(DispatcherState {
+            main_thread: thread::current().id(),
+            stopped: std::sync::atomic::AtomicBool::new(false),
+            failed: std::sync::atomic::AtomicBool::new(false),
+            main_queue: Mutex::new(VecDeque::new()),
+            background_queue: Mutex::new(VecDeque::new()),
+            timers: Mutex::new(VecDeque::new()),
+            worker_wakeup: Condvar::new(),
+            worker: Mutex::new(None),
+        });
+        let weak_state = Arc::downgrade(&state);
+        let worker = thread::Builder::new()
+            .name("toybox-gpui-worker".to_string())
+            .spawn(move || {
+                loop {
+                    let Some(state) = weak_state.upgrade() else {
+                        break;
+                    };
+                    let runnable = {
+                        let mut queue = match state.background_queue.lock() {
+                            Ok(queue) => queue,
+                            Err(_) => {
+                                state
+                                    .failed
+                                    .store(true, std::sync::atomic::Ordering::Release);
+                                state
+                                    .stopped
+                                    .store(true, std::sync::atomic::Ordering::Release);
+                                state.worker_wakeup.notify_all();
+                                return;
+                            }
+                        };
+                        loop {
+                            if state.stopped.load(std::sync::atomic::Ordering::Acquire) {
+                                return;
+                            }
+                            if let Some(runnable) = queue.pop_front() {
+                                break runnable;
+                            }
+                            queue = match state.worker_wakeup.wait(queue) {
+                                Ok(queue) => queue,
+                                Err(_) => {
+                                    state
+                                        .failed
+                                        .store(true, std::sync::atomic::Ordering::Release);
+                                    state
+                                        .stopped
+                                        .store(true, std::sync::atomic::Ordering::Release);
+                                    state.worker_wakeup.notify_all();
+                                    return;
+                                }
+                            };
+                        }
+                    };
+                    if state.stopped.load(std::sync::atomic::Ordering::Acquire) {
+                        drop(runnable);
+                        continue;
+                    }
+                    let result =
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match runnable {
+                            WorkItem::Runnable(runnable) => {
+                                let _ = runnable.run();
+                            }
+                            WorkItem::Realtime(callback) => {
+                                callback();
+                            }
+                        }));
+                    if result.is_err() {
+                        state
+                            .failed
+                            .store(true, std::sync::atomic::Ordering::Release);
+                        state
+                            .stopped
+                            .store(true, std::sync::atomic::Ordering::Release);
+                        state.worker_wakeup.notify_all();
+                        return;
+                    }
+                }
+            })
+            .expect("failed to start GPUI dispatcher worker");
+        *state.worker.lock().expect("GPUI worker lock poisoned") = Some(worker);
+        Arc::new(Self { state })
+    }
+
+    pub(crate) fn pump(&self) {
+        if thread::current().id() != self.state.main_thread
+            || self
+                .state
+                .stopped
+                .load(std::sync::atomic::Ordering::Acquire)
+        {
+            return;
+        }
+        let now = Instant::now();
+        let mut ready = Vec::new();
+        match self.state.timers.lock() {
+            Ok(mut timers) => {
+                let mut pending = VecDeque::new();
+                while let Some((deadline, runnable)) = timers.pop_front() {
+                    if deadline <= now {
+                        ready.push(runnable);
+                    } else {
+                        pending.push_back((deadline, runnable));
+                    }
+                }
+                *timers = pending;
+            }
+            Err(_) => {
+                self.fail_runtime();
+                return;
+            }
+        }
+        if !ready.is_empty() {
+            let mut accepted = false;
+            match self.state.main_queue.lock() {
+                Ok(mut queue)
+                    if !self
+                        .state
+                        .stopped
+                        .load(std::sync::atomic::Ordering::Acquire)
+                        && queue.len().saturating_add(ready.len()) <= 1024 =>
+                {
+                    queue.extend(ready.drain(..));
+                    accepted = true;
+                }
+                Ok(_) => {}
+                Err(_) => {
+                    self.fail_runtime();
+                    return;
+                }
+            }
+            if !accepted {
+                self.fail_overflow();
+            }
+        }
+        for _ in 0..64 {
+            let runnable = match self.state.main_queue.lock() {
+                Ok(mut queue) => queue.pop_front(),
+                Err(_) => {
+                    self.fail_runtime();
+                    return;
+                }
+            };
+            let Some(runnable) = runnable else {
+                break;
+            };
+            if self
+                .state
+                .stopped
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
+                drop(runnable);
+                continue;
+            }
+            if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| runnable.run())).is_err() {
+                self.fail_runtime();
+                return;
+            }
+        }
+    }
+
+    pub(crate) fn stop(&self) {
+        self.state
+            .stopped
+            .store(true, std::sync::atomic::Ordering::Release);
+        self.state.worker_wakeup.notify_all();
+        let worker = self
+            .state
+            .worker
+            .lock()
+            .ok()
+            .and_then(|mut worker| worker.take());
+        if let Some(worker) = worker {
+            if worker.thread().id() != thread::current().id() {
+                let _ = worker.join();
+            } else if let Ok(mut slot) = self.state.worker.lock() {
+                // A realtime callback may request shutdown from the worker.
+                // Keep the handle owned until a host-thread stop can join it;
+                // dropping it here would detach code from an unloading DLL.
+                *slot = Some(worker);
+            }
+        }
+
+        // Take queued captures out of their locks before dropping them. A
+        // GPUI task destructor can schedule more work, and dropping it while
+        // holding one of these locks would deadlock that reentrant enqueue.
+        let main_queue = match self.state.main_queue.lock() {
+            Ok(mut queue) => Some(std::mem::take(&mut *queue)),
+            Err(_) => {
+                self.fail_runtime();
+                None
+            }
+        };
+        let background_queue = match self.state.background_queue.lock() {
+            Ok(mut queue) => Some(std::mem::take(&mut *queue)),
+            Err(_) => {
+                self.fail_runtime();
+                None
+            }
+        };
+        let timers = match self.state.timers.lock() {
+            Ok(mut timers) => Some(std::mem::take(&mut *timers)),
+            Err(_) => {
+                self.fail_runtime();
+                None
+            }
+        };
+        drop(main_queue);
+        drop(background_queue);
+        drop(timers);
+    }
+
+    pub(crate) fn failed(&self) -> bool {
+        self.state.failed.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    fn fail_overflow(&self) {
+        self.state
+            .failed
+            .store(true, std::sync::atomic::Ordering::Release);
+        self.state
+            .stopped
+            .store(true, std::sync::atomic::Ordering::Release);
+        self.state.worker_wakeup.notify_all();
+    }
+
+    fn fail_runtime(&self) {
+        self.state
+            .failed
+            .store(true, std::sync::atomic::Ordering::Release);
+        self.state
+            .stopped
+            .store(true, std::sync::atomic::Ordering::Release);
+        self.state.worker_wakeup.notify_all();
+    }
+
+    fn enqueue_background(&self, item: WorkItem) {
+        let mut item = Some(item);
+        let mut overflow = false;
+        let mut poisoned = false;
+        match self.state.background_queue.lock() {
+            Ok(mut queue)
+                if !self
+                    .state
+                    .stopped
+                    .load(std::sync::atomic::Ordering::Acquire) =>
+            {
+                if queue.len() < 1024 {
+                    queue.push_back(item.take().expect("work item present"));
+                } else {
+                    overflow = true;
+                }
+            }
+            Ok(_) => {}
+            Err(_) => poisoned = true,
+        }
+        let accepted = item.is_none();
+        drop(item);
+        if poisoned {
+            self.fail_runtime();
+        } else if overflow {
+            self.fail_overflow();
+        } else if accepted {
+            self.state.worker_wakeup.notify_one();
+        }
+    }
+}
+
+impl Drop for EmbeddedDispatcher {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+impl gpui::PlatformDispatcher for EmbeddedDispatcher {
+    fn is_main_thread(&self) -> bool {
+        thread::current().id() == self.state.main_thread
+    }
+
+    fn dispatch(&self, runnable: gpui::RunnableVariant, _priority: Priority) {
+        self.enqueue_background(WorkItem::Runnable(runnable));
+    }
+
+    fn dispatch_on_main_thread(&self, runnable: gpui::RunnableVariant, _priority: Priority) {
+        let mut runnable = Some(runnable);
+        let mut overflow = false;
+        let mut poisoned = false;
+        match self.state.main_queue.lock() {
+            Ok(mut queue)
+                if !self
+                    .state
+                    .stopped
+                    .load(std::sync::atomic::Ordering::Acquire) =>
+            {
+                if queue.len() < 1024 {
+                    queue.push_back(runnable.take().expect("runnable present"));
+                } else {
+                    overflow = true;
+                }
+            }
+            Ok(_) => {}
+            Err(_) => poisoned = true,
+        }
+        drop(runnable);
+        if poisoned {
+            self.fail_runtime();
+        } else if overflow {
+            self.fail_overflow();
+        }
+    }
+
+    fn dispatch_after(&self, duration: Duration, runnable: gpui::RunnableVariant) {
+        let mut runnable = Some(runnable);
+        let mut overflow = false;
+        let mut poisoned = false;
+        match self.state.timers.lock() {
+            Ok(mut timers)
+                if !self
+                    .state
+                    .stopped
+                    .load(std::sync::atomic::Ordering::Acquire) =>
+            {
+                if timers.len() < 1024 {
+                    timers.push_back((
+                        Instant::now() + duration,
+                        runnable.take().expect("runnable present"),
+                    ));
+                } else {
+                    overflow = true;
+                }
+            }
+            Ok(_) => {}
+            Err(_) => poisoned = true,
+        }
+        drop(runnable);
+        if poisoned {
+            self.fail_runtime();
+        } else if overflow {
+            self.fail_overflow();
+        }
+    }
+
+    fn spawn_realtime(&self, f: Box<dyn FnOnce() + Send>) {
+        self.enqueue_background(WorkItem::Realtime(f));
+    }
+}
+
+#[derive(Debug)]
+struct EmbeddedDisplay;
+
+impl PlatformDisplay for EmbeddedDisplay {
+    fn id(&self) -> gpui::DisplayId {
+        gpui::DisplayId::new(1)
+    }
+
+    fn uuid(&self) -> Result<uuid::Uuid> {
+        Err(anyhow::anyhow!(
+            "embedded GPUI has no host display identity"
+        ))
+    }
+
+    fn bounds(&self) -> Bounds<Pixels> {
+        Bounds::new(point(px(0.0), px(0.0)), size(px(1.0), px(1.0)))
+    }
+}
+
+/// Platform state owned by one hosted editor instance.
+pub(crate) struct EmbeddedPlatform {
+    dispatcher: Arc<EmbeddedDispatcher>,
+    background_executor: BackgroundExecutor,
+    foreground_executor: ForegroundExecutor,
+    text_system: Arc<dyn PlatformTextSystem>,
+    display: Rc<dyn PlatformDisplay>,
+    active_window: Cell<Option<AnyWindowHandle>>,
+    active_window_shared: Rc<Cell<Option<AnyWindowHandle>>>,
+    windows: RefCell<HashMap<gpui::WindowId, AnyWindowHandle>>,
+    stopped: Cell<bool>,
+    parent: raw_window_handle::RawWindowHandle,
+    class_name: &'static str,
+    callback_keyboard_only: bool,
+    visibility_callback: Rc<RefCell<Option<Box<dyn FnMut(bool)>>>>,
+    gpu_context: gpui_wgpu::GpuContext,
+    window_owner: RefCell<Option<Weak<WindowState>>>,
+    visibility_state: Cell<Option<bool>>,
+    parent_scale_factor: f32,
+}
+
+impl EmbeddedPlatform {
+    pub(crate) fn new(
+        parent: raw_window_handle::RawWindowHandle,
+        class_name: &'static str,
+        callback_keyboard_only: bool,
+        visibility_callback: Rc<RefCell<Option<Box<dyn FnMut(bool)>>>>,
+    ) -> anyhow::Result<Rc<Self>> {
+        let dispatcher = EmbeddedDispatcher::new();
+        let dispatcher_trait: Arc<dyn gpui::PlatformDispatcher> = dispatcher.clone();
+        let text_system = CosmicTextSystem::new_without_system_fonts("Ioskeley Mono");
+        text_system.add_fonts(vec![
+            Cow::Borrowed(include_bytes!(
+                "../../assets/IoskeleyMono/IoskeleyMono-Regular.ttf"
+            )),
+            Cow::Borrowed(include_bytes!(
+                "../../assets/Sometype_Mono/static/SometypeMono-Regular.ttf"
+            )),
+        ])?;
+        Ok(Rc::new(Self {
+            background_executor: BackgroundExecutor::new(dispatcher_trait.clone()),
+            foreground_executor: ForegroundExecutor::new(dispatcher_trait),
+            dispatcher,
+            text_system: Arc::new(text_system),
+            display: Rc::new(EmbeddedDisplay),
+            active_window: Cell::new(None),
+            active_window_shared: Rc::new(Cell::new(None)),
+            windows: RefCell::new(HashMap::new()),
+            stopped: Cell::new(false),
+            parent,
+            class_name,
+            callback_keyboard_only,
+            visibility_callback,
+            gpu_context: Rc::new(RefCell::new(None)),
+            window_owner: RefCell::new(None),
+            visibility_state: Cell::new(None),
+            parent_scale_factor: parent_scale_factor(parent),
+        }))
+    }
+
+    pub(crate) fn pump(&self) {
+        self.dispatcher.pump();
+    }
+
+    pub(crate) fn stop(&self) {
+        if !self.stopped.replace(true) {
+            self.window_owner.borrow_mut().take();
+            self.dispatcher.stop();
+        }
+    }
+
+    pub(crate) fn failed(&self) -> bool {
+        self.dispatcher.failed()
+    }
+
+    pub(crate) fn sync_visibility(&self) {
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        let visible = self
+            .window_owner
+            .borrow()
+            .as_ref()
+            .and_then(Weak::upgrade)
+            .and_then(|state| state.native.borrow().as_ref().map(NativeChild::is_visible));
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        let visible = None;
+        if self.visibility_state.get() == visible {
+            return;
+        }
+        self.visibility_state.set(visible);
+        if let Some(visible) = visible
+            && let Ok(mut callback) = self.visibility_callback.try_borrow_mut()
+            && let Some(callback) = callback.as_mut()
+        {
+            let _ = crate::gui_panic::contain("GPUI visibility observer", || callback(visible));
+        }
+    }
+
+    pub(crate) fn resize(&self, size: Size<Pixels>) {
+        if let Some(owner) = self.window_owner.borrow().as_ref().and_then(Weak::upgrade) {
+            owner.resize(size);
+        }
+    }
+
+    pub(crate) fn show(&self, visible: bool) {
+        if let Some(owner) = self.window_owner.borrow().as_ref().and_then(Weak::upgrade) {
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            if let Some(native) = owner.native.borrow_mut().as_mut() {
+                native.set_visible(visible);
+            }
+        }
+    }
+
+    pub(crate) fn focus(&self, focused: bool) -> bool {
+        if let Some(owner) = self.window_owner.borrow().as_ref().and_then(Weak::upgrade) {
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            if let Some(native) = owner.native.borrow_mut().as_mut() {
+                return native.set_focus(focused);
+            }
+        }
+        false
+    }
+
+    pub(crate) fn scale_factor(&self) -> f32 {
+        self.window_owner
+            .borrow()
+            .as_ref()
+            .and_then(Weak::upgrade)
+            .map_or(self.parent_scale_factor, |owner| owner.scale_factor())
+    }
+
+    pub(crate) fn host_size_from_logical(&self, width: u32, height: u32) -> (u32, u32) {
+        logical_to_host_size(width, height, self.scale_factor())
+    }
+
+    pub(crate) fn logical_size_from_host(&self, width: u32, height: u32) -> (u32, u32) {
+        host_to_logical_size(width, height, self.scale_factor())
+    }
+
+    pub(crate) fn dispatch_vst3_key(
+        &self,
+        key: u16,
+        key_code: i16,
+        modifiers: i16,
+        down: bool,
+    ) -> bool {
+        self.window_owner
+            .borrow()
+            .as_ref()
+            .and_then(Weak::upgrade)
+            .is_some_and(|owner| owner.dispatch_vst3_key(key, key_code, modifiers, down))
+    }
+
+    pub(crate) fn capture_rgba(&self) -> anyhow::Result<(u32, u32, Vec<u8>)> {
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        {
+            let owner = self
+                .window_owner
+                .borrow()
+                .as_ref()
+                .and_then(Weak::upgrade)
+                .ok_or_else(|| anyhow::anyhow!("GPUI native window is not open"))?;
+            if owner.closed.get() {
+                anyhow::bail!("GPUI native window is closed");
+            }
+            if let Some(native) = owner.native.borrow_mut().as_mut() {
+                native.request_capture();
+            }
+            // GPUI owns the scene; request its next frame rather than trying
+            // to clone or reconstruct a scene in the host facade.
+            owner.request_frame();
+            for _ in 0..8 {
+                self.pump();
+                if let Some(pixels) = owner
+                    .native
+                    .borrow_mut()
+                    .as_mut()
+                    .and_then(NativeChild::take_capture)
+                {
+                    return Ok(pixels);
+                }
+            }
+            if owner
+                .native
+                .borrow()
+                .as_ref()
+                .is_some_and(NativeChild::is_failed)
+            {
+                anyhow::bail!("GPUI native renderer failed during capture");
+            }
+            anyhow::bail!("GPUI frame did not produce a capture")
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            anyhow::bail!("GPUI capture requires a native embedded renderer")
+        }
+    }
+}
+
+impl Platform for EmbeddedPlatform {
+    fn background_executor(&self) -> BackgroundExecutor {
+        self.background_executor.clone()
+    }
+
+    fn foreground_executor(&self) -> ForegroundExecutor {
+        self.foreground_executor.clone()
+    }
+
+    fn text_system(&self) -> Arc<dyn PlatformTextSystem> {
+        self.text_system.clone()
+    }
+
+    fn run(&self, on_finish_launching: Box<dyn 'static + FnOnce()>) {
+        on_finish_launching();
+    }
+
+    fn quit(&self) {
+        self.stop();
+    }
+
+    fn restart(&self, _binary_path: Option<PathBuf>) {}
+    fn activate(&self, _ignoring_other_apps: bool) {}
+    fn hide(&self) {}
+    fn hide_other_apps(&self) {}
+    fn unhide_other_apps(&self) {}
+
+    fn displays(&self) -> Vec<Rc<dyn PlatformDisplay>> {
+        vec![self.display.clone()]
+    }
+
+    fn primary_display(&self) -> Option<Rc<dyn PlatformDisplay>> {
+        Some(self.display.clone())
+    }
+
+    fn active_window(&self) -> Option<AnyWindowHandle> {
+        self.active_window_shared.get()
+    }
+
+    fn open_window(
+        &self,
+        handle: AnyWindowHandle,
+        options: WindowParams,
+    ) -> anyhow::Result<Box<dyn PlatformWindow>> {
+        self.windows.borrow_mut().insert(handle.window_id(), handle);
+        self.active_window.set(Some(handle));
+        self.active_window_shared.set(Some(handle));
+        let window = Box::new(EmbeddedWindow::new(
+            handle,
+            options,
+            self.display.clone(),
+            self.active_window_shared.clone(),
+        ));
+        let state = window.state.clone();
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        {
+            let native = NativeChild::new(
+                self.parent,
+                self.class_name,
+                Rc::downgrade(&state),
+                self.gpu_context.clone(),
+                window.bounds().size,
+                self.callback_keyboard_only,
+                self.visibility_callback.clone(),
+            )?;
+            state.atlas.borrow_mut().clone_from(&native.sprite_atlas());
+            state.native.replace(Some(native));
+            *self.window_owner.borrow_mut() = Some(Rc::downgrade(&state));
+        }
+        Ok(window)
+    }
+
+    fn window_appearance(&self) -> WindowAppearance {
+        WindowAppearance::Light
+    }
+
+    fn open_url(&self, _url: &str) {}
+    fn on_open_urls(&self, _callback: Box<dyn FnMut(Vec<String>)>) {}
+    fn register_url_scheme(&self, _url: &str) -> Task<Result<()>> {
+        Task::ready(Ok(()))
+    }
+
+    fn prompt_for_paths(
+        &self,
+        _options: PathPromptOptions,
+    ) -> oneshot::Receiver<Result<Option<Vec<PathBuf>>>> {
+        let (_sender, receiver) = oneshot::channel();
+        receiver
+    }
+
+    fn prompt_for_new_path(
+        &self,
+        _directory: &Path,
+        _suggested_name: Option<&str>,
+    ) -> oneshot::Receiver<Result<Option<PathBuf>>> {
+        let (_sender, receiver) = oneshot::channel();
+        receiver
+    }
+
+    fn can_select_mixed_files_and_dirs(&self) -> bool {
+        false
+    }
+
+    fn reveal_path(&self, _path: &Path) {}
+    fn open_with_system(&self, _path: &Path) {}
+    fn on_quit(&self, _callback: Box<dyn FnMut()>) {}
+    fn on_reopen(&self, _callback: Box<dyn FnMut()>) {}
+    fn on_system_wake(&self, _callback: Box<dyn FnMut()>) {}
+    fn set_menus(&self, _menus: Vec<gpui::Menu>, _keymap: &Keymap) {}
+    fn set_dock_menu(&self, _menu: Vec<gpui::MenuItem>, _keymap: &Keymap) {}
+    fn on_app_menu_action(&self, _callback: Box<dyn FnMut(&dyn gpui::Action)>) {}
+    fn on_will_open_app_menu(&self, _callback: Box<dyn FnMut()>) {}
+    fn on_validate_app_menu_command(&self, _callback: Box<dyn FnMut(&dyn gpui::Action) -> bool>) {}
+    fn thermal_state(&self) -> ThermalState {
+        ThermalState::Nominal
+    }
+    fn on_thermal_state_change(&self, _callback: Box<dyn FnMut()>) {}
+    fn app_path(&self) -> Result<PathBuf> {
+        std::env::current_exe().map_err(Into::into)
+    }
+    fn path_for_auxiliary_executable(&self, name: &str) -> Result<PathBuf> {
+        Ok(self.app_path()?.with_file_name(name))
+    }
+    fn set_cursor_style(&self, _style: CursorStyle) {}
+    fn hide_cursor_until_mouse_moves(&self) {}
+    fn is_cursor_visible(&self) -> bool {
+        true
+    }
+    fn should_auto_hide_scrollbars(&self) -> bool {
+        false
+    }
+    fn read_from_clipboard(&self) -> Option<ClipboardItem> {
+        None
+    }
+    fn write_to_clipboard(&self, _item: ClipboardItem) {}
+    #[cfg(target_os = "macos")]
+    fn read_from_find_pasteboard(&self) -> Option<ClipboardItem> {
+        None
+    }
+    #[cfg(target_os = "macos")]
+    fn write_to_find_pasteboard(&self, _item: ClipboardItem) {}
+    fn write_credentials(&self, _url: &str, _username: &str, _password: &[u8]) -> Task<Result<()>> {
+        Task::ready(Ok(()))
+    }
+    fn read_credentials(&self, _url: &str) -> Task<Result<Option<(String, Vec<u8>)>>> {
+        Task::ready(Ok(None))
+    }
+    fn delete_credentials(&self, _url: &str) -> Task<Result<()>> {
+        Task::ready(Ok(()))
+    }
+    fn keyboard_layout(&self) -> Box<dyn PlatformKeyboardLayout> {
+        Box::new(EmbeddedKeyboardLayout)
+    }
+    fn keyboard_mapper(&self) -> Rc<dyn PlatformKeyboardMapper> {
+        Rc::new(DummyKeyboardMapper)
+    }
+    fn on_keyboard_layout_change(&self, _callback: Box<dyn FnMut()>) {}
+}
+
+struct EmbeddedKeyboardLayout;
+
+impl PlatformKeyboardLayout for EmbeddedKeyboardLayout {
+    fn id(&self) -> &str {
+        "embedded"
+    }
+
+    fn name(&self) -> &str {
+        "Embedded"
+    }
+}
+
+struct InputHandlerSlot {
+    value: Option<PlatformInputHandler>,
+    generation: u64,
+}
+
+struct CallbackSlot<T> {
+    value: Option<T>,
+    generation: u64,
+}
+
+impl<T> Default for CallbackSlot<T> {
+    fn default() -> Self {
+        Self {
+            value: None,
+            generation: 0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum KeySource {
+    Native,
+    Vst3Callback,
+}
+
+struct RecentKey {
+    key: String,
+    modifiers: Modifiers,
+    down: bool,
+    source: KeySource,
+    at: Instant,
+    result: DispatchEventResult,
+}
+
+struct RecentText {
+    text: String,
+    source: KeySource,
+    at: Instant,
+}
+
+struct WindowState {
+    bounds: Cell<Bounds<Pixels>>,
+    active_window: Rc<Cell<Option<AnyWindowHandle>>>,
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    native: RefCell<Option<NativeChild>>,
+    input_handler: RefCell<InputHandlerSlot>,
+    input_callback:
+        RefCell<CallbackSlot<Box<dyn FnMut(PlatformInput) -> DispatchEventResult>>>,
+    request_frame_callback: RefCell<CallbackSlot<Box<dyn FnMut(RequestFrameOptions)>>>,
+    active_callback: RefCell<Option<Box<dyn FnMut(bool)>>>,
+    hover_callback: RefCell<Option<Box<dyn FnMut(bool)>>>,
+    resize_callback: RefCell<CallbackSlot<Box<dyn FnMut(Size<Pixels>, f32)>>>,
+    moved_callback: RefCell<Option<Box<dyn FnMut()>>>,
+    close_callback: RefCell<Option<Box<dyn FnOnce()>>>,
+    should_close_callback: RefCell<Option<Box<dyn FnMut() -> bool>>>,
+    hit_test_callback: RefCell<Option<Box<dyn FnMut() -> Option<WindowControlArea>>>>,
+    appearance_callback: RefCell<Option<Box<dyn FnMut()>>>,
+    atlas: RefCell<Arc<dyn PlatformAtlas>>,
+    title: RefCell<String>,
+    background: Cell<WindowBackgroundAppearance>,
+    fullscreen: Cell<bool>,
+    closed: Cell<bool>,
+    in_update: Cell<bool>,
+    pending_inputs: RefCell<VecDeque<PlatformInput>>,
+    pending_frame: Cell<bool>,
+    pending_resize: Cell<Option<Size<Pixels>>>,
+    suppress_resize_callback: Cell<bool>,
+    recent_key: RefCell<Option<RecentKey>>,
+    recent_text: RefCell<Option<RecentText>>,
+}
+
+impl Drop for WindowState {
+    fn drop(&mut self) {
+        self.closed.set(true);
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        if let Some(mut native) = self.native.get_mut().take() {
+            native.clear_owner();
+            native.close();
+        }
+    }
+}
+
+struct EmbeddedWindow {
+    state: Rc<WindowState>,
+    handle: AnyWindowHandle,
+    display: Rc<dyn PlatformDisplay>,
+}
+
+impl Drop for EmbeddedWindow {
+    fn drop(&mut self) {
+        self.state.closed.set(true);
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        if let Some(mut native) = self.state.native.borrow_mut().take() {
+            native.clear_owner();
+            native.close();
+        }
+    }
+}
+
+impl EmbeddedWindow {
+    fn new(
+        handle: AnyWindowHandle,
+        options: WindowParams,
+        display: Rc<dyn PlatformDisplay>,
+        active_window: Rc<Cell<Option<AnyWindowHandle>>>,
+    ) -> Self {
+        Self {
+            state: Rc::new(WindowState {
+                bounds: Cell::new(options.bounds),
+                active_window,
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                native: RefCell::new(None),
+                input_handler: RefCell::new(InputHandlerSlot {
+                    value: None,
+                    generation: 0,
+                }),
+                input_callback: RefCell::new(CallbackSlot::default()),
+                request_frame_callback: RefCell::new(CallbackSlot::default()),
+                active_callback: RefCell::new(None),
+                hover_callback: RefCell::new(None),
+                resize_callback: RefCell::new(CallbackSlot::default()),
+                moved_callback: RefCell::new(None),
+                close_callback: RefCell::new(None),
+                should_close_callback: RefCell::new(None),
+                hit_test_callback: RefCell::new(None),
+                appearance_callback: RefCell::new(None),
+                atlas: RefCell::new(Arc::new(EmptyAtlas::default())),
+                title: RefCell::new(String::new()),
+                background: Cell::new(WindowBackgroundAppearance::Opaque),
+                fullscreen: Cell::new(false),
+                closed: Cell::new(false),
+                in_update: Cell::new(false),
+                pending_inputs: RefCell::new(VecDeque::new()),
+                pending_frame: Cell::new(false),
+                pending_resize: Cell::new(None),
+                suppress_resize_callback: Cell::new(false),
+                recent_key: RefCell::new(None),
+                recent_text: RefCell::new(None),
+            }),
+            handle,
+            display,
+        }
+    }
+}
+
+impl WindowState {
+    pub(crate) fn resize(&self, size: Size<Pixels>) {
+        self.bounds.set(Bounds::new(self.bounds.get().origin, size));
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        if let Some(native) = self.native.borrow_mut().as_mut() {
+            self.suppress_resize_callback.set(true);
+            native.resize(size);
+            self.suppress_resize_callback.set(false);
+        }
+    }
+
+    fn with_input_handler<R>(
+        &self,
+        callback: impl FnOnce(&mut PlatformInputHandler) -> R,
+    ) -> Option<R> {
+        let (generation, mut input_handler) = {
+            let mut slot = self.input_handler.borrow_mut();
+            (slot.generation, slot.value.take()?)
+        };
+        let result = callback(&mut input_handler);
+        let mut slot = self.input_handler.borrow_mut();
+        if !self.closed.get() && slot.generation == generation && slot.value.is_none() {
+            slot.value = Some(input_handler);
+        }
+        Some(result)
+    }
+
+    pub(crate) fn dispatch_input(&self, event: PlatformInput) -> DispatchEventResult {
+        if self.closed.get() {
+            return DispatchEventResult {
+                propagate: false,
+                default_prevented: true,
+            };
+        }
+        if self.in_update.replace(true) {
+            let mut pending = self.pending_inputs.borrow_mut();
+            if pending.len() >= 1024 {
+                self.closed.set(true);
+            } else {
+                pending.push_back(event);
+            }
+            return DispatchEventResult {
+                propagate: false,
+                default_prevented: true,
+            };
+        }
+        let result = self.dispatch_input_one(event);
+        self.drain_gateway();
+        result
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    pub(crate) fn dispatch_native_key(&self, event: PlatformInput) -> DispatchEventResult {
+        self.dispatch_key_from_source(event, KeySource::Native)
+    }
+
+    pub(crate) fn dispatch_vst3_key(
+        &self,
+        key: u16,
+        key_code: i16,
+        modifiers: i16,
+        down: bool,
+    ) -> bool {
+        if self.closed.get() || self.input_callback.borrow().value.is_none() {
+            return false;
+        }
+        let Some((key_name, key_char)) = vst3_keystroke(key, key_code) else {
+            return false;
+        };
+        let modifiers = vst3_modifiers(modifiers);
+        let keystroke = Keystroke {
+            modifiers,
+            key: key_name,
+            key_char,
+        };
+        let event = if down {
+            PlatformInput::KeyDown(KeyDownEvent {
+                keystroke,
+                is_held: false,
+                prefer_character_input: false,
+            })
+        } else {
+            PlatformInput::KeyUp(KeyUpEvent { keystroke })
+        };
+        let result = self.dispatch_key_from_source(event, KeySource::Vst3Callback);
+        if !down {
+            return !result.propagate || result.default_prevented;
+        }
+        if !result.propagate || result.default_prevented {
+            return true;
+        }
+        if !modifiers.control && !modifiers.alt && !modifiers.platform
+            && let Some(text) = vst3_text(key, key_code)
+        {
+            return self.dispatch_callback_text(&text);
+        }
+        false
+    }
+
+    fn dispatch_key_from_source(
+        &self,
+        event: PlatformInput,
+        source: KeySource,
+    ) -> DispatchEventResult {
+        let (key, modifiers, down) = match &event {
+            PlatformInput::KeyDown(event) => (
+                event.keystroke.key.clone(),
+                event.keystroke.modifiers,
+                true,
+            ),
+            PlatformInput::KeyUp(event) => (
+                event.keystroke.key.clone(),
+                event.keystroke.modifiers,
+                false,
+            ),
+            _ => return self.dispatch_input(event),
+        };
+        if let Some(recent) = self.recent_key.borrow_mut().take()
+            && recent.source != source
+            && recent.key == key
+            && recent.modifiers == modifiers
+            && recent.down == down
+            && recent.at.elapsed() <= Duration::from_millis(16)
+        {
+            return recent.result;
+        }
+        let result = self.dispatch_input(event);
+        *self.recent_key.borrow_mut() = Some(RecentKey {
+            key,
+            modifiers,
+            down,
+            source,
+            at: Instant::now(),
+            result: result.clone(),
+        });
+        result
+    }
+
+    fn dispatch_input_one(&self, event: PlatformInput) -> DispatchEventResult {
+        let (generation, Some(mut callback)) = ({
+            let mut slot = self.input_callback.borrow_mut();
+            (slot.generation, slot.value.take())
+        }) else {
+            return DispatchEventResult::default();
+        };
+        let result = crate::gui_panic::contain("GPUI input callback", || callback(event))
+            .unwrap_or_else(|| DispatchEventResult {
+                propagate: true,
+                default_prevented: true,
+            });
+        let mut slot = self.input_callback.borrow_mut();
+        if !self.closed.get() && slot.generation == generation && slot.value.is_none() {
+            slot.value = Some(callback);
+        }
+        result
+    }
+
+    pub(crate) fn dispatch_text(&self, text: &str) -> bool {
+        self.dispatch_text_from_source(text, KeySource::Native)
+    }
+
+    fn dispatch_callback_text(&self, text: &str) -> bool {
+        self.dispatch_text_from_source(text, KeySource::Vst3Callback)
+    }
+
+    fn dispatch_text_from_source(&self, text: &str, source: KeySource) -> bool {
+        if let Some(recent) = self.recent_text.borrow_mut().take()
+            && recent.source != source
+            && recent.text == text
+            && recent.at.elapsed() <= Duration::from_millis(16)
+        {
+            return true;
+        }
+        let handled = self.with_input_handler(|input_handler| {
+            let _ = crate::gui_panic::contain("GPUI text input", || {
+                input_handler.replace_text_in_range(None, text);
+            });
+        })
+        .is_some();
+        if handled {
+            *self.recent_text.borrow_mut() = Some(RecentText {
+                text: text.to_string(),
+                source,
+                at: Instant::now(),
+            });
+        }
+        handled
+    }
+
+    pub(crate) fn request_frame(&self) {
+        if self.closed.get() {
+            return;
+        }
+        if self.in_update.replace(true) {
+            self.pending_frame.set(true);
+            return;
+        }
+        self.request_frame_one();
+        self.drain_gateway();
+    }
+
+    fn request_frame_one(&self) {
+        let (generation, callback) = {
+            let mut slot = self.request_frame_callback.borrow_mut();
+            (slot.generation, slot.value.take())
+        };
+        if let Some(mut callback) = callback {
+            let _ = crate::gui_panic::contain("GPUI frame callback", || {
+                callback(RequestFrameOptions {
+                    require_presentation: true,
+                    force_render: false,
+                });
+            });
+            let mut slot = self.request_frame_callback.borrow_mut();
+            if !self.closed.get() && slot.generation == generation && slot.value.is_none() {
+                slot.value = Some(callback);
+            }
+        }
+    }
+
+    fn drain_gateway(&self) {
+        let mut budget = 64;
+        while !self.closed.get() && budget > 0 {
+            let event = { self.pending_inputs.borrow_mut().pop_front() };
+            if let Some(event) = event {
+                let _ = self.dispatch_input_one(event);
+                budget -= 1;
+                continue;
+            }
+            if let Some(size) = self.pending_resize.take() {
+                self.resize_callback(size);
+                budget -= 1;
+                continue;
+            }
+            if self.pending_frame.replace(false) {
+                self.request_frame_one();
+                budget -= 1;
+                continue;
+            }
+            break;
+        }
+        let has_pending = !self.pending_inputs.borrow().is_empty()
+            || self.pending_resize.get().is_some()
+            || self.pending_frame.get();
+        self.in_update.set(false);
+        if has_pending && !self.closed.get() {
+            // Ask GPUI for another frame after the bounded gateway drain. The
+            // callback is invoked after `in_update` is released, so a nested
+            // AsyncApp.update cannot borrow this gateway recursively.
+            self.request_frame_one();
+        }
+    }
+
+    fn resize_callback(&self, size: Size<Pixels>) {
+        let (generation, callback) = {
+            let mut slot = self.resize_callback.borrow_mut();
+            (slot.generation, slot.value.take())
+        };
+        if let Some(mut callback) = callback {
+            let scale = self.scale_factor();
+            let _ = crate::gui_panic::contain("GPUI resize callback", || callback(size, scale));
+            let mut slot = self.resize_callback.borrow_mut();
+            if !self.closed.get() && slot.generation == generation && slot.value.is_none() {
+                slot.value = Some(callback);
+            }
+        }
+    }
+
+    pub(crate) fn native_resize(&self, width: f32, height: f32) {
+        let size = size(px(width.max(1.0)), px(height.max(1.0)));
+        self.bounds.set(Bounds::new(self.bounds.get().origin, size));
+        if self.suppress_resize_callback.get() {
+            return;
+        }
+        if self.in_update.replace(true) {
+            self.pending_resize.set(Some(size));
+            return;
+        }
+        self.resize_callback(size);
+        self.drain_gateway();
+    }
+
+    /// Make the embedded child the native first responder after a real mouse
+    /// click. AppKit and Win32 do not promote an arbitrary custom child view
+    /// merely because it accepts keyboard focus.
+    pub(crate) fn native_mouse_down_focus(&self) {
+        if self.closed.get() {
+            return;
+        }
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        if let Some(native) = self.native.borrow_mut().as_mut() {
+            let _ = native.set_focus(true);
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    pub(crate) fn native_resize_device(&self, width: f32, height: f32) {
+        let scale = self.scale_factor().max(0.01);
+        self.native_resize(width / scale, height / scale);
+    }
+
+    pub(crate) fn quarantine_native(&self) {
+        self.closed.set(true);
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        if let Some(native) = self.native.borrow_mut().as_mut() {
+            native.quarantine();
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    pub(crate) fn native_dpi_changed(&self) {
+        if let Some(native) = self.native.borrow_mut().as_mut() {
+            native.dpi_changed(self.bounds.get().size);
+        }
+    }
+
+    pub(crate) fn dispatch_marked_text(
+        &self,
+        replacement_range: Option<Range<usize>>,
+        text: &str,
+        selected_range: Option<Range<usize>>,
+    ) {
+        let _ = self.with_input_handler(|input_handler| {
+            let _ = crate::gui_panic::contain("GPUI marked text input", || {
+                input_handler.replace_and_mark_text_in_range(
+                    replacement_range,
+                    text,
+                    selected_range,
+                );
+            });
+        });
+    }
+
+    pub(crate) fn unmark_text(&self) {
+        let _ = self.with_input_handler(|input_handler| {
+            let _ = crate::gui_panic::contain("GPUI unmark text", || input_handler.unmark_text());
+        });
+    }
+
+    pub(crate) fn marked_text_range(&self) -> Option<Range<usize>> {
+        self.with_input_handler(|input_handler| input_handler.marked_text_range())
+            .flatten()
+    }
+
+    pub(crate) fn selected_text_range(&self) -> Option<Range<usize>> {
+        self.with_input_handler(|input_handler| {
+            input_handler
+                .selected_text_range(true)
+                .map(|selection| selection.range)
+        })
+        .flatten()
+    }
+
+    pub(crate) fn bounds_for_range(&self, range: Range<usize>) -> Option<Bounds<Pixels>> {
+        self.with_input_handler(|input_handler| input_handler.bounds_for_range(range))
+            .flatten()
+    }
+
+    pub(crate) fn character_index_for_point(&self, x: f32, y: f32) -> Option<usize> {
+        self.with_input_handler(|input_handler| {
+            input_handler.character_index_for_point(Point::new(px(x), px(y)))
+        })
+        .flatten()
+    }
+
+    fn scale_factor(&self) -> f32 {
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        if let Some(native) = self.native.borrow().as_ref() {
+            return native.scale_factor();
+        }
+        1.0
+    }
+}
+
+impl HasWindowHandle for EmbeddedWindow {
+    fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        if let Some(native) = self.state.native.borrow().as_ref() {
+            return native.window_handle();
+        }
+        Err(HandleError::NotSupported)
+    }
+}
+
+impl HasDisplayHandle for EmbeddedWindow {
+    fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        if let Some(native) = self.state.native.borrow().as_ref() {
+            return native.display_handle();
+        }
+        Err(HandleError::NotSupported)
+    }
+}
+
+impl PlatformWindow for EmbeddedWindow {
+    fn bounds(&self) -> Bounds<Pixels> {
+        self.state.bounds.get()
+    }
+
+    fn is_maximized(&self) -> bool {
+        false
+    }
+
+    fn window_bounds(&self) -> WindowBounds {
+        WindowBounds::Windowed(self.bounds())
+    }
+
+    fn content_size(&self) -> Size<Pixels> {
+        self.bounds().size
+    }
+
+    fn resize(&mut self, size: Size<Pixels>) {
+        self.state.resize(size);
+    }
+
+    fn scale_factor(&self) -> f32 {
+        self.state.scale_factor()
+    }
+
+    fn appearance(&self) -> WindowAppearance {
+        WindowAppearance::Light
+    }
+
+    fn display(&self) -> Option<Rc<dyn PlatformDisplay>> {
+        Some(self.display.clone())
+    }
+
+    fn mouse_position(&self) -> Point<Pixels> {
+        Point::default()
+    }
+
+    fn modifiers(&self) -> Modifiers {
+        Modifiers::default()
+    }
+
+    fn capslock(&self) -> Capslock {
+        Capslock::default()
+    }
+
+    fn set_input_handler(&mut self, input_handler: PlatformInputHandler) {
+        let mut slot = self.state.input_handler.borrow_mut();
+        slot.generation = slot.generation.wrapping_add(1);
+        slot.value = Some(input_handler);
+    }
+
+    fn take_input_handler(&mut self) -> Option<PlatformInputHandler> {
+        let mut slot = self.state.input_handler.borrow_mut();
+        slot.generation = slot.generation.wrapping_add(1);
+        slot.value.take()
+    }
+
+    fn prompt(
+        &self,
+        _level: gpui::PromptLevel,
+        _msg: &str,
+        _detail: Option<&str>,
+        _answers: &[PromptButton],
+    ) -> Option<oneshot::Receiver<usize>> {
+        None
+    }
+
+    fn activate(&self) {
+        self.state.active_window.set(Some(self.handle));
+    }
+
+    fn is_active(&self) -> bool {
+        self.state
+            .active_window
+            .get()
+            .is_some_and(|handle| handle.window_id() == self.handle.window_id())
+    }
+
+    fn is_hovered(&self) -> bool {
+        false
+    }
+
+    fn background_appearance(&self) -> WindowBackgroundAppearance {
+        self.state.background.get()
+    }
+
+    fn set_title(&mut self, title: &str) {
+        self.state.title.replace(title.to_string());
+    }
+
+    fn set_background_appearance(&self, background_appearance: WindowBackgroundAppearance) {
+        self.state.background.set(background_appearance);
+    }
+
+    fn minimize(&self) {}
+    fn zoom(&self) {}
+    fn toggle_fullscreen(&self) {
+        self.state.fullscreen.set(!self.state.fullscreen.get());
+    }
+    fn is_fullscreen(&self) -> bool {
+        self.state.fullscreen.get()
+    }
+
+    fn on_request_frame(&self, callback: Box<dyn FnMut(RequestFrameOptions)>) {
+        let mut slot = self.state.request_frame_callback.borrow_mut();
+        slot.generation = slot.generation.wrapping_add(1);
+        slot.value = Some(callback);
+    }
+
+    fn on_input(&self, callback: Box<dyn FnMut(PlatformInput) -> DispatchEventResult>) {
+        let mut slot = self.state.input_callback.borrow_mut();
+        slot.generation = slot.generation.wrapping_add(1);
+        slot.value = Some(callback);
+    }
+
+    fn on_active_status_change(&self, callback: Box<dyn FnMut(bool)>) {
+        *self.state.active_callback.borrow_mut() = Some(callback);
+    }
+
+    fn on_hover_status_change(&self, callback: Box<dyn FnMut(bool)>) {
+        *self.state.hover_callback.borrow_mut() = Some(callback);
+    }
+
+    fn on_resize(&self, callback: Box<dyn FnMut(Size<Pixels>, f32)>) {
+        let mut slot = self.state.resize_callback.borrow_mut();
+        slot.generation = slot.generation.wrapping_add(1);
+        slot.value = Some(callback);
+    }
+
+    fn on_moved(&self, callback: Box<dyn FnMut()>) {
+        *self.state.moved_callback.borrow_mut() = Some(callback);
+    }
+
+    fn on_should_close(&self, callback: Box<dyn FnMut() -> bool>) {
+        *self.state.should_close_callback.borrow_mut() = Some(callback);
+    }
+
+    fn on_hit_test_window_control(&self, callback: Box<dyn FnMut() -> Option<WindowControlArea>>) {
+        *self.state.hit_test_callback.borrow_mut() = Some(callback);
+    }
+
+    fn on_close(&self, callback: Box<dyn FnOnce()>) {
+        *self.state.close_callback.borrow_mut() = Some(callback);
+    }
+
+    fn on_appearance_changed(&self, callback: Box<dyn FnMut()>) {
+        *self.state.appearance_callback.borrow_mut() = Some(callback);
+    }
+
+    fn draw(&self, scene: &Scene) {
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        if let Some(native) = self.state.native.borrow_mut().as_mut() {
+            if crate::gui_panic::contain("GPUI native draw", || native.draw(scene)).is_none() {
+                self.state.quarantine_native();
+            }
+        }
+    }
+
+    fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas> {
+        self.state.atlas.borrow().clone()
+    }
+
+    fn is_subpixel_rendering_supported(&self) -> bool {
+        false
+    }
+
+    fn gpu_specs(&self) -> Option<GpuSpecs> {
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        if let Some(native) = self.state.native.borrow().as_ref() {
+            return native.gpu_specs();
+        }
+        None
+    }
+
+    fn update_ime_position(&self, _bounds: Bounds<Pixels>) {}
+}
+
+/// Translate Steinberg's platform-independent virtual-key values into the
+/// key names used by GPUI. These values are part of the VST3 ABI and are
+/// intentionally kept here so the GPUI feature does not require linking the
+/// VST3 SDK for CLAP-only consumers.
+fn vst3_keystroke(key: u16, key_code: i16) -> Option<(String, Option<String>)> {
+    let key_code = i64::from(key_code);
+    let semantic = match key_code {
+        1 => Some(("backspace", None)),
+        2 => Some(("tab", None)),
+        4 | 19 => Some(("enter", None)),
+        6 => Some(("escape", None)),
+        7 => Some(("space", Some(" ".to_string()))),
+        9 => Some(("end", None)),
+        10 => Some(("home", None)),
+        11 => Some(("left", None)),
+        12 => Some(("up", None)),
+        13 => Some(("right", None)),
+        14 => Some(("down", None)),
+        15 => Some(("pageup", None)),
+        16 => Some(("pagedown", None)),
+        21 => Some(("insert", None)),
+        22 => Some(("delete", None)),
+        40..=51 => Some((f_key_name(key_code - 40), None)),
+        65..=76 => Some((f_key_name(key_code - 65 + 12), None)),
+        _ => None,
+    };
+    if let Some((name, text)) = semantic {
+        return Some((name.to_string(), text));
+    }
+    let text = vst3_text(key, key_code as i16)?;
+    Some((text.to_lowercase(), Some(text)))
+}
+
+fn f_key_name(value: i64) -> &'static str {
+    match value {
+        0 => "f1",
+        1 => "f2",
+        2 => "f3",
+        3 => "f4",
+        4 => "f5",
+        5 => "f6",
+        6 => "f7",
+        7 => "f8",
+        8 => "f9",
+        9 => "f10",
+        10 => "f11",
+        11 => "f12",
+        12 => "f13",
+        13 => "f14",
+        14 => "f15",
+        15 => "f16",
+        16 => "f17",
+        17 => "f18",
+        18 => "f19",
+        19 => "f20",
+        20 => "f21",
+        21 => "f22",
+        22 => "f23",
+        _ => "f24",
+    }
+}
+
+fn vst3_text(key: u16, key_code: i16) -> Option<String> {
+    let key_code = i64::from(key_code);
+    let code = match key_code {
+        7 => return Some(" ".to_string()),
+        1 | 2 | 4 | 6 | 9..=16 | 19 | 21 | 22 | 40..=51 | 65..=76 => return None,
+        24..=33 if key == 0 => return char::from_u32(b'0' as u32 + (key_code - 24) as u32)
+            .map(|character| character.to_string()),
+        34 if key == 0 => return Some("*".to_string()),
+        35 if key == 0 => return Some("+".to_string()),
+        36 if key == 0 => return Some(",".to_string()),
+        37 if key == 0 => return Some("-".to_string()),
+        38 if key == 0 => return Some(".".to_string()),
+        39 if key == 0 => return Some("/".to_string()),
+        _ if key != 0 => u32::from(key),
+        _ if (0x21..=0x7e).contains(&key_code) => key_code as u32,
+        _ => return None,
+    };
+    char::from_u32(code).filter(|character| !character.is_control()).map(|character| {
+        character.to_string()
+    })
+}
+
+fn vst3_modifiers(modifiers: i16) -> Modifiers {
+    let modifiers = i64::from(modifiers);
+    #[cfg(target_os = "macos")]
+    let (platform, control) = (4, 8);
+    #[cfg(not(target_os = "macos"))]
+    let (platform, control) = (8, 4);
+    Modifiers {
+        shift: modifiers & 1 != 0,
+        alt: modifiers & 2 != 0,
+        platform: modifiers & platform != 0,
+        control: modifiers & control != 0,
+        function: false,
+    }
+}
+
+#[derive(Default)]
+struct EmptyAtlas {
+    tiles: Mutex<HashMap<AtlasKey, AtlasTile>>,
+    next: std::sync::atomic::AtomicU32,
+}
+
+impl PlatformAtlas for EmptyAtlas {
+    fn get_or_insert_with<'a>(
+        &self,
+        key: &AtlasKey,
+        build: &mut dyn FnMut() -> anyhow::Result<Option<(Size<DevicePixels>, Cow<'a, [u8]>)>>,
+    ) -> anyhow::Result<Option<AtlasTile>> {
+        if let Some(tile) = self
+            .tiles
+            .lock()
+            .ok()
+            .and_then(|tiles| tiles.get(key).copied())
+        {
+            return Ok(Some(tile));
+        }
+        let Some((tile_size, _)) = build()? else {
+            return Ok(None);
+        };
+        let index = self.next.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        let tile = AtlasTile {
+            texture_id: AtlasTextureId {
+                index,
+                kind: AtlasTextureKind::Monochrome,
+            },
+            tile_id: TileId(index),
+            padding: 0,
+            bounds: Bounds::new(Point::default(), tile_size),
+        };
+        if let Ok(mut tiles) = self.tiles.lock() {
+            tiles.insert(key.clone(), tile);
+        }
+        Ok(Some(tile))
+    }
+
+    fn remove(&self, key: &AtlasKey) {
+        if let Ok(mut tiles) = self.tiles.lock() {
+            tiles.remove(key);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+
+    #[test]
+    fn vst3_navigation_and_numeric_key_translation_is_stable() {
+        assert_eq!(
+            vst3_keystroke(0, 11),
+            Some(("left".to_string(), None))
+        );
+        assert_eq!(
+            vst3_keystroke(0, 24),
+            Some(("0".to_string(), Some("0".to_string())))
+        );
+        assert_eq!(
+            vst3_keystroke(0, 40),
+            Some(("f1".to_string(), None))
+        );
+        assert_eq!(
+            vst3_keystroke(0, 65),
+            Some(("f13".to_string(), None))
+        );
+        assert_eq!(vst3_keystroke('A' as u16, 0), Some((
+            "a".to_string(),
+            Some("A".to_string()),
+        )));
+    }
+
+    #[test]
+    fn vst3_modifier_bits_follow_host_platform_convention() {
+        let modifiers = vst3_modifiers(1 | 2 | 4 | 8);
+        assert!(modifiers.shift);
+        assert!(modifiers.alt);
+        assert!(modifiers.platform);
+        assert!(modifiers.control);
+    }
+
+    #[test]
+    fn realtime_worker_is_joined_when_dispatcher_stops() {
+        let dispatcher = EmbeddedDispatcher::new();
+        let (sender, receiver) = mpsc::channel();
+        gpui::PlatformDispatcher::spawn_realtime(
+            dispatcher.as_ref(),
+            Box::new(move || sender.send(()).expect("test receiver is alive")),
+        );
+        receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("dispatcher worker ran realtime work");
+        dispatcher.stop();
+        assert!(!dispatcher.failed());
+    }
+}

@@ -7,9 +7,14 @@ edition = "2024"
 clack-plugin = { git = "https://github.com/prokopyl/clack.git", rev = "36602d61bb192e2779a68fddf985e7664f161fb1", package = "clack-plugin" }
 clack-extensions = { git = "https://github.com/prokopyl/clack.git", rev = "36602d61bb192e2779a68fddf985e7664f161fb1", package = "clack-extensions", features = ["params", "clack-plugin", "audio-ports", "note-ports", "state", "latency", "gui", "raw-window-handle_05"] }
 clack-common = { git = "https://github.com/prokopyl/clack.git", rev = "36602d61bb192e2779a68fddf985e7664f161fb1", package = "clack-common" }
+anyhow = { version = "1", optional = true }
+futures = { version = "0.3.32", optional = true }
+uuid = { version = "1", features = ["v4"], optional = true }
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 mts_esp = { git = "https://github.com/PORTALSURFER/mts-esp-rs", rev = "d107a979e44c1b16dcc72dfd47cdd8dac77854ca", package = "mts-esp-rs" }
 patchbay-gui = { path = "patchbay-gui", version = "0.1.0", optional = true }
+gpui = { git = "https://github.com/PORTALSURFER/gpui-embedded.git", rev = "77a1325a13bd0d3631f737b98445b70c8c936cb7", version = "0.2.2", default-features = false, optional = true }
+gpui-wgpu = { git = "https://github.com/PORTALSURFER/gpui-embedded.git", rev = "77a1325a13bd0d3631f737b98445b70c8c936cb7", package = "gpui_wgpu", default-features = false, optional = true }
 raw-window-handle = { version = "0.5.2", optional = true }
 radiant = { git = "https://github.com/PORTALSURFER/radiant.git", rev = "7001b84b2c7edd4a286d167c183a5b35366156fc", default-features = false, optional = true }
 raw-window-handle-06 = { package = "raw-window-handle", version = "0.6", optional = true }
@@ -40,6 +45,18 @@ cargo-clippy = []
 gui = ["dep:patchbay-gui", "dep:raw-window-handle"]
 screenshot-test = ["gui", "dep:image", "patchbay-gui/frame-capture"]
 vst3 = ["dep:toybox-vst3-ffi"]
+gpui-gui = [
+    "dep:gpui",
+    "dep:gpui-wgpu",
+    "dep:anyhow",
+    "dep:futures",
+    "dep:raw-window-handle",
+    "dep:raw-window-handle-06",
+    "dep:uuid",
+    "dep:objc",
+    "dep:windows",
+]
+gpui-vst3 = ["gpui-gui", "vst3"]
 radiant-vst3 = ["radiant-gui", "vst3"]
 # Radiant's host-neutral retained editor bridge. This intentionally does not
 # enable the legacy Patchbay `gui` feature; CLAP and VST3 integrations can opt
@@ -77,3 +94,7 @@ missing_crate_level_docs = "deny"
 
 [workspace.lints.clippy]
 missing_docs_in_private_items = "deny"
+
+[[example]]
+name = "gpui-embedded-smoke"
+required-features = ["gpui-gui"]

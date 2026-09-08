@@ -14,9 +14,16 @@ pub mod bundle;
 pub mod clap;
 pub mod dsp;
 pub mod events;
+/// Embedded GPUI hosting for native CLAP and VST3 editor children.
+#[cfg(feature = "gpui-gui")]
+pub mod gpui_gui;
 #[cfg(feature = "gui")]
 pub mod gui;
-#[cfg(any(feature = "radiant-gui", all(feature = "gui", feature = "vst3")))]
+#[cfg(any(
+    feature = "radiant-gui",
+    feature = "gpui-gui",
+    all(feature = "gui", feature = "vst3")
+))]
 mod gui_panic;
 #[cfg(feature = "gui")]
 mod logging;
@@ -38,10 +45,13 @@ pub use clack_extensions;
 pub use clack_plugin;
 /// Re-export MTS-ESP for shared tuning support across plugins.
 pub use mts_esp;
+/// Re-export GPUI for plugin view factories and event types.
+#[cfg(feature = "gpui-gui")]
+pub use gpui;
 /// Re-export raw generated VST3 ABI bindings.
 #[cfg(feature = "vst3")]
 pub use toybox_vst3_ffi;
 
 /// Re-export raw-window-handle for host parent integration code.
-#[cfg(any(feature = "gui", feature = "radiant-gui"))]
+#[cfg(any(feature = "gui", feature = "radiant-gui", feature = "gpui-gui"))]
 pub use raw_window_handle;

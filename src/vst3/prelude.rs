@@ -26,10 +26,15 @@ pub use crate::vst3::component::{
 pub use crate::vst3::connection::{IToyboxSharedState, InstanceConnection, InstanceConnectionRole};
 pub use crate::vst3::entry::PluginClassIds;
 pub use crate::vst3::events::{Vst3EventTimeline, Vst3ParameterPoint, collect_vst3_timeline};
-#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
+#[cfg(any(feature = "gui", feature = "radiant-vst3", feature = "gpui-vst3"))]
 pub use crate::vst3::gui::parent_to_raw_window_handle;
-#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
+#[cfg(any(feature = "gui", feature = "radiant-vst3", feature = "gpui-vst3"))]
 pub use crate::vst3::gui::{HostedVst3View, Vst3HostedGui};
+#[cfg(all(
+    feature = "gpui-vst3",
+    any(target_os = "macos", target_os = "windows")
+))]
+pub use crate::vst3::gui::create_gpui_view;
 pub use crate::vst3::gui::{
     bool_to_tresult, copy_wstring, default_platform_type, platform_type_matches, tchar_len,
     view_rect,

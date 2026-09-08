@@ -1,4 +1,4 @@
-#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
+#[cfg(any(feature = "gui", feature = "radiant-vst3", feature = "gpui-vst3"))]
 impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
     unsafe fn isPlatformTypeSupported(&self, r#type: FIDString) -> tresult {
         self.guarded_callback("VST3 isPlatformTypeSupported", || {
@@ -31,7 +31,7 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
                 return kResultFalse;
             };
 
-            let Ok(mut gui) = self.gui.lock() else {
+            let Ok(mut gui) = self.gui.try_lock() else {
                 return kResultFalse;
             };
             gui.set_callback_keyboard_mode(true);
@@ -77,9 +77,11 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
 
     unsafe fn removed(&self) -> tresult {
         self.guarded_callback("VST3 removed", || {
-            if let Ok(mut gui) = self.gui.lock() {
-                gui.close();
-                gui.set_callback_keyboard_mode(false);
+            // Always defer the actual close. This keeps direct and reentrant
+            // removals on one path and lets `drain_pending_removed` guard the
+            // close against a callback that re-enters `removed` itself.
+            if !self.draining_removed.get() {
+                self.pending_removed.set(true);
             }
             self.attached.set(false);
             kResultOk
@@ -92,7 +94,7 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
 
     unsafe fn onKeyDown(&self, key: char16, key_code: int16, modifiers: int16) -> tresult {
         self.guarded_callback("VST3 onKeyDown", || {
-            let Ok(gui) = self.gui.lock() else {
+            let Ok(gui) = self.gui.try_lock() else {
                 return kResultFalse;
             };
             bool_to_tresult(gui.on_key_down(key, key_code, modifiers))
@@ -101,7 +103,7 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
 
     unsafe fn onKeyUp(&self, key: char16, key_code: int16, modifiers: int16) -> tresult {
         self.guarded_callback("VST3 onKeyUp", || {
-            let Ok(gui) = self.gui.lock() else {
+            let Ok(gui) = self.gui.try_lock() else {
                 return kResultFalse;
             };
             bool_to_tresult(gui.on_key_up(key, key_code, modifiers))
@@ -128,7 +130,7 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
             let requested = unsafe { *new_size };
             let requested_host_width = requested.right.saturating_sub(requested.left).max(1);
             let requested_host_height = requested.bottom.saturating_sub(requested.top).max(1);
-            let Ok(gui) = self.gui.lock() else {
+            let Ok(gui) = self.gui.try_lock() else {
                 return kResultFalse;
             };
             let (requested_width, requested_height) = gui
@@ -158,7 +160,7 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
 
     unsafe fn onFocus(&self, state: TBool) -> tresult {
         self.guarded_callback("VST3 onFocus", || {
-            let Ok(gui) = self.gui.lock() else {
+            let Ok(gui) = self.gui.try_lock() else {
                 return kResultFalse;
             };
             if gui.on_focus(state != 0) {
@@ -185,7 +187,7 @@ impl<G: Vst3HostedGui> IPlugViewTrait for HostedVst3View<G> {
             let rect = unsafe { &mut *rect };
             let requested_host_width = rect.right.saturating_sub(rect.left).max(1);
             let requested_host_height = rect.bottom.saturating_sub(rect.top).max(1);
-            let Ok(gui) = self.gui.lock() else {
+            let Ok(gui) = self.gui.try_lock() else {
                 return kResultFalse;
             };
             let (requested_width, requested_height) = gui
