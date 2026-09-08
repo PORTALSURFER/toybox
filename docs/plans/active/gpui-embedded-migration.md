@@ -71,14 +71,20 @@ orange output meter, target marker, Normalize label, and synchronized pulse.
 
 ## Status
 
-The backend passes macOS, Windows and Linux CI, including strict lint and
-platform tests. Native macOS VST3 probes pass target editing, clipboard input,
-resize/reopen, visibility auto-stop and both independently linked plugin load
-orders. GainSnap's four live captures preserve the compact visual design.
-Fresh macOS CLAP/VST3 bundles pass packaging, signature and symbol audits.
+The implementation and automated acceptance are complete. The backend passes
+macOS, Windows and Linux CI, including strict lint and platform tests. GainSnap
+passes macOS and Windows CI with the exact backend pin, including real Windows
+VST3 editor input and lifecycle coverage.
 
-Final acceptance is pending for native button keyboard activation and the
-remaining GainSnap Windows runtime and release-contract checks. Rebuild and
-audit the final plugin revision after these fixes. Manual DAW keyboard and
-audible acceptance remain the user's final check. No release is authorized by
-this plan.
+Native macOS probes pass target editing, clipboard, button Space/Enter and
+repeat/modifier handling, resize/reopen, visibility auto-stop and both
+independently linked plugin load orders. Four live captures preserve the compact
+visual design. Fresh CLAP/VST3 bundles pass packaging, signature and symbol
+audits. GainSnap's release preflight passes macOS/Windows packaging and the
+combined artifact contract. The production publisher check is main-only and is
+not run on the migration PR.
+
+Review source: GainSnap `e0244cc8845992468b2de7c3a0838ba82de44f20`, Toybox
+`dae3bf1b0652bbb6c4d5055b7f45270d10c60172`, GPUI
+`77a1325a13bd0d3631f737b98445b70c8c936cb7`. Manual DAW keyboard and audible
+acceptance remain the user's final check. No release is authorized by this plan.
