@@ -827,10 +827,9 @@ extern "C" fn flags_changed(this: &Object, _cmd: Sel, event: *mut Object) {
 extern "C" fn key_down(this: &Object, _cmd: Sel, event: *mut Object) {
     native_callback(this, "GPUI AppKit key down", |owner| unsafe {
         let flags = event_modifiers(event);
-        let characters: *mut Object = msg_send![event, characters];
         let ignored: *mut Object = msg_send![event, charactersIgnoringModifiers];
         let key_char = ns_string(ignored);
-        let key = key_name(ignored, key_char.as_deref());
+        let key = key_name(key_char.as_deref());
         let token = event_identity(event).map(|identity| owner.native_event_token(identity));
         let result = owner.dispatch_native_key(
             PlatformInput::KeyDown(KeyDownEvent {
@@ -847,8 +846,6 @@ extern "C" fn key_down(this: &Object, _cmd: Sel, event: *mut Object) {
         if result.propagate && !flags.control && !flags.alt && !flags.platform {
             let events: *mut Object = msg_send![class!(NSArray), arrayWithObject: event];
             let _: () = msg_send![this, interpretKeyEvents: events];
-        } else if result.propagate && key_char.is_none() {
-            let _ = characters;
         }
     });
 }
@@ -856,12 +853,13 @@ extern "C" fn key_down(this: &Object, _cmd: Sel, event: *mut Object) {
 extern "C" fn key_up(this: &Object, _cmd: Sel, event: *mut Object) {
     native_callback(this, "GPUI AppKit key up", |owner| unsafe {
         let ignored: *mut Object = msg_send![event, charactersIgnoringModifiers];
+        let key_char = ns_string(ignored);
         let token = event_identity(event).map(|identity| owner.native_event_token(identity));
         let _ = owner.dispatch_native_key(
             PlatformInput::KeyUp(KeyUpEvent {
                 keystroke: gpui::Keystroke {
                     modifiers: event_modifiers(event),
-                    key: key_name(ignored, None),
+                    key: key_name(key_char.as_deref()),
                     key_char: None,
                 },
             }),
@@ -1077,7 +1075,7 @@ unsafe fn cocoa_string(value: &str) -> Option<NonNull<Object>> {
     NonNull::new(initialized)
 }
 
-fn key_name(ignored: *mut Object, key_char: Option<&str>) -> String {
+fn key_name(key_char: Option<&str>) -> String {
     let Some(value) = key_char else {
         return "unknown".to_string();
     };
@@ -1094,11 +1092,30 @@ fn key_name(ignored: *mut Object, key_char: Option<&str>) -> String {
         Some('\t') => "tab".to_string(),
         Some(' ') => "space".to_string(),
         Some(character) => character.to_lowercase().collect(),
-        None => ns_string(ignored).unwrap_or_else(|| "unknown".to_string()),
+        None => value.to_string(),
     }
 }
 
 fn range_option(range: NSRange) -> Option<std::ops::Range<usize>> {
     (range.location != NS_NOT_FOUND)
         .then_some(range.location..range.location.saturating_add(range.length))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::key_name;
+
+    #[test]
+    fn key_name_is_stable_for_key_down_and_key_up_characters() {
+        for (characters, expected) in [
+            (Some(" "), "space"),
+            (Some("\r"), "enter"),
+            (Some("\n"), "enter"),
+            (Some("A"), "a"),
+            (Some("z"), "z"),
+        ] {
+            assert_eq!(key_name(characters), expected);
+        }
+        assert_eq!(key_name(None), "unknown");
+    }
 }
