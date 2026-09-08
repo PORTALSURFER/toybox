@@ -917,9 +917,9 @@ mod tests {
 
     #[test]
     fn capture_does_not_steal_another_window() {
-        let child = HWND(1);
+        let child = HWND(1_usize as *mut _);
         assert!(capture_is_available(HWND::default(), child));
         assert!(capture_is_available(child, child));
-        assert!(!capture_is_available(HWND(2), child));
+        assert!(!capture_is_available(HWND(2_usize as *mut _), child));
     }
 }
