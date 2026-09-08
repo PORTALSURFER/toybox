@@ -90,13 +90,15 @@ int main(int argc, char** argv) {
         if (getenv("PROBE_GAIN_SNAP_INPUT")) {
           [window makeKeyAndOrderFront:nil];
           const NSInteger number=[window windowNumber];
-          auto key=[&](NSString* text,unsigned short code,NSEventModifierFlags modifiers) {
+          auto key=[&](NSString* text,unsigned short code,NSEventModifierFlags modifiers,bool standalone_callback=false) {
             NSEvent* down=[NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint
-              modifierFlags:modifiers timestamp:0 windowNumber:number context:nil
+              modifierFlags:modifiers timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:number context:nil
               characters:text charactersIgnoringModifiers:text isARepeat:NO keyCode:code];
             [window sendEvent:down];
+            // This direct ABI call has no shared native OS event token.
+            if (standalone_callback) view->onKeyDown(0,12,0);
             NSEvent* up=[NSEvent keyEventWithType:NSEventTypeKeyUp location:NSZeroPoint
-              modifierFlags:modifiers timestamp:0 windowNumber:number context:nil
+              modifierFlags:modifiers timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:number context:nil
               characters:text charactersIgnoringModifiers:text isARepeat:NO keyCode:code];
             [window sendEvent:up];
             pump(0.02);
@@ -121,6 +123,20 @@ int main(int argc, char** argv) {
             fprintf(stderr,"FAIL native arrows expected -14.1 got %.6f\n",stepped); return 17;
           }
           fprintf(stderr,"PASS native GainSnap selection, target typing, commit, arrows and Shift-arrows\n");
+          view->onKeyDown('a',0,4); view->onKeyUp('a',0,4);
+          for (char ch : {'-','1','8'}) { view->onKeyDown(ch,0,0); view->onKeyUp(ch,0,0); }
+          view->onKeyDown(0,4,0); view->onKeyUp(0,4,0);
+          pump(0.02);
+          const double callback_target=-36.0+36.0*controller->getParamNormalized(1);
+          if (std::fabs(callback_target-(-18.0))>0.001) {
+            fprintf(stderr,"FAIL VST3 callback target entry expected -18 got %.6f\n",callback_target); return 18;
+          }
+          key(@"\uF700",126,0,true);
+          const double independent_target=-36.0+36.0*controller->getParamNormalized(1);
+          if (std::fabs(independent_target-(-16.0))>0.001) {
+            fprintf(stderr,"FAIL independent native/VST3 Up expected -16 got %.6f\n",independent_target); return 19;
+          }
+          fprintf(stderr,"PASS VST3 callback text entry and standalone callback fallback\n");
         }
         if (getenv("PROBE_CLOSE_EACH")) {
           view->removed(); view->release(); controller->terminate(); controller->release();

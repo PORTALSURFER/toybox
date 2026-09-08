@@ -27,6 +27,9 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
       - name: Install ripgrep
         run: sudo apt-get update && sudo apt-get install --yes ripgrep
 
@@ -96,6 +99,9 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
 
       - name: Build minimal CLAP cdylib
         run: cargo build -p toybox-minimal-clap
@@ -195,6 +201,9 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
       - name: Lint embedded GPUI platform
         run: cargo clippy -p toybox --all-targets --features gpui-gui -- -D warnings
 
@@ -204,10 +213,21 @@ jobs:
       - name: Exercise native GPUI child on the main thread
         run: cargo run -p toybox --example gpui-embedded-smoke --features gpui-gui
 
+      - name: Capture native debugger backtrace
+        if: failure()
+        run: |
+          if [[ -x target/debug/examples/gpui-embedded-smoke ]]; then
+            lldb --batch -o run -o 'thread backtrace all' -- target/debug/examples/gpui-embedded-smoke > gpui-native-backtrace.txt 2>&1 || true
+            cat gpui-native-backtrace.txt
+          fi
+
       - name: Collect native crash diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: gpui-macos-crash-reports
-          path: ~/Library/Logs/DiagnosticReports/
+          path: |
+            ~/Library/Logs/DiagnosticReports/
+            /Library/Logs/DiagnosticReports/
+            gpui-native-backtrace.txt
           if-no-files-found: ignore

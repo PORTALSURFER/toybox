@@ -36,6 +36,14 @@ transport keys available to the host. Text fields own selection, composition,
 clipboard actions, and edit commit/cancel behavior. Do not recreate the input
 entity during meter updates.
 
+When native delivery and a VST3 callback refer to the same verified operating
+system key event, the backend reuses the first dispatch result. A standalone
+VST3 callback without a matching native event remains usable. The VST3 key ABI
+does not carry an event identifier, so a host that resends a key asynchronously
+after its native event has ended cannot always be identified as a duplicate.
+Do not disable native text input to compensate: hosts differ in which keys they
+forward through VST3.
+
 Treat visibility separately from focus. Hiding or closing a plugin can end a
 plugin-specific listening mode, while changing focus must not do so. Invoke
 parameter changes through the same automation path used by normal controls.
