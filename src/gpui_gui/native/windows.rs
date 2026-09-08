@@ -49,14 +49,14 @@ use windows::Win32::UI::WindowsAndMessaging::{
     CS_HREDRAW, CS_OWNDC, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DestroyWindow, GA_ROOT,
     GWLP_USERDATA, GetAncestor, GetMessageTime, GetWindowLongPtrW, IDC_ARROW, IsIconic,
     IsWindowVisible, LoadCursorW, RegisterClassExW, SW_HIDE, SW_SHOW, SetTimer, SetWindowLongPtrW,
-    ShowWindow, UnregisterClassW, WM_CHAR, WM_DPICHANGED, WM_ERASEBKGND, WM_IME_COMPOSITION,
-    WM_IME_ENDCOMPOSITION, WM_IME_STARTCOMPOSITION, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN,
-    WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_RBUTTONDOWN,
-    WM_RBUTTONUP, WM_SIZE, WM_TIMER, WNDCLASSEXW, WS_CHILD, WS_TABSTOP, WS_VISIBLE,
+    ShowWindow, UnregisterClassW, WM_CHAR, WM_DPICHANGED, WM_DPICHANGED_AFTERPARENT, WM_ERASEBKGND,
+    WM_IME_COMPOSITION, WM_IME_ENDCOMPOSITION, WM_IME_STARTCOMPOSITION, WM_KEYDOWN, WM_KEYUP,
+    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT,
+    WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WM_TIMER, WNDCLASSEXW, WS_CHILD, WS_TABSTOP, WS_VISIBLE,
 };
 use windows::core::PCWSTR;
 
-use super::super::{VisibilityCallback, WindowState};
+use super::super::WindowState;
 
 const UI_TIMER_ID: usize = 1;
 const UI_TIMER_INTERVAL_MS: u32 = 16;
@@ -121,7 +121,6 @@ impl NativeChild {
         gpu_context: gpui_wgpu::GpuContext,
         size: Size<Pixels>,
         _callback_keyboard_only: bool,
-        _visibility_callback: VisibilityCallback,
     ) -> anyhow::Result<Self> {
         let parent = match parent {
             raw_window_handle::RawWindowHandle::Win32(handle) => HWND(handle.hwnd),
@@ -338,7 +337,7 @@ impl NativeChild {
         self.resize(logical_size);
     }
 
-    pub(crate) fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
+    pub(crate) fn window_handle(&self) -> Result<WindowHandle<'static>, HandleError> {
         let Some(hwnd) = NonZeroIsize::new(self.hwnd.0 as isize) else {
             return Err(HandleError::NotSupported);
         };
@@ -346,7 +345,7 @@ impl NativeChild {
         Ok(unsafe { WindowHandle::borrow_raw(RawWindowHandle::Win32(handle)) })
     }
 
-    pub(crate) fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
+    pub(crate) fn display_handle(&self) -> Result<DisplayHandle<'static>, HandleError> {
         Ok(unsafe {
             DisplayHandle::borrow_raw(RawDisplayHandle::Windows(WindowsDisplayHandle::new()))
         })
@@ -477,7 +476,7 @@ unsafe extern "system" fn window_proc(
             native_callback(hwnd, "GPUI Win32 timer", WindowState::native_tick);
             LRESULT(0)
         }
-        WM_DPICHANGED => {
+        WM_DPICHANGED | WM_DPICHANGED_AFTERPARENT => {
             native_callback(hwnd, "GPUI Win32 DPI change", |owner| {
                 owner.native_dpi_changed();
             });
@@ -711,7 +710,7 @@ fn ime_string(hwnd: HWND, kind: IME_COMPOSITION_STRING) -> Option<String> {
 
 pub(crate) fn read_clipboard() -> Option<ClipboardItem> {
     unsafe {
-        OpenClipboard(None).ok().ok()?;
+        OpenClipboard(None).ok()?;
         let result = (|| {
             let handle = GetClipboardData(CF_UNICODETEXT_FORMAT).ok()?;
             let global = HGLOBAL(handle.0);

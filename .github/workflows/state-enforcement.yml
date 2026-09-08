@@ -103,6 +103,12 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
+      - name: Build toybox with GPUI GUI feature
+        run: cargo check -p toybox --features gpui-gui
+
+      - name: Test toybox with GPUI GUI feature
+        run: cargo test -p toybox --features gpui-gui
+
       - name: Build minimal CLAP cdylib
         run: cargo build -p toybox-minimal-clap
 
@@ -114,9 +120,6 @@ jobs:
 
       - name: Build toybox with Radiant GUI feature
         run: cargo check -p toybox --features radiant-gui
-
-      - name: Build toybox with GPUI GUI feature
-        run: cargo check -p toybox --features gpui-gui
 
       - name: Test patchbay-gui
         run: cargo test -p patchbay-gui
@@ -140,9 +143,6 @@ jobs:
 
       - name: Test toybox with Radiant GUI feature
         run: cargo test -p toybox --features radiant-gui
-
-      - name: Test toybox with GPUI GUI feature
-        run: cargo test -p toybox --features gpui-gui
 
       - name: Lint toybox VST3 feature (SDK optional)
         if: ${{ vars.VST3_SDK_DIR != '' }}

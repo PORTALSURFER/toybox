@@ -137,16 +137,16 @@ impl GpuiHostedGui {
     }
 
     /// Attach the parent supplied by a CLAP GUI callback.
-    pub fn set_parent(&mut self, window: clack_extensions::gui::Window<'_>) {
+    pub fn set_parent(&mut self, _window: clack_extensions::gui::Window<'_>) {
         #[cfg(target_os = "macos")]
-        if let Some(ns_view) = window.as_cocoa_nsview() {
+        if let Some(ns_view) = _window.as_cocoa_nsview() {
             let mut handle = raw_window_handle::AppKitWindowHandle::empty();
             handle.ns_view = ns_view;
             self.parent = Some(RawWindowHandle::AppKit(handle));
         }
 
         #[cfg(target_os = "windows")]
-        if let Some(hwnd) = window.as_win32_hwnd() {
+        if let Some(hwnd) = _window.as_win32_hwnd() {
             let mut handle = raw_window_handle::Win32WindowHandle::empty();
             handle.hwnd = hwnd;
             handle.hinstance = std::ptr::null_mut();

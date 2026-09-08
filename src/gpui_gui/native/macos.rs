@@ -26,7 +26,7 @@ use raw_window_handle_06::{
     RawWindowHandle, WindowHandle,
 };
 
-use super::super::{NativeEventIdentity, VisibilityCallback, WindowState};
+use super::super::{NativeEventIdentity, WindowState};
 
 pub(crate) fn parent_scale_factor(_parent: raw_window_handle::RawWindowHandle) -> f32 {
     1.0
@@ -81,7 +81,7 @@ pub(crate) fn write_clipboard(item: ClipboardItem) {
             let _: () = msg_send![kind.as_ptr(), release];
             return;
         };
-        let _: BOOL = msg_send![pasteboard, clearContents];
+        let _: isize = msg_send![pasteboard, clearContents];
         let _: BOOL = msg_send![pasteboard, setString: value.as_ptr() forType: kind.as_ptr()];
         let _: () = msg_send![value.as_ptr(), release];
         let _: () = msg_send![kind.as_ptr(), release];
@@ -189,7 +189,6 @@ impl NativeChild {
         gpu_context: gpui_wgpu::GpuContext,
         size: Size<Pixels>,
         _callback_keyboard_only: bool,
-        _visibility_callback: VisibilityCallback,
     ) -> anyhow::Result<Self> {
         let raw_parent = match parent {
             raw_window_handle::RawWindowHandle::AppKit(handle) => handle.ns_view,

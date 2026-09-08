@@ -8,13 +8,15 @@
 #[cfg(all(target_os = "macos", feature = "gpui-gui"))]
 use std::cell::Cell;
 #[cfg(all(target_os = "macos", feature = "gpui-gui"))]
+use std::ffi::{CStr, CString};
+#[cfg(all(target_os = "macos", feature = "gpui-gui"))]
 use std::rc::Rc;
 #[cfg(all(target_os = "macos", feature = "gpui-gui"))]
 use std::time::{Duration, Instant};
 
 #[cfg(all(target_os = "macos", feature = "gpui-gui"))]
 use gpui::{
-    App, AppContext, InteractiveElement, IntoElement, ParentElement, Render,
+    App, AppContext, ClipboardItem, InteractiveElement, IntoElement, ParentElement, Render,
     StatefulInteractiveElement, Styled, Window, div, rgb,
 };
 #[cfg(all(target_os = "macos", feature = "gpui-gui"))]
@@ -85,6 +87,112 @@ struct SmokeView {
 }
 
 #[cfg(all(target_os = "macos", feature = "gpui-gui"))]
+struct ClipboardItemBackup {
+    entries: Vec<(String, Vec<u8>)>,
+}
+
+#[cfg(all(target_os = "macos", feature = "gpui-gui"))]
+struct ClipboardRestore {
+    pasteboard: *mut Object,
+    items: Vec<ClipboardItemBackup>,
+}
+
+#[cfg(all(target_os = "macos", feature = "gpui-gui"))]
+impl ClipboardRestore {
+    unsafe fn capture() -> Option<Self> {
+        let pasteboard: *mut Object = msg_send![class!(NSPasteboard), generalPasteboard];
+        if pasteboard.is_null() {
+            return None;
+        }
+        let native_items: *mut Object = msg_send![pasteboard, pasteboardItems];
+        let count: usize = if native_items.is_null() {
+            0
+        } else {
+            msg_send![native_items, count]
+        };
+        let mut items = Vec::with_capacity(count);
+        for index in 0..count {
+            let item: *mut Object = msg_send![native_items, objectAtIndex: index];
+            let types: *mut Object = msg_send![item, types];
+            let type_count: usize = msg_send![types, count];
+            let mut entries = Vec::with_capacity(type_count);
+            for type_index in 0..type_count {
+                let kind: *mut Object = msg_send![types, objectAtIndex: type_index];
+                let kind_ptr: *const i8 = msg_send![kind, UTF8String];
+                if kind_ptr.is_null() {
+                    continue;
+                }
+                let data: *mut Object = msg_send![item, dataForType: kind];
+                let Ok(kind) = unsafe { CStr::from_ptr(kind_ptr) }.to_str() else {
+                    continue;
+                };
+                let length: usize = if data.is_null() {
+                    0
+                } else {
+                    msg_send![data, length]
+                };
+                let bytes: *const u8 = if data.is_null() || length == 0 {
+                    std::ptr::null()
+                } else {
+                    msg_send![data, bytes]
+                };
+                let value = if bytes.is_null() {
+                    Vec::new()
+                } else {
+                    unsafe { std::slice::from_raw_parts(bytes, length) }.to_vec()
+                };
+                entries.push((kind.to_owned(), value));
+            }
+            items.push(ClipboardItemBackup { entries });
+        }
+        Some(Self { pasteboard, items })
+    }
+}
+
+#[cfg(all(target_os = "macos", feature = "gpui-gui"))]
+impl Drop for ClipboardRestore {
+    fn drop(&mut self) {
+        unsafe {
+            let _: isize = msg_send![self.pasteboard, clearContents];
+            let mut native_items = Vec::with_capacity(self.items.len());
+            for item_backup in &self.items {
+                let item: *mut Object = msg_send![class!(NSPasteboardItem), new];
+                if item.is_null() {
+                    continue;
+                }
+                for (kind, bytes) in &item_backup.entries {
+                    let Ok(kind) = CString::new(kind.as_bytes()) else {
+                        continue;
+                    };
+                    let kind: *mut Object = msg_send![
+                        class!(NSString),
+                        stringWithUTF8String: kind.as_ptr()
+                    ];
+                    let data: *mut Object = msg_send![
+                        class!(NSData),
+                        dataWithBytes: bytes.as_ptr()
+                        length: bytes.len()
+                    ];
+                    let _: BOOL = msg_send![item, setData: data forType: kind];
+                }
+                native_items.push(item);
+            }
+            if !native_items.is_empty() {
+                let array: *mut Object = msg_send![
+                    class!(NSArray),
+                    arrayWithObjects: native_items.as_ptr()
+                    count: native_items.len()
+                ];
+                let _: BOOL = msg_send![self.pasteboard, writeObjects: array];
+            }
+            for item in native_items {
+                let _: () = msg_send![item, release];
+            }
+        }
+    }
+}
+
+#[cfg(all(target_os = "macos", feature = "gpui-gui"))]
 impl Render for SmokeView {
     fn render(&mut self, _window: &mut Window, _cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let key_count = self.key_count.clone();
@@ -146,11 +254,26 @@ fn main() {
         let _: () = msg_send![window, makeKeyAndOrderFront: std::ptr::null_mut::<Object>()];
         eprintln!("gpui smoke: window ready");
 
+        // The guard keeps every existing pasteboard item/type alive while the
+        // GPUI platform path performs a text roundtrip, then restores the
+        // user's pasteboard after the smoke process exits.
+        let _clipboard_restore =
+            ClipboardRestore::capture().expect("AppKit general pasteboard should be available");
+        let clipboard_roundtrip = Rc::new(Cell::new(false));
+        let factory_clipboard = clipboard_roundtrip.clone();
+
         let keys = Rc::new(Cell::new(0));
         let factory_keys = keys.clone();
         let mut gui = GpuiHostedGui::new(
             "ToyboxGpuiEmbeddedSmoke",
             move |_window: &mut Window, cx: &mut App| {
+                let fixture = "toybox-gpui-clipboard-roundtrip".to_string();
+                cx.write_to_clipboard(ClipboardItem::new_string(fixture.clone()));
+                assert_eq!(
+                    cx.read_from_clipboard().and_then(|item| item.text()),
+                    Some(fixture)
+                );
+                factory_clipboard.set(true);
                 cx.new(|_| SmokeView {
                     key_count: factory_keys.clone(),
                 })
@@ -164,6 +287,11 @@ fn main() {
         gui.set_parent_raw(toybox::raw_window_handle::RawWindowHandle::AppKit(handle));
         assert!(gui.open(), "GPUI child should open in an AppKit parent");
         eprintln!("gpui smoke: child opened");
+        assert!(
+            clipboard_roundtrip.get(),
+            "GPUI platform clipboard should roundtrip text"
+        );
+        eprintln!("gpui smoke: clipboard roundtrip complete");
         // Start with no editor focus. The click below must promote the child
         // through AppKit's real responder dispatch before the key event.
         let _: BOOL = msg_send![window, makeFirstResponder: std::ptr::null_mut::<Object>()];

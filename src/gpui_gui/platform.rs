@@ -459,6 +459,7 @@ impl PlatformDisplay for EmbeddedDisplay {
 }
 
 /// Platform state owned by one hosted editor instance.
+#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
 pub(crate) struct EmbeddedPlatform {
     dispatcher: Arc<EmbeddedDispatcher>,
     background_executor: BackgroundExecutor,
@@ -475,7 +476,6 @@ pub(crate) struct EmbeddedPlatform {
     visibility_callback: VisibilityCallback,
     gpu_context: gpui_wgpu::GpuContext,
     window_owner: RefCell<Option<Weak<WindowState>>>,
-    visibility_state: Cell<Option<bool>>,
     parent_scale_factor: f32,
 }
 
@@ -513,7 +513,6 @@ impl EmbeddedPlatform {
             visibility_callback,
             gpu_context: Rc::new(RefCell::new(None)),
             window_owner: RefCell::new(None),
-            visibility_state: Cell::new(None),
             parent_scale_factor: parent_scale_factor(parent),
         }))
     }
@@ -535,23 +534,8 @@ impl EmbeddedPlatform {
 
     pub(crate) fn sync_visibility(&self) {
         #[cfg(any(target_os = "macos", target_os = "windows"))]
-        let visible = self
-            .window_owner
-            .borrow()
-            .as_ref()
-            .and_then(Weak::upgrade)
-            .and_then(|state| state.native.borrow().as_ref().map(NativeChild::is_visible));
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-        let visible = None;
-        if self.visibility_state.get() == visible {
-            return;
-        }
-        self.visibility_state.set(visible);
-        if let Some(visible) = visible
-            && let Ok(mut callback) = self.visibility_callback.try_borrow_mut()
-            && let Some(callback) = callback.as_mut()
-        {
-            let _ = crate::gui_panic::contain("GPUI visibility observer", || callback(visible));
+        if let Some(owner) = self.window_owner.borrow().as_ref().and_then(Weak::upgrade) {
+            owner.sync_visibility();
         }
     }
 
@@ -562,9 +546,9 @@ impl EmbeddedPlatform {
     }
 
     pub(crate) fn show(&self, visible: bool) {
-        if let Some(owner) = self.window_owner.borrow().as_ref().and_then(Weak::upgrade) {
+        if let Some(_owner) = self.window_owner.borrow().as_ref().and_then(Weak::upgrade) {
             #[cfg(any(target_os = "macos", target_os = "windows"))]
-            if let Some(native) = owner.native.borrow_mut().as_mut() {
+            if let Some(native) = _owner.native.borrow_mut().as_mut() {
                 native.set_visible(visible);
             }
         }
@@ -572,17 +556,17 @@ impl EmbeddedPlatform {
         let _ = visible;
     }
 
-    pub(crate) fn focus(&self, focused: bool) -> bool {
-        if let Some(owner) = self.window_owner.borrow().as_ref().and_then(Weak::upgrade) {
+    pub(crate) fn focus(&self, _focused: bool) -> bool {
+        if let Some(_owner) = self.window_owner.borrow().as_ref().and_then(Weak::upgrade) {
             #[cfg(any(target_os = "macos", target_os = "windows"))]
-            if owner.native.borrow().is_some() {
-                let result = owner
+            if _owner.native.borrow().is_some() {
+                let result = _owner
                     .native
                     .borrow_mut()
                     .as_mut()
-                    .is_some_and(|native| native.set_focus(focused));
+                    .is_some_and(|native| native.set_focus(_focused));
                 if result {
-                    owner.focus_changed();
+                    _owner.focus_changed();
                 }
                 return result;
             }
@@ -730,22 +714,23 @@ impl Platform for EmbeddedPlatform {
             self.display.clone(),
             self.active_window_shared.clone(),
             self.dispatcher.clone(),
+            self.visibility_callback.clone(),
         ));
-        let state = window.state.clone();
+        let _state = window.state.clone();
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         {
             let native = NativeChild::new(
                 self.parent,
                 self.class_name,
-                Rc::downgrade(&state),
+                Rc::downgrade(&_state),
                 self.gpu_context.clone(),
                 window.bounds().size,
                 self.callback_keyboard_only,
-                self.visibility_callback.clone(),
             )?;
-            state.atlas.borrow_mut().clone_from(&native.sprite_atlas());
-            state.native.replace(Some(native));
-            *self.window_owner.borrow_mut() = Some(Rc::downgrade(&state));
+            _state.atlas.borrow_mut().clone_from(&native.sprite_atlas());
+            _state.native.replace(Some(native));
+            _state.visibility_state.set(Some(true));
+            *self.window_owner.borrow_mut() = Some(Rc::downgrade(&_state));
         }
         Ok(window)
     }
@@ -812,7 +797,7 @@ impl Platform for EmbeddedPlatform {
     fn read_from_clipboard(&self) -> Option<ClipboardItem> {
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         {
-            return native::read_clipboard();
+            native::read_clipboard()
         }
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
@@ -893,12 +878,14 @@ impl<T> Default for CallbackSlot<T> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
 enum KeySource {
     Native,
     Vst3Callback,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
 pub(crate) enum NativeEventIdentity {
     Mac {
         timestamp_bits: u64,
@@ -955,6 +942,7 @@ struct EventLedger {
 impl EventLedger {
     const MAX_ENTRIES: usize = 128;
 
+    #[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
     fn clear(&mut self) {
         self.entries.clear();
     }
@@ -1055,6 +1043,7 @@ struct WindowsTextState {
     composition_active: bool,
 }
 
+#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
 struct WindowState {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     dispatcher: Arc<EmbeddedDispatcher>,
@@ -1062,6 +1051,10 @@ struct WindowState {
     active_window: Rc<Cell<Option<AnyWindowHandle>>>,
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     native: RefCell<Option<NativeChild>>,
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    visibility_callback: VisibilityCallback,
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    visibility_state: Cell<Option<bool>>,
     input_handler: RefCell<InputHandlerSlot>,
     input_callback: RefCell<CallbackSlot<InputCallback>>,
     request_frame_callback: RefCell<CallbackSlot<FrameCallback>>,
@@ -1126,6 +1119,8 @@ impl EmbeddedWindow {
         display: Rc<dyn PlatformDisplay>,
         active_window: Rc<Cell<Option<AnyWindowHandle>>>,
         _dispatcher: Arc<EmbeddedDispatcher>,
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        visibility_callback: VisibilityCallback,
     ) -> Self {
         Self {
             state: Rc::new(WindowState {
@@ -1135,6 +1130,10 @@ impl EmbeddedWindow {
                 active_window,
                 #[cfg(any(target_os = "macos", target_os = "windows"))]
                 native: RefCell::new(None),
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                visibility_callback,
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                visibility_state: Cell::new(None),
                 input_handler: RefCell::new(InputHandlerSlot {
                     value: None,
                     generation: 0,
@@ -1172,6 +1171,7 @@ impl EmbeddedWindow {
     }
 }
 
+#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
 impl WindowState {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     pub(crate) fn native_tick(&self) {
@@ -1179,7 +1179,27 @@ impl WindowState {
             return;
         }
         self.dispatcher.pump();
-        self.request_frame();
+        self.sync_visibility();
+        if self.visibility_state.get() == Some(true) {
+            self.request_frame();
+        }
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    fn sync_visibility(&self) {
+        let visible = self.native.borrow().as_ref().map(NativeChild::is_visible);
+        if self.visibility_state.get() == visible {
+            return;
+        }
+        self.visibility_state.set(visible);
+        let Some(visible) = visible else {
+            return;
+        };
+        if let Ok(mut callback) = self.visibility_callback.try_borrow_mut()
+            && let Some(callback) = callback.as_mut()
+        {
+            let _ = crate::gui_panic::contain("GPUI visibility observer", || callback(visible));
+        }
     }
 
     pub(crate) fn resize(&self, size: Size<Pixels>) {
@@ -1245,9 +1265,7 @@ impl WindowState {
         match &event {
             PlatformInput::KeyDown(_) => self.last_native_key_token.set(token),
             PlatformInput::KeyUp(_) => {
-                if self.last_native_key_token.get() == token {
-                    self.last_native_key_token.set(None);
-                }
+                self.last_native_key_token.set(None);
             }
             _ => {}
         }
@@ -1269,8 +1287,7 @@ impl WindowState {
         }
         #[cfg(target_os = "macos")]
         {
-            return native::current_event_identity()
-                .map(|identity| self.native_event_token(identity));
+            native::current_event_identity().map(|identity| self.native_event_token(identity))
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -1566,6 +1583,9 @@ impl WindowState {
 
     #[cfg(target_os = "windows")]
     pub(crate) fn native_resize_device(&self, width: f32, height: f32) {
+        if self.closed.get() || self.suppress_resize_callback.get() {
+            return;
+        }
         let scale = self.scale_factor().max(0.01);
         self.native_resize(width / scale, height / scale);
     }
@@ -1612,7 +1632,7 @@ impl WindowState {
                 message_time: token_time,
                 window: token_window,
                 ..
-            } if token_time == message_time && token_window == window => Some(token),
+            } if token_time == message_time && token_window == window as u64 => Some(token),
             _ => None,
         }
     }
@@ -1628,8 +1648,7 @@ impl WindowState {
             return;
         }
 
-        let mut output = Vec::new();
-        {
+        let output = {
             let mut state = self.windows_text.borrow_mut();
             if state
                 .suppressed_commit_units
@@ -1643,8 +1662,8 @@ impl WindowState {
                 state.suppressed_commit_units.clear();
             }
 
-            output = decode_windows_utf16_unit(&mut state, unit, token);
-        }
+            decode_windows_utf16_unit(&mut state, unit, token)
+        };
         for (text, token) in output {
             self.dispatch_native_text(&text, token);
         }
@@ -1683,9 +1702,13 @@ impl WindowState {
         if self.closed.get() {
             return;
         }
+        let size = self.bounds.get().size;
+        self.suppress_resize_callback.set(true);
         if let Some(native) = self.native.borrow_mut().as_mut() {
-            native.dpi_changed(self.bounds.get().size);
+            native.dpi_changed(size);
         }
+        self.suppress_resize_callback.set(false);
+        self.native_resize(f32::from(size.width), f32::from(size.height));
     }
 
     pub(crate) fn dispatch_marked_text(
@@ -1961,12 +1984,12 @@ impl PlatformWindow for EmbeddedWindow {
         *self.state.appearance_callback.borrow_mut() = Some(callback);
     }
 
-    fn draw(&self, scene: &Scene) {
+    fn draw(&self, _scene: &Scene) {
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         let failed = {
             let mut native = self.state.native.borrow_mut();
             native.as_mut().is_some_and(|native| {
-                crate::gui_panic::contain("GPUI native draw", || native.draw(scene)).is_none()
+                crate::gui_panic::contain("GPUI native draw", || native.draw(_scene)).is_none()
             })
         };
         #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -2265,6 +2288,43 @@ mod tests {
         assert_eq!(count.get(), 2);
     }
 
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn native_keyup_clears_text_correlation_for_distinct_up_token() {
+        let state = test_window_state();
+        let down_token = NativeEventToken {
+            generation: 0,
+            identity: NativeEventIdentity::Mac {
+                timestamp_bits: 11,
+                key_code: 12,
+                event_type: 10,
+                window: 3,
+            },
+        };
+        let up_token = NativeEventToken {
+            generation: 0,
+            identity: NativeEventIdentity::Mac {
+                timestamp_bits: 12,
+                key_code: 12,
+                event_type: 11,
+                window: 3,
+            },
+        };
+        state.dispatch_native_key(test_key_event(), Some(down_token));
+        assert_eq!(state.last_native_key_token.get(), Some(down_token));
+        state.dispatch_native_key(
+            PlatformInput::KeyUp(KeyUpEvent {
+                keystroke: gpui::Keystroke {
+                    modifiers: Modifiers::default(),
+                    key: "x".to_string(),
+                    key_char: None,
+                },
+            }),
+            Some(up_token),
+        );
+        assert_eq!(state.last_native_key_token.get(), None);
+    }
+
     #[cfg(target_os = "windows")]
     #[test]
     fn windows_utf16_surrogates_are_committed_as_one_scalar() {
@@ -2491,6 +2551,10 @@ mod tests {
             active_window: Rc::new(Cell::new(None)),
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             native: RefCell::new(None),
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            visibility_callback: Rc::new(RefCell::new(None)),
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            visibility_state: Cell::new(None),
             input_handler: RefCell::new(InputHandlerSlot {
                 value: None,
                 generation: 0,

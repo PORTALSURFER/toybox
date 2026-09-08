@@ -54,7 +54,7 @@ int main(int argc, char** argv) {
         if (view->getSize(&preferred)!=kResultOk) return 13;
         NSRect frame=NSMakeRect(0,0,preferred.right-preferred.left,preferred.bottom-preferred.top);
         NSWindow* window=[[NSWindow alloc] initWithContentRect:frame
-          styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskResizable
+          styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskResizable|NSWindowStyleMaskMiniaturizable
           backing:NSBackingStoreBuffered defer:NO];
         [window setReleasedWhenClosed:NO];
         [window setTitle:[NSString stringWithFormat:@"GainSnap GPUI probe %d",n]];
@@ -137,6 +137,36 @@ int main(int argc, char** argv) {
             fprintf(stderr,"FAIL independent native/VST3 Up expected -16 got %.6f\n",independent_target); return 19;
           }
           fprintf(stderr,"PASS VST3 callback text entry and standalone callback fallback\n");
+        }
+        if (getenv("PROBE_GAIN_SNAP_VISIBILITY")) {
+          const double held_gain=controller->getParamNormalized(3);
+          for (int hidden_kind=0; hidden_kind<2; ++hidden_kind) {
+            [window makeKeyAndOrderFront:nil];
+            pump(0.05);
+            controller->setParamNormalized(2,1.0);
+            view->onFocus(0);
+            [window makeFirstResponder:nil];
+            pump(0.05);
+            if (controller->getParamNormalized(2)<0.5) {
+              fprintf(stderr,"FAIL focus loss stopped Match\n"); return 20;
+            }
+            if (hidden_kind==0) [window orderOut:nil];
+            else [window miniaturize:nil];
+            pump(0.15);
+            if (controller->getParamNormalized(2)>=0.5 ||
+                std::fabs(controller->getParamNormalized(3)-held_gain)>1e-9) {
+              fprintf(stderr,"FAIL hide/minimize kind=%d match=%f held=%f expected-held=%f visible=%d minimized=%d\n",
+                hidden_kind,controller->getParamNormalized(2),controller->getParamNormalized(3),held_gain,
+                [window isVisible],[window isMiniaturized]); return 21;
+            }
+            [window deminiaturize:nil];
+            [window makeKeyAndOrderFront:nil];
+            pump(0.05);
+            if (controller->getParamNormalized(2)>=0.5) {
+              fprintf(stderr,"FAIL restoring window restarted Match\n"); return 22;
+            }
+          }
+          fprintf(stderr,"PASS focus preservation, hide/minimize Match stop and held gain\n");
         }
         if (getenv("PROBE_CLOSE_EACH")) {
           view->removed(); view->release(); controller->terminate(); controller->release();
