@@ -13,9 +13,9 @@ use std::sync::Mutex;
 
 use gpui::{
     ClipboardItem, DevicePixels, GpuSpecs, KeyDownEvent, KeyUpEvent, Modifiers,
-    ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
-    PlatformAtlas, PlatformInput, Point, Scene, ScrollDelta, ScrollWheelEvent, Size, TouchPhase,
-    px,
+    ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent,
+    MouseUpEvent, Pixels, PlatformAtlas, PlatformInput, Point, Scene, ScrollDelta,
+    ScrollWheelEvent, Size, TouchPhase, px,
 };
 use gpui_wgpu::{WgpuRenderer, WgpuSurfaceConfig};
 use objc::declare::ClassDecl;
@@ -27,6 +27,10 @@ use raw_window_handle_06::{
 };
 
 use super::super::{NativeEventIdentity, WindowState};
+
+#[cfg(test)]
+#[link(name = "AppKit", kind = "framework")]
+unsafe extern "C" {}
 
 pub(crate) fn parent_scale_factor(_parent: raw_window_handle::RawWindowHandle) -> f32 {
     1.0
@@ -94,6 +98,11 @@ const OPTION: u64 = 1 << 19;
 const COMMAND: u64 = 1 << 20;
 const FUNCTION: u64 = 1 << 23;
 const NS_NOT_FOUND: usize = usize::MAX;
+const NSTRACKING_MOUSE_ENTERED_AND_EXITED: usize = 0x01;
+const NSTRACKING_MOUSE_MOVED: usize = 0x02;
+const NSTRACKING_ACTIVE_ALWAYS: usize = 0x80;
+const NSTRACKING_IN_VISIBLE_RECT: usize = 0x200;
+const NSTRACKING_ENABLED_DURING_MOUSE_DRAG: usize = 0x400;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -208,6 +217,7 @@ impl NativeChild {
             );
             let _: () = msg_send![parent.as_ptr(), addSubview: view.as_ptr()];
             let _: () = msg_send![view.as_ptr(), setWantsLayer: YES];
+            let _: () = msg_send![view.as_ptr(), updateTrackingAreas];
             // GPUI lays out in logical points, while CAMetalLayer and WGPU
             // consume device pixels. The child is attached before querying
             // the window so this also handles a host whose parent is already
@@ -516,6 +526,7 @@ unsafe fn new_view(class_name: &'static str, size: Size<Pixels>) -> Option<NonNu
     )];
     let view = NonNull::new(view)?;
     (&mut *view.as_ptr()).set_ivar("owner", 0_usize);
+    (&mut *view.as_ptr()).set_ivar("tracking_area", 0_usize);
     Some(view)
 }
 
@@ -533,6 +544,7 @@ fn editor_view_class(class_name: &'static str) -> Option<&'static Class> {
     }
     let mut decl = ClassDecl::new(&name, class!(NSView))?;
     decl.add_ivar::<usize>("owner");
+    decl.add_ivar::<usize>("tracking_area");
     unsafe {
         decl.add_method(
             sel!(drawRect:),
@@ -549,6 +561,10 @@ fn editor_view_class(class_name: &'static str) -> Option<&'static Class> {
         decl.add_method(
             sel!(viewDidChangeBackingProperties),
             view_did_change_backing_properties as extern "C" fn(&Object, Sel),
+        );
+        decl.add_method(
+            sel!(updateTrackingAreas),
+            update_tracking_areas as extern "C" fn(&Object, Sel),
         );
         decl.add_method(
             sel!(mouseDown:),
@@ -577,6 +593,10 @@ fn editor_view_class(class_name: &'static str) -> Option<&'static Class> {
         decl.add_method(
             sel!(mouseMoved:),
             mouse_moved as extern "C" fn(&Object, Sel, *mut Object),
+        );
+        decl.add_method(
+            sel!(mouseExited:),
+            mouse_exited as extern "C" fn(&Object, Sel, *mut Object),
         );
         decl.add_method(
             sel!(scrollWheel:),
@@ -647,6 +667,7 @@ fn editor_view_class(class_name: &'static str) -> Option<&'static Class> {
             sel!(characterIndexForPoint:),
             character_index as extern "C" fn(&Object, Sel, NSPoint) -> usize,
         );
+        decl.add_method(sel!(dealloc), dealloc as extern "C" fn(&Object, Sel));
     }
     Some(decl.register())
 }
@@ -742,6 +763,36 @@ unsafe fn quarantine_view(view: &Object) {
     let _: () = msg_send![view, setHidden: YES];
 }
 
+extern "C" fn update_tracking_areas(this: &Object, _cmd: Sel) {
+    unsafe {
+        let _: () = msg_send![super(this, class!(NSView)), updateTrackingAreas];
+        remove_tracking_area(this);
+
+        // The tracking area, rather than an NSWindow setting or a process-wide
+        // monitor, gives this embedded child its own idle-motion and leave
+        // delivery. `InVisibleRect` also keeps the tracking geometry current
+        // when a host resizes or clips the editor.
+        let options = NSTRACKING_MOUSE_ENTERED_AND_EXITED
+            | NSTRACKING_MOUSE_MOVED
+            | NSTRACKING_ACTIVE_ALWAYS
+            | NSTRACKING_IN_VISIBLE_RECT
+            | NSTRACKING_ENABLED_DURING_MOUSE_DRAG;
+        let area: *mut Object = msg_send![class!(NSTrackingArea), alloc];
+        let area: *mut Object = msg_send![
+            area,
+            initWithRect: ns_rect(0.0, 0.0, 0.0, 0.0)
+            options: options
+            owner: this
+            userInfo: ptr::null_mut::<Object>()
+        ];
+        if !area.is_null() {
+            let _: () = msg_send![this, addTrackingArea: area];
+            let view = this as *const Object as *mut Object;
+            (*view).set_ivar("tracking_area", area as usize);
+        }
+    }
+}
+
 extern "C" fn draw_rect(this: &Object, _cmd: Sel, _dirty: NSRect) {
     native_callback(this, "GPUI AppKit draw", |owner| owner.request_frame());
 }
@@ -826,6 +877,16 @@ extern "C" fn right_mouse_dragged(this: &Object, _cmd: Sel, event: *mut Object) 
 extern "C" fn mouse_moved(this: &Object, _cmd: Sel, event: *mut Object) {
     native_callback(this, "GPUI AppKit mouse move", |owner| {
         let _ = owner.dispatch_input(PlatformInput::MouseMove(MouseMoveEvent {
+            position: event_position(this, event),
+            pressed_button: None,
+            modifiers: event_modifiers(event),
+        }));
+    });
+}
+
+extern "C" fn mouse_exited(this: &Object, _cmd: Sel, event: *mut Object) {
+    native_callback(this, "GPUI AppKit mouse exit", |owner| {
+        let _ = owner.dispatch_input(PlatformInput::MouseExited(MouseExitEvent {
             position: event_position(this, event),
             pressed_button: None,
             modifiers: event_modifiers(event),
@@ -1091,6 +1152,24 @@ fn mouse_input(view: &Object, event: *mut Object, down: bool, dragged: bool) -> 
     }
 }
 
+unsafe fn remove_tracking_area(view: &Object) {
+    let area = *view.get_ivar::<usize>("tracking_area") as *mut Object;
+    if area.is_null() {
+        return;
+    }
+    let _: () = msg_send![view, removeTrackingArea: area];
+    let _: () = msg_send![area, release];
+    let view = view as *const Object as *mut Object;
+    (*view).set_ivar("tracking_area", 0_usize);
+}
+
+extern "C" fn dealloc(this: &Object, _cmd: Sel) {
+    unsafe {
+        remove_tracking_area(this);
+        let _: () = msg_send![super(this, class!(NSView)), dealloc];
+    }
+}
+
 fn ns_string(value: *mut Object) -> Option<String> {
     if value.is_null() {
         return None;
@@ -1147,10 +1226,7 @@ fn range_option(range: NSRange) -> Option<std::ops::Range<usize>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        NS_RIGHT_MOUSE_DOWN, NS_RIGHT_MOUSE_DRAGGED, NS_RIGHT_MOUSE_UP, key_name,
-        mouse_button_for_event_type,
-    };
+    use super::*;
     use gpui::MouseButton;
 
     #[test]
@@ -1184,5 +1260,43 @@ mod tests {
             mouse_button_for_event_type(NS_RIGHT_MOUSE_DRAGGED),
             MouseButton::Right
         );
+    }
+
+    #[test]
+    fn appkit_child_installs_one_visible_hover_tracking_area() {
+        unsafe {
+            let view = new_view(
+                "ToyboxGpuiHoverTrackingTest",
+                Size::new(px(208.0), px(212.0)),
+            )
+            .expect("AppKit child view should allocate");
+            let _: () = msg_send![view.as_ptr(), updateTrackingAreas];
+
+            let area = *view.as_ref().get_ivar::<usize>("tracking_area") as *mut Object;
+            assert!(!area.is_null(), "hover tracking area should be installed");
+            let options: usize = msg_send![area, options];
+            assert_eq!(
+                options
+                    & (NSTRACKING_MOUSE_ENTERED_AND_EXITED
+                        | NSTRACKING_MOUSE_MOVED
+                        | NSTRACKING_ACTIVE_ALWAYS
+                        | NSTRACKING_IN_VISIBLE_RECT
+                        | NSTRACKING_ENABLED_DURING_MOUSE_DRAG),
+                NSTRACKING_MOUSE_ENTERED_AND_EXITED
+                    | NSTRACKING_MOUSE_MOVED
+                    | NSTRACKING_ACTIVE_ALWAYS
+                    | NSTRACKING_IN_VISIBLE_RECT
+                    | NSTRACKING_ENABLED_DURING_MOUSE_DRAG
+            );
+
+            // Rebuilding tracking areas must replace the old area rather than
+            // accumulating one on every resize or reattachment.
+            let _: () = msg_send![view.as_ptr(), updateTrackingAreas];
+            let areas: *mut Object = msg_send![view.as_ptr(), trackingAreas];
+            let count: usize = msg_send![areas, count];
+            assert_eq!(count, 1);
+
+            let _: () = msg_send![view.as_ptr(), release];
+        }
     }
 }
