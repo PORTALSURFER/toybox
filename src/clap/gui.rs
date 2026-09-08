@@ -2,6 +2,7 @@
 
 mod error_mapping;
 mod host_window;
+/// Declarative CLAP GUI callback export macros.
 mod macros;
 mod requester;
 mod types;
