@@ -827,6 +827,7 @@ extern "C" fn flags_changed(this: &Object, _cmd: Sel, event: *mut Object) {
 extern "C" fn key_down(this: &Object, _cmd: Sel, event: *mut Object) {
     native_callback(this, "GPUI AppKit key down", |owner| unsafe {
         let flags = event_modifiers(event);
+        let is_repeat: BOOL = msg_send![event, isARepeat];
         let ignored: *mut Object = msg_send![event, charactersIgnoringModifiers];
         let key_char = ns_string(ignored);
         let key = key_name(key_char.as_deref());
@@ -838,7 +839,7 @@ extern "C" fn key_down(this: &Object, _cmd: Sel, event: *mut Object) {
                     key,
                     key_char: key_char.clone(),
                 },
-                is_held: false,
+                is_held: is_repeat != NO,
                 prefer_character_input: false,
             }),
             token,
