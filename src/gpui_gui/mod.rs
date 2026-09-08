@@ -156,6 +156,7 @@ pub struct GpuiHostedGui {
     contract: GpuiSizeContract,
     fixed_aspect_ratio: bool,
     visibility_callback: platform::VisibilityCallback,
+    pointer_cancel_callback: platform::PointerCancelCallback,
     runtime: Option<Runtime>,
     callback_keyboard_only: bool,
 }
@@ -177,6 +178,7 @@ impl GpuiHostedGui {
             contract: GpuiSizeContract::new(preferred, (1, 1), (u32::MAX, u32::MAX)),
             fixed_aspect_ratio: false,
             visibility_callback: Rc::new(RefCell::new(None)),
+            pointer_cancel_callback: Rc::new(RefCell::new(None)),
             runtime: None,
             callback_keyboard_only: false,
         }
@@ -203,6 +205,16 @@ impl GpuiHostedGui {
     /// Observe effective native visibility changes on the host UI thread.
     pub fn with_visibility_callback(self, callback: impl FnMut(bool) + 'static) -> Self {
         *self.visibility_callback.borrow_mut() = Some(Box::new(callback));
+        self
+    }
+
+    /// Observe native pointer cancellation on the host UI thread.
+    ///
+    /// The callback is deferred through the embedded GPUI gateway and runs
+    /// when the native child loses pointer capture or focus. No synthetic
+    /// mouse-up or keyboard event is emitted for the cancellation.
+    pub fn with_pointer_cancel_callback(self, callback: impl FnMut() + 'static) -> Self {
+        *self.pointer_cancel_callback.borrow_mut() = Some(Box::new(callback));
         self
     }
 
@@ -241,6 +253,7 @@ impl GpuiHostedGui {
             self.class_name,
             self.callback_keyboard_only,
             self.visibility_callback.clone(),
+            self.pointer_cancel_callback.clone(),
         ) else {
             return false;
         };

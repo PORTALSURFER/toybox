@@ -42,17 +42,19 @@ use windows::Win32::UI::Input::Ime::{
     ImmReleaseContext,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetKeyState, SetFocus, VIRTUAL_KEY, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
+    GetCapture, GetKeyState, ReleaseCapture, SetCapture, SetFocus, VIRTUAL_KEY, VK_CONTROL,
+    VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
 };
 use windows::Win32::UI::WindowsAndMessaging::KillTimer;
 use windows::Win32::UI::WindowsAndMessaging::{
     CS_HREDRAW, CS_OWNDC, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DestroyWindow, GA_ROOT,
     GWLP_USERDATA, GetAncestor, GetMessageTime, GetWindowLongPtrW, IDC_ARROW, IsIconic,
     IsWindowVisible, LoadCursorW, RegisterClassExW, SW_HIDE, SW_SHOW, SetTimer, SetWindowLongPtrW,
-    ShowWindow, UnregisterClassW, WM_CHAR, WM_DPICHANGED, WM_DPICHANGED_AFTERPARENT, WM_ERASEBKGND,
-    WM_IME_COMPOSITION, WM_IME_ENDCOMPOSITION, WM_IME_STARTCOMPOSITION, WM_KEYDOWN, WM_KEYUP,
-    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT,
-    WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WM_TIMER, WNDCLASSEXW, WS_CHILD, WS_TABSTOP, WS_VISIBLE,
+    ShowWindow, UnregisterClassW, WM_CANCELMODE, WM_CAPTURECHANGED, WM_CHAR, WM_DPICHANGED,
+    WM_DPICHANGED_AFTERPARENT, WM_ERASEBKGND, WM_IME_COMPOSITION, WM_IME_ENDCOMPOSITION,
+    WM_IME_STARTCOMPOSITION, WM_KEYDOWN, WM_KEYUP, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE,
+    WM_TIMER, WNDCLASSEXW, WS_CHILD, WS_TABSTOP, WS_VISIBLE,
 };
 use windows::core::PCWSTR;
 
@@ -61,6 +63,8 @@ use super::super::WindowState;
 const UI_TIMER_ID: usize = 1;
 const UI_TIMER_INTERVAL_MS: u32 = 16;
 const CF_UNICODETEXT_FORMAT: u32 = 13;
+const MK_LBUTTON_FLAG: u32 = 0x0001;
+const MK_RBUTTON_FLAG: u32 = 0x0002;
 
 pub(crate) fn parent_scale_factor(parent: raw_window_handle::RawWindowHandle) -> f32 {
     let hwnd = match parent {
@@ -276,6 +280,9 @@ impl NativeChild {
     pub(crate) fn set_visible(&mut self, visible: bool) {
         if !self.failed {
             unsafe {
+                if !visible {
+                    release_capture_if_owned(self.hwnd);
+                }
                 let _ = ShowWindow(self.hwnd, if visible { SW_SHOW } else { SW_HIDE });
                 if visible {
                     if self.timer_id == 0 {
@@ -357,6 +364,7 @@ impl NativeChild {
         self.stop_timer();
         unsafe {
             let _: isize = SetWindowLongPtrW(self.hwnd, GWLP_USERDATA, 0);
+            release_capture_if_owned(self.hwnd);
             let _ = ShowWindow(self.hwnd, SW_HIDE);
         }
         if let Some(mut renderer) = self.renderer.take() {
@@ -377,6 +385,7 @@ impl NativeChild {
         }
         unsafe {
             let _: isize = SetWindowLongPtrW(self.hwnd, GWLP_USERDATA, 0);
+            release_capture_if_owned(self.hwnd);
             let _ = DestroyWindow(self.hwnd);
         }
         self.owner_token.take();
@@ -456,6 +465,50 @@ fn native_callback(hwnd: HWND, operation: &str, callback: impl FnOnce(&WindowSta
     }
 }
 
+/// Take capture only when it is free or already owned by this child.
+fn capture_window_if_available(hwnd: HWND) -> bool {
+    unsafe {
+        let current = GetCapture();
+        if !capture_is_available(current, hwnd) {
+            return false;
+        }
+        let _ = SetCapture(hwnd);
+        GetCapture() == hwnd
+    }
+}
+
+/// Release capture only when this child still owns it. `ReleaseCapture` can
+/// synchronously re-enter the window procedure, so callers must clear their
+/// owner state before invoking this helper.
+fn release_capture_if_owned(hwnd: HWND) {
+    unsafe {
+        if GetCapture() == hwnd {
+            let _ = ReleaseCapture();
+        }
+    }
+}
+
+fn pressed_button_for_move(wparam: WPARAM, button: Option<MouseButton>) -> Option<MouseButton> {
+    let flags = wparam.0 as u32;
+    match button {
+        Some(MouseButton::Left) if flags & MK_LBUTTON_FLAG != 0 => Some(MouseButton::Left),
+        Some(MouseButton::Right) if flags & MK_RBUTTON_FLAG != 0 => Some(MouseButton::Right),
+        _ => None,
+    }
+}
+
+fn capture_is_available(current: HWND, requested: HWND) -> bool {
+    current.is_invalid() || current == requested
+}
+
+fn mouse_button_for_message(message: u32) -> MouseButton {
+    if message == WM_LBUTTONDOWN || message == WM_LBUTTONUP {
+        MouseButton::Left
+    } else {
+        MouseButton::Right
+    }
+}
+
 unsafe extern "system" fn window_proc(
     hwnd: HWND,
     message: u32,
@@ -489,13 +542,16 @@ unsafe extern "system" fn window_proc(
             LRESULT(0)
         }
         WM_LBUTTONDOWN | WM_RBUTTONDOWN => {
+            let button = mouse_button_for_message(message);
+            let captured = capture_window_if_available(hwnd);
+            if !captured {
+                return LRESULT(0);
+            }
             native_callback(hwnd, "GPUI Win32 mouse down", |owner| {
                 owner.native_mouse_down_focus();
-                let button = if message == WM_LBUTTONDOWN {
-                    MouseButton::Left
-                } else {
-                    MouseButton::Right
-                };
+                if !owner.native_pointer_pressed(button, captured) {
+                    return;
+                }
                 let _ = owner.dispatch_input(PlatformInput::MouseDown(MouseDownEvent {
                     button,
                     position: client_mouse_position(lparam, owner.scale_factor()),
@@ -507,12 +563,12 @@ unsafe extern "system" fn window_proc(
             LRESULT(0)
         }
         WM_LBUTTONUP | WM_RBUTTONUP => {
+            let button = mouse_button_for_message(message);
             native_callback(hwnd, "GPUI Win32 mouse up", |owner| {
-                let button = if message == WM_LBUTTONUP {
-                    MouseButton::Left
-                } else {
-                    MouseButton::Right
-                };
+                if !owner.native_pointer_released(button) {
+                    return;
+                }
+                release_capture_if_owned(hwnd);
                 let _ = owner.dispatch_input(PlatformInput::MouseUp(MouseUpEvent {
                     button,
                     position: client_mouse_position(lparam, owner.scale_factor()),
@@ -524,12 +580,33 @@ unsafe extern "system" fn window_proc(
         }
         WM_MOUSEMOVE => {
             native_callback(hwnd, "GPUI Win32 mouse move", |owner| {
+                let active_button = owner.native_pointer_button();
+                let pressed_button = pressed_button_for_move(wparam, active_button);
+                if active_button.is_some() && pressed_button.is_none() {
+                    owner.native_pointer_capture_lost();
+                    release_capture_if_owned(hwnd);
+                    return;
+                }
                 let _ = owner.dispatch_input(PlatformInput::MouseMove(MouseMoveEvent {
                     position: client_mouse_position(lparam, owner.scale_factor()),
-                    pressed_button: None,
+                    pressed_button,
                     modifiers: modifiers(),
                 }));
             });
+            LRESULT(0)
+        }
+        WM_CANCELMODE | WM_CAPTURECHANGED => {
+            native_callback(hwnd, "GPUI Win32 pointer capture lost", |owner| {
+                owner.native_pointer_capture_lost();
+            });
+            release_capture_if_owned(hwnd);
+            LRESULT(0)
+        }
+        WM_KILLFOCUS => {
+            native_callback(hwnd, "GPUI Win32 focus lost", |owner| {
+                owner.native_focus_lost();
+            });
+            release_capture_if_owned(hwnd);
             LRESULT(0)
         }
         WM_MOUSEWHEEL => {
@@ -614,6 +691,10 @@ unsafe extern "system" fn window_proc(
         }
         WM_ERASEBKGND => LRESULT(1),
         WM_NCDESTROY => {
+            native_callback(hwnd, "GPUI Win32 native child destroyed", |owner| {
+                owner.native_focus_lost();
+            });
+            release_capture_if_owned(hwnd);
             let _ = KillTimer(Some(hwnd), UI_TIMER_ID);
             let _: isize = SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
             DefWindowProcW(hwnd, message, wparam, lparam)
@@ -807,5 +888,38 @@ mod tests {
             client_mouse_position(lparam, 1.5),
             Point::new(px(-6.0), px(-8.0))
         );
+    }
+
+    #[test]
+    fn native_button_messages_preserve_left_and_right_mapping() {
+        assert_eq!(mouse_button_for_message(WM_LBUTTONDOWN), MouseButton::Left);
+        assert_eq!(mouse_button_for_message(WM_LBUTTONUP), MouseButton::Left);
+        assert_eq!(mouse_button_for_message(WM_RBUTTONDOWN), MouseButton::Right);
+        assert_eq!(mouse_button_for_message(WM_RBUTTONUP), MouseButton::Right);
+    }
+
+    #[test]
+    fn mouse_move_requires_the_owned_button_to_remain_pressed() {
+        assert_eq!(pressed_button_for_move(WPARAM(0), None), None);
+        assert_eq!(
+            pressed_button_for_move(WPARAM(MK_LBUTTON_FLAG as usize), Some(MouseButton::Left)),
+            Some(MouseButton::Left)
+        );
+        assert_eq!(
+            pressed_button_for_move(WPARAM(MK_RBUTTON_FLAG as usize), Some(MouseButton::Right)),
+            Some(MouseButton::Right)
+        );
+        assert_eq!(
+            pressed_button_for_move(WPARAM(MK_RBUTTON_FLAG as usize), Some(MouseButton::Left)),
+            None
+        );
+    }
+
+    #[test]
+    fn capture_does_not_steal_another_window() {
+        let child = HWND(1);
+        assert!(capture_is_available(HWND::default(), child));
+        assert!(capture_is_available(child, child));
+        assert!(!capture_is_available(HWND(2), child));
     }
 }

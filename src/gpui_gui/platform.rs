@@ -14,6 +14,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use futures::channel::oneshot;
+#[cfg(target_os = "windows")]
+use gpui::MouseButton;
 use gpui::{
     AnyWindowHandle, AtlasKey, AtlasTextureId, AtlasTextureKind, AtlasTile, BackgroundExecutor,
     Bounds, Capslock, ClipboardItem, CursorStyle, DevicePixels, DispatchEventResult,
@@ -30,6 +32,7 @@ use raw_window_handle_06::{
 };
 
 pub(crate) type VisibilityCallback = Rc<RefCell<Option<Box<dyn FnMut(bool)>>>>;
+pub(crate) type PointerCancelCallback = Rc<RefCell<Option<Box<dyn FnMut()>>>>;
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 #[path = "native.rs"]
@@ -474,6 +477,7 @@ pub(crate) struct EmbeddedPlatform {
     class_name: &'static str,
     callback_keyboard_only: bool,
     visibility_callback: VisibilityCallback,
+    pointer_cancel_callback: PointerCancelCallback,
     gpu_context: gpui_wgpu::GpuContext,
     window_owner: RefCell<Option<Weak<WindowState>>>,
     parent_scale_factor: f32,
@@ -485,6 +489,7 @@ impl EmbeddedPlatform {
         class_name: &'static str,
         callback_keyboard_only: bool,
         visibility_callback: VisibilityCallback,
+        pointer_cancel_callback: PointerCancelCallback,
     ) -> anyhow::Result<Rc<Self>> {
         let dispatcher = EmbeddedDispatcher::new();
         let dispatcher_trait: Arc<dyn gpui::PlatformDispatcher> = dispatcher.clone();
@@ -511,6 +516,7 @@ impl EmbeddedPlatform {
             class_name,
             callback_keyboard_only,
             visibility_callback,
+            pointer_cancel_callback,
             gpu_context: Rc::new(RefCell::new(None)),
             window_owner: RefCell::new(None),
             parent_scale_factor: parent_scale_factor(parent),
@@ -519,6 +525,10 @@ impl EmbeddedPlatform {
 
     pub(crate) fn pump(&self) {
         self.dispatcher.pump();
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        if let Some(owner) = self.window_owner.borrow().as_ref().and_then(Weak::upgrade) {
+            owner.pump_gateway();
+        }
     }
 
     pub(crate) fn stop(&self) {
@@ -568,7 +578,11 @@ impl EmbeddedPlatform {
                     .as_mut()
                     .is_some_and(|native| native.set_focus(_focused));
                 if result {
-                    _owner.focus_changed();
+                    if _focused {
+                        _owner.focus_changed();
+                    } else {
+                        _owner.native_focus_lost();
+                    }
                 }
                 return result;
             }
@@ -718,6 +732,8 @@ impl Platform for EmbeddedPlatform {
             self.dispatcher.clone(),
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             self.visibility_callback.clone(),
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            self.pointer_cancel_callback.clone(),
         ));
         let _state = window.state.clone();
         #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -1058,6 +1074,8 @@ struct WindowState {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     visibility_callback: VisibilityCallback,
     #[cfg(any(target_os = "macos", target_os = "windows"))]
+    pointer_cancel_callback: PointerCancelCallback,
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     visibility_state: Cell<Option<bool>>,
     input_handler: RefCell<InputHandlerSlot>,
     input_callback: RefCell<CallbackSlot<InputCallback>>,
@@ -1077,6 +1095,10 @@ struct WindowState {
     closed: Cell<bool>,
     in_update: Cell<bool>,
     pending_inputs: RefCell<VecDeque<PlatformInput>>,
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    pending_pointer_cancel: Cell<bool>,
+    #[cfg(target_os = "windows")]
+    pending_active_status: Cell<Option<bool>>,
     pending_frame: Cell<bool>,
     pending_resize: Cell<Option<Size<Pixels>>>,
     suppress_resize_callback: Cell<bool>,
@@ -1086,6 +1108,8 @@ struct WindowState {
     last_native_key_token: Cell<Option<NativeEventToken>>,
     #[cfg(target_os = "windows")]
     windows_text: RefCell<WindowsTextState>,
+    #[cfg(target_os = "windows")]
+    native_pointer_button: Cell<Option<MouseButton>>,
 }
 
 impl Drop for WindowState {
@@ -1125,6 +1149,8 @@ impl EmbeddedWindow {
         _dispatcher: Arc<EmbeddedDispatcher>,
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         visibility_callback: VisibilityCallback,
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        pointer_cancel_callback: PointerCancelCallback,
     ) -> Self {
         Self {
             state: Rc::new(WindowState {
@@ -1136,6 +1162,8 @@ impl EmbeddedWindow {
                 native: RefCell::new(None),
                 #[cfg(any(target_os = "macos", target_os = "windows"))]
                 visibility_callback,
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                pointer_cancel_callback,
                 #[cfg(any(target_os = "macos", target_os = "windows"))]
                 visibility_state: Cell::new(None),
                 input_handler: RefCell::new(InputHandlerSlot {
@@ -1159,6 +1187,10 @@ impl EmbeddedWindow {
                 closed: Cell::new(false),
                 in_update: Cell::new(false),
                 pending_inputs: RefCell::new(VecDeque::new()),
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                pending_pointer_cancel: Cell::new(false),
+                #[cfg(target_os = "windows")]
+                pending_active_status: Cell::new(None),
                 pending_frame: Cell::new(false),
                 pending_resize: Cell::new(None),
                 suppress_resize_callback: Cell::new(false),
@@ -1168,6 +1200,8 @@ impl EmbeddedWindow {
                 last_native_key_token: Cell::new(None),
                 #[cfg(target_os = "windows")]
                 windows_text: RefCell::new(WindowsTextState::default()),
+                #[cfg(target_os = "windows")]
+                native_pointer_button: Cell::new(None),
             }),
             handle,
             display,
@@ -1184,6 +1218,7 @@ impl WindowState {
         }
         self.dispatcher.pump();
         self.sync_visibility();
+        self.pump_gateway();
         if self.visibility_state.get() == Some(true) {
             self.request_frame();
         }
@@ -1203,6 +1238,27 @@ impl WindowState {
             && let Some(callback) = callback.as_mut()
         {
             let _ = crate::gui_panic::contain("GPUI visibility observer", || callback(visible));
+        }
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    fn dispatch_pointer_cancel(&self) {
+        let Ok(mut callback_slot) = self.pointer_cancel_callback.try_borrow_mut() else {
+            self.pending_pointer_cancel.set(true);
+            return;
+        };
+        let Some(mut callback) = callback_slot.take() else {
+            return;
+        };
+        drop(callback_slot);
+        let _ = crate::gui_panic::contain("GPUI pointer cancellation callback", &mut callback);
+        if !self.closed.get()
+            && self
+                .pointer_cancel_callback
+                .try_borrow()
+                .is_ok_and(|callback| callback.is_none())
+        {
+            self.pointer_cancel_callback.borrow_mut().replace(callback);
         }
     }
 
@@ -1489,6 +1545,18 @@ impl WindowState {
     fn drain_gateway(&self) {
         let mut budget = 64;
         while !self.closed.get() && budget > 0 {
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            if self.pending_pointer_cancel.replace(false) {
+                self.dispatch_pointer_cancel();
+                budget -= 1;
+                continue;
+            }
+            #[cfg(target_os = "windows")]
+            if let Some(active) = self.pending_active_status.take() {
+                self.dispatch_active_status(active);
+                budget -= 1;
+                continue;
+            }
             let event = { self.pending_inputs.borrow_mut().pop_front() };
             if let Some(event) = event {
                 let _ = self.dispatch_input_one(event);
@@ -1507,9 +1575,21 @@ impl WindowState {
             }
             break;
         }
-        let has_pending = !self.pending_inputs.borrow().is_empty()
-            || self.pending_resize.get().is_some()
-            || self.pending_frame.get();
+        let has_pending = {
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            let pointer_cancel = self.pending_pointer_cancel.get();
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+            let pointer_cancel = false;
+            #[cfg(target_os = "windows")]
+            let active_status = self.pending_active_status.get().is_some();
+            #[cfg(not(target_os = "windows"))]
+            let active_status = false;
+            !self.pending_inputs.borrow().is_empty()
+                || pointer_cancel
+                || active_status
+                || self.pending_resize.get().is_some()
+                || self.pending_frame.get()
+        };
         self.in_update.set(false);
         if has_pending && !self.closed.get() {
             // Ask GPUI for another frame after the bounded gateway drain. The
@@ -1517,6 +1597,14 @@ impl WindowState {
             // AsyncApp.update cannot borrow this gateway recursively.
             self.request_frame_one();
         }
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    fn pump_gateway(&self) {
+        if self.closed.get() || self.in_update.replace(true) {
+            return;
+        }
+        self.drain_gateway();
     }
 
     fn resize_callback(&self, size: Size<Pixels>) {
@@ -1584,7 +1672,61 @@ impl WindowState {
         }
     }
 
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    pub(crate) fn native_focus_lost(&self) {
+        if self.closed.get() {
+            return;
+        }
+        self.focus_changed();
+        #[cfg(target_os = "windows")]
+        self.native_pointer_button.set(None);
+        #[cfg(target_os = "windows")]
+        self.pending_active_status.set(Some(false));
+        self.pending_pointer_cancel.set(true);
+    }
+
+    #[cfg(target_os = "windows")]
+    pub(crate) fn native_pointer_capture_lost(&self) {
+        if self.closed.get() {
+            return;
+        }
+        if self.native_pointer_button.take().is_some() {
+            self.pending_pointer_cancel.set(true);
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    pub(crate) fn native_pointer_pressed(&self, button: MouseButton, captured: bool) -> bool {
+        if self.closed.get() || !captured {
+            return false;
+        }
+        if self.pending_pointer_cancel.get() && !self.in_update.get() {
+            self.pump_gateway();
+        }
+        if self.pending_pointer_cancel.get() || self.native_pointer_button.get().is_some() {
+            return false;
+        }
+        self.native_pointer_button.set(Some(button));
+        true
+    }
+
+    #[cfg(target_os = "windows")]
+    pub(crate) fn native_pointer_released(&self, button: MouseButton) -> bool {
+        if self.native_pointer_button.get() != Some(button) {
+            return false;
+        }
+        self.native_pointer_button.set(None);
+        true
+    }
+
+    #[cfg(target_os = "windows")]
+    pub(crate) fn native_pointer_button(&self) -> Option<MouseButton> {
+        self.native_pointer_button.get()
+    }
+
     fn dispatch_active_status(&self, active: bool) {
+        #[cfg(target_os = "windows")]
+        self.pending_active_status.set(None);
         let Some(mut callback) = self.active_callback.borrow_mut().take() else {
             return;
         };
@@ -1607,7 +1749,8 @@ impl WindowState {
         self.closed.set(true);
         self.invalidate_event_generation();
         #[cfg(any(target_os = "macos", target_os = "windows"))]
-        if let Some(native) = self.native.borrow_mut().as_mut() {
+        if let Some(mut native) = self.native.borrow_mut().take() {
+            native.clear_owner();
             native.quarantine();
         }
     }
@@ -2344,6 +2487,72 @@ mod tests {
         assert_eq!(state.last_native_key_token.get(), None);
     }
 
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn native_pointer_cancel_is_deferred_through_the_gateway() {
+        let state = test_window_state();
+        let cancel_count = Rc::new(Cell::new(0_u32));
+        let cancel_count_for_callback = cancel_count.clone();
+        state
+            .pointer_cancel_callback
+            .borrow_mut()
+            .replace(Box::new(move || {
+                cancel_count_for_callback.set(cancel_count_for_callback.get() + 1);
+            }));
+
+        state.pending_pointer_cancel.set(true);
+        assert_eq!(cancel_count.get(), 0);
+        state.pump_gateway();
+        assert_eq!(cancel_count.get(), 1);
+        state.pump_gateway();
+        assert_eq!(cancel_count.get(), 1);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_pointer_capture_lifecycle_matches_buttons_and_cancels_safely() {
+        let state = test_window_state();
+        let cancel_count = Rc::new(Cell::new(0_u32));
+        let cancel_count_for_callback = cancel_count.clone();
+        state
+            .pointer_cancel_callback
+            .borrow_mut()
+            .replace(Box::new(move || {
+                cancel_count_for_callback.set(cancel_count_for_callback.get() + 1);
+            }));
+        let active_statuses = Rc::new(RefCell::new(Vec::new()));
+        let active_statuses_for_callback = active_statuses.clone();
+        state
+            .active_callback
+            .borrow_mut()
+            .replace(Box::new(move |active| {
+                active_statuses_for_callback.borrow_mut().push(active);
+            }));
+
+        assert!(state.native_pointer_pressed(MouseButton::Left, true));
+        assert_eq!(state.native_pointer_button(), Some(MouseButton::Left));
+        assert!(!state.native_pointer_pressed(MouseButton::Right, true));
+        assert!(!state.native_pointer_released(MouseButton::Right));
+        assert_eq!(state.native_pointer_button(), Some(MouseButton::Left));
+        assert!(state.native_pointer_released(MouseButton::Left));
+        assert_eq!(state.native_pointer_button(), None);
+        assert_eq!(cancel_count.get(), 0);
+
+        assert!(state.native_pointer_pressed(MouseButton::Right, true));
+        state.native_pointer_capture_lost();
+        assert_eq!(state.native_pointer_button(), None);
+        assert_eq!(cancel_count.get(), 0);
+        assert!(state.native_pointer_pressed(MouseButton::Left, true));
+        assert_eq!(cancel_count.get(), 1);
+        assert_eq!(state.native_pointer_button(), Some(MouseButton::Left));
+
+        state.native_focus_lost();
+        assert_eq!(state.native_pointer_button(), None);
+        state.pump_gateway();
+        assert_eq!(cancel_count.get(), 2);
+        assert_eq!(*active_statuses.borrow(), vec![false]);
+    }
+
     #[cfg(target_os = "windows")]
     #[test]
     fn windows_utf16_surrogates_are_committed_as_one_scalar() {
@@ -2611,6 +2820,8 @@ mod tests {
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             visibility_callback: Rc::new(RefCell::new(None)),
             #[cfg(any(target_os = "macos", target_os = "windows"))]
+            pointer_cancel_callback: Rc::new(RefCell::new(None)),
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             visibility_state: Cell::new(None),
             input_handler: RefCell::new(InputHandlerSlot {
                 value: None,
@@ -2633,6 +2844,10 @@ mod tests {
             closed: Cell::new(false),
             in_update: Cell::new(false),
             pending_inputs: RefCell::new(VecDeque::new()),
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            pending_pointer_cancel: Cell::new(false),
+            #[cfg(target_os = "windows")]
+            pending_active_status: Cell::new(None),
             pending_frame: Cell::new(false),
             pending_resize: Cell::new(None),
             suppress_resize_callback: Cell::new(false),
@@ -2642,6 +2857,8 @@ mod tests {
             last_native_key_token: Cell::new(None),
             #[cfg(target_os = "windows")]
             windows_text: RefCell::new(WindowsTextState::default()),
+            #[cfg(target_os = "windows")]
+            native_pointer_button: Cell::new(None),
         })
     }
 }

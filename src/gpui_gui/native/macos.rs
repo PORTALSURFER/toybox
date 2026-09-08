@@ -563,6 +563,18 @@ fn editor_view_class(class_name: &'static str) -> Option<&'static Class> {
             mouse_dragged as extern "C" fn(&Object, Sel, *mut Object),
         );
         decl.add_method(
+            sel!(rightMouseDown:),
+            right_mouse_down as extern "C" fn(&Object, Sel, *mut Object),
+        );
+        decl.add_method(
+            sel!(rightMouseUp:),
+            right_mouse_up as extern "C" fn(&Object, Sel, *mut Object),
+        );
+        decl.add_method(
+            sel!(rightMouseDragged:),
+            right_mouse_dragged as extern "C" fn(&Object, Sel, *mut Object),
+        );
+        decl.add_method(
             sel!(mouseMoved:),
             mouse_moved as extern "C" fn(&Object, Sel, *mut Object),
         );
@@ -788,6 +800,25 @@ extern "C" fn mouse_up(this: &Object, _cmd: Sel, event: *mut Object) {
 
 extern "C" fn mouse_dragged(this: &Object, _cmd: Sel, event: *mut Object) {
     native_callback(this, "GPUI AppKit mouse drag", |owner| {
+        let _ = owner.dispatch_input(mouse_input(this, event, false, true));
+    });
+}
+
+extern "C" fn right_mouse_down(this: &Object, _cmd: Sel, event: *mut Object) {
+    native_callback(this, "GPUI AppKit right mouse down", |owner| {
+        owner.native_mouse_down_focus();
+        let _ = owner.dispatch_input(mouse_input(this, event, true, false));
+    });
+}
+
+extern "C" fn right_mouse_up(this: &Object, _cmd: Sel, event: *mut Object) {
+    native_callback(this, "GPUI AppKit right mouse up", |owner| {
+        let _ = owner.dispatch_input(mouse_input(this, event, false, false));
+    });
+}
+
+extern "C" fn right_mouse_dragged(this: &Object, _cmd: Sel, event: *mut Object) {
+    native_callback(this, "GPUI AppKit right mouse drag", |owner| {
         let _ = owner.dispatch_input(mouse_input(this, event, false, true));
     });
 }
@@ -1019,10 +1050,22 @@ fn event_modifiers(event: *mut Object) -> Modifiers {
     }
 }
 
+const NS_RIGHT_MOUSE_DOWN: u64 = 3;
+const NS_RIGHT_MOUSE_UP: u64 = 4;
+const NS_RIGHT_MOUSE_DRAGGED: u64 = 7;
+
+fn mouse_button_for_event_type(event_type: u64) -> MouseButton {
+    match event_type {
+        NS_RIGHT_MOUSE_DOWN | NS_RIGHT_MOUSE_UP | NS_RIGHT_MOUSE_DRAGGED => MouseButton::Right,
+        _ => MouseButton::Left,
+    }
+}
+
 fn mouse_input(view: &Object, event: *mut Object, down: bool, dragged: bool) -> PlatformInput {
     let position = event_position(view, event);
     let modifiers = event_modifiers(event);
-    let button = MouseButton::Left;
+    let event_type: u64 = unsafe { msg_send![event, type] };
+    let button = mouse_button_for_event_type(event_type);
     let click_count: usize = unsafe { msg_send![event, clickCount] };
     if dragged {
         PlatformInput::MouseMove(MouseMoveEvent {
@@ -1104,7 +1147,11 @@ fn range_option(range: NSRange) -> Option<std::ops::Range<usize>> {
 
 #[cfg(test)]
 mod tests {
-    use super::key_name;
+    use super::{
+        NS_RIGHT_MOUSE_DOWN, NS_RIGHT_MOUSE_DRAGGED, NS_RIGHT_MOUSE_UP, key_name,
+        mouse_button_for_event_type,
+    };
+    use gpui::MouseButton;
 
     #[test]
     fn key_name_is_stable_for_key_down_and_key_up_characters() {
@@ -1118,5 +1165,24 @@ mod tests {
             assert_eq!(key_name(characters), expected);
         }
         assert_eq!(key_name(None), "unknown");
+    }
+
+    #[test]
+    fn appkit_mouse_event_types_preserve_right_button_dragging() {
+        assert_eq!(mouse_button_for_event_type(1), MouseButton::Left);
+        assert_eq!(mouse_button_for_event_type(2), MouseButton::Left);
+        assert_eq!(mouse_button_for_event_type(6), MouseButton::Left);
+        assert_eq!(
+            mouse_button_for_event_type(NS_RIGHT_MOUSE_DOWN),
+            MouseButton::Right
+        );
+        assert_eq!(
+            mouse_button_for_event_type(NS_RIGHT_MOUSE_UP),
+            MouseButton::Right
+        );
+        assert_eq!(
+            mouse_button_for_event_type(NS_RIGHT_MOUSE_DRAGGED),
+            MouseButton::Right
+        );
     }
 }
