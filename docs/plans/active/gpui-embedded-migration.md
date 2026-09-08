@@ -71,7 +71,12 @@ orange output meter, target marker, Normalize label, and synchronized pulse.
 
 ## Status
 
-Architecture and baseline captured; implementation in progress. The standalone
-native surface smoke example passed real NSWindow/NSView creation, rendering,
-resize and teardown with an owned CAMetalLayer. Full GPUI input and plugin host
-acceptance remain pending. No release is authorized by this plan.
+Implementation is in progress. The native surface smoke passed real
+NSWindow/NSView creation, rendering, resize and teardown with an owned
+CAMetalLayer. GainSnap's four live captures preserve the compact visual design;
+its native input fixture passes selection, typing, commit, arrows and
+Shift-arrows. Mac lint, unit tests and VST3 compilation pass locally.
+
+Acceptance is still pending for VST3 input after close/reopen, native clipboard
+delivery, Windows input/DPI/timer behavior, hosted CI runtime checks and
+independently linked plugin load orders. No release is authorized by this plan.

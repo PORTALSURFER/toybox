@@ -217,7 +217,7 @@ jobs:
         if: failure()
         run: |
           if [[ -x target/debug/examples/gpui-embedded-smoke ]]; then
-            lldb --batch -o run -o 'thread backtrace all' -- target/debug/examples/gpui-embedded-smoke > gpui-native-backtrace.txt 2>&1 || true
+            lldb --batch -o run -k 'thread backtrace all' -- target/debug/examples/gpui-embedded-smoke > gpui-native-backtrace.txt 2>&1 || true
             cat gpui-native-backtrace.txt
           fi
 

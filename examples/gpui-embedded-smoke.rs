@@ -14,8 +14,8 @@ use std::time::{Duration, Instant};
 
 #[cfg(all(target_os = "macos", feature = "gpui-gui"))]
 use gpui::{
-    App, AppContext, InteractiveElement, IntoElement, ParentElement, Render, Styled, Window, div,
-    rgb,
+    App, AppContext, InteractiveElement, IntoElement, ParentElement, Render,
+    StatefulInteractiveElement, Styled, Window, div, rgb,
 };
 #[cfg(all(target_os = "macos", feature = "gpui-gui"))]
 use objc::runtime::{BOOL, NO, Object, YES};
@@ -27,6 +27,12 @@ use toybox::gpui_gui::GpuiHostedGui;
 #[cfg(all(target_os = "macos", feature = "gpui-gui"))]
 #[link(name = "AppKit", kind = "framework")]
 unsafe extern "C" {}
+
+#[cfg(all(target_os = "macos", feature = "gpui-gui"))]
+#[link(name = "Foundation", kind = "framework")]
+unsafe extern "C" {
+    static NSDefaultRunLoopMode: *mut Object;
+}
 
 #[cfg(all(target_os = "macos", feature = "gpui-gui"))]
 #[repr(C)]
@@ -85,6 +91,7 @@ impl Render for SmokeView {
         div()
             .id("gpui-smoke")
             .size_full()
+            .focusable()
             .bg(rgb(0x224466))
             .on_key_down(move |_, _, _| key_count.set(key_count.get().saturating_add(1)))
             .child("Toybox GPUI")
@@ -102,7 +109,7 @@ fn pump(app: *mut Object, seconds: f64, gui: &GpuiHostedGui) {
                 app,
                 nextEventMatchingMask: usize::MAX
                 untilDate: date
-                inMode: std::ptr::null_mut::<Object>()
+                inMode: NSDefaultRunLoopMode
                 dequeue: YES
             ];
             if !event.is_null() {
@@ -120,6 +127,7 @@ fn main() {
     unsafe {
         let app: *mut Object = msg_send![class!(NSApplication), sharedApplication];
         assert!(!app.is_null(), "NSApplication should be available");
+        eprintln!("gpui smoke: app ready");
         let parent: *mut Object = msg_send![class!(NSView), new];
         let window: *mut Object = msg_send![class!(NSWindow), new];
         assert!(
@@ -136,6 +144,7 @@ fn main() {
         let _: () = msg_send![window, setFrame: frame display: YES];
         let _: () = msg_send![window, setContentView: parent];
         let _: () = msg_send![window, makeKeyAndOrderFront: std::ptr::null_mut::<Object>()];
+        eprintln!("gpui smoke: window ready");
 
         let keys = Rc::new(Cell::new(0));
         let factory_keys = keys.clone();
@@ -154,10 +163,12 @@ fn main() {
         handle.ns_view = parent.cast();
         gui.set_parent_raw(toybox::raw_window_handle::RawWindowHandle::AppKit(handle));
         assert!(gui.open(), "GPUI child should open in an AppKit parent");
+        eprintln!("gpui smoke: child opened");
         // Start with no editor focus. The click below must promote the child
         // through AppKit's real responder dispatch before the key event.
         let _: BOOL = msg_send![window, makeFirstResponder: std::ptr::null_mut::<Object>()];
         pump(app, 0.25, &gui);
+        eprintln!("gpui smoke: initial pump complete");
 
         let subviews: *mut Object = msg_send![parent, subviews];
         let subview_count: usize = msg_send![subviews, count];
@@ -190,6 +201,7 @@ fn main() {
             pressure: 1.0_f64
         ];
         let _: () = msg_send![app, sendEvent: mouse_event];
+        eprintln!("gpui smoke: click dispatched");
         let first_responder: *mut Object = msg_send![window, firstResponder];
         assert_eq!(
             first_responder, child,
@@ -210,11 +222,13 @@ fn main() {
         ];
         let _: () = msg_send![app, sendEvent: key_event];
         pump(app, 0.05, &gui);
+        eprintln!("gpui smoke: key dispatched count={}", keys.get());
         assert!(keys.get() >= 1, "AppKit key event should reach GPUI input");
 
         let captured = gui
             .capture_rgba()
             .expect("GPUI scene capture should complete");
+        eprintln!("gpui smoke: capture complete {}x{}", captured.0, captured.1);
         assert!(captured.0 > 0 && captured.1 > 0);
         assert_eq!(
             captured.2.len(),
@@ -229,6 +243,7 @@ fn main() {
             pump(app, seconds.min(600.0), &gui);
         }
         gui.close();
+        eprintln!("gpui smoke: child closed");
         let _: () = msg_send![window, orderOut: std::ptr::null_mut::<Object>()];
         let _: () = msg_send![parent, release];
         let _: () = msg_send![window, release];

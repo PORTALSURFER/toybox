@@ -568,13 +568,23 @@ impl EmbeddedPlatform {
                 native.set_visible(visible);
             }
         }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        let _ = visible;
     }
 
     pub(crate) fn focus(&self, focused: bool) -> bool {
         if let Some(owner) = self.window_owner.borrow().as_ref().and_then(Weak::upgrade) {
             #[cfg(any(target_os = "macos", target_os = "windows"))]
-            if let Some(native) = owner.native.borrow_mut().as_mut() {
-                return native.set_focus(focused);
+            if owner.native.borrow().is_some() {
+                let result = owner
+                    .native
+                    .borrow_mut()
+                    .as_mut()
+                    .is_some_and(|native| native.set_focus(focused));
+                if result {
+                    owner.focus_changed();
+                }
+                return result;
             }
         }
         false
@@ -719,6 +729,7 @@ impl Platform for EmbeddedPlatform {
             options,
             self.display.clone(),
             self.active_window_shared.clone(),
+            self.dispatcher.clone(),
         ));
         let state = window.state.clone();
         #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -799,9 +810,27 @@ impl Platform for EmbeddedPlatform {
         false
     }
     fn read_from_clipboard(&self) -> Option<ClipboardItem> {
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        {
+            return native::read_clipboard();
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            None
+        }
+    }
+    fn write_to_clipboard(&self, item: ClipboardItem) {
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        native::write_clipboard(item);
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        let _ = item;
+    }
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    fn read_from_primary(&self) -> Option<ClipboardItem> {
         None
     }
-    fn write_to_clipboard(&self, _item: ClipboardItem) {}
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    fn write_to_primary(&self, _item: ClipboardItem) {}
     #[cfg(target_os = "macos")]
     fn read_from_find_pasteboard(&self) -> Option<ClipboardItem> {
         None
@@ -869,22 +898,166 @@ enum KeySource {
     Vst3Callback,
 }
 
-struct RecentKey {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum NativeEventIdentity {
+    Mac {
+        timestamp_bits: u64,
+        key_code: u16,
+        event_type: u16,
+        window: u64,
+    },
+    #[cfg(target_os = "windows")]
+    Windows {
+        message_time: u32,
+        window: u64,
+        virtual_key: u32,
+        scan_code: u16,
+        kind: u8,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct NativeEventToken {
+    generation: u64,
+    identity: NativeEventIdentity,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct SemanticKey {
     key: String,
     modifiers: Modifiers,
     down: bool,
+}
+
+struct LedgerKey {
+    stroke: SemanticKey,
     source: KeySource,
-    at: Instant,
     result: DispatchEventResult,
 }
 
-struct RecentText {
+struct LedgerText {
     text: String,
     source: KeySource,
-    at: Instant,
+    handled: bool,
+}
+
+struct EventLedgerEntry {
+    token: NativeEventToken,
+    key: Option<LedgerKey>,
+    text: Option<LedgerText>,
+}
+
+#[derive(Default)]
+struct EventLedger {
+    entries: VecDeque<EventLedgerEntry>,
+}
+
+impl EventLedger {
+    const MAX_ENTRIES: usize = 128;
+
+    fn clear(&mut self) {
+        self.entries.clear();
+    }
+
+    fn key_duplicate(
+        &self,
+        token: NativeEventToken,
+        stroke: &SemanticKey,
+        source: KeySource,
+    ) -> Option<DispatchEventResult> {
+        self.entries.iter().find_map(|entry| {
+            if entry.token != token {
+                return None;
+            }
+            let key = entry.key.as_ref()?;
+            (key.source != source && key.stroke == *stroke).then(|| key.result.clone())
+        })
+    }
+
+    fn record_key(
+        &mut self,
+        token: NativeEventToken,
+        stroke: SemanticKey,
+        source: KeySource,
+        result: DispatchEventResult,
+    ) {
+        if self.entries.iter().any(|entry| {
+            entry.token == token && entry.key.as_ref().is_some_and(|key| key.stroke == stroke)
+        }) {
+            return;
+        }
+        self.push(EventLedgerEntry {
+            token,
+            key: Some(LedgerKey {
+                stroke,
+                source,
+                result,
+            }),
+            text: None,
+        });
+    }
+
+    fn text_duplicate(
+        &self,
+        token: NativeEventToken,
+        text: &str,
+        source: KeySource,
+    ) -> Option<bool> {
+        self.entries.iter().find_map(|entry| {
+            if entry.token != token {
+                return None;
+            }
+            let text_entry = entry.text.as_ref()?;
+            (text_entry.source != source && text_entry.text == text).then_some(text_entry.handled)
+        })
+    }
+
+    fn record_text(
+        &mut self,
+        token: NativeEventToken,
+        text: String,
+        source: KeySource,
+        handled: bool,
+    ) {
+        if self.entries.iter().any(|entry| {
+            entry.token == token
+                && entry
+                    .text
+                    .as_ref()
+                    .is_some_and(|text_entry| text_entry.text == text)
+        }) {
+            return;
+        }
+        self.push(EventLedgerEntry {
+            token,
+            key: None,
+            text: Some(LedgerText {
+                text,
+                source,
+                handled,
+            }),
+        });
+    }
+
+    fn push(&mut self, entry: EventLedgerEntry) {
+        if self.entries.len() >= Self::MAX_ENTRIES {
+            self.entries.pop_front();
+        }
+        self.entries.push_back(entry);
+    }
+}
+
+#[cfg(target_os = "windows")]
+#[derive(Default)]
+struct WindowsTextState {
+    pending_high_surrogate: Option<(u16, Option<NativeEventToken>)>,
+    suppressed_commit_units: VecDeque<u16>,
+    composition_active: bool,
 }
 
 struct WindowState {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    dispatcher: Arc<EmbeddedDispatcher>,
     bounds: Cell<Bounds<Pixels>>,
     active_window: Rc<Cell<Option<AnyWindowHandle>>>,
     #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -910,8 +1083,12 @@ struct WindowState {
     pending_frame: Cell<bool>,
     pending_resize: Cell<Option<Size<Pixels>>>,
     suppress_resize_callback: Cell<bool>,
-    recent_key: RefCell<Option<RecentKey>>,
-    recent_text: RefCell<Option<RecentText>>,
+    focus_generation: Cell<u64>,
+    event_ledger: RefCell<EventLedger>,
+    active_native_token: Cell<Option<NativeEventToken>>,
+    last_native_key_token: Cell<Option<NativeEventToken>>,
+    #[cfg(target_os = "windows")]
+    windows_text: RefCell<WindowsTextState>,
 }
 
 impl Drop for WindowState {
@@ -948,9 +1125,12 @@ impl EmbeddedWindow {
         options: WindowParams,
         display: Rc<dyn PlatformDisplay>,
         active_window: Rc<Cell<Option<AnyWindowHandle>>>,
+        _dispatcher: Arc<EmbeddedDispatcher>,
     ) -> Self {
         Self {
             state: Rc::new(WindowState {
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                dispatcher: _dispatcher,
                 bounds: Cell::new(options.bounds),
                 active_window,
                 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -979,8 +1159,12 @@ impl EmbeddedWindow {
                 pending_frame: Cell::new(false),
                 pending_resize: Cell::new(None),
                 suppress_resize_callback: Cell::new(false),
-                recent_key: RefCell::new(None),
-                recent_text: RefCell::new(None),
+                focus_generation: Cell::new(0),
+                event_ledger: RefCell::new(EventLedger::default()),
+                active_native_token: Cell::new(None),
+                last_native_key_token: Cell::new(None),
+                #[cfg(target_os = "windows")]
+                windows_text: RefCell::new(WindowsTextState::default()),
             }),
             handle,
             display,
@@ -989,6 +1173,15 @@ impl EmbeddedWindow {
 }
 
 impl WindowState {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    pub(crate) fn native_tick(&self) {
+        if self.closed.get() {
+            return;
+        }
+        self.dispatcher.pump();
+        self.request_frame();
+    }
+
     pub(crate) fn resize(&self, size: Size<Pixels>) {
         self.bounds.set(Bounds::new(self.bounds.get().origin, size));
         #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -1043,8 +1236,46 @@ impl WindowState {
     }
 
     #[cfg(any(target_os = "macos", target_os = "windows"))]
-    pub(crate) fn dispatch_native_key(&self, event: PlatformInput) -> DispatchEventResult {
-        self.dispatch_key_from_source(event, KeySource::Native)
+    pub(crate) fn dispatch_native_key(
+        &self,
+        event: PlatformInput,
+        token: Option<NativeEventToken>,
+    ) -> DispatchEventResult {
+        let previous = self.active_native_token.replace(token);
+        match &event {
+            PlatformInput::KeyDown(_) => self.last_native_key_token.set(token),
+            PlatformInput::KeyUp(_) => {
+                if self.last_native_key_token.get() == token {
+                    self.last_native_key_token.set(None);
+                }
+            }
+            _ => {}
+        }
+        let result = self.dispatch_key_from_source(event, KeySource::Native, token);
+        self.active_native_token.set(previous);
+        result
+    }
+
+    pub(crate) fn native_event_token(&self, identity: NativeEventIdentity) -> NativeEventToken {
+        NativeEventToken {
+            generation: self.focus_generation.get(),
+            identity,
+        }
+    }
+
+    fn current_native_event_token(&self) -> Option<NativeEventToken> {
+        if let Some(token) = self.active_native_token.get() {
+            return Some(token);
+        }
+        #[cfg(target_os = "macos")]
+        {
+            return native::current_event_identity()
+                .map(|identity| self.native_event_token(identity));
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            None
+        }
     }
 
     pub(crate) fn dispatch_vst3_key(
@@ -1075,7 +1306,8 @@ impl WindowState {
         } else {
             PlatformInput::KeyUp(KeyUpEvent { keystroke })
         };
-        let result = self.dispatch_key_from_source(event, KeySource::Vst3Callback);
+        let token = self.current_native_event_token();
+        let result = self.dispatch_key_from_source(event, KeySource::Vst3Callback, token);
         if !down {
             return !result.propagate || result.default_prevented;
         }
@@ -1087,7 +1319,7 @@ impl WindowState {
             && !modifiers.platform
             && let Some(text) = vst3_text(key, key_code)
         {
-            return self.dispatch_callback_text(&text);
+            return self.dispatch_callback_text(&text, token);
         }
         false
     }
@@ -1096,6 +1328,7 @@ impl WindowState {
         &self,
         event: PlatformInput,
         source: KeySource,
+        token: Option<NativeEventToken>,
     ) -> DispatchEventResult {
         let (key, modifiers, down) = match &event {
             PlatformInput::KeyDown(event) => {
@@ -1108,24 +1341,28 @@ impl WindowState {
             ),
             _ => return self.dispatch_input(event),
         };
-        if let Some(recent) = self.recent_key.borrow_mut().take()
-            && recent.source != source
-            && recent.key == key
-            && recent.modifiers == modifiers
-            && recent.down == down
-            && recent.at.elapsed() <= Duration::from_millis(16)
-        {
-            return recent.result;
-        }
-        let result = self.dispatch_input(event);
-        *self.recent_key.borrow_mut() = Some(RecentKey {
+        let stroke = SemanticKey {
             key,
             modifiers,
             down,
-            source,
-            at: Instant::now(),
-            result: result.clone(),
-        });
+        };
+        if let Some(token) = token
+            && token.generation == self.focus_generation.get()
+            && let Some(result) = self
+                .event_ledger
+                .borrow()
+                .key_duplicate(token, &stroke, source)
+        {
+            return result;
+        }
+        let result = self.dispatch_input(event);
+        if let Some(token) = token
+            && token.generation == self.focus_generation.get()
+        {
+            self.event_ledger
+                .borrow_mut()
+                .record_key(token, stroke, source, result.clone());
+        }
         result
     }
 
@@ -1148,21 +1385,28 @@ impl WindowState {
         result
     }
 
-    pub(crate) fn dispatch_text(&self, text: &str) -> bool {
-        self.dispatch_text_from_source(text, KeySource::Native)
+    pub(crate) fn dispatch_native_text(&self, text: &str, token: Option<NativeEventToken>) -> bool {
+        self.dispatch_text_from_source(text, KeySource::Native, token)
     }
 
-    fn dispatch_callback_text(&self, text: &str) -> bool {
-        self.dispatch_text_from_source(text, KeySource::Vst3Callback)
+    fn dispatch_callback_text(&self, text: &str, token: Option<NativeEventToken>) -> bool {
+        self.dispatch_text_from_source(text, KeySource::Vst3Callback, token)
     }
 
-    fn dispatch_text_from_source(&self, text: &str, source: KeySource) -> bool {
-        if let Some(recent) = self.recent_text.borrow_mut().take()
-            && recent.source != source
-            && recent.text == text
-            && recent.at.elapsed() <= Duration::from_millis(16)
+    fn dispatch_text_from_source(
+        &self,
+        text: &str,
+        source: KeySource,
+        token: Option<NativeEventToken>,
+    ) -> bool {
+        if let Some(token) = token
+            && token.generation == self.focus_generation.get()
+            && let Some(handled) = self
+                .event_ledger
+                .borrow()
+                .text_duplicate(token, text, source)
         {
-            return true;
+            return handled;
         }
         let handled = self
             .with_input_handler(|input_handler| {
@@ -1171,12 +1415,12 @@ impl WindowState {
                 });
             })
             .is_some();
-        if handled {
-            *self.recent_text.borrow_mut() = Some(RecentText {
-                text: text.to_string(),
-                source,
-                at: Instant::now(),
-            });
+        if let Some(token) = token
+            && token.generation == self.focus_generation.get()
+        {
+            self.event_ledger
+                .borrow_mut()
+                .record_text(token, text.to_string(), source, handled);
         }
         handled
     }
@@ -1297,8 +1541,26 @@ impl WindowState {
             return;
         }
         #[cfg(any(target_os = "macos", target_os = "windows"))]
-        if let Some(native) = self.native.borrow_mut().as_mut() {
-            let _ = native.set_focus(true);
+        let focused = self
+            .native
+            .borrow_mut()
+            .as_mut()
+            .is_some_and(|native| native.set_focus(true));
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        let focused = false;
+        if focused {
+            self.invalidate_event_generation();
+            self.dispatch_active_status(true);
+        }
+    }
+
+    fn dispatch_active_status(&self, active: bool) {
+        let Some(mut callback) = self.active_callback.borrow_mut().take() else {
+            return;
+        };
+        let _ = crate::gui_panic::contain("GPUI active status callback", || callback(active));
+        if !self.closed.get() && self.active_callback.borrow().is_none() {
+            self.active_callback.borrow_mut().replace(callback);
         }
     }
 
@@ -1310,10 +1572,110 @@ impl WindowState {
 
     pub(crate) fn quarantine_native(&self) {
         self.closed.set(true);
+        self.invalidate_event_generation();
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         if let Some(native) = self.native.borrow_mut().as_mut() {
             native.quarantine();
         }
+    }
+
+    pub(crate) fn focus_changed(&self) {
+        if !self.closed.get() {
+            self.invalidate_event_generation();
+        }
+    }
+
+    fn invalidate_event_generation(&self) {
+        self.focus_generation
+            .set(self.focus_generation.get().wrapping_add(1));
+        self.event_ledger.borrow_mut().clear();
+        self.active_native_token.set(None);
+        self.last_native_key_token.set(None);
+        #[cfg(target_os = "windows")]
+        {
+            *self.windows_text.borrow_mut() = WindowsTextState::default();
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    pub(crate) fn windows_text_token(
+        &self,
+        window: usize,
+        message_time: u32,
+    ) -> Option<NativeEventToken> {
+        let token = self.last_native_key_token.get()?;
+        if token.generation != self.focus_generation.get() {
+            return None;
+        }
+        match token.identity {
+            NativeEventIdentity::Windows {
+                message_time: token_time,
+                window: token_window,
+                ..
+            } if token_time == message_time && token_window == window => Some(token),
+            _ => None,
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    pub(crate) fn windows_char(
+        &self,
+        unit: u16,
+        modifiers: Modifiers,
+        token: Option<NativeEventToken>,
+    ) {
+        if windows_char_is_shortcut(unit, modifiers) {
+            return;
+        }
+
+        let mut output = Vec::new();
+        {
+            let mut state = self.windows_text.borrow_mut();
+            if state
+                .suppressed_commit_units
+                .front()
+                .is_some_and(|suppressed| *suppressed == unit)
+            {
+                state.suppressed_commit_units.pop_front();
+                return;
+            }
+            if !state.suppressed_commit_units.is_empty() {
+                state.suppressed_commit_units.clear();
+            }
+
+            output = decode_windows_utf16_unit(&mut state, unit, token);
+        }
+        for (text, token) in output {
+            self.dispatch_native_text(&text, token);
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    pub(crate) fn windows_ime_composition(
+        &self,
+        text: &str,
+        result: bool,
+        token: Option<NativeEventToken>,
+    ) {
+        if result {
+            {
+                let mut state = self.windows_text.borrow_mut();
+                state.pending_high_surrogate = None;
+                state.suppressed_commit_units = text.encode_utf16().collect();
+                state.composition_active = false;
+            }
+            self.dispatch_native_text(text, token);
+            self.unmark_text();
+        } else {
+            self.windows_text.borrow_mut().composition_active = true;
+            self.dispatch_marked_text(None, text, None);
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    pub(crate) fn windows_ime_end(&self) {
+        self.windows_text.borrow_mut().composition_active = false;
+        self.unmark_text();
     }
 
     #[cfg(target_os = "windows")]
@@ -1402,6 +1764,52 @@ impl HasDisplayHandle for EmbeddedWindow {
         }
         Err(HandleError::NotSupported)
     }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_char_is_shortcut(unit: u16, modifiers: Modifiers) -> bool {
+    // WM_CHAR emits C0 controls for Ctrl-A/C/V and for navigation keys. Those
+    // strokes have already gone through WM_KEYDOWN and must not become text.
+    // A printable AltGr character is delivered with Ctrl+Alt, so retain that
+    // path even though Windows reports the control modifier as pressed.
+    if unit < 0x20 || unit == 0x7f {
+        return true;
+    }
+    modifiers.platform || (modifiers.control && !modifiers.alt)
+}
+
+#[cfg(target_os = "windows")]
+fn decode_windows_utf16_unit(
+    state: &mut WindowsTextState,
+    unit: u16,
+    token: Option<NativeEventToken>,
+) -> Vec<(String, Option<NativeEventToken>)> {
+    let mut output = Vec::new();
+    if let Some((high, pending_token)) = state.pending_high_surrogate.take() {
+        if (0xDC00..=0xDFFF).contains(&unit) {
+            let code_point =
+                0x1_0000 + (((u32::from(high) - 0xD800) << 10) | (u32::from(unit) - 0xDC00));
+            if let Some(character) = char::from_u32(code_point) {
+                output.push((character.to_string(), pending_token.or(token)));
+            }
+        } else {
+            output.push((String::from_utf16_lossy(&[high]), pending_token));
+            if (0xD800..=0xDBFF).contains(&unit) {
+                state.pending_high_surrogate = Some((unit, token));
+            } else if let Some(character) = char::from_u32(u32::from(unit)) {
+                output.push((character.to_string(), token));
+            } else {
+                output.push((String::from_utf16_lossy(&[unit]), token));
+            }
+        }
+    } else if (0xD800..=0xDBFF).contains(&unit) {
+        state.pending_high_surrogate = Some((unit, token));
+    } else if let Some(character) = char::from_u32(u32::from(unit)) {
+        output.push((character.to_string(), token));
+    } else {
+        output.push((String::from_utf16_lossy(&[unit]), token));
+    }
+    output
 }
 
 impl PlatformWindow for EmbeddedWindow {
@@ -1584,12 +1992,12 @@ impl PlatformWindow for EmbeddedWindow {
     }
 
     #[cfg(target_os = "windows")]
-    fn get_raw_handle(&self) -> windows::Win32::Foundation::HWND {
+    fn get_raw_handle(&self) -> windows_061::Win32::Foundation::HWND {
         self.state
             .native
             .borrow()
             .as_ref()
-            .map(NativeChild::raw_handle)
+            .map(|native| windows_061::Win32::Foundation::HWND(native.raw_handle()))
             .unwrap_or_default()
     }
 
@@ -1773,6 +2181,139 @@ mod tests {
     }
 
     #[test]
+    fn event_ledger_deduplicates_only_verified_cross_source_events() {
+        let token_one = NativeEventToken {
+            generation: 7,
+            identity: NativeEventIdentity::Mac {
+                timestamp_bits: 1,
+                key_code: 12,
+                event_type: 10,
+                window: 3,
+            },
+        };
+        let token_two = NativeEventToken {
+            generation: 7,
+            identity: NativeEventIdentity::Mac {
+                timestamp_bits: 2,
+                key_code: 12,
+                event_type: 10,
+                window: 3,
+            },
+        };
+        let stroke = SemanticKey {
+            key: "x".to_string(),
+            modifiers: Modifiers::default(),
+            down: true,
+        };
+        let result = DispatchEventResult {
+            propagate: false,
+            default_prevented: true,
+        };
+        let mut ledger = EventLedger::default();
+        ledger.record_key(token_one, stroke.clone(), KeySource::Native, result.clone());
+        assert_eq!(
+            ledger.key_duplicate(token_one, &stroke, KeySource::Vst3Callback),
+            Some(result.clone())
+        );
+        assert_eq!(
+            ledger.key_duplicate(token_one, &stroke, KeySource::Native),
+            None
+        );
+        assert_eq!(
+            ledger.key_duplicate(token_two, &stroke, KeySource::Vst3Callback),
+            None
+        );
+
+        ledger.record_text(token_one, "🙂".to_string(), KeySource::Native, true);
+        assert_eq!(
+            ledger.text_duplicate(token_one, "🙂", KeySource::Vst3Callback),
+            Some(true)
+        );
+        assert_eq!(
+            ledger.text_duplicate(token_two, "🙂", KeySource::Vst3Callback),
+            None
+        );
+
+        // Entries are retained independently of elapsed wall-clock time and
+        // survive interleaved native events, while a focus generation reset
+        // removes every old token.
+        ledger.record_key(token_two, stroke.clone(), KeySource::Native, result.clone());
+        assert!(
+            ledger
+                .key_duplicate(token_two, &stroke, KeySource::Vst3Callback)
+                .is_some()
+        );
+        ledger.clear();
+        assert_eq!(
+            ledger.key_duplicate(token_one, &stroke, KeySource::Vst3Callback),
+            None
+        );
+    }
+
+    #[test]
+    fn uncorrelatable_callback_events_are_delivered_independently() {
+        let state = test_window_state();
+        let count = Rc::new(Cell::new(0_u32));
+        let count_for_callback = count.clone();
+        state.input_callback.borrow_mut().value = Some(Box::new(move |_event| {
+            count_for_callback.set(count_for_callback.get() + 1);
+            DispatchEventResult::default()
+        }));
+        let event = test_key_event();
+        let _ = state.dispatch_key_from_source(event.clone(), KeySource::Native, None);
+        let _ = state.dispatch_key_from_source(event, KeySource::Vst3Callback, None);
+        assert_eq!(count.get(), 2);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_utf16_surrogates_are_committed_as_one_scalar() {
+        let mut state = WindowsTextState::default();
+        let token = NativeEventToken {
+            generation: 1,
+            identity: NativeEventIdentity::Windows {
+                message_time: 12,
+                window: 4,
+                virtual_key: 0,
+                scan_code: 0,
+                kind: 1,
+            },
+        };
+        assert!(decode_windows_utf16_unit(&mut state, 0xD83D, Some(token)).is_empty());
+        assert_eq!(
+            decode_windows_utf16_unit(&mut state, 0xDE42, Some(token)),
+            vec![("🙂".to_string(), Some(token))]
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_controls_are_filtered_but_altgr_printable_text_survives() {
+        assert!(windows_char_is_shortcut(
+            0x03,
+            Modifiers {
+                control: true,
+                ..Modifiers::default()
+            }
+        ));
+        assert!(windows_char_is_shortcut(
+            'c' as u16,
+            Modifiers {
+                control: true,
+                ..Modifiers::default()
+            }
+        ));
+        assert!(!windows_char_is_shortcut(
+            '€' as u16,
+            Modifiers {
+                control: true,
+                alt: true,
+                ..Modifiers::default()
+            }
+        ));
+    }
+
+    #[test]
     fn realtime_worker_is_joined_when_dispatcher_stops() {
         let dispatcher = EmbeddedDispatcher::new();
         let (sender, receiver) = mpsc::channel();
@@ -1941,6 +2482,8 @@ mod tests {
 
     fn test_window_state() -> Rc<WindowState> {
         Rc::new(WindowState {
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            dispatcher: EmbeddedDispatcher::new(),
             bounds: Cell::new(Bounds::new(
                 point(px(0.0), px(0.0)),
                 size(px(10.0), px(10.0)),
@@ -1972,8 +2515,12 @@ mod tests {
             pending_frame: Cell::new(false),
             pending_resize: Cell::new(None),
             suppress_resize_callback: Cell::new(false),
-            recent_key: RefCell::new(None),
-            recent_text: RefCell::new(None),
+            focus_generation: Cell::new(0),
+            event_ledger: RefCell::new(EventLedger::default()),
+            active_native_token: Cell::new(None),
+            last_native_key_token: Cell::new(None),
+            #[cfg(target_os = "windows")]
+            windows_text: RefCell::new(WindowsTextState::default()),
         })
     }
 }

@@ -29,12 +29,21 @@ windows = { version = "0.62", default-features = false, optional = true, feature
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
     "Win32_System_LibraryLoader",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
     "Win32_UI_Controls",
     "Win32_UI_HiDpi",
     "Win32_UI_Input",
+    "Win32_UI_Input_Ime",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
+] }
+# GPUI's PlatformWindow ABI currently exposes its own windows 0.61 HWND. Keep
+# this narrow compatibility dependency separate from Toybox's 0.62 Win32 API
+# usage and convert the opaque pointer at the trait boundary.
+windows_061 = { package = "windows", version = "0.61", default-features = false, optional = true, features = [
+    "Win32_Foundation",
 ] }
 
 [features]
@@ -55,6 +64,7 @@ gpui-gui = [
     "dep:uuid",
     "dep:objc",
     "dep:windows",
+    "dep:windows_061",
 ]
 gpui-vst3 = ["gpui-gui", "vst3"]
 radiant-vst3 = ["radiant-gui", "vst3"]

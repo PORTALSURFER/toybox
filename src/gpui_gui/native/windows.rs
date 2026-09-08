@@ -13,35 +13,54 @@ use std::rc::{Rc, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use gpui::{
-    DevicePixels, GpuSpecs, KeyDownEvent, KeyUpEvent, Modifiers, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, Pixels, PlatformAtlas, PlatformInput, Point, Scene, ScrollDelta,
-    ScrollWheelEvent, Size, TouchPhase, px,
+    ClipboardItem, DevicePixels, GpuSpecs, KeyDownEvent, KeyUpEvent, Modifiers, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, PlatformAtlas, PlatformInput, Point,
+    Scene, ScrollDelta, ScrollWheelEvent, Size, TouchPhase, px,
 };
 use gpui_wgpu::{WgpuRenderer, WgpuSurfaceConfig};
 use raw_window_handle_06::{
     DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
     RawWindowHandle, Win32WindowHandle, WindowHandle, WindowsDisplayHandle,
 };
-use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{
+    GlobalFree, HANDLE, HGLOBAL, HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM,
+};
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, COLOR_WINDOW, EndPaint, GetSysColorBrush, InvalidateRect, PAINTSTRUCT,
+    ScreenToClient,
+};
+use windows::Win32::System::DataExchange::{
+    CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard, SetClipboardData,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::System::Memory::{
+    GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock,
+};
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
+use windows::Win32::UI::Input::Ime::{
+    GCS_COMPSTR, GCS_RESULTSTR, IME_COMPOSITION_STRING, ImmGetCompositionStringW, ImmGetContext,
+    ImmReleaseContext,
+};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetKeyState, SetFocus, VIRTUAL_KEY, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
 };
+use windows::Win32::UI::WindowsAndMessaging::KillTimer;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CS_HREDRAW, CS_OWNDC, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DestroyWindow,
-    GWLP_USERDATA, GetWindowLongPtrW, IDC_ARROW, IsWindowVisible, LoadCursorW, RegisterClassExW,
-    SW_HIDE, SW_SHOW, SetWindowLongPtrW, ShowWindow, UnregisterClassW, WM_CHAR, WM_DPICHANGED,
-    WM_ERASEBKGND, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL,
-    WM_NCDESTROY, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WNDCLASSEXW, WS_CHILD,
-    WS_TABSTOP, WS_VISIBLE,
+    CS_HREDRAW, CS_OWNDC, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DestroyWindow, GA_ROOT,
+    GWLP_USERDATA, GetAncestor, GetMessageTime, GetWindowLongPtrW, IDC_ARROW, IsIconic,
+    IsWindowVisible, LoadCursorW, RegisterClassExW, SW_HIDE, SW_SHOW, SetTimer, SetWindowLongPtrW,
+    ShowWindow, UnregisterClassW, WM_CHAR, WM_DPICHANGED, WM_ERASEBKGND, WM_IME_COMPOSITION,
+    WM_IME_ENDCOMPOSITION, WM_IME_STARTCOMPOSITION, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN,
+    WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_RBUTTONDOWN,
+    WM_RBUTTONUP, WM_SIZE, WM_TIMER, WNDCLASSEXW, WS_CHILD, WS_TABSTOP, WS_VISIBLE,
 };
 use windows::core::PCWSTR;
 
 use super::super::{VisibilityCallback, WindowState};
+
+const UI_TIMER_ID: usize = 1;
+const UI_TIMER_INTERVAL_MS: u32 = 16;
+const CF_UNICODETEXT_FORMAT: u32 = 13;
 
 pub(crate) fn parent_scale_factor(parent: raw_window_handle::RawWindowHandle) -> f32 {
     let hwnd = match parent {
@@ -88,6 +107,7 @@ pub(crate) struct NativeChild {
     class_name: Vec<u16>,
     instance: HINSTANCE,
     scale_factor: f32,
+    timer_id: usize,
     capture_requested: bool,
     capture_result: Option<Vec<u8>>,
     failed: bool,
@@ -173,6 +193,14 @@ impl NativeChild {
                 (&mut *owner_token as *mut Weak<WindowState>) as isize,
             );
         }
+        let timer_id = unsafe { SetTimer(Some(hwnd), UI_TIMER_ID, UI_TIMER_INTERVAL_MS, None) };
+        if timer_id == 0 {
+            let mut renderer = renderer;
+            renderer.destroy();
+            unsafe { DestroyWindow(hwnd) }?;
+            unregister_class(&class_name, instance);
+            return Err(anyhow::anyhow!("SetTimer failed for GPUI child window"));
+        }
         Ok(Self {
             hwnd,
             renderer: Some(renderer),
@@ -181,6 +209,7 @@ impl NativeChild {
             class_name,
             instance,
             scale_factor,
+            timer_id,
             capture_requested: false,
             capture_result: None,
             failed: false,
@@ -252,7 +281,13 @@ impl NativeChild {
             unsafe {
                 ShowWindow(self.hwnd, if visible { SW_SHOW } else { SW_HIDE });
                 if visible {
+                    if self.timer_id == 0 {
+                        self.timer_id =
+                            SetTimer(Some(self.hwnd), UI_TIMER_ID, UI_TIMER_INTERVAL_MS, None);
+                    }
                     let _ = InvalidateRect(Some(self.hwnd), None, false);
+                } else {
+                    self.stop_timer();
                 }
             }
         }
@@ -272,7 +307,11 @@ impl NativeChild {
     }
 
     pub(crate) fn is_visible(&self) -> bool {
-        !self.failed && unsafe { IsWindowVisible(self.hwnd).as_bool() }
+        if self.failed || !unsafe { IsWindowVisible(self.hwnd).as_bool() } {
+            return false;
+        }
+        let root = unsafe { GetAncestor(self.hwnd, GA_ROOT) };
+        root.is_invalid() || !unsafe { IsIconic(root).as_bool() }
     }
 
     pub(crate) fn sprite_atlas(&self) -> std::sync::Arc<dyn PlatformAtlas> {
@@ -290,8 +329,8 @@ impl NativeChild {
         self.scale_factor
     }
 
-    pub(crate) fn raw_handle(&self) -> HWND {
-        self.hwnd
+    pub(crate) fn raw_handle(&self) -> *mut c_void {
+        self.hwnd.0
     }
 
     pub(crate) fn dpi_changed(&mut self, logical_size: Size<Pixels>) {
@@ -318,6 +357,7 @@ impl NativeChild {
             return;
         }
         self.failed = true;
+        self.stop_timer();
         unsafe {
             let _: isize = SetWindowLongPtrW(self.hwnd, GWLP_USERDATA, 0);
             ShowWindow(self.hwnd, SW_HIDE);
@@ -334,6 +374,7 @@ impl NativeChild {
     }
 
     pub(crate) fn close(&mut self) {
+        self.stop_timer();
         if let Some(mut renderer) = self.renderer.take() {
             renderer.destroy();
         }
@@ -343,6 +384,15 @@ impl NativeChild {
         }
         self.owner_token.take();
         unregister_class(&self.class_name, self.instance);
+    }
+
+    fn stop_timer(&mut self) {
+        if self.timer_id != 0 {
+            unsafe {
+                let _ = KillTimer(Some(self.hwnd), self.timer_id);
+            }
+            self.timer_id = 0;
+        }
     }
 }
 
@@ -402,6 +452,7 @@ fn native_callback(hwnd: HWND, operation: &str, callback: impl FnOnce(&WindowSta
     };
     if crate::gui_panic::contain(operation, || callback(owner.as_ref())).is_none() {
         unsafe {
+            let _ = KillTimer(Some(hwnd), UI_TIMER_ID);
             let _: isize = SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
             ShowWindow(hwnd, SW_HIDE);
         }
@@ -420,6 +471,10 @@ unsafe extern "system" fn window_proc(
             BeginPaint(hwnd, &mut paint);
             native_callback(hwnd, "GPUI Win32 paint", |owner| owner.request_frame());
             EndPaint(hwnd, &paint);
+            LRESULT(0)
+        }
+        WM_TIMER if wparam.0 == UI_TIMER_ID => {
+            native_callback(hwnd, "GPUI Win32 timer", WindowState::native_tick);
             LRESULT(0)
         }
         WM_DPICHANGED => {
@@ -446,7 +501,7 @@ unsafe extern "system" fn window_proc(
                 };
                 let _ = owner.dispatch_input(PlatformInput::MouseDown(MouseDownEvent {
                     button,
-                    position: mouse_position(lparam),
+                    position: client_mouse_position(lparam, owner.scale_factor()),
                     modifiers: modifiers(),
                     click_count: 1,
                     first_mouse: true,
@@ -463,7 +518,7 @@ unsafe extern "system" fn window_proc(
                 };
                 let _ = owner.dispatch_input(PlatformInput::MouseUp(MouseUpEvent {
                     button,
-                    position: mouse_position(lparam),
+                    position: client_mouse_position(lparam, owner.scale_factor()),
                     modifiers: modifiers(),
                     click_count: 1,
                 }));
@@ -473,7 +528,7 @@ unsafe extern "system" fn window_proc(
         WM_MOUSEMOVE => {
             native_callback(hwnd, "GPUI Win32 mouse move", |owner| {
                 let _ = owner.dispatch_input(PlatformInput::MouseMove(MouseMoveEvent {
-                    position: mouse_position(lparam),
+                    position: client_mouse_position(lparam, owner.scale_factor()),
                     pressed_button: None,
                     modifiers: modifiers(),
                 }));
@@ -484,7 +539,7 @@ unsafe extern "system" fn window_proc(
             native_callback(hwnd, "GPUI Win32 wheel", |owner| {
                 let delta = ((wparam.0 >> 16) & 0xffff) as i16 as f32 / 120.0;
                 let _ = owner.dispatch_input(PlatformInput::ScrollWheel(ScrollWheelEvent {
-                    position: mouse_position(lparam),
+                    position: wheel_mouse_position(hwnd, lparam, owner.scale_factor()),
                     delta: ScrollDelta::Lines(Point::new(0.0, -delta)),
                     modifiers: modifiers(),
                     touch_phase: TouchPhase::Moved,
@@ -495,42 +550,74 @@ unsafe extern "system" fn window_proc(
         WM_KEYDOWN => {
             native_callback(hwnd, "GPUI Win32 key down", |owner| {
                 let key = key_name(wparam.0 as u32);
-                let _ = owner.dispatch_native_key(PlatformInput::KeyDown(KeyDownEvent {
-                    keystroke: gpui::Keystroke {
-                        modifiers: modifiers(),
-                        key,
-                        key_char: None,
-                    },
-                    is_held: (lparam.0 & (1 << 30)) != 0,
-                    prefer_character_input: false,
-                }));
+                let token =
+                    owner.native_event_token(key_event_identity(hwnd, wparam, lparam, true));
+                let _ = owner.dispatch_native_key(
+                    PlatformInput::KeyDown(KeyDownEvent {
+                        keystroke: gpui::Keystroke {
+                            modifiers: modifiers(),
+                            key,
+                            key_char: None,
+                        },
+                        is_held: (lparam.0 & (1 << 30)) != 0,
+                        prefer_character_input: false,
+                    }),
+                    Some(token),
+                );
             });
             LRESULT(0)
         }
         WM_KEYUP => {
             native_callback(hwnd, "GPUI Win32 key up", |owner| {
-                let _ = owner.dispatch_native_key(PlatformInput::KeyUp(KeyUpEvent {
-                    keystroke: gpui::Keystroke {
-                        modifiers: modifiers(),
-                        key: key_name(wparam.0 as u32),
-                        key_char: None,
-                    },
-                }));
+                let token =
+                    owner.native_event_token(key_event_identity(hwnd, wparam, lparam, false));
+                let _ = owner.dispatch_native_key(
+                    PlatformInput::KeyUp(KeyUpEvent {
+                        keystroke: gpui::Keystroke {
+                            modifiers: modifiers(),
+                            key: key_name(wparam.0 as u32),
+                            key_char: None,
+                        },
+                    }),
+                    Some(token),
+                );
             });
             LRESULT(0)
         }
-        WM_CHAR => {
-            native_callback(hwnd, "GPUI Win32 text input", |owner| {
-                if let Some(character) = char::from_u32(wparam.0 as u32) {
-                    let mut text = String::new();
-                    text.push(character);
-                    owner.dispatch_text(&text);
+        WM_IME_STARTCOMPOSITION => LRESULT(0),
+        WM_IME_COMPOSITION => {
+            let message_time = unsafe { GetMessageTime() as u32 };
+            let flags = lparam.0 as u32;
+            native_callback(hwnd, "GPUI Win32 IME composition", |owner| {
+                let token = owner.windows_text_token(hwnd.0 as usize, message_time);
+                if flags & GCS_RESULTSTR.0 != 0 {
+                    if let Some(text) = ime_string(hwnd, GCS_RESULTSTR) {
+                        owner.windows_ime_composition(&text, true, token);
+                    }
                 }
+                if flags & GCS_COMPSTR.0 != 0 {
+                    if let Some(text) = ime_string(hwnd, GCS_COMPSTR) {
+                        owner.windows_ime_composition(&text, false, token);
+                    }
+                }
+            });
+            LRESULT(0)
+        }
+        WM_IME_ENDCOMPOSITION => {
+            native_callback(hwnd, "GPUI Win32 IME end", WindowState::windows_ime_end);
+            LRESULT(0)
+        }
+        WM_CHAR => {
+            let message_time = unsafe { GetMessageTime() as u32 };
+            native_callback(hwnd, "GPUI Win32 text input", |owner| {
+                let token = owner.windows_text_token(hwnd.0 as usize, message_time);
+                owner.windows_char(wparam.0 as u16, modifiers(), token);
             });
             LRESULT(0)
         }
         WM_ERASEBKGND => LRESULT(1),
         WM_NCDESTROY => {
+            let _ = KillTimer(Some(hwnd), UI_TIMER_ID);
             let _: isize = SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
             DefWindowProcW(hwnd, message, wparam, lparam)
         }
@@ -549,10 +636,130 @@ fn modifiers() -> Modifiers {
     }
 }
 
-fn mouse_position(lparam: LPARAM) -> Point<Pixels> {
-    let x = (lparam.0 as u32 & 0xffff) as i16 as f32;
-    let y = ((lparam.0 as u32 >> 16) & 0xffff) as i16 as f32;
-    Point::new(px(x), px(y))
+fn client_mouse_position(lparam: LPARAM, scale_factor: f32) -> Point<Pixels> {
+    let (x, y) = lparam_position(lparam);
+    scaled_position(x, y, scale_factor)
+}
+
+fn wheel_mouse_position(hwnd: HWND, lparam: LPARAM, scale_factor: f32) -> Point<Pixels> {
+    let (x, y) = lparam_position(lparam);
+    let mut point = POINT { x, y };
+    if unsafe { ScreenToClient(hwnd, &mut point).as_bool() } {
+        scaled_position(point.x, point.y, scale_factor)
+    } else {
+        scaled_position(x, y, scale_factor)
+    }
+}
+
+fn lparam_position(lparam: LPARAM) -> (i32, i32) {
+    (
+        (lparam.0 as u32 & 0xffff) as i16 as i32,
+        ((lparam.0 as u32 >> 16) & 0xffff) as i16 as i32,
+    )
+}
+
+fn scaled_position(x: i32, y: i32, scale_factor: f32) -> Point<Pixels> {
+    let scale_factor = scale_factor.max(0.01);
+    Point::new(px(x as f32 / scale_factor), px(y as f32 / scale_factor))
+}
+
+fn key_event_identity(
+    hwnd: HWND,
+    wparam: WPARAM,
+    lparam: LPARAM,
+    down: bool,
+) -> super::super::NativeEventIdentity {
+    let raw = lparam.0 as u64;
+    super::super::NativeEventIdentity::Windows {
+        message_time: unsafe { GetMessageTime() as u32 },
+        window: hwnd.0 as usize as u64,
+        virtual_key: wparam.0 as u32,
+        scan_code: (((raw >> 16) & 0xff) as u16) | if raw & (1 << 24) != 0 { 0x100 } else { 0 },
+        kind: if down { 1 } else { 2 },
+    }
+}
+
+fn ime_string(hwnd: HWND, kind: IME_COMPOSITION_STRING) -> Option<String> {
+    unsafe {
+        let context = ImmGetContext(hwnd);
+        if context.0.is_null() {
+            return None;
+        }
+        let byte_count = ImmGetCompositionStringW(context, kind, None, 0);
+        if byte_count < 0 {
+            let _ = ImmReleaseContext(hwnd, context);
+            return None;
+        }
+        let mut units = vec![0_u16; (byte_count as usize).div_ceil(2)];
+        let read = if byte_count == 0 {
+            0
+        } else {
+            ImmGetCompositionStringW(
+                context,
+                kind,
+                Some(units.as_mut_ptr().cast::<c_void>()),
+                byte_count as u32,
+            )
+        };
+        let _ = ImmReleaseContext(hwnd, context);
+        if read < 0 {
+            return None;
+        }
+        Some(String::from_utf16_lossy(&units[..(read as usize / 2)]))
+    }
+}
+
+pub(crate) fn read_clipboard() -> Option<ClipboardItem> {
+    unsafe {
+        OpenClipboard(None).ok().ok()?;
+        let result = (|| {
+            let handle = GetClipboardData(CF_UNICODETEXT_FORMAT).ok()?;
+            let global = HGLOBAL(handle.0);
+            let pointer = GlobalLock(global) as *const u16;
+            if pointer.is_null() {
+                return None;
+            }
+            let units = GlobalSize(global) / size_of::<u16>();
+            let slice = std::slice::from_raw_parts(pointer, units);
+            let length = slice.iter().position(|unit| *unit == 0).unwrap_or(units);
+            let text = String::from_utf16_lossy(&slice[..length]);
+            let _ = GlobalUnlock(global);
+            Some(ClipboardItem::new_string(text))
+        })();
+        let _ = CloseClipboard();
+        result
+    }
+}
+
+pub(crate) fn write_clipboard(item: ClipboardItem) {
+    let Some(text) = item.text() else {
+        return;
+    };
+    unsafe {
+        if OpenClipboard(None).is_err() || EmptyClipboard().is_err() {
+            let _ = CloseClipboard();
+            return;
+        }
+        let mut units: Vec<u16> = text.encode_utf16().collect();
+        units.push(0);
+        let bytes = units.len().saturating_mul(size_of::<u16>());
+        let Ok(global) = GlobalAlloc(GMEM_MOVEABLE, bytes) else {
+            let _ = CloseClipboard();
+            return;
+        };
+        let pointer = GlobalLock(global) as *mut u16;
+        if pointer.is_null() {
+            let _ = GlobalFree(Some(global));
+            let _ = CloseClipboard();
+            return;
+        }
+        std::ptr::copy_nonoverlapping(units.as_ptr(), pointer, units.len());
+        let _ = GlobalUnlock(global);
+        if SetClipboardData(CF_UNICODETEXT_FORMAT, Some(HANDLE(global.0))).is_err() {
+            let _ = GlobalFree(Some(global));
+        }
+        let _ = CloseClipboard();
+    }
 }
 
 fn key_name(key: u32) -> String {
@@ -581,4 +788,27 @@ fn key_name(key: u32) -> String {
         _ => "unknown",
     }
     .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn client_coordinates_convert_physical_pixels_to_logical_points() {
+        let lparam = LPARAM((75_u32 << 16 | 150) as isize);
+        assert_eq!(
+            client_mouse_position(lparam, 1.5),
+            Point::new(px(100.0), px(50.0))
+        );
+    }
+
+    #[test]
+    fn signed_client_coordinates_are_preserved_before_dpi_conversion() {
+        let lparam = LPARAM(((-12_i16 as u16 as u32) << 16 | (-9_i16 as u16 as u32)) as isize);
+        assert_eq!(
+            client_mouse_position(lparam, 1.5),
+            Point::new(px(-6.0), px(-8.0))
+        );
+    }
 }

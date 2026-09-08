@@ -12,9 +12,10 @@ use std::rc::{Rc, Weak};
 use std::sync::Mutex;
 
 use gpui::{
-    DevicePixels, GpuSpecs, KeyDownEvent, KeyUpEvent, Modifiers, ModifiersChangedEvent,
-    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, PlatformAtlas,
-    PlatformInput, Point, Scene, ScrollDelta, ScrollWheelEvent, Size, TouchPhase, px,
+    ClipboardItem, DevicePixels, GpuSpecs, KeyDownEvent, KeyUpEvent, Modifiers,
+    ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
+    PlatformAtlas, PlatformInput, Point, Scene, ScrollDelta, ScrollWheelEvent, Size, TouchPhase,
+    px,
 };
 use gpui_wgpu::{WgpuRenderer, WgpuSurfaceConfig};
 use objc::declare::ClassDecl;
@@ -25,10 +26,66 @@ use raw_window_handle_06::{
     RawWindowHandle, WindowHandle,
 };
 
-use super::super::{VisibilityCallback, WindowState};
+use super::super::{NativeEventIdentity, VisibilityCallback, WindowState};
 
 pub(crate) fn parent_scale_factor(_parent: raw_window_handle::RawWindowHandle) -> f32 {
     1.0
+}
+
+/// Return the identity of the AppKit key event currently being dispatched.
+///
+/// VST3 hosts can deliver their keyboard callback from inside AppKit's event
+/// dispatch. Reading the current event lets the two paths share a token when
+/// they are genuinely the same native event, while returning `None` for
+/// unrelated asynchronous callbacks preserves both deliveries.
+pub(crate) fn current_event_identity() -> Option<NativeEventIdentity> {
+    unsafe {
+        let application: *mut Object = msg_send![class!(NSApplication), sharedApplication];
+        if application.is_null() {
+            return None;
+        }
+        let event: *mut Object = msg_send![application, currentEvent];
+        event_identity(event)
+    }
+}
+
+const NSPASTEBOARD_STRING_TYPE: &str = "public.utf8-plain-text";
+
+pub(crate) fn read_clipboard() -> Option<ClipboardItem> {
+    unsafe {
+        let pasteboard: *mut Object = msg_send![class!(NSPasteboard), generalPasteboard];
+        if pasteboard.is_null() {
+            return None;
+        }
+        let kind = cocoa_string(NSPASTEBOARD_STRING_TYPE)?;
+        let value: *mut Object = msg_send![pasteboard, stringForType: kind.as_ptr()];
+        let text = ns_string(value);
+        let _: () = msg_send![kind.as_ptr(), release];
+        text.map(ClipboardItem::new_string)
+    }
+}
+
+pub(crate) fn write_clipboard(item: ClipboardItem) {
+    let Some(text) = item.text() else {
+        return;
+    };
+    unsafe {
+        let pasteboard: *mut Object = msg_send![class!(NSPasteboard), generalPasteboard];
+        if pasteboard.is_null() {
+            return;
+        }
+        let Some(kind) = cocoa_string(NSPASTEBOARD_STRING_TYPE) else {
+            return;
+        };
+        let Some(value) = cocoa_string(&text) else {
+            let _: () = msg_send![kind.as_ptr(), release];
+            return;
+        };
+        let _: BOOL = msg_send![pasteboard, clearContents];
+        let _: BOOL = msg_send![pasteboard, setString: value.as_ptr() forType: kind.as_ptr()];
+        let _: () = msg_send![value.as_ptr(), release];
+        let _: () = msg_send![kind.as_ptr(), release];
+    }
 }
 
 const SHIFT: u64 = 1 << 17;
@@ -117,6 +174,7 @@ pub(crate) struct NativeChild {
     view: NonNull<Object>,
     layer: NonNull<Object>,
     renderer: Option<WgpuRenderer>,
+    timer: Option<NonNull<Object>>,
     owner_token: Option<Box<Weak<WindowState>>>,
     capture_requested: bool,
     capture_result: Option<Vec<u8>>,
@@ -176,7 +234,9 @@ impl NativeChild {
             )
             .map_err(|error| anyhow::anyhow!("failed to initialize GPUI WGPU renderer: {error}"))?;
             sync_metal_layer(view.as_ptr());
-            child.commit(layer, renderer, owner_token)
+            let mut child = child.commit(layer, renderer, owner_token)?;
+            child.start_timer();
+            Ok(child)
         }
     }
 
@@ -262,7 +322,10 @@ impl NativeChild {
                 let _: () =
                     msg_send![self.view.as_ptr(), setHidden: if visible { NO } else { YES }];
                 if visible {
+                    self.start_timer();
                     let _: () = msg_send![self.view.as_ptr(), setNeedsDisplay: YES];
+                } else {
+                    self.stop_timer();
                 }
             }
         }
@@ -339,6 +402,7 @@ impl NativeChild {
             return;
         }
         self.failed = true;
+        self.stop_timer();
         unsafe {
             let view = self.view.as_ptr();
             (*view).set_ivar("owner", 0_usize);
@@ -356,6 +420,7 @@ impl NativeChild {
     }
 
     pub(crate) fn close(&mut self) {
+        self.stop_timer();
         if let Some(mut renderer) = self.renderer.take() {
             renderer.destroy();
         }
@@ -366,6 +431,30 @@ impl NativeChild {
             let _: () = msg_send![self.view.as_ptr(), release];
         }
         self.owner_token.take();
+    }
+
+    fn start_timer(&mut self) {
+        if self.timer.is_none() {
+            let timer: *mut Object = unsafe {
+                msg_send![
+                    class!(NSTimer),
+                    scheduledTimerWithTimeInterval: 0.016_f64
+                    target: self.view.as_ptr()
+                    selector: sel!(toyboxGpuiTick:)
+                    userInfo: ptr::null_mut::<Object>()
+                    repeats: YES
+                ]
+            };
+            self.timer = NonNull::new(timer);
+        }
+    }
+
+    fn stop_timer(&mut self) {
+        if let Some(timer) = self.timer.take() {
+            unsafe {
+                let _: () = msg_send![timer.as_ptr(), invalidate];
+            }
+        }
     }
 }
 
@@ -390,6 +479,7 @@ impl PendingChild {
             view: self.view,
             layer,
             renderer: Some(renderer),
+            timer: None,
             owner_token: Some(owner_token),
             capture_requested: false,
             capture_result: None,
@@ -448,6 +538,10 @@ fn editor_view_class(class_name: &'static str) -> Option<&'static Class> {
         decl.add_method(
             sel!(drawRect:),
             draw_rect as extern "C" fn(&Object, Sel, NSRect),
+        );
+        decl.add_method(
+            sel!(toyboxGpuiTick:),
+            timer_tick as extern "C" fn(&Object, Sel, *mut Object),
         );
         decl.add_method(
             sel!(setFrameSize:),
@@ -641,10 +735,24 @@ extern "C" fn draw_rect(this: &Object, _cmd: Sel, _dirty: NSRect) {
     native_callback(this, "GPUI AppKit draw", |owner| owner.request_frame());
 }
 
+extern "C" fn timer_tick(this: &Object, _cmd: Sel, _timer: *mut Object) {
+    native_callback(this, "GPUI AppKit timer", |owner| owner.native_tick());
+}
+
 extern "C" fn set_frame_size(this: &Object, _cmd: Sel, size: NSSize) {
+    // `setFrame:` reaches this override through `setFrameSize:`. Preserve
+    // NSView's geometry update before synchronizing GPUI; otherwise a reused
+    // VST3 view keeps the previous child frame after remove/attach and native
+    // coordinates no longer match GPUI's hitboxes.
+    unsafe {
+        let _: () = msg_send![super(this, class!(NSView)), setFrameSize: size];
+    }
     native_callback(this, "GPUI AppKit resize", |owner| {
         owner.native_resize(size.width as f32, size.height as f32);
     });
+    unsafe {
+        let _: () = msg_send![this, setNeedsDisplay: YES];
+    }
 }
 
 extern "C" fn view_did_change_backing_properties(this: &Object, _cmd: Sel) {
@@ -724,15 +832,19 @@ extern "C" fn key_down(this: &Object, _cmd: Sel, event: *mut Object) {
         let ignored: *mut Object = msg_send![event, charactersIgnoringModifiers];
         let key_char = ns_string(ignored);
         let key = key_name(ignored, key_char.as_deref());
-        let result = owner.dispatch_native_key(PlatformInput::KeyDown(KeyDownEvent {
-            keystroke: gpui::Keystroke {
-                modifiers: flags,
-                key,
-                key_char: key_char.clone(),
-            },
-            is_held: false,
-            prefer_character_input: false,
-        }));
+        let token = event_identity(event).map(|identity| owner.native_event_token(identity));
+        let result = owner.dispatch_native_key(
+            PlatformInput::KeyDown(KeyDownEvent {
+                keystroke: gpui::Keystroke {
+                    modifiers: flags,
+                    key,
+                    key_char: key_char.clone(),
+                },
+                is_held: false,
+                prefer_character_input: false,
+            }),
+            token,
+        );
         if result.propagate && !flags.control && !flags.alt && !flags.platform {
             let events: *mut Object = msg_send![class!(NSArray), arrayWithObject: event];
             let _: () = msg_send![this, interpretKeyEvents: events];
@@ -745,20 +857,25 @@ extern "C" fn key_down(this: &Object, _cmd: Sel, event: *mut Object) {
 extern "C" fn key_up(this: &Object, _cmd: Sel, event: *mut Object) {
     native_callback(this, "GPUI AppKit key up", |owner| unsafe {
         let ignored: *mut Object = msg_send![event, charactersIgnoringModifiers];
-        let _ = owner.dispatch_native_key(PlatformInput::KeyUp(KeyUpEvent {
-            keystroke: gpui::Keystroke {
-                modifiers: event_modifiers(event),
-                key: key_name(ignored, None),
-                key_char: None,
-            },
-        }));
+        let token = event_identity(event).map(|identity| owner.native_event_token(identity));
+        let _ = owner.dispatch_native_key(
+            PlatformInput::KeyUp(KeyUpEvent {
+                keystroke: gpui::Keystroke {
+                    modifiers: event_modifiers(event),
+                    key: key_name(ignored, None),
+                    key_char: None,
+                },
+            }),
+            token,
+        );
     });
 }
 
 extern "C" fn insert_text(this: &Object, _cmd: Sel, text: *mut Object, _range: NSRange) {
     native_callback(this, "GPUI AppKit insert text", |owner| {
         if let Some(text) = ns_string(text) {
-            owner.dispatch_text(&text);
+            let token = current_event_identity().map(|identity| owner.native_event_token(identity));
+            owner.dispatch_native_text(&text, token);
         }
     });
 }
@@ -873,6 +990,26 @@ fn event_position(view: &Object, event: *mut Object) -> Point<Pixels> {
     }
 }
 
+unsafe fn event_identity(event: *mut Object) -> Option<NativeEventIdentity> {
+    if event.is_null() {
+        return None;
+    }
+    let event_type: u64 = msg_send![event, type];
+    let event_type = match event_type {
+        10 | 11 => event_type as u16,
+        _ => return None,
+    };
+    let timestamp: f64 = msg_send![event, timestamp];
+    let key_code: u16 = msg_send![event, keyCode];
+    let window_number: isize = msg_send![event, windowNumber];
+    Some(NativeEventIdentity::Mac {
+        timestamp_bits: timestamp.to_bits(),
+        key_code,
+        event_type,
+        window: window_number.max(0) as u64,
+    })
+}
+
 fn event_modifiers(event: *mut Object) -> Modifiers {
     let flags: u64 = unsafe { msg_send![event, modifierFlags] };
     Modifiers {
@@ -928,6 +1065,17 @@ fn ns_string(value: *mut Object) -> Option<String> {
                 .map(str::to_owned)
         }
     }
+}
+
+unsafe fn cocoa_string(value: &str) -> Option<NonNull<Object>> {
+    let allocated: *mut Object = msg_send![class!(NSString), alloc];
+    let initialized: *mut Object = msg_send![
+        allocated,
+        initWithBytes: value.as_ptr().cast::<c_void>()
+        length: value.len()
+        encoding: 4_usize
+    ];
+    NonNull::new(initialized)
 }
 
 fn key_name(ignored: *mut Object, key_char: Option<&str>) -> String {
