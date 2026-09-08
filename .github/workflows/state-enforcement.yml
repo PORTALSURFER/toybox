@@ -29,6 +29,8 @@ jobs:
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - name: Install ripgrep
         run: sudo apt-get update && sudo apt-get install --yes ripgrep
@@ -102,6 +104,8 @@ jobs:
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - name: Build toybox with GPUI GUI feature
         run: cargo check -p toybox --features gpui-gui
@@ -203,6 +207,8 @@ jobs:
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - name: Lint embedded GPUI platform
         run: cargo clippy -p toybox --all-targets --features gpui-gui -- -D warnings

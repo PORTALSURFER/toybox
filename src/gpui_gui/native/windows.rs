@@ -102,7 +102,6 @@ impl HasDisplayHandle for ViewHandle {
 pub(crate) struct NativeChild {
     hwnd: HWND,
     renderer: Option<WgpuRenderer>,
-    handle: ViewHandle,
     owner_token: Option<Box<Weak<WindowState>>>,
     class_name: Vec<u16>,
     instance: HINSTANCE,
@@ -203,7 +202,6 @@ impl NativeChild {
         Ok(Self {
             hwnd,
             renderer: Some(renderer),
-            handle,
             owner_token: Some(owner_token),
             class_name,
             instance,
@@ -278,7 +276,7 @@ impl NativeChild {
     pub(crate) fn set_visible(&mut self, visible: bool) {
         if !self.failed {
             unsafe {
-                ShowWindow(self.hwnd, if visible { SW_SHOW } else { SW_HIDE });
+                let _ = ShowWindow(self.hwnd, if visible { SW_SHOW } else { SW_HIDE });
                 if visible {
                     if self.timer_id == 0 {
                         self.timer_id =
@@ -359,7 +357,7 @@ impl NativeChild {
         self.stop_timer();
         unsafe {
             let _: isize = SetWindowLongPtrW(self.hwnd, GWLP_USERDATA, 0);
-            ShowWindow(self.hwnd, SW_HIDE);
+            let _ = ShowWindow(self.hwnd, SW_HIDE);
         }
         if let Some(mut renderer) = self.renderer.take() {
             renderer.destroy();
@@ -404,7 +402,7 @@ fn register_class(class_name: &'static str, instance: HINSTANCE) -> anyhow::Resu
     let serial = NEXT_CLASS_ID.fetch_add(1, Ordering::Relaxed);
     let name = format!(
         "{class_name}_ToyboxGpui_{:x}_{:x}_{serial:x}",
-        window_proc as usize, instance.0 as usize,
+        window_proc as *const () as usize, instance.0 as usize,
     );
     let mut wide: Vec<u16> = name.encode_utf16().collect();
     wide.push(0);
@@ -453,7 +451,7 @@ fn native_callback(hwnd: HWND, operation: &str, callback: impl FnOnce(&WindowSta
         unsafe {
             let _ = KillTimer(Some(hwnd), UI_TIMER_ID);
             let _: isize = SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-            ShowWindow(hwnd, SW_HIDE);
+            let _ = ShowWindow(hwnd, SW_HIDE);
         }
     }
 }
@@ -469,7 +467,7 @@ unsafe extern "system" fn window_proc(
             let mut paint = PAINTSTRUCT::default();
             BeginPaint(hwnd, &mut paint);
             native_callback(hwnd, "GPUI Win32 paint", |owner| owner.request_frame());
-            EndPaint(hwnd, &paint);
+            let _ = EndPaint(hwnd, &paint);
             LRESULT(0)
         }
         WM_TIMER if wparam.0 == UI_TIMER_ID => {

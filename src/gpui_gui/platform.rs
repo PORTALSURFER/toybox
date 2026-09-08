@@ -890,6 +890,7 @@ enum KeySource {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
 pub(crate) enum NativeEventIdentity {
+    #[cfg_attr(target_os = "windows", allow(dead_code))]
     Mac {
         timestamp_bits: u64,
         key_code: u16,
@@ -1737,11 +1738,13 @@ impl WindowState {
         });
     }
 
+    #[cfg(target_os = "macos")]
     pub(crate) fn marked_text_range(&self) -> Option<Range<usize>> {
         self.with_input_handler(|input_handler| input_handler.marked_text_range())
             .flatten()
     }
 
+    #[cfg(target_os = "macos")]
     pub(crate) fn selected_text_range(&self) -> Option<Range<usize>> {
         self.with_input_handler(|input_handler| {
             input_handler
@@ -1751,11 +1754,13 @@ impl WindowState {
         .flatten()
     }
 
+    #[cfg(target_os = "macos")]
     pub(crate) fn bounds_for_range(&self, range: Range<usize>) -> Option<Bounds<Pixels>> {
         self.with_input_handler(|input_handler| input_handler.bounds_for_range(range))
             .flatten()
     }
 
+    #[cfg(target_os = "macos")]
     pub(crate) fn character_index_for_point(&self, x: f32, y: f32) -> Option<usize> {
         self.with_input_handler(|input_handler| {
             input_handler.character_index_for_point(Point::new(px(x), px(y)))
