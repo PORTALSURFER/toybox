@@ -152,7 +152,8 @@ int main(int argc, char** argv) {
             }
             if (hidden_kind==0) [window orderOut:nil];
             else [window miniaturize:nil];
-            pump(0.15);
+            // Miniaturization can animate before normal run-loop timers resume.
+            for (int tick=0; tick<50 && controller->getParamNormalized(2)>=0.5; ++tick) pump(0.02);
             if (controller->getParamNormalized(2)>=0.5 ||
                 std::fabs(controller->getParamNormalized(3)-held_gain)>1e-9) {
               fprintf(stderr,"FAIL hide/minimize kind=%d match=%f held=%f expected-held=%f visible=%d minimized=%d\n",
@@ -166,7 +167,15 @@ int main(int argc, char** argv) {
               fprintf(stderr,"FAIL restoring window restarted Match\n"); return 22;
             }
           }
-          fprintf(stderr,"PASS focus preservation, hide/minimize Match stop and held gain\n");
+          controller->setParamNormalized(2,1.0);
+          if (view->removed()!=kResultOk || controller->getParamNormalized(2)>=0.5 ||
+              std::fabs(controller->getParamNormalized(3)-held_gain)>1e-9) {
+            fprintf(stderr,"FAIL removing editor must stop Match and retain gain\n"); return 23;
+          }
+          if (view->attached((__bridge void*)parent,"NSView")!=kResultOk) return 24;
+          pump(0.05);
+          if (controller->getParamNormalized(2)>=0.5) return 25;
+          fprintf(stderr,"PASS focus preservation, hide/minimize/close Match stop and held gain\n");
         }
         if (getenv("PROBE_CLOSE_EACH")) {
           view->removed(); view->release(); controller->terminate(); controller->release();

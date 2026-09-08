@@ -534,7 +534,9 @@ impl EmbeddedPlatform {
 
     pub(crate) fn sync_visibility(&self) {
         #[cfg(any(target_os = "macos", target_os = "windows"))]
-        if let Some(owner) = self.window_owner.borrow().as_ref().and_then(Weak::upgrade) {
+        let owner = { self.window_owner.borrow().as_ref().and_then(Weak::upgrade) };
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        if let Some(owner) = owner {
             owner.sync_visibility();
         }
     }
@@ -714,6 +716,7 @@ impl Platform for EmbeddedPlatform {
             self.display.clone(),
             self.active_window_shared.clone(),
             self.dispatcher.clone(),
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             self.visibility_callback.clone(),
         ));
         let _state = window.state.clone();
@@ -1798,7 +1801,9 @@ fn windows_char_is_shortcut(unit: u16, modifiers: Modifiers) -> bool {
     if unit < 0x20 || unit == 0x7f {
         return true;
     }
-    modifiers.platform || (modifiers.control && !modifiers.alt)
+    modifiers.platform
+        || (modifiers.control && !modifiers.alt)
+        || (modifiers.alt && !modifiers.control)
 }
 
 #[cfg(target_os = "windows")]
@@ -2360,6 +2365,13 @@ mod tests {
             'c' as u16,
             Modifiers {
                 control: true,
+                ..Modifiers::default()
+            }
+        ));
+        assert!(windows_char_is_shortcut(
+            'x' as u16,
+            Modifiers {
+                alt: true,
                 ..Modifiers::default()
             }
         ));
