@@ -3,6 +3,8 @@
 //! Run with `cargo run --example gpui-embedded-smoke --features gpui-gui` on
 //! macOS. Set `TOYBOX_GPUI_SMOKE_SECONDS` for a visible interactive window.
 
+#![allow(clippy::missing_docs_in_private_items)]
+
 #[cfg(all(target_os = "macos", feature = "gpui-gui"))]
 use std::cell::Cell;
 #[cfg(all(target_os = "macos", feature = "gpui-gui"))]
@@ -11,7 +13,10 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 #[cfg(all(target_os = "macos", feature = "gpui-gui"))]
-use gpui::{App, AppContext, IntoElement, InteractiveElement, ParentElement, Render, Styled, Window, div, rgb};
+use gpui::{
+    App, AppContext, InteractiveElement, IntoElement, ParentElement, Render, Styled, Window, div,
+    rgb,
+};
 #[cfg(all(target_os = "macos", feature = "gpui-gui"))]
 use objc::runtime::{BOOL, NO, Object, YES};
 #[cfg(all(target_os = "macos", feature = "gpui-gui"))]
@@ -91,7 +96,8 @@ fn pump(app: *mut Object, seconds: f64, gui: &GpuiHostedGui) {
     let deadline = Instant::now() + Duration::from_secs_f64(seconds);
     while Instant::now() < deadline {
         unsafe {
-            let date: *mut Object = msg_send![class!(NSDate), dateWithTimeIntervalSinceNow: 0.005_f64];
+            let date: *mut Object =
+                msg_send![class!(NSDate), dateWithTimeIntervalSinceNow: 0.005_f64];
             let event: *mut Object = msg_send![
                 app,
                 nextEventMatchingMask: usize::MAX
@@ -116,7 +122,10 @@ fn main() {
         assert!(!app.is_null(), "NSApplication should be available");
         let parent: *mut Object = msg_send![class!(NSView), new];
         let window: *mut Object = msg_send![class!(NSWindow), new];
-        assert!(!parent.is_null() && !window.is_null(), "AppKit objects should allocate");
+        assert!(
+            !parent.is_null() && !window.is_null(),
+            "AppKit objects should allocate"
+        );
         let frame = NSRect {
             origin: NSPoint { x: 0.0, y: 0.0 },
             size: NSSize {
@@ -155,7 +164,10 @@ fn main() {
         assert_eq!(subview_count, 1, "child view should attach");
         let child: *mut Object = msg_send![subviews, objectAtIndex: 0_usize];
         let first_responder: *mut Object = msg_send![window, firstResponder];
-        assert_ne!(first_responder, child, "smoke must begin without child focus");
+        assert_ne!(
+            first_responder, child,
+            "smoke must begin without child focus"
+        );
         let _: BOOL = msg_send![child, acceptsFirstResponder];
 
         // Exercise the real AppKit responder path. The event is sent through
@@ -163,7 +175,7 @@ fn main() {
         let window_number: isize = msg_send![window, windowNumber];
         let characters: *mut Object = msg_send![
             class!(NSString),
-            stringWithUTF8String: b"a\0".as_ptr().cast::<i8>()
+            stringWithUTF8String: c"a".as_ptr().cast::<i8>()
         ];
         let mouse_event: *mut Object = msg_send![
             class!(NSEvent),
@@ -179,7 +191,10 @@ fn main() {
         ];
         let _: () = msg_send![app, sendEvent: mouse_event];
         let first_responder: *mut Object = msg_send![window, firstResponder];
-        assert_eq!(first_responder, child, "a native click must focus the GPUI child");
+        assert_eq!(
+            first_responder, child,
+            "a native click must focus the GPUI child"
+        );
         let key_event: *mut Object = msg_send![
             class!(NSEvent),
             keyEventWithType: 10_usize
@@ -197,9 +212,14 @@ fn main() {
         pump(app, 0.05, &gui);
         assert!(keys.get() >= 1, "AppKit key event should reach GPUI input");
 
-        let captured = gui.capture_rgba().expect("GPUI scene capture should complete");
+        let captured = gui
+            .capture_rgba()
+            .expect("GPUI scene capture should complete");
         assert!(captured.0 > 0 && captured.1 > 0);
-        assert_eq!(captured.2.len(), captured.0 as usize * captured.1 as usize * 4);
+        assert_eq!(
+            captured.2.len(),
+            captured.0 as usize * captured.1 as usize * 4
+        );
 
         let seconds = std::env::var("TOYBOX_GPUI_SMOKE_SECONDS")
             .ok()

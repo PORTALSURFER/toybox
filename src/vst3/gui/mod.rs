@@ -38,10 +38,7 @@ include!("view_rect_utils.rs");
 ))]
 pub use crate::radiant_gui::{RadiantVst3Editor, RadiantVst3HostedGui};
 
-#[cfg(all(
-    feature = "gpui-vst3",
-    any(target_os = "macos", target_os = "windows")
-))]
+#[cfg(all(feature = "gpui-vst3", any(target_os = "macos", target_os = "windows")))]
 impl Vst3HostedGui for crate::gpui_gui::GpuiHostedGui {
     fn set_parent_raw(&mut self, parent: RawWindowHandle) {
         crate::gpui_gui::GpuiHostedGui::set_parent_raw(self, parent);
@@ -93,10 +90,7 @@ impl Vst3HostedGui for crate::gpui_gui::GpuiHostedGui {
 }
 
 /// Wrap a GPUI host facade in Toybox's reusable VST3 `IPlugView`.
-#[cfg(all(
-    feature = "gpui-vst3",
-    any(target_os = "macos", target_os = "windows")
-))]
+#[cfg(all(feature = "gpui-vst3", any(target_os = "macos", target_os = "windows")))]
 pub fn create_gpui_view(
     gui: crate::gpui_gui::GpuiHostedGui,
     width: u32,
@@ -104,13 +98,12 @@ pub fn create_gpui_view(
     minimum: (u32, u32),
     maximum: (u32, u32),
 ) -> HostedVst3View<crate::gpui_gui::GpuiHostedGui> {
-    HostedVst3View::new(gui, width, height).with_size_bounds(
-        minimum.0,
-        minimum.1,
-        maximum.0,
-        maximum.1,
-    )
+    HostedVst3View::new(gui, width, height)
+        .with_size_bounds(minimum.0, minimum.1, maximum.0, maximum.1)
 }
 
-#[cfg(all(test, any(feature = "gui", feature = "radiant-vst3", feature = "gpui-vst3")))]
+#[cfg(all(
+    test,
+    any(feature = "gui", feature = "radiant-vst3", feature = "gpui-vst3")
+))]
 mod tests;

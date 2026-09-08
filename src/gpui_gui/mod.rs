@@ -1,5 +1,7 @@
 //! Embedded GPUI editor hosting for native plugin children.
 
+#![allow(clippy::missing_docs_in_private_items)]
+
 mod platform;
 
 use std::cell::{Cell, RefCell};
@@ -9,6 +11,8 @@ use gpui::{AnyView, App, AppContext, Application, ApplicationHandle, IntoElement
 use raw_window_handle::RawWindowHandle;
 
 use self::platform::EmbeddedPlatform;
+
+type ViewFactory = dyn Fn(&mut gpui::Window, &mut App) -> AnyView;
 
 /// A logical editor size contract used by GPUI host resize negotiation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -79,11 +83,11 @@ struct Runtime {
 /// the host gives the plugin UI time to process queued GPUI work.
 pub struct GpuiHostedGui {
     class_name: &'static str,
-    factory: Rc<dyn Fn(&mut gpui::Window, &mut App) -> AnyView>,
+    factory: Rc<ViewFactory>,
     parent: Option<RawWindowHandle>,
     size: Cell<Option<(u32, u32)>>,
     contract: GpuiSizeContract,
-    visibility_callback: Rc<RefCell<Option<Box<dyn FnMut(bool)>>>>,
+    visibility_callback: platform::VisibilityCallback,
     runtime: Option<Runtime>,
     callback_keyboard_only: bool,
 }

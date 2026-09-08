@@ -43,11 +43,11 @@ pub use clack_common;
 /// Re-exported CLAP crates so downstream plugins only depend on `toybox`.
 pub use clack_extensions;
 pub use clack_plugin;
-/// Re-export MTS-ESP for shared tuning support across plugins.
-pub use mts_esp;
 /// Re-export GPUI for plugin view factories and event types.
 #[cfg(feature = "gpui-gui")]
 pub use gpui;
+/// Re-export MTS-ESP for shared tuning support across plugins.
+pub use mts_esp;
 /// Re-export raw generated VST3 ABI bindings.
 #[cfg(feature = "vst3")]
 pub use toybox_vst3_ffi;

@@ -9,9 +9,8 @@
 use std::ffi::c_void;
 use std::mem::size_of;
 use std::num::NonZeroIsize;
-use std::ptr::{self, NonNull};
 use std::rc::{Rc, Weak};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use gpui::{
     DevicePixels, GpuSpecs, KeyDownEvent, KeyUpEvent, Modifiers, MouseButton, MouseDownEvent,
@@ -20,45 +19,41 @@ use gpui::{
 };
 use gpui_wgpu::{WgpuRenderer, WgpuSurfaceConfig};
 use raw_window_handle_06::{
-    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawWindowHandle,
-    Win32WindowHandle, WindowHandle, WindowsDisplayHandle,
+    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
+    RawWindowHandle, Win32WindowHandle, WindowHandle, WindowsDisplayHandle,
 };
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, GetSysColorBrush, PAINTSTRUCT};
+use windows::Win32::Graphics::Gdi::{
+    BeginPaint, COLOR_WINDOW, EndPaint, GetSysColorBrush, InvalidateRect, PAINTSTRUCT,
+};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetKeyState, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
+    GetKeyState, SetFocus, VIRTUAL_KEY, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CS_HREDRAW, CS_OWNDC, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DestroyWindow,
     GWLP_USERDATA, GetWindowLongPtrW, IDC_ARROW, IsWindowVisible, LoadCursorW, RegisterClassExW,
-    SW_HIDE, SW_SHOW, SetFocus, SetWindowLongPtrW, ShowWindow, UnregisterClassW, WM_CHAR,
-    WM_DPICHANGED, WM_ERASEBKGND, WM_KEYDOWN, WM_KEYUP,
-    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT,
-    WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WNDCLASSEXW, WNDPROC, WS_CHILD, WS_TABSTOP, WS_VISIBLE,
+    SW_HIDE, SW_SHOW, SetWindowLongPtrW, ShowWindow, UnregisterClassW, WM_CHAR, WM_DPICHANGED,
+    WM_ERASEBKGND, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL,
+    WM_NCDESTROY, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WNDCLASSEXW, WS_CHILD,
+    WS_TABSTOP, WS_VISIBLE,
 };
 use windows::core::PCWSTR;
 
-use super::super::WindowState;
+use super::super::{VisibilityCallback, WindowState};
 
 pub(crate) fn parent_scale_factor(parent: raw_window_handle::RawWindowHandle) -> f32 {
-    let raw = match parent {
-        raw_window_handle::RawWindowHandle::Win32(handle) => handle.hwnd,
-        _ => ptr::null_mut(),
+    let hwnd = match parent {
+        raw_window_handle::RawWindowHandle::Win32(handle) => HWND(handle.hwnd),
+        _ => HWND::default(),
     };
-    let hwnd = HWND(raw as isize);
     if hwnd.is_invalid() {
         1.0
     } else {
         unsafe { GetDpiForWindow(hwnd).max(1) as f32 / 96.0 }
     }
 }
-
-const SHIFT_MASK: i16 = 0x8000;
-const CONTROL_MASK: i16 = 0x8000;
-const OPTION_MASK: i16 = 0x8000;
-const COMMAND_MASK: i16 = 0x8000;
 
 #[derive(Clone, Debug)]
 struct ViewHandle(HWND);
@@ -68,7 +63,7 @@ unsafe impl Sync for ViewHandle {}
 
 impl HasWindowHandle for ViewHandle {
     fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
-        let Some(hwnd) = NonZeroIsize::new(self.0.0) else {
+        let Some(hwnd) = NonZeroIsize::new(self.0.0 as isize) else {
             return Err(HandleError::NotSupported);
         };
         let handle = Win32WindowHandle::new(hwnd);
@@ -79,7 +74,7 @@ impl HasWindowHandle for ViewHandle {
 impl HasDisplayHandle for ViewHandle {
     fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
         Ok(unsafe {
-            DisplayHandle::borrow_raw(RawWindowHandle::Windows(WindowsDisplayHandle::new().into()))
+            DisplayHandle::borrow_raw(RawDisplayHandle::Windows(WindowsDisplayHandle::new()))
         })
     }
 }
@@ -98,9 +93,6 @@ pub(crate) struct NativeChild {
     failed: bool,
 }
 
-unsafe impl Send for NativeChild {}
-unsafe impl Sync for NativeChild {}
-
 impl NativeChild {
     pub(crate) fn new(
         parent: raw_window_handle::RawWindowHandle,
@@ -109,13 +101,12 @@ impl NativeChild {
         gpu_context: gpui_wgpu::GpuContext,
         size: Size<Pixels>,
         _callback_keyboard_only: bool,
-        _visibility_callback: std::rc::Rc<std::cell::RefCell<Option<Box<dyn FnMut(bool)>>>>,
+        _visibility_callback: VisibilityCallback,
     ) -> anyhow::Result<Self> {
         let parent = match parent {
-            raw_window_handle::RawWindowHandle::Win32(handle) => handle.hwnd,
-            _ => ptr::null_mut(),
+            raw_window_handle::RawWindowHandle::Win32(handle) => HWND(handle.hwnd),
+            _ => HWND::default(),
         };
-        let parent = HWND(parent as isize);
         if parent.is_invalid() {
             anyhow::bail!("missing Win32 parent HWND");
         }
@@ -127,7 +118,7 @@ impl NativeChild {
             (f32::from(size.width) * scale_factor).max(1.0) as i32,
             (f32::from(size.height) * scale_factor).max(1.0) as i32,
         ];
-        let hwnd = unsafe {
+        let hwnd = match unsafe {
             CreateWindowExW(
                 Default::default(),
                 PCWSTR(class_name.as_ptr()),
@@ -141,7 +132,13 @@ impl NativeChild {
                 None,
                 Some(instance),
                 Some((&mut *owner_token as *mut Weak<WindowState>).cast::<c_void>()),
-            )?
+            )
+        } {
+            Ok(hwnd) => hwnd,
+            Err(error) => {
+                unregister_class(&class_name, instance);
+                return Err(error.into());
+            }
         };
         let handle = ViewHandle(hwnd);
         let renderer = match unsafe {
@@ -215,7 +212,11 @@ impl NativeChild {
     pub(crate) fn take_capture(&mut self) -> Option<(u32, u32, Vec<u8>)> {
         let pixels = self.capture_result.take()?;
         let size = self.renderer.as_ref()?.viewport_size();
-        Some((size.width.0.max(1) as u32, size.height.0.max(1) as u32, pixels))
+        Some((
+            size.width.0.max(1) as u32,
+            size.height.0.max(1) as u32,
+            pixels,
+        ))
     }
 
     pub(crate) fn is_failed(&self) -> bool {
@@ -251,9 +252,7 @@ impl NativeChild {
             unsafe {
                 ShowWindow(self.hwnd, if visible { SW_SHOW } else { SW_HIDE });
                 if visible {
-                    let _ = windows::Win32::UI::WindowsAndMessaging::InvalidateRect(
-                        self.hwnd, None, false,
-                    );
+                    let _ = InvalidateRect(Some(self.hwnd), None, false);
                 }
             }
         }
@@ -291,18 +290,26 @@ impl NativeChild {
         self.scale_factor
     }
 
+    pub(crate) fn raw_handle(&self) -> HWND {
+        self.hwnd
+    }
+
     pub(crate) fn dpi_changed(&mut self, logical_size: Size<Pixels>) {
         self.scale_factor = unsafe { GetDpiForWindow(self.hwnd).max(1) as f32 / 96.0 };
         self.resize(logical_size);
     }
 
-    pub(crate) fn window_handle(&self) -> Result<WindowHandle<'static>, HandleError> {
-        self.handle.window_handle()
+    pub(crate) fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
+        let Some(hwnd) = NonZeroIsize::new(self.hwnd.0 as isize) else {
+            return Err(HandleError::NotSupported);
+        };
+        let handle = Win32WindowHandle::new(hwnd);
+        Ok(unsafe { WindowHandle::borrow_raw(RawWindowHandle::Win32(handle)) })
     }
 
-    pub(crate) fn display_handle(&self) -> Result<DisplayHandle<'static>, HandleError> {
+    pub(crate) fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
         Ok(unsafe {
-            DisplayHandle::borrow_raw(RawWindowHandle::Windows(WindowsDisplayHandle::new().into()))
+            DisplayHandle::borrow_raw(RawDisplayHandle::Windows(WindowsDisplayHandle::new()))
         })
     }
 
@@ -339,15 +346,19 @@ impl NativeChild {
     }
 }
 
-static CLASS_REGISTRATION: Mutex<()> = Mutex::new(());
+static NEXT_CLASS_ID: AtomicU64 = AtomicU64::new(1);
 
 fn register_class(class_name: &'static str, instance: HINSTANCE) -> anyhow::Result<Vec<u16>> {
-    let name = format!("{class_name}_ToyboxGpui_{:x}", window_proc as usize);
+    // Register every child independently. Reusing a class name lets the first
+    // editor to close unregister the class while a sibling editor still owns
+    // windows of that class, which can silently break the remaining editor.
+    let serial = NEXT_CLASS_ID.fetch_add(1, Ordering::Relaxed);
+    let name = format!(
+        "{class_name}_ToyboxGpui_{:x}_{:x}_{serial:x}",
+        window_proc as usize, instance.0 as usize,
+    );
     let mut wide: Vec<u16> = name.encode_utf16().collect();
     wide.push(0);
-    let _lock = CLASS_REGISTRATION
-        .lock()
-        .map_err(|_| anyhow::anyhow!("Win32 class registry poisoned"))?;
     let cursor = unsafe { LoadCursorW(None, IDC_ARROW)? };
     unsafe {
         let class = WNDCLASSEXW {
@@ -357,18 +368,16 @@ fn register_class(class_name: &'static str, instance: HINSTANCE) -> anyhow::Resu
             cbClsExtra: 0,
             cbWndExtra: 0,
             hInstance: instance,
-            hIcon: None,
+            hIcon: Default::default(),
             hCursor: cursor,
-            hbrBackground: GetSysColorBrush(0),
+            hbrBackground: GetSysColorBrush(COLOR_WINDOW),
             lpszMenuName: PCWSTR::null(),
             lpszClassName: PCWSTR(wide.as_ptr()),
-            hIconSm: None,
+            hIconSm: Default::default(),
         };
         if RegisterClassExW(&class) == 0 {
-            let error = windows::core::Error::from_win32();
-            if error.code().0 != 1410 {
-                return Err(anyhow::anyhow!("RegisterClassExW failed: {error}"));
-            }
+            let error = windows::core::Error::from_thread();
+            return Err(anyhow::anyhow!("RegisterClassExW failed: {error}"));
         }
     }
     Ok(wide)
@@ -530,7 +539,7 @@ unsafe extern "system" fn window_proc(
 }
 
 fn modifiers() -> Modifiers {
-    let down = |key| unsafe { GetKeyState(key.0 as i32) < 0 };
+    let down = |key: VIRTUAL_KEY| unsafe { GetKeyState(key.0 as i32) < 0 };
     Modifiers {
         control: down(VK_CONTROL),
         alt: down(VK_MENU),

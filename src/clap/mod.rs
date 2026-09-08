@@ -7,10 +7,10 @@ pub mod automation;
 pub mod bundle;
 pub mod entry;
 pub mod events;
-#[cfg(feature = "gui")]
-pub mod gui;
 #[cfg(feature = "gpui-gui")]
 mod gpui_gui;
+#[cfg(feature = "gui")]
+pub mod gui;
 pub mod params;
 pub mod prelude;
 pub mod process;

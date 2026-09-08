@@ -25,7 +25,7 @@ use raw_window_handle_06::{
     RawWindowHandle, WindowHandle,
 };
 
-use super::super::WindowState;
+use super::super::{VisibilityCallback, WindowState};
 
 pub(crate) fn parent_scale_factor(_parent: raw_window_handle::RawWindowHandle) -> f32 {
     1.0
@@ -123,9 +123,6 @@ pub(crate) struct NativeChild {
     failed: bool,
 }
 
-unsafe impl Send for NativeChild {}
-unsafe impl Sync for NativeChild {}
-
 impl NativeChild {
     pub(crate) fn new(
         parent: raw_window_handle::RawWindowHandle,
@@ -134,7 +131,7 @@ impl NativeChild {
         gpu_context: gpui_wgpu::GpuContext,
         size: Size<Pixels>,
         _callback_keyboard_only: bool,
-        _visibility_callback: std::rc::Rc<std::cell::RefCell<Option<Box<dyn FnMut(bool)>>>>,
+        _visibility_callback: VisibilityCallback,
     ) -> anyhow::Result<Self> {
         let raw_parent = match parent {
             raw_window_handle::RawWindowHandle::AppKit(handle) => handle.ns_view,
@@ -154,13 +151,18 @@ impl NativeChild {
             );
             let _: () = msg_send![parent.as_ptr(), addSubview: view.as_ptr()];
             let _: () = msg_send![view.as_ptr(), setWantsLayer: YES];
+            // GPUI lays out in logical points, while CAMetalLayer and WGPU
+            // consume device pixels. The child is attached before querying
+            // the window so this also handles a host whose parent is already
+            // on a Retina display.
+            let scale_factor = view_scale_factor(view.as_ptr());
             let layer = create_metal_layer(view.as_ptr())
                 .ok_or_else(|| anyhow::anyhow!("failed to create GPUI CAMetalLayer"))?;
             let handle = ViewHandle(view.as_ptr() as usize);
             let config = WgpuSurfaceConfig {
                 size: gpui::size(
-                    DevicePixels(f32::from(size.width).max(1.0) as i32),
-                    DevicePixels(f32::from(size.height).max(1.0) as i32),
+                    DevicePixels((f32::from(size.width) * scale_factor).max(1.0) as i32),
+                    DevicePixels((f32::from(size.height) * scale_factor).max(1.0) as i32),
                 ),
                 transparent: false,
                 preferred_present_mode: None,
@@ -205,7 +207,11 @@ impl NativeChild {
     pub(crate) fn take_capture(&mut self) -> Option<(u32, u32, Vec<u8>)> {
         let pixels = self.capture_result.take()?;
         let size = self.renderer.as_ref()?.viewport_size();
-        Some((size.width.0.max(1) as u32, size.height.0.max(1) as u32, pixels))
+        Some((
+            size.width.0.max(1) as u32,
+            size.height.0.max(1) as u32,
+            pixels,
+        ))
     }
 
     pub(crate) fn is_failed(&self) -> bool {
@@ -216,6 +222,7 @@ impl NativeChild {
         if self.failed {
             return;
         }
+        let scale_factor = self.scale_factor();
         unsafe {
             let _: () = msg_send![self.view.as_ptr(), setFrame: ns_rect(
                 0.0,
@@ -227,8 +234,24 @@ impl NativeChild {
         }
         if let Some(renderer) = self.renderer.as_mut() {
             renderer.update_drawable_size(gpui::size(
-                DevicePixels(f32::from(size.width).max(1.0) as i32),
-                DevicePixels(f32::from(size.height).max(1.0) as i32),
+                DevicePixels((f32::from(size.width) * scale_factor).max(1.0) as i32),
+                DevicePixels((f32::from(size.height) * scale_factor).max(1.0) as i32),
+            ));
+        }
+    }
+
+    /// Reconfigure the drawable when the host moves the view between displays
+    /// without changing its logical frame.
+    pub(crate) fn backing_scale_changed(&mut self, size: Size<Pixels>) {
+        if self.failed {
+            return;
+        }
+        let scale_factor = self.scale_factor();
+        unsafe { sync_metal_layer(self.view.as_ptr()) };
+        if let Some(renderer) = self.renderer.as_mut() {
+            renderer.update_drawable_size(gpui::size(
+                DevicePixels((f32::from(size.width) * scale_factor).max(1.0) as i32),
+                DevicePixels((f32::from(size.height) * scale_factor).max(1.0) as i32),
             ));
         }
     }
@@ -297,15 +320,7 @@ impl NativeChild {
     }
 
     pub(crate) fn scale_factor(&self) -> f32 {
-        unsafe {
-            let window: *mut Object = msg_send![self.view.as_ptr(), window];
-            if window.is_null() {
-                1.0
-            } else {
-                let scale: f64 = msg_send![window, backingScaleFactor];
-                scale as f32
-            }
-        }
+        unsafe { view_scale_factor(self.view.as_ptr()) }
     }
 
     pub(crate) fn window_handle(&self) -> Result<WindowHandle<'static>, HandleError> {
@@ -437,6 +452,10 @@ fn editor_view_class(class_name: &'static str) -> Option<&'static Class> {
         decl.add_method(
             sel!(setFrameSize:),
             set_frame_size as extern "C" fn(&Object, Sel, NSSize),
+        );
+        decl.add_method(
+            sel!(viewDidChangeBackingProperties),
+            view_did_change_backing_properties as extern "C" fn(&Object, Sel),
         );
         decl.add_method(
             sel!(mouseDown:),
@@ -576,6 +595,16 @@ fn ns_rect(x: f64, y: f64, width: f64, height: f64) -> NSRect {
     }
 }
 
+unsafe fn view_scale_factor(view: *mut Object) -> f32 {
+    let window: *mut Object = msg_send![view, window];
+    if window.is_null() {
+        1.0
+    } else {
+        let scale: f64 = msg_send![window, backingScaleFactor];
+        (scale as f32).max(0.01)
+    }
+}
+
 fn owner(this: &Object) -> Option<Rc<WindowState>> {
     unsafe {
         let token = *(*this).get_ivar::<usize>("owner") as *const Weak<WindowState>;
@@ -615,6 +644,13 @@ extern "C" fn draw_rect(this: &Object, _cmd: Sel, _dirty: NSRect) {
 extern "C" fn set_frame_size(this: &Object, _cmd: Sel, size: NSSize) {
     native_callback(this, "GPUI AppKit resize", |owner| {
         owner.native_resize(size.width as f32, size.height as f32);
+    });
+}
+
+extern "C" fn view_did_change_backing_properties(this: &Object, _cmd: Sel) {
+    native_callback(this, "GPUI AppKit backing scale", |owner| unsafe {
+        let bounds: NSRect = msg_send![this, bounds];
+        owner.native_backing_scale_changed(bounds.size.width as f32, bounds.size.height as f32);
     });
 }
 
@@ -760,11 +796,14 @@ extern "C" fn unmark_text(this: &Object, _cmd: Sel) {
 }
 
 extern "C" fn has_marked_text(this: &Object, _cmd: Sel) -> BOOL {
-    owner(this)
+    if owner(this)
         .and_then(|owner| owner.marked_text_range())
         .is_some()
-        .then_some(YES)
-        .unwrap_or(NO)
+    {
+        YES
+    } else {
+        NO
+    }
 }
 
 extern "C" fn marked_range(this: &Object, _cmd: Sel) -> NSRange {

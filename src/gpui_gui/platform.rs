@@ -1,6 +1,6 @@
 //! Host-loop and GPUI platform plumbing for the embedded editor.
 
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::missing_docs_in_private_items)]
 
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
@@ -17,17 +17,19 @@ use futures::channel::oneshot;
 use gpui::{
     AnyWindowHandle, AtlasKey, AtlasTextureId, AtlasTextureKind, AtlasTile, BackgroundExecutor,
     Bounds, Capslock, ClipboardItem, CursorStyle, DevicePixels, DispatchEventResult,
-    DummyKeyboardMapper, ForegroundExecutor, GpuSpecs, KeyDownEvent, KeyUpEvent, Keymap,
-    Keystroke, Modifiers, PathPromptOptions, Pixels, Platform, PlatformAtlas, PlatformDisplay,
-    PlatformInput, PlatformInputHandler, PlatformKeyboardLayout, PlatformKeyboardMapper,
-    PlatformTextSystem, PlatformWindow, Point, Priority, PromptButton, RequestFrameOptions, Scene,
-    Size, Task, ThermalState, TileId, WindowAppearance, WindowBackgroundAppearance, WindowBounds,
+    DummyKeyboardMapper, ForegroundExecutor, GpuSpecs, KeyDownEvent, KeyUpEvent, Keymap, Keystroke,
+    Modifiers, PathPromptOptions, Pixels, Platform, PlatformAtlas, PlatformDisplay, PlatformInput,
+    PlatformInputHandler, PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem,
+    PlatformWindow, Point, Priority, PromptButton, RequestFrameOptions, Scene, Size, Task,
+    ThermalState, TileId, WindowAppearance, WindowBackgroundAppearance, WindowBounds,
     WindowControlArea, WindowParams, point, px, size,
 };
 use gpui_wgpu::CosmicTextSystem;
 use raw_window_handle_06::{
     DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, WindowHandle,
 };
+
+pub(crate) type VisibilityCallback = Rc<RefCell<Option<Box<dyn FnMut(bool)>>>>;
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 #[path = "native.rs"]
@@ -470,7 +472,7 @@ pub(crate) struct EmbeddedPlatform {
     parent: raw_window_handle::RawWindowHandle,
     class_name: &'static str,
     callback_keyboard_only: bool,
-    visibility_callback: Rc<RefCell<Option<Box<dyn FnMut(bool)>>>>,
+    visibility_callback: VisibilityCallback,
     gpu_context: gpui_wgpu::GpuContext,
     window_owner: RefCell<Option<Weak<WindowState>>>,
     visibility_state: Cell<Option<bool>>,
@@ -482,7 +484,7 @@ impl EmbeddedPlatform {
         parent: raw_window_handle::RawWindowHandle,
         class_name: &'static str,
         callback_keyboard_only: bool,
-        visibility_callback: Rc<RefCell<Option<Box<dyn FnMut(bool)>>>>,
+        visibility_callback: VisibilityCallback,
     ) -> anyhow::Result<Rc<Self>> {
         let dispatcher = EmbeddedDispatcher::new();
         let dispatcher_trait: Arc<dyn gpui::PlatformDispatcher> = dispatcher.clone();
@@ -587,11 +589,22 @@ impl EmbeddedPlatform {
     }
 
     pub(crate) fn host_size_from_logical(&self, width: u32, height: u32) -> (u32, u32) {
-        logical_to_host_size(width, height, self.scale_factor())
+        logical_to_host_size(width, height, self.host_unit_scale_factor())
     }
 
     pub(crate) fn logical_size_from_host(&self, width: u32, height: u32) -> (u32, u32) {
-        host_to_logical_size(width, height, self.scale_factor())
+        host_to_logical_size(width, height, self.host_unit_scale_factor())
+    }
+
+    fn host_unit_scale_factor(&self) -> f32 {
+        #[cfg(target_os = "windows")]
+        {
+            self.scale_factor()
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            1.0
+        }
     }
 
     pub(crate) fn dispatch_vst3_key(
@@ -835,6 +848,12 @@ struct CallbackSlot<T> {
     generation: u64,
 }
 
+type InputCallback = Box<dyn FnMut(PlatformInput) -> DispatchEventResult>;
+type FrameCallback = Box<dyn FnMut(RequestFrameOptions)>;
+type BoolCallback = Box<dyn FnMut(bool)>;
+type ResizeCallback = Box<dyn FnMut(Size<Pixels>, f32)>;
+type HitTestCallback = Box<dyn FnMut() -> Option<WindowControlArea>>;
+
 impl<T> Default for CallbackSlot<T> {
     fn default() -> Self {
         Self {
@@ -871,16 +890,15 @@ struct WindowState {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     native: RefCell<Option<NativeChild>>,
     input_handler: RefCell<InputHandlerSlot>,
-    input_callback:
-        RefCell<CallbackSlot<Box<dyn FnMut(PlatformInput) -> DispatchEventResult>>>,
-    request_frame_callback: RefCell<CallbackSlot<Box<dyn FnMut(RequestFrameOptions)>>>,
-    active_callback: RefCell<Option<Box<dyn FnMut(bool)>>>,
-    hover_callback: RefCell<Option<Box<dyn FnMut(bool)>>>,
-    resize_callback: RefCell<CallbackSlot<Box<dyn FnMut(Size<Pixels>, f32)>>>,
+    input_callback: RefCell<CallbackSlot<InputCallback>>,
+    request_frame_callback: RefCell<CallbackSlot<FrameCallback>>,
+    active_callback: RefCell<Option<BoolCallback>>,
+    hover_callback: RefCell<Option<BoolCallback>>,
+    resize_callback: RefCell<CallbackSlot<ResizeCallback>>,
     moved_callback: RefCell<Option<Box<dyn FnMut()>>>,
     close_callback: RefCell<Option<Box<dyn FnOnce()>>>,
     should_close_callback: RefCell<Option<Box<dyn FnMut() -> bool>>>,
-    hit_test_callback: RefCell<Option<Box<dyn FnMut() -> Option<WindowControlArea>>>>,
+    hit_test_callback: RefCell<Option<HitTestCallback>>,
     appearance_callback: RefCell<Option<Box<dyn FnMut()>>>,
     atlas: RefCell<Arc<dyn PlatformAtlas>>,
     title: RefCell<String>,
@@ -985,6 +1003,9 @@ impl WindowState {
         &self,
         callback: impl FnOnce(&mut PlatformInputHandler) -> R,
     ) -> Option<R> {
+        if self.closed.get() {
+            return None;
+        }
         let (generation, mut input_handler) = {
             let mut slot = self.input_handler.borrow_mut();
             (slot.generation, slot.value.take()?)
@@ -1061,7 +1082,9 @@ impl WindowState {
         if !result.propagate || result.default_prevented {
             return true;
         }
-        if !modifiers.control && !modifiers.alt && !modifiers.platform
+        if !modifiers.control
+            && !modifiers.alt
+            && !modifiers.platform
             && let Some(text) = vst3_text(key, key_code)
         {
             return self.dispatch_callback_text(&text);
@@ -1075,11 +1098,9 @@ impl WindowState {
         source: KeySource,
     ) -> DispatchEventResult {
         let (key, modifiers, down) = match &event {
-            PlatformInput::KeyDown(event) => (
-                event.keystroke.key.clone(),
-                event.keystroke.modifiers,
-                true,
-            ),
+            PlatformInput::KeyDown(event) => {
+                (event.keystroke.key.clone(), event.keystroke.modifiers, true)
+            }
             PlatformInput::KeyUp(event) => (
                 event.keystroke.key.clone(),
                 event.keystroke.modifiers,
@@ -1116,7 +1137,7 @@ impl WindowState {
             return DispatchEventResult::default();
         };
         let result = crate::gui_panic::contain("GPUI input callback", || callback(event))
-            .unwrap_or_else(|| DispatchEventResult {
+            .unwrap_or(DispatchEventResult {
                 propagate: true,
                 default_prevented: true,
             });
@@ -1143,12 +1164,13 @@ impl WindowState {
         {
             return true;
         }
-        let handled = self.with_input_handler(|input_handler| {
-            let _ = crate::gui_panic::contain("GPUI text input", || {
-                input_handler.replace_text_in_range(None, text);
-            });
-        })
-        .is_some();
+        let handled = self
+            .with_input_handler(|input_handler| {
+                let _ = crate::gui_panic::contain("GPUI text input", || {
+                    input_handler.replace_text_in_range(None, text);
+                });
+            })
+            .is_some();
         if handled {
             *self.recent_text.borrow_mut() = Some(RecentText {
                 text: text.to_string(),
@@ -1239,6 +1261,9 @@ impl WindowState {
     }
 
     pub(crate) fn native_resize(&self, width: f32, height: f32) {
+        if self.closed.get() {
+            return;
+        }
         let size = size(px(width.max(1.0)), px(height.max(1.0)));
         self.bounds.set(Bounds::new(self.bounds.get().origin, size));
         if self.suppress_resize_callback.get() {
@@ -1250,6 +1275,18 @@ impl WindowState {
         }
         self.resize_callback(size);
         self.drain_gateway();
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) fn native_backing_scale_changed(&self, width: f32, height: f32) {
+        if self.closed.get() {
+            return;
+        }
+        let size = size(px(width.max(1.0)), px(height.max(1.0)));
+        if let Some(native) = self.native.borrow_mut().as_mut() {
+            native.backing_scale_changed(size);
+        }
+        self.native_resize(width, height);
     }
 
     /// Make the embedded child the native first responder after a real mouse
@@ -1281,6 +1318,9 @@ impl WindowState {
 
     #[cfg(target_os = "windows")]
     pub(crate) fn native_dpi_changed(&self) {
+        if self.closed.get() {
+            return;
+        }
         if let Some(native) = self.native.borrow_mut().as_mut() {
             native.dpi_changed(self.bounds.get().size);
         }
@@ -1515,10 +1555,15 @@ impl PlatformWindow for EmbeddedWindow {
 
     fn draw(&self, scene: &Scene) {
         #[cfg(any(target_os = "macos", target_os = "windows"))]
-        if let Some(native) = self.state.native.borrow_mut().as_mut() {
-            if crate::gui_panic::contain("GPUI native draw", || native.draw(scene)).is_none() {
-                self.state.quarantine_native();
-            }
+        let failed = {
+            let mut native = self.state.native.borrow_mut();
+            native.as_mut().is_some_and(|native| {
+                crate::gui_panic::contain("GPUI native draw", || native.draw(scene)).is_none()
+            })
+        };
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        if failed {
+            self.state.quarantine_native();
         }
     }
 
@@ -1536,6 +1581,16 @@ impl PlatformWindow for EmbeddedWindow {
             return native.gpu_specs();
         }
         None
+    }
+
+    #[cfg(target_os = "windows")]
+    fn get_raw_handle(&self) -> windows::Win32::Foundation::HWND {
+        self.state
+            .native
+            .borrow()
+            .as_ref()
+            .map(NativeChild::raw_handle)
+            .unwrap_or_default()
     }
 
     fn update_ime_position(&self, _bounds: Bounds<Pixels>) {}
@@ -1608,8 +1663,10 @@ fn vst3_text(key: u16, key_code: i16) -> Option<String> {
     let code = match key_code {
         7 => return Some(" ".to_string()),
         1 | 2 | 4 | 6 | 9..=16 | 19 | 21 | 22 | 40..=51 | 65..=76 => return None,
-        24..=33 if key == 0 => return char::from_u32(b'0' as u32 + (key_code - 24) as u32)
-            .map(|character| character.to_string()),
+        24..=33 if key == 0 => {
+            return char::from_u32(b'0' as u32 + (key_code - 24) as u32)
+                .map(|character| character.to_string());
+        }
         34 if key == 0 => return Some("*".to_string()),
         35 if key == 0 => return Some("+".to_string()),
         36 if key == 0 => return Some(",".to_string()),
@@ -1620,9 +1677,9 @@ fn vst3_text(key: u16, key_code: i16) -> Option<String> {
         _ if (0x21..=0x7e).contains(&key_code) => key_code as u32,
         _ => return None,
     };
-    char::from_u32(code).filter(|character| !character.is_control()).map(|character| {
-        character.to_string()
-    })
+    char::from_u32(code)
+        .filter(|character| !character.is_control())
+        .map(|character| character.to_string())
 }
 
 fn vst3_modifiers(modifiers: i16) -> Modifiers {
@@ -1693,26 +1750,17 @@ mod tests {
 
     #[test]
     fn vst3_navigation_and_numeric_key_translation_is_stable() {
-        assert_eq!(
-            vst3_keystroke(0, 11),
-            Some(("left".to_string(), None))
-        );
+        assert_eq!(vst3_keystroke(0, 11), Some(("left".to_string(), None)));
         assert_eq!(
             vst3_keystroke(0, 24),
             Some(("0".to_string(), Some("0".to_string())))
         );
+        assert_eq!(vst3_keystroke(0, 40), Some(("f1".to_string(), None)));
+        assert_eq!(vst3_keystroke(0, 65), Some(("f13".to_string(), None)));
         assert_eq!(
-            vst3_keystroke(0, 40),
-            Some(("f1".to_string(), None))
+            vst3_keystroke('A' as u16, 0),
+            Some(("a".to_string(), Some("A".to_string()),))
         );
-        assert_eq!(
-            vst3_keystroke(0, 65),
-            Some(("f13".to_string(), None))
-        );
-        assert_eq!(vst3_keystroke('A' as u16, 0), Some((
-            "a".to_string(),
-            Some("A".to_string()),
-        )));
     }
 
     #[test]
@@ -1737,5 +1785,195 @@ mod tests {
             .expect("dispatcher worker ran realtime work");
         dispatcher.stop();
         assert!(!dispatcher.failed());
+    }
+
+    #[test]
+    fn host_logical_size_conversion_tracks_dpi_scale() {
+        assert_eq!(logical_to_host_size(208, 212, 1.0), (208, 212));
+        assert_eq!(logical_to_host_size(208, 212, 1.25), (260, 265));
+        assert_eq!(host_to_logical_size(260, 265, 1.25), (208, 212));
+    }
+
+    #[test]
+    fn nested_input_is_queued_until_outer_callback_returns() {
+        let state = test_window_state();
+        let weak_state = Rc::downgrade(&state);
+        let callback_count = Rc::new(Cell::new(0_u32));
+        let callback_count_for_input = callback_count.clone();
+        state.input_callback.borrow_mut().value = Some(Box::new(move |_event| {
+            let count = callback_count_for_input.get();
+            callback_count_for_input.set(count + 1);
+            if count == 0
+                && let Some(state) = weak_state.upgrade()
+            {
+                let _ = state.dispatch_input(test_key_event());
+            }
+            DispatchEventResult::default()
+        }));
+
+        let _ = state.dispatch_input(test_key_event());
+
+        assert_eq!(callback_count.get(), 2);
+        assert!(!state.closed.get());
+    }
+
+    #[test]
+    fn callback_replacement_survives_reentrant_dispatch() {
+        let state = test_window_state();
+        let weak_state = Rc::downgrade(&state);
+        let old_count = Rc::new(Cell::new(0_u32));
+        let replacement_count = Rc::new(Cell::new(0_u32));
+        let old_count_for_input = old_count.clone();
+        let replacement_count_for_input = replacement_count.clone();
+        state.input_callback.borrow_mut().value = Some(Box::new(move |_event| {
+            old_count_for_input.set(old_count_for_input.get() + 1);
+            let replacement_count = replacement_count_for_input.clone();
+            if let Some(state) = weak_state.upgrade() {
+                let mut slot = state.input_callback.borrow_mut();
+                if slot.generation == 0 {
+                    slot.generation = slot.generation.wrapping_add(1);
+                    slot.value = Some(Box::new(move |_event| {
+                        replacement_count.set(replacement_count.get() + 1);
+                        DispatchEventResult::default()
+                    }));
+                }
+            }
+            DispatchEventResult::default()
+        }));
+
+        let _ = state.dispatch_input(test_key_event());
+        let _ = state.dispatch_input(test_key_event());
+
+        assert_eq!(old_count.get(), 1);
+        assert_eq!(replacement_count.get(), 1);
+    }
+
+    #[test]
+    fn shutdown_during_input_or_frame_drops_callbacks_without_late_dispatch() {
+        struct DropProbe(Rc<Cell<bool>>);
+
+        impl Drop for DropProbe {
+            fn drop(&mut self) {
+                self.0.set(true);
+            }
+        }
+
+        let state = test_window_state();
+        let weak_state = Rc::downgrade(&state);
+        let input_count = Rc::new(Cell::new(0_u32));
+        let input_count_for_callback = input_count.clone();
+        let input_dropped = Rc::new(Cell::new(false));
+        let input_probe = DropProbe(input_dropped.clone());
+        let frame_count = Rc::new(Cell::new(0_u32));
+        let frame_count_for_callback = frame_count.clone();
+        state.request_frame_callback.borrow_mut().value = Some(Box::new(move |_| {
+            frame_count_for_callback.set(frame_count_for_callback.get() + 1);
+        }));
+        let resize_count = Rc::new(Cell::new(0_u32));
+        let resize_count_for_callback = resize_count.clone();
+        state.resize_callback.borrow_mut().value = Some(Box::new(move |_, _| {
+            resize_count_for_callback.set(resize_count_for_callback.get() + 1);
+        }));
+        state.input_callback.borrow_mut().value = Some(Box::new(move |_event| {
+            let _probe = &input_probe;
+            input_count_for_callback.set(input_count_for_callback.get() + 1);
+            let owner = weak_state.upgrade().expect("callback owner remains alive");
+            owner.quarantine_native();
+            owner.request_frame();
+            owner.native_resize(20.0, 20.0);
+            let nested = owner.dispatch_input(test_key_event());
+            assert!(nested.default_prevented);
+            DispatchEventResult::default()
+        }));
+
+        let _ = state.dispatch_input(test_key_event());
+
+        assert_eq!(input_count.get(), 1);
+        assert!(input_dropped.get(), "closed callback was not dropped");
+        assert!(state.input_callback.borrow().value.is_none());
+        assert_eq!(frame_count.get(), 0);
+        assert_eq!(resize_count.get(), 0);
+        assert!(state.pending_inputs.borrow().is_empty());
+        assert!(state.pending_resize.get().is_none());
+        assert!(!state.pending_frame.get());
+        let _ = state.dispatch_input(test_key_event());
+        state.request_frame();
+        state.native_resize(30.0, 30.0);
+        assert_eq!(input_count.get(), 1);
+        assert_eq!(frame_count.get(), 0);
+        assert_eq!(resize_count.get(), 0);
+
+        let state = test_window_state();
+        let weak_state = Rc::downgrade(&state);
+        let frame_count = Rc::new(Cell::new(0_u32));
+        let frame_count_for_callback = frame_count.clone();
+        let frame_dropped = Rc::new(Cell::new(false));
+        let frame_probe = DropProbe(frame_dropped.clone());
+        state.request_frame_callback.borrow_mut().value = Some(Box::new(move |_| {
+            let _probe = &frame_probe;
+            frame_count_for_callback.set(frame_count_for_callback.get() + 1);
+            weak_state
+                .upgrade()
+                .expect("frame owner remains alive")
+                .quarantine_native();
+        }));
+
+        state.request_frame();
+        state.request_frame();
+
+        assert_eq!(frame_count.get(), 1);
+        assert!(frame_dropped.get(), "closed frame callback was not dropped");
+        assert!(state.request_frame_callback.borrow().value.is_none());
+        assert!(state.closed.get());
+    }
+
+    fn test_key_event() -> PlatformInput {
+        PlatformInput::KeyDown(KeyDownEvent {
+            keystroke: Keystroke {
+                modifiers: Modifiers::default(),
+                key: "x".to_string(),
+                key_char: Some("x".to_string()),
+            },
+            is_held: false,
+            prefer_character_input: false,
+        })
+    }
+
+    fn test_window_state() -> Rc<WindowState> {
+        Rc::new(WindowState {
+            bounds: Cell::new(Bounds::new(
+                point(px(0.0), px(0.0)),
+                size(px(10.0), px(10.0)),
+            )),
+            active_window: Rc::new(Cell::new(None)),
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            native: RefCell::new(None),
+            input_handler: RefCell::new(InputHandlerSlot {
+                value: None,
+                generation: 0,
+            }),
+            input_callback: RefCell::new(CallbackSlot::default()),
+            request_frame_callback: RefCell::new(CallbackSlot::default()),
+            active_callback: RefCell::new(None),
+            hover_callback: RefCell::new(None),
+            resize_callback: RefCell::new(CallbackSlot::default()),
+            moved_callback: RefCell::new(None),
+            close_callback: RefCell::new(None),
+            should_close_callback: RefCell::new(None),
+            hit_test_callback: RefCell::new(None),
+            appearance_callback: RefCell::new(None),
+            atlas: RefCell::new(Arc::new(EmptyAtlas::default())),
+            title: RefCell::new(String::new()),
+            background: Cell::new(WindowBackgroundAppearance::Opaque),
+            fullscreen: Cell::new(false),
+            closed: Cell::new(false),
+            in_update: Cell::new(false),
+            pending_inputs: RefCell::new(VecDeque::new()),
+            pending_frame: Cell::new(false),
+            pending_resize: Cell::new(None),
+            suppress_resize_callback: Cell::new(false),
+            recent_key: RefCell::new(None),
+            recent_text: RefCell::new(None),
+        })
     }
 }
