@@ -473,9 +473,10 @@ impl Drop for GpuiHostedGui {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "macos")]
+    use super::GpuiHostedGui;
     use super::{
-        GpuiHostedGui, GpuiSizeContract, constrain_host_size_at_scale,
-        max_logical_dimension_for_host, platform,
+        GpuiSizeContract, constrain_host_size_at_scale, max_logical_dimension_for_host, platform,
     };
 
     #[test]
