@@ -2218,6 +2218,9 @@ fn vst3_keystroke(key: u16, key_code: i16) -> Option<(String, Option<String>)> {
     if let Some((name, text)) = semantic {
         return Some((name.to_string(), text));
     }
+    if matches!(key, 8 | 127) {
+        return Some(("backspace".to_string(), None));
+    }
     let text = vst3_text(key, key_code as i16)?;
     Some((text.to_lowercase(), Some(text)))
 }
@@ -2354,6 +2357,18 @@ mod tests {
             vst3_keystroke('A' as u16, 0),
             Some(("a".to_string(), Some("A".to_string()),))
         );
+    }
+
+    #[test]
+    fn vst3_backspace_character_fallback_preserves_semantic_delete() {
+        for character in [8, 127] {
+            assert_eq!(
+                vst3_keystroke(character, 0),
+                Some(("backspace".to_string(), None))
+            );
+        }
+        assert_eq!(vst3_keystroke(0, 1), Some(("backspace".to_string(), None)));
+        assert_eq!(vst3_keystroke(0, 22), Some(("delete".to_string(), None)));
     }
 
     #[test]
