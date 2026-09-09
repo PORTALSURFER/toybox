@@ -1,15 +1,29 @@
 #import <Cocoa/Cocoa.h>
 #include <dlfcn.h>
 #include <cstdio>
+#include <cstdlib>
+#include <cmath>
 #include <vector>
 #include "pluginterfaces/base/ipluginbase.h"
 #include "pluginterfaces/gui/iplugview.h"
 #include "pluginterfaces/vst/ivsteditcontroller.h"
 using namespace Steinberg;
 int main(int argc, char** argv) {
+  if (argc<2) { fprintf(stderr,"usage: plugin-editor-probe <VST3 binary> [additional binary...]\n"); return 1; }
   @autoreleasepool {
     [NSApplication sharedApplication];
+    std::vector<NSWindow*> windows;
     std::vector<IPlugView*> views;
+    auto pump = [](double seconds) {
+      NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
+      do {
+        NSEvent* event = [NSApp nextEventMatchingMask:NSEventMaskAny
+          untilDate:[NSDate dateWithTimeIntervalSinceNow:0.005]
+          inMode:NSDefaultRunLoopMode dequeue:YES];
+        if (event) [NSApp sendEvent:event];
+        [NSApp updateWindows];
+      } while ([deadline timeIntervalSinceNow] > 0);
+    };
     std::vector<Vst::IEditController*> controllers;
     for (int n=1; n<argc; ++n) {
       fprintf(stderr, "LOAD %s\n", argv[n]);
@@ -36,11 +50,26 @@ int main(int argc, char** argv) {
         fprintf(stderr,"CONTROLLER %s initialize=%d\n",info.name,controller->initialize(nullptr));
         auto view=controller->createView("editor");
         if (!view) return 4;
-        NSView* parent=[[NSView alloc] initWithFrame:NSMakeRect(0,0,640,400)];
+        ViewRect preferred{};
+        if (view->getSize(&preferred)!=kResultOk) return 13;
+        NSRect frame=NSMakeRect(0,0,preferred.right-preferred.left,preferred.bottom-preferred.top);
+        NSWindow* window=[[NSWindow alloc] initWithContentRect:frame
+          styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskResizable|NSWindowStyleMaskMiniaturizable
+          backing:NSBackingStoreBuffered defer:NO];
+        [window setReleasedWhenClosed:NO];
+        [window setTitle:[NSString stringWithFormat:@"GainSnap GPUI probe %d",n]];
+        NSView* parent=[window contentView];
+        windows.push_back(window);
+        if (getenv("PROBE_VISIBLE")) {
+          [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+          [window makeKeyAndOrderFront:nil];
+          [NSApp activateIgnoringOtherApps:YES];
+        }
         fprintf(stderr,"ATTACH %s\n",info.name);
         result=view->attached((__bridge void*)parent,"NSView");
         fprintf(stderr,"ATTACHED result=%d\n",result);
         if (result!=kResultOk) return 5;
+        pump(0.05);
         if (getenv("PROBE_KEY_PASSTHROUGH")) {
           if (view->onKeyDown(' ', 0, 0)!=kResultFalse) return 11;
           if (view->onKeyDown('x', 0, 0)!=kResultFalse) return 12;
@@ -49,9 +78,104 @@ int main(int argc, char** argv) {
         for (int cycle=0; cycle<3; ++cycle) {
           ViewRect size{0,0,640 + cycle * 32,400 + cycle * 20};
           if (view->checkSizeConstraint(&size)!=kResultOk || view->onSize(&size)!=kResultOk) return 7;
+          [window setContentSize:NSMakeSize(size.right-size.left,size.bottom-size.top)];
+          pump(0.02);
           for (NSView* child in [parent subviews]) { [child display]; }
           if (view->removed()!=kResultOk || [[parent subviews] count]!=0) return 8;
           if (view->attached((__bridge void*)parent,"NSView")!=kResultOk) return 9;
+        }
+        if (view->onSize(&preferred)!=kResultOk) return 14;
+        [window setContentSize:NSMakeSize(preferred.right-preferred.left,preferred.bottom-preferred.top)];
+        pump(0.02);
+        if (getenv("PROBE_GAIN_SNAP_INPUT")) {
+          [window makeKeyAndOrderFront:nil];
+          const NSInteger number=[window windowNumber];
+          auto key=[&](NSString* text,unsigned short code,NSEventModifierFlags modifiers,bool standalone_callback=false) {
+            NSEvent* down=[NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint
+              modifierFlags:modifiers timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:number context:nil
+              characters:text charactersIgnoringModifiers:text isARepeat:NO keyCode:code];
+            [window sendEvent:down];
+            // This direct ABI call has no shared native OS event token.
+            if (standalone_callback) view->onKeyDown(0,12,0);
+            NSEvent* up=[NSEvent keyEventWithType:NSEventTypeKeyUp location:NSZeroPoint
+              modifierFlags:modifiers timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:number context:nil
+              characters:text charactersIgnoringModifiers:text isARepeat:NO keyCode:code];
+            [window sendEvent:up];
+            pump(0.02);
+          };
+          for (NSEventType type : {NSEventTypeLeftMouseDown,NSEventTypeLeftMouseUp}) {
+            NSEvent* click=[NSEvent mouseEventWithType:type location:NSMakePoint(48,28)
+              modifierFlags:0 timestamp:0 windowNumber:number context:nil
+              eventNumber:1 clickCount:1 pressure:1];
+            [window sendEvent:click];
+          }
+          pump(0.02);
+          key(@"a",0,NSEventModifierFlagCommand);
+          key(@"-",27,0); key(@"1",18,0); key(@"5",23,0); key(@"\r",36,0);
+          const double typed=-36.0+36.0*controller->getParamNormalized(1);
+          if (std::fabs(typed-(-15.0))>0.001) {
+            fprintf(stderr,"FAIL native target entry expected -15 got %.6f\n",typed); return 16;
+          }
+          key(@"\uF700",126,0);
+          key(@"\uF701",125,NSEventModifierFlagShift);
+          const double stepped=-36.0+36.0*controller->getParamNormalized(1);
+          if (std::fabs(stepped-(-14.1))>0.001) {
+            fprintf(stderr,"FAIL native arrows expected -14.1 got %.6f\n",stepped); return 17;
+          }
+          fprintf(stderr,"PASS native GainSnap selection, target typing, commit, arrows and Shift-arrows\n");
+          view->onKeyDown('a',0,4); view->onKeyUp('a',0,4);
+          for (char ch : {'-','1','8'}) { view->onKeyDown(ch,0,0); view->onKeyUp(ch,0,0); }
+          view->onKeyDown(0,4,0); view->onKeyUp(0,4,0);
+          pump(0.02);
+          const double callback_target=-36.0+36.0*controller->getParamNormalized(1);
+          if (std::fabs(callback_target-(-18.0))>0.001) {
+            fprintf(stderr,"FAIL VST3 callback target entry expected -18 got %.6f\n",callback_target); return 18;
+          }
+          key(@"\uF700",126,0,true);
+          const double independent_target=-36.0+36.0*controller->getParamNormalized(1);
+          if (std::fabs(independent_target-(-16.0))>0.001) {
+            fprintf(stderr,"FAIL independent native/VST3 Up expected -16 got %.6f\n",independent_target); return 19;
+          }
+          fprintf(stderr,"PASS VST3 callback text entry and standalone callback fallback\n");
+        }
+        if (getenv("PROBE_GAIN_SNAP_VISIBILITY")) {
+          const double held_gain=controller->getParamNormalized(3);
+          for (int hidden_kind=0; hidden_kind<2; ++hidden_kind) {
+            [window makeKeyAndOrderFront:nil];
+            pump(0.05);
+            controller->setParamNormalized(2,1.0);
+            view->onFocus(0);
+            [window makeFirstResponder:nil];
+            pump(0.05);
+            if (controller->getParamNormalized(2)<0.5) {
+              fprintf(stderr,"FAIL focus loss stopped Match\n"); return 20;
+            }
+            if (hidden_kind==0) [window orderOut:nil];
+            else [window miniaturize:nil];
+            // Miniaturization can animate before normal run-loop timers resume.
+            for (int tick=0; tick<50 && controller->getParamNormalized(2)>=0.5; ++tick) pump(0.02);
+            if (controller->getParamNormalized(2)>=0.5 ||
+                std::fabs(controller->getParamNormalized(3)-held_gain)>1e-9) {
+              fprintf(stderr,"FAIL hide/minimize kind=%d match=%f held=%f expected-held=%f visible=%d minimized=%d\n",
+                hidden_kind,controller->getParamNormalized(2),controller->getParamNormalized(3),held_gain,
+                [window isVisible],[window isMiniaturized]); return 21;
+            }
+            [window deminiaturize:nil];
+            [window makeKeyAndOrderFront:nil];
+            pump(0.05);
+            if (controller->getParamNormalized(2)>=0.5) {
+              fprintf(stderr,"FAIL restoring window restarted Match\n"); return 22;
+            }
+          }
+          controller->setParamNormalized(2,1.0);
+          if (view->removed()!=kResultOk || controller->getParamNormalized(2)>=0.5 ||
+              std::fabs(controller->getParamNormalized(3)-held_gain)>1e-9) {
+            fprintf(stderr,"FAIL removing editor must stop Match and retain gain\n"); return 23;
+          }
+          if (view->attached((__bridge void*)parent,"NSView")!=kResultOk) return 24;
+          pump(0.05);
+          if (controller->getParamNormalized(2)>=0.5) return 25;
+          fprintf(stderr,"PASS focus preservation, hide/minimize/close Match stop and held gain\n");
         }
         if (getenv("PROBE_CLOSE_EACH")) {
           view->removed(); view->release(); controller->terminate(); controller->release();
@@ -61,8 +185,23 @@ int main(int argc, char** argv) {
       }
       if (!opened) return 6;
     }
+    if (const char* seconds=getenv("PROBE_INTERACTIVE_SECONDS")) {
+      double duration=std::strtod(seconds,nullptr);
+      if (duration>0 && duration<=600) pump(duration);
+    }
+    if (getenv("PROBE_GAIN_SNAP_PARAMS") || getenv("PROBE_EXPECT_TARGET_DB")) {
+    for (auto controller:controllers) {
+      const double target=controller->getParamNormalized(1);
+      fprintf(stderr,"PARAM target normalized=%.9f plain=%.3f match=%.0f rms=%.0f\n",
+        target,-36.0+36.0*target,controller->getParamNormalized(2),controller->getParamNormalized(4));
+      if (const char* expected=getenv("PROBE_EXPECT_TARGET_DB")) {
+        if (std::fabs((-36.0+36.0*target)-std::strtod(expected,nullptr))>0.001) return 15;
+      }
+    }
+    }
     for (auto it=views.rbegin();it!=views.rend();++it) { (*it)->removed(); (*it)->release(); }
     for (auto c:controllers) { c->terminate(); c->release(); }
+    for (auto window:windows) { [window close]; [window release]; }
     fprintf(stderr,"PASS attach, resize, close/reopen and remove\n");
   }
   return 0;

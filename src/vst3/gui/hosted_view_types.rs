@@ -1,5 +1,5 @@
 /// GUI contract for reusable host-parented VST3 views backed by Patchbay windows.
-#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
+#[cfg(any(feature = "gui", feature = "radiant-vst3", feature = "gpui-vst3"))]
 pub trait Vst3HostedGui {
     /// Attach the host-provided raw parent window handle.
     fn set_parent_raw(&mut self, parent: RawWindowHandle);
@@ -67,7 +67,7 @@ pub trait Vst3HostedGui {
     }
 }
 
-#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
+#[cfg(any(feature = "gui", feature = "radiant-vst3", feature = "gpui-vst3"))]
 #[derive(Clone, Copy)]
 /// Ordered logical bounds used by embedded-host resize negotiation.
 struct SizeBounds {
@@ -77,7 +77,7 @@ struct SizeBounds {
     maximum: (i32, i32),
 }
 
-#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
+#[cfg(any(feature = "gui", feature = "radiant-vst3", feature = "gpui-vst3"))]
 impl SizeBounds {
     /// Build ordered, non-zero bounds that always contain the default size.
     fn new(default: (i32, i32), minimum: (u32, u32), maximum: (u32, u32)) -> Self {
@@ -94,7 +94,7 @@ impl SizeBounds {
 }
 
 /// Reusable VST3 `IPlugView` implementation for host-parented Patchbay GUIs.
-#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
+#[cfg(any(feature = "gui", feature = "radiant-vst3", feature = "gpui-vst3"))]
 pub struct HostedVst3View<G: Vst3HostedGui> {
     /// Latest host-facing rectangle in plugin coordinates used for resize behavior.
     rect: Cell<ViewRect>,
@@ -112,9 +112,15 @@ pub struct HostedVst3View<G: Vst3HostedGui> {
     enforce_minimum_size: bool,
     /// GUI instance shared with FFI callbacks and synchronized under a mutex.
     gui: Mutex<G>,
+    /// Records a host removal that re-entered while another GUI callback held
+    /// the mutex. The outer callback drains this after releasing its guard.
+    pending_removed: Cell<bool>,
+    /// Prevents a close callback from recursively draining itself when a GUI
+    /// implementation synchronously re-enters `removed` during `close`.
+    draining_removed: Cell<bool>,
 }
 
-#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
+#[cfg(any(feature = "gui", feature = "radiant-vst3", feature = "gpui-vst3"))]
 impl<G: Vst3HostedGui> HostedVst3View<G> {
     /// Create a new host-parented view with default logical dimensions.
     pub fn new(gui: G, default_width: u32, default_height: u32) -> Self {
@@ -133,7 +139,59 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
             preserve_aspect_ratio: true,
             enforce_minimum_size: false,
             gui: Mutex::new(gui),
+            pending_removed: Cell::new(false),
+            draining_removed: Cell::new(false),
         }
+    }
+
+    /// Finish a deferred host removal once no GUI mutex guard is held.
+    ///
+    /// VST3 hosts are allowed to synchronously call back into the view while
+    /// a callback is running. A blocking mutex acquisition here would deadlock
+    /// in that case, so a busy lock leaves the request pending for the next
+    /// outer callback.
+    fn drain_pending_removed(&self) {
+        if !self.pending_removed.get() || self.draining_removed.replace(true) {
+            return;
+        }
+
+        let cleanup = match self.gui.try_lock() {
+            Ok(mut gui) => {
+                self.pending_removed.set(false);
+                Some(crate::gui_panic::contain(
+                    "pending VST3 view cleanup",
+                    || {
+                        gui.close();
+                        gui.set_callback_keyboard_mode(false);
+                    },
+                ))
+            }
+            Err(std::sync::TryLockError::Poisoned(error)) => {
+                self.pending_removed.set(false);
+                let mut gui = error.into_inner();
+                Some(crate::gui_panic::contain(
+                    "pending poisoned VST3 view cleanup",
+                    || {
+                        gui.close();
+                        gui.set_callback_keyboard_mode(false);
+                    },
+                ))
+            }
+            Err(std::sync::TryLockError::WouldBlock) => None,
+        };
+
+        if let Some(None) = cleanup {
+            self.failed.set(true);
+        }
+        // `close` is terminal for this removal request. A callback from
+        // inside `close` is acknowledged while `draining_removed` is set and
+        // must not schedule a second close on the next host callback. Keep a
+        // busy request pending for the next outer callback instead.
+        if cleanup.is_some() {
+            self.pending_removed.set(false);
+        }
+        self.attached.set(false);
+        self.draining_removed.set(false);
     }
 
     /// Contain GUI failures before returning through the non-unwinding VST3 ABI.
@@ -142,16 +200,19 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
             return kResultFalse;
         }
         if let Some(result) = crate::gui_panic::contain(operation, callback) {
+            self.drain_pending_removed();
+            if operation == "VST3 attached" && result == kResultOk && !self.attached.get() {
+                return kResultFalse;
+            }
             return result;
         }
         self.failed.set(true);
         self.attached.set(false);
-        // The failing callback may have poisoned the mutex. Recover it only for
-        // cleanup, never for further editor input or rendering.
-        let _ = crate::gui_panic::contain("failed VST3 view cleanup", || {
-            let mut gui = self.gui.lock().unwrap_or_else(|error| error.into_inner());
-            gui.close();
-        });
+        // The failing callback may have poisoned or still be unwinding around
+        // the mutex. Defer cleanup through the same nonblocking path instead
+        // of ever waiting for the GUI lock during ABI panic containment.
+        self.pending_removed.set(true);
+        self.drain_pending_removed();
         kResultFalse
     }
 
@@ -196,7 +257,7 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
 
     /// Synchronize the cached rectangle from the hosted GUI's latest reported size.
     fn sync_rect_from_gui(&self) {
-        let Ok(gui) = self.gui.lock() else {
+        let Ok(gui) = self.gui.try_lock() else {
             return;
         };
         if let Some((host_width, host_height)) = gui.last_size() {
@@ -318,13 +379,13 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
     }
 }
 
-#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
+#[cfg(any(feature = "gui", feature = "radiant-vst3", feature = "gpui-vst3"))]
 /// Convert a host-provided logical dimension to a positive VST3 coordinate.
 fn logical_dimension(value: u32) -> i32 {
     value.clamp(1, i32::MAX as u32) as i32
 }
 
-#[cfg(any(feature = "gui", feature = "radiant-vst3"))]
+#[cfg(any(feature = "gui", feature = "radiant-vst3", feature = "gpui-vst3"))]
 impl<G: Vst3HostedGui> Class for HostedVst3View<G> {
     type Interfaces = (IPlugView,);
 }

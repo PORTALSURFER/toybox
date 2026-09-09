@@ -7,7 +7,7 @@
 
 ## Goals
 - Provide reusable DSP utilities (filters, delay lines, smoothing, spectral/STFT helpers) derived from current plugins.
-- Provide reusable GUI building blocks (Patchbay GUI window wrapper, common controls, visualization helpers, snapshot readers).
+- Provide reusable embedded GPUI hosting, native input/lifecycle adapters, and snapshot readers.
 - Standardize parameter/state plumbing (param definitions, snapshots, state serialization, event handling) across plugins.
 - Provide stable import surfaces for plugin wiring:
   - `toybox::clap::prelude`
@@ -45,7 +45,7 @@
 - VST3 example compiles and exports through toybox entry helpers.
 
 ## Assumptions
-- Patchbay GUI remains the default UI stack.
+- GPUI is the supported UI stack for new plugin editors; existing Radiant and Patchbay consumers retain their optional compatibility features.
 - Existing plugin behavior remains the reference for feature parity.
 - VST3 support is exposed behind the `vst3` Cargo feature.
 - Windows is the primary VST3 packaging target for the first release.
@@ -53,5 +53,5 @@
 ## Dependencies
 - CLAP: `clack-plugin`, `clack-extensions`, `clack-common`.
 - VST3: `VST3_SDK_DIR` SDK location (validated at build time) plus generated Rust bindings from `vst3`.
-- GUI: `patchbay-gui` + `vello` (on top of `wgpu`).
+- GUI: pinned GPUI core and `gpui_wgpu`, embedded through Toybox's native child-window platform. See [GPUI](GPUI.md).
 - DSP/spectral use-cases: `rustfft` in plugin crates that need it.

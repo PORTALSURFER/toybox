@@ -13,7 +13,8 @@ This directory contains project context and execution plans.
 - `docs/plans/`: active and archived execution plans.
 - `docs/ADR-2026-02-06-reliability-hardening.md`: reliability-focused architecture decision.
 - `docs/DESIGN-PRINCIPLES.md`: engineering design guidance.
-- `docs/GUI-*.md`: GUI architecture, contract, migration, and layout specifications.
+- `docs/GPUI.md`: current embedded GPUI integration and validation guide.
+- `docs/GUI-*.md`: existing GUI architecture and compatibility contracts; use `docs/GPUI.md` for new editors.
 - `docs/OVERSAMPLING.md`: realtime fixed-factor 2x/4x DSP response, latency,
   realtime policy, and benchmark contract.
 - `docs/PACKAGING.md`: packaging notes.

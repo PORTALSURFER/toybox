@@ -27,6 +27,11 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
       - name: Install ripgrep
         run: sudo apt-get update && sudo apt-get install --yes ripgrep
 
@@ -67,6 +72,12 @@ jobs:
       - name: Run toybox state helper tests
         run: cargo test -p toybox clap::state
 
+      - name: Lint embedded GPUI platform
+        run: cargo clippy -p toybox --all-targets --features gpui-gui -- -D warnings
+
+      - name: Test embedded GPUI platform
+        run: cargo test -p toybox --features gpui-gui
+
       - name: Run toybox docs tests
         run: cargo test -p toybox --doc
 
@@ -90,6 +101,17 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Build toybox with GPUI GUI feature
+        run: cargo check -p toybox --features gpui-gui
+
+      - name: Test toybox with GPUI GUI feature
+        run: cargo test -p toybox --features gpui-gui
 
       - name: Build minimal CLAP cdylib
         run: cargo build -p toybox-minimal-clap
@@ -155,3 +177,63 @@ jobs:
         env:
           VST3_SDK_DIR: ${{ vars.VST3_SDK_DIR }}
         run: cargo test -p toybox --features radiant-vst3
+
+      - name: Test toybox GPUI VST3 feature (SDK optional)
+        if: ${{ vars.VST3_SDK_DIR != '' }}
+        env:
+          VST3_SDK_DIR: ${{ vars.VST3_SDK_DIR }}
+        run: cargo test -p toybox --features gpui-vst3
+
+  gpui-build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure private git dependencies
+        shell: bash
+        env:
+          RADIANT_REPO_TOKEN: ${{ secrets.RADIANT_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${RADIANT_REPO_TOKEN}" ]]; then
+            echo "::error::RADIANT_REPO_TOKEN is required to fetch private git dependencies"
+            exit 1
+          fi
+          git config --global url."https://x-access-token:${RADIANT_REPO_TOKEN}@github.com/".insteadOf "https://github.com/"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Lint embedded GPUI platform
+        run: cargo clippy -p toybox --all-targets --features gpui-gui -- -D warnings
+
+      - name: Test embedded GPUI platform
+        run: cargo test -p toybox --features gpui-gui
+
+      - name: Exercise native GPUI child on the main thread
+        run: cargo run -p toybox --example gpui-embedded-smoke --features gpui-gui
+
+      - name: Capture native debugger backtrace
+        if: failure()
+        run: |
+          if [[ -x target/debug/examples/gpui-embedded-smoke ]]; then
+            lldb --batch -o run -k 'thread backtrace all' -- target/debug/examples/gpui-embedded-smoke > gpui-native-backtrace.txt 2>&1 || true
+            cat gpui-native-backtrace.txt
+          fi
+
+      - name: Collect native crash diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpui-macos-crash-reports
+          path: |
+            ~/Library/Logs/DiagnosticReports/
+            /Library/Logs/DiagnosticReports/
+            gpui-native-backtrace.txt
+          if-no-files-found: ignore

@@ -1,4 +1,6 @@
 use super::*;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 use std::sync::Mutex;
 
 struct MockHostedGui {
@@ -34,6 +36,59 @@ impl Vst3HostedGui for MockHostedGui {
 
 struct RecordingHostedGui {
     events: Mutex<Vec<&'static str>>,
+}
+
+/// Exercises the host callback path that can synchronously remove a view
+/// while another VST3 callback still owns the GUI mutex.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+struct ReentrantRemovedGui {
+    remove: Rc<RefCell<Option<Box<dyn FnMut()>>>>,
+    closes: Rc<Cell<usize>>,
+    remove_on_open: bool,
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+impl Vst3HostedGui for ReentrantRemovedGui {
+    fn set_parent_raw(&mut self, _parent: RawWindowHandle) {}
+
+    fn open(&mut self) -> bool {
+        if self.remove_on_open
+            && let Ok(mut callback) = self.remove.try_borrow_mut()
+            && let Some(callback) = callback.as_mut()
+        {
+            self.remove_on_open = false;
+            callback();
+        }
+        true
+    }
+
+    fn close(&mut self) {
+        self.closes.set(self.closes.get() + 1);
+        if let Ok(mut callback) = self.remove.try_borrow_mut()
+            && let Some(callback) = callback.as_mut()
+        {
+            callback();
+        }
+    }
+
+    fn last_size(&self) -> Option<(u32, u32)> {
+        None
+    }
+
+    fn show(&self) -> bool {
+        true
+    }
+
+    fn request_resize(&self, _width: u32, _height: u32) {}
+
+    fn on_key_down(&self, _key: char16, _key_code: int16, _modifiers: int16) -> bool {
+        if let Ok(mut callback) = self.remove.try_borrow_mut()
+            && let Some(callback) = callback.as_mut()
+        {
+            callback();
+        }
+        true
+    }
 }
 
 impl RecordingHostedGui {
@@ -252,6 +307,67 @@ fn hosted_view_enables_callback_keyboard_before_open_and_shows_child() {
             "native"
         ]
     );
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[test]
+fn hosted_view_defers_reentrant_removed_until_outer_callback_releases_gui() {
+    let remove = Rc::new(RefCell::new(None));
+    let closes = Rc::new(Cell::new(0));
+    let view = HostedVst3View::new(
+        ReentrantRemovedGui {
+            remove: remove.clone(),
+            closes: closes.clone(),
+            remove_on_open: false,
+        },
+        420,
+        240,
+    );
+    let view_ptr: *const HostedVst3View<ReentrantRemovedGui> = &view;
+    *remove.borrow_mut() = Some(Box::new(move || unsafe {
+        assert_eq!((*view_ptr).removed(), kResultOk);
+    }));
+
+    let parent = std::ptr::dangling_mut::<std::ffi::c_void>();
+    #[cfg(target_os = "macos")]
+    let platform = kPlatformTypeNSView;
+    #[cfg(target_os = "windows")]
+    let platform = kPlatformTypeHWND;
+    assert_eq!(unsafe { view.attached(parent, platform) }, kResultOk);
+    assert_eq!(unsafe { view.onKeyDown('a' as u16, 0, 0) }, kResultTrue);
+    assert_eq!(closes.get(), 1);
+    assert!(!view.attached.get());
+    assert_eq!(unsafe { view.getSize(&mut view_rect(420, 240)) }, kResultOk);
+    assert_eq!(closes.get(), 1);
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[test]
+fn hosted_view_reports_reentrant_removal_during_attach_as_failed() {
+    let remove = Rc::new(RefCell::new(None));
+    let closes = Rc::new(Cell::new(0));
+    let view = HostedVst3View::new(
+        ReentrantRemovedGui {
+            remove: remove.clone(),
+            closes: closes.clone(),
+            remove_on_open: true,
+        },
+        420,
+        240,
+    );
+    let view_ptr: *const HostedVst3View<ReentrantRemovedGui> = &view;
+    *remove.borrow_mut() = Some(Box::new(move || unsafe {
+        assert_eq!((*view_ptr).removed(), kResultOk);
+    }));
+
+    let parent = std::ptr::dangling_mut::<std::ffi::c_void>();
+    #[cfg(target_os = "macos")]
+    let platform = kPlatformTypeNSView;
+    #[cfg(target_os = "windows")]
+    let platform = kPlatformTypeHWND;
+    assert_eq!(unsafe { view.attached(parent, platform) }, kResultFalse);
+    assert_eq!(closes.get(), 1);
+    assert!(!view.attached.get());
 }
 
 #[test]
