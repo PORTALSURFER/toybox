@@ -2,7 +2,13 @@
 
 #![allow(clippy::missing_docs_in_private_items)]
 
+mod numeric_input;
 mod platform;
+
+pub use numeric_input::{
+    NumericInput, NumericInputCanceled, NumericInputChanged, NumericInputConfig, NumericInputRange,
+    NumericInputStepped, NumericInputStyle, NumericInputSubmitted,
+};
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
