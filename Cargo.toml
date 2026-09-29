@@ -13,8 +13,8 @@ uuid = { version = "1", features = ["v4"], optional = true }
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 mts_esp = { git = "https://github.com/PORTALSURFER/mts-esp-rs", rev = "d107a979e44c1b16dcc72dfd47cdd8dac77854ca", package = "mts-esp-rs" }
 patchbay-gui = { path = "patchbay-gui", version = "0.1.0", optional = true }
-gpui = { git = "https://github.com/PORTALSURFER/gpui-embedded.git", rev = "f53a0cf28742e8b230d56f653e474c18bc4ad33f", version = "0.2.2", default-features = false, optional = true }
-gpui-wgpu = { git = "https://github.com/PORTALSURFER/gpui-embedded.git", rev = "f53a0cf28742e8b230d56f653e474c18bc4ad33f", package = "gpui_wgpu", default-features = false, optional = true }
+gpui = { git = "https://github.com/PORTALSURFER/gpui-embedded.git", rev = "0c086e0d3b95b57b4e48b3268c36016d868821c3", version = "0.2.2", default-features = false, optional = true }
+gpui-wgpu = { git = "https://github.com/PORTALSURFER/gpui-embedded.git", rev = "0c086e0d3b95b57b4e48b3268c36016d868821c3", package = "gpui_wgpu", default-features = false, optional = true }
 raw-window-handle = { version = "0.5.2", optional = true }
 radiant = { git = "https://github.com/PORTALSURFER/radiant.git", rev = "7001b84b2c7edd4a286d167c183a5b35366156fc", default-features = false, optional = true }
 raw-window-handle-06 = { package = "raw-window-handle", version = "0.6", optional = true }
