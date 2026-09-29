@@ -7,13 +7,14 @@
 )]
 
 use std::ffi::c_void;
+use std::path::PathBuf;
 use std::ptr::{self, NonNull};
 use std::rc::{Rc, Weak};
 use std::sync::Mutex;
 
 use gpui::{
-    ClipboardItem, DevicePixels, GpuSpecs, KeyDownEvent, KeyUpEvent, Modifiers,
-    ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent,
+    ClipboardItem, DevicePixels, ExternalPaths, FileDropEvent, GpuSpecs, KeyDownEvent, KeyUpEvent,
+    Modifiers, ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent,
     MouseUpEvent, Pixels, PlatformAtlas, PlatformInput, Point, Scene, ScrollDelta,
     ScrollWheelEvent, Size, TouchPhase, px,
 };
@@ -249,13 +250,14 @@ impl NativeChild {
         }
     }
 
-    pub(crate) fn draw(&mut self, scene: &Scene) {
+    pub(crate) fn draw(&mut self, scene: &Scene, effects: Vec<gpui_wgpu::PostEffect>) {
         if self.failed {
             return;
         }
         let Some(renderer) = self.renderer.as_mut() else {
             return;
         };
+        renderer.set_post_effects(&effects);
         unsafe { sync_metal_layer(self.view.as_ptr()) };
         if self.capture_requested {
             self.capture_requested = false;
@@ -527,6 +529,12 @@ unsafe fn new_view(class_name: &'static str, size: Size<Pixels>) -> Option<NonNu
     let view = NonNull::new(view)?;
     (&mut *view.as_ptr()).set_ivar("owner", 0_usize);
     (&mut *view.as_ptr()).set_ivar("tracking_area", 0_usize);
+    if let Some(file_url_type) = cocoa_string("public.file-url") {
+        let types: *mut Object =
+            msg_send![class!(NSArray), arrayWithObject: file_url_type.as_ptr()];
+        let _: () = msg_send![view.as_ptr(), registerForDraggedTypes: types];
+        let _: () = msg_send![file_url_type.as_ptr(), release];
+    }
     Some(view)
 }
 
@@ -597,6 +605,22 @@ fn editor_view_class(class_name: &'static str) -> Option<&'static Class> {
         decl.add_method(
             sel!(mouseExited:),
             mouse_exited as extern "C" fn(&Object, Sel, *mut Object),
+        );
+        decl.add_method(
+            sel!(draggingEntered:),
+            dragging_entered as extern "C" fn(&Object, Sel, *mut Object) -> usize,
+        );
+        decl.add_method(
+            sel!(draggingUpdated:),
+            dragging_updated as extern "C" fn(&Object, Sel, *mut Object) -> usize,
+        );
+        decl.add_method(
+            sel!(draggingExited:),
+            dragging_exited as extern "C" fn(&Object, Sel, *mut Object),
+        );
+        decl.add_method(
+            sel!(performDragOperation:),
+            perform_drag_operation as extern "C" fn(&Object, Sel, *mut Object) -> BOOL,
         );
         decl.add_method(
             sel!(scrollWheel:),
@@ -1078,6 +1102,99 @@ fn event_position(view: &Object, event: *mut Object) -> Point<Pixels> {
             msg_send![view, convertPoint: point fromView: ptr::null_mut::<Object>()];
         Point::new(px(point.x as f32), px(point.y as f32))
     }
+}
+
+fn drop_position(view: &Object, dragging: *mut Object) -> Point<Pixels> {
+    unsafe {
+        let point: NSPoint = msg_send![dragging, draggingLocation];
+        let point: NSPoint =
+            msg_send![view, convertPoint: point fromView: ptr::null_mut::<Object>()];
+        Point::new(px(point.x as f32), px(point.y as f32))
+    }
+}
+
+fn dropped_file_paths(dragging: *mut Object) -> ExternalPaths {
+    let mut paths = ExternalPaths::default();
+    unsafe {
+        let pasteboard: *mut Object = msg_send![dragging, draggingPasteboard];
+        if pasteboard.is_null() {
+            return paths;
+        }
+        let classes: *mut Object = msg_send![class!(NSArray), arrayWithObject: class!(NSURL)];
+        let urls: *mut Object = msg_send![pasteboard, readObjectsForClasses: classes options: ptr::null_mut::<Object>()];
+        if urls.is_null() {
+            return paths;
+        }
+        let count: usize = msg_send![urls, count];
+        for index in 0..count {
+            let url: *mut Object = msg_send![urls, objectAtIndex: index];
+            let is_file: BOOL = msg_send![url, isFileURL];
+            if is_file == NO {
+                continue;
+            }
+            let path: *mut Object = msg_send![url, path];
+            if path.is_null() {
+                continue;
+            }
+            let utf8: *const std::ffi::c_char = msg_send![path, UTF8String];
+            if !utf8.is_null() {
+                paths.0.push(PathBuf::from(
+                    std::ffi::CStr::from_ptr(utf8)
+                        .to_string_lossy()
+                        .into_owned(),
+                ));
+            }
+        }
+    }
+    paths
+}
+
+extern "C" fn dragging_entered(this: &Object, _cmd: Sel, dragging: *mut Object) -> usize {
+    let paths = dropped_file_paths(dragging);
+    if paths.0.is_empty() {
+        return 0;
+    }
+    native_callback(this, "GPUI AppKit file drag entered", |owner| {
+        let _ = owner.dispatch_input(PlatformInput::FileDrop(FileDropEvent::Entered {
+            position: drop_position(this, dragging),
+            paths,
+        }));
+    });
+    1 // NSDragOperationCopy
+}
+
+extern "C" fn dragging_updated(this: &Object, _cmd: Sel, dragging: *mut Object) -> usize {
+    if dropped_file_paths(dragging).0.is_empty() {
+        return 0;
+    }
+    native_callback(this, "GPUI AppKit file drag updated", |owner| {
+        let _ = owner.dispatch_input(PlatformInput::FileDrop(FileDropEvent::Pending {
+            position: drop_position(this, dragging),
+        }));
+    });
+    1
+}
+
+extern "C" fn dragging_exited(this: &Object, _cmd: Sel, _dragging: *mut Object) {
+    native_callback(this, "GPUI AppKit file drag exited", |owner| {
+        let _ = owner.dispatch_input(PlatformInput::FileDrop(FileDropEvent::Exited));
+    });
+}
+
+extern "C" fn perform_drag_operation(this: &Object, _cmd: Sel, dragging: *mut Object) -> BOOL {
+    let paths = dropped_file_paths(dragging);
+    if paths.0.is_empty() {
+        return NO;
+    }
+    native_callback(this, "GPUI AppKit file drop", |owner| {
+        let position = drop_position(this, dragging);
+        let _ = owner.dispatch_input(PlatformInput::FileDrop(FileDropEvent::Entered {
+            position,
+            paths,
+        }));
+        let _ = owner.dispatch_input(PlatformInput::FileDrop(FileDropEvent::Submit { position }));
+    });
+    YES
 }
 
 unsafe fn event_identity(event: *mut Object) -> Option<NativeEventIdentity> {

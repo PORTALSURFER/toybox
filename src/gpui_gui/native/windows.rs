@@ -6,16 +6,18 @@
     unsafe_op_in_unsafe_fn
 )]
 
+use std::cell::Cell;
 use std::ffi::c_void;
 use std::mem::size_of;
 use std::num::NonZeroIsize;
+use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use gpui::{
-    ClipboardItem, DevicePixels, GpuSpecs, KeyDownEvent, KeyUpEvent, Modifiers, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, PlatformAtlas, PlatformInput, Point,
-    Scene, ScrollDelta, ScrollWheelEvent, Size, TouchPhase, px,
+    ClipboardItem, DevicePixels, ExternalPaths, FileDropEvent, GpuSpecs, KeyDownEvent, KeyUpEvent,
+    Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, PlatformAtlas,
+    PlatformInput, Point, Scene, ScrollDelta, ScrollWheelEvent, Size, TouchPhase, px,
 };
 use gpui_wgpu::{WgpuRenderer, WgpuSurfaceConfig};
 use raw_window_handle_06::{
@@ -23,12 +25,13 @@ use raw_window_handle_06::{
     RawWindowHandle, Win32WindowHandle, WindowHandle, WindowsDisplayHandle,
 };
 use windows::Win32::Foundation::{
-    GlobalFree, HANDLE, HGLOBAL, HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM,
+    GlobalFree, HANDLE, HGLOBAL, HINSTANCE, HWND, LPARAM, LRESULT, POINT, POINTL, WPARAM,
 };
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, COLOR_WINDOW, EndPaint, GetSysColorBrush, InvalidateRect, PAINTSTRUCT,
     ScreenToClient,
 };
+use windows::Win32::System::Com::{DVASPECT_CONTENT, FORMATETC, IDataObject, TYMED_HGLOBAL};
 use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard, SetClipboardData,
 };
@@ -36,6 +39,11 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Memory::{
     GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock,
 };
+use windows::Win32::System::Ole::{
+    CF_HDROP, DROPEFFECT, DROPEFFECT_COPY, DROPEFFECT_NONE, IDropTarget, IDropTarget_Impl,
+    OleInitialize, OleUninitialize, RegisterDragDrop, ReleaseStgMedium, RevokeDragDrop,
+};
+use windows::Win32::System::SystemServices::MODIFIERKEYS_FLAGS;
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::Input::Ime::{
     GCS_COMPSTR, GCS_RESULTSTR, IME_COMPOSITION_STRING, ImmGetCompositionStringW, ImmGetContext,
@@ -45,18 +53,21 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetCapture, GetKeyState, ReleaseCapture, SetCapture, SetFocus, VIRTUAL_KEY, VK_CONTROL,
     VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
 };
+use windows::Win32::UI::Shell::{
+    DragAcceptFiles, DragFinish, DragQueryFileW, DragQueryPoint, HDROP,
+};
 use windows::Win32::UI::WindowsAndMessaging::KillTimer;
 use windows::Win32::UI::WindowsAndMessaging::{
     CS_HREDRAW, CS_OWNDC, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DestroyWindow, GA_ROOT,
     GWLP_USERDATA, GetAncestor, GetMessageTime, GetWindowLongPtrW, IDC_ARROW, IsIconic,
     IsWindowVisible, LoadCursorW, RegisterClassExW, SW_HIDE, SW_SHOW, SetTimer, SetWindowLongPtrW,
     ShowWindow, UnregisterClassW, WM_CANCELMODE, WM_CAPTURECHANGED, WM_CHAR, WM_DPICHANGED,
-    WM_DPICHANGED_AFTERPARENT, WM_ERASEBKGND, WM_IME_COMPOSITION, WM_IME_ENDCOMPOSITION,
-    WM_IME_STARTCOMPOSITION, WM_KEYDOWN, WM_KEYUP, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_LBUTTONUP,
-    WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE,
-    WM_TIMER, WNDCLASSEXW, WS_CHILD, WS_TABSTOP, WS_VISIBLE,
+    WM_DPICHANGED_AFTERPARENT, WM_DROPFILES, WM_ERASEBKGND, WM_IME_COMPOSITION,
+    WM_IME_ENDCOMPOSITION, WM_IME_STARTCOMPOSITION, WM_KEYDOWN, WM_KEYUP, WM_KILLFOCUS,
+    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT,
+    WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WM_TIMER, WNDCLASSEXW, WS_CHILD, WS_TABSTOP, WS_VISIBLE,
 };
-use windows::core::PCWSTR;
+use windows::core::{PCWSTR, Ref, implement};
 
 use super::super::WindowState;
 
@@ -65,6 +76,163 @@ const UI_TIMER_INTERVAL_MS: u32 = 16;
 const CF_UNICODETEXT_FORMAT: u32 = 13;
 const MK_LBUTTON_FLAG: u32 = 0x0001;
 const MK_RBUTTON_FLAG: u32 = 0x0002;
+
+#[implement(IDropTarget)]
+struct FileDropTarget {
+    hwnd: isize,
+    accepting: Cell<bool>,
+}
+
+impl FileDropTarget_Impl {
+    fn position(&self, screen: &POINTL) -> Point<Pixels> {
+        let hwnd = HWND(self.hwnd as *mut c_void);
+        let mut client = POINT {
+            x: screen.x,
+            y: screen.y,
+        };
+        let _ = unsafe { ScreenToClient(hwnd, &mut client) };
+        let scale = owner(hwnd).map_or(1.0, |owner| owner.scale_factor());
+        Point::new(px(client.x as f32 / scale), px(client.y as f32 / scale))
+    }
+
+    fn set_effect(&self, effect: *mut DROPEFFECT) {
+        if !effect.is_null() {
+            unsafe {
+                *effect = if self.accepting.get() && (*effect).0 & DROPEFFECT_COPY.0 != 0 {
+                    DROPEFFECT_COPY
+                } else {
+                    DROPEFFECT_NONE
+                };
+            }
+        }
+    }
+}
+
+#[allow(non_snake_case)]
+impl IDropTarget_Impl for FileDropTarget_Impl {
+    fn DragEnter(
+        &self,
+        data: Ref<IDataObject>,
+        _: MODIFIERKEYS_FLAGS,
+        screen: &POINTL,
+        effect: *mut DROPEFFECT,
+    ) -> windows::core::Result<()> {
+        self.accepting
+            .set(data.as_ref().is_some_and(can_accept_files));
+        self.set_effect(effect);
+        if self.accepting.get() {
+            let hwnd = HWND(self.hwnd as *mut c_void);
+            native_callback(hwnd, "GPUI Win32 OLE drag entered", |owner| {
+                let _ = owner.dispatch_input(PlatformInput::FileDrop(FileDropEvent::Entered {
+                    position: self.position(screen),
+                    paths: ExternalPaths::default(),
+                }));
+            });
+        }
+        Ok(())
+    }
+
+    fn DragOver(
+        &self,
+        _: MODIFIERKEYS_FLAGS,
+        screen: &POINTL,
+        effect: *mut DROPEFFECT,
+    ) -> windows::core::Result<()> {
+        self.set_effect(effect);
+        if self.accepting.get() {
+            let hwnd = HWND(self.hwnd as *mut c_void);
+            native_callback(hwnd, "GPUI Win32 OLE drag updated", |owner| {
+                let _ = owner.dispatch_input(PlatformInput::FileDrop(FileDropEvent::Pending {
+                    position: self.position(screen),
+                }));
+            });
+        }
+        Ok(())
+    }
+
+    fn DragLeave(&self) -> windows::core::Result<()> {
+        if self.accepting.replace(false) {
+            native_callback(
+                HWND(self.hwnd as *mut c_void),
+                "GPUI Win32 OLE drag exited",
+                |owner| {
+                    let _ = owner.dispatch_input(PlatformInput::FileDrop(FileDropEvent::Exited));
+                },
+            );
+        }
+        Ok(())
+    }
+
+    fn Drop(
+        &self,
+        data: Ref<IDataObject>,
+        _: MODIFIERKEYS_FLAGS,
+        screen: &POINTL,
+        effect: *mut DROPEFFECT,
+    ) -> windows::core::Result<()> {
+        self.set_effect(effect);
+        let paths = if self.accepting.replace(false) {
+            data.as_ref().and_then(file_paths_from_data)
+        } else {
+            None
+        };
+        if paths.is_none() && !effect.is_null() {
+            unsafe { *effect = DROPEFFECT_NONE };
+        }
+        let hwnd = HWND(self.hwnd as *mut c_void);
+        native_callback(hwnd, "GPUI Win32 OLE file drop", |owner| {
+            let _ = owner.dispatch_input(PlatformInput::FileDrop(FileDropEvent::Exited));
+            if let Some(paths) = paths {
+                let position = self.position(screen);
+                let _ = owner.dispatch_input(PlatformInput::FileDrop(FileDropEvent::Entered {
+                    position,
+                    paths,
+                }));
+                let _ = owner
+                    .dispatch_input(PlatformInput::FileDrop(FileDropEvent::Submit { position }));
+            }
+        });
+        Ok(())
+    }
+}
+
+fn file_drop_format() -> FORMATETC {
+    FORMATETC {
+        cfFormat: CF_HDROP.0,
+        ptd: std::ptr::null_mut(),
+        dwAspect: DVASPECT_CONTENT.0,
+        lindex: -1,
+        tymed: TYMED_HGLOBAL.0 as u32,
+    }
+}
+
+fn can_accept_files(data: &IDataObject) -> bool {
+    unsafe { data.QueryGetData(&file_drop_format()).is_ok() }
+}
+
+fn file_paths_from_data(data: &IDataObject) -> Option<ExternalPaths> {
+    let mut medium = unsafe { data.GetData(&file_drop_format()).ok()? };
+    let mut paths = ExternalPaths::default();
+    if medium.tymed == TYMED_HGLOBAL.0 as u32 {
+        let drop = HDROP(unsafe { medium.u.hGlobal.0 });
+        let count = unsafe { DragQueryFileW(drop, u32::MAX, None) };
+        for index in 0..count {
+            let length = unsafe { DragQueryFileW(drop, index, None) } as usize;
+            if length == 0 {
+                continue;
+            }
+            let mut wide = vec![0u16; length + 1];
+            let copied = unsafe { DragQueryFileW(drop, index, Some(&mut wide)) } as usize;
+            if copied != 0 {
+                paths
+                    .0
+                    .push(PathBuf::from(String::from_utf16_lossy(&wide[..copied])));
+            }
+        }
+    }
+    unsafe { ReleaseStgMedium(&mut medium) };
+    (!paths.0.is_empty()).then_some(paths)
+}
 
 pub(crate) fn parent_scale_factor(parent: raw_window_handle::RawWindowHandle) -> f32 {
     let hwnd = match parent {
@@ -111,6 +279,8 @@ pub(crate) struct NativeChild {
     instance: HINSTANCE,
     scale_factor: f32,
     timer_id: usize,
+    drop_target: Option<IDropTarget>,
+    ole_initialized: bool,
     capture_requested: bool,
     capture_result: Option<Vec<u8>>,
     failed: bool,
@@ -203,6 +373,24 @@ impl NativeChild {
             unregister_class(&class_name, instance);
             return Err(anyhow::anyhow!("SetTimer failed for GPUI child window"));
         }
+        let mut ole_initialized = unsafe { OleInitialize(None) }.is_ok();
+        let drop_target = if ole_initialized {
+            let target: IDropTarget = FileDropTarget {
+                hwnd: hwnd.0 as isize,
+                accepting: Cell::new(false),
+            }
+            .into();
+            if unsafe { RegisterDragDrop(hwnd, &target) }.is_ok() {
+                Some(target)
+            } else {
+                unsafe { OleUninitialize() };
+                ole_initialized = false;
+                None
+            }
+        } else {
+            None
+        };
+        unsafe { DragAcceptFiles(hwnd, drop_target.is_none()) };
         Ok(Self {
             hwnd,
             renderer: Some(renderer),
@@ -211,17 +399,20 @@ impl NativeChild {
             instance,
             scale_factor,
             timer_id,
+            drop_target,
+            ole_initialized,
             capture_requested: false,
             capture_result: None,
             failed: false,
         })
     }
 
-    pub(crate) fn draw(&mut self, scene: &Scene) {
+    pub(crate) fn draw(&mut self, scene: &Scene, effects: Vec<gpui_wgpu::PostEffect>) {
         if self.failed {
             return;
         }
         if let Some(renderer) = self.renderer.as_mut() {
+            renderer.set_post_effects(&effects);
             if self.capture_requested {
                 self.capture_requested = false;
                 match renderer.render_to_rgba(scene) {
@@ -362,6 +553,7 @@ impl NativeChild {
         }
         self.failed = true;
         self.stop_timer();
+        self.stop_file_drop();
         unsafe {
             let _: isize = SetWindowLongPtrW(self.hwnd, GWLP_USERDATA, 0);
             release_capture_if_owned(self.hwnd);
@@ -380,6 +572,7 @@ impl NativeChild {
 
     pub(crate) fn close(&mut self) {
         self.stop_timer();
+        self.stop_file_drop();
         if let Some(mut renderer) = self.renderer.take() {
             renderer.destroy();
         }
@@ -398,6 +591,17 @@ impl NativeChild {
                 let _ = KillTimer(Some(self.hwnd), self.timer_id);
             }
             self.timer_id = 0;
+        }
+    }
+
+    fn stop_file_drop(&mut self) {
+        unsafe { DragAcceptFiles(self.hwnd, false) };
+        if self.drop_target.take().is_some() {
+            unsafe { RevokeDragDrop(self.hwnd) }.ok();
+        }
+        if self.ole_initialized {
+            unsafe { OleUninitialize() };
+            self.ole_initialized = false;
         }
     }
 }
@@ -539,6 +743,42 @@ unsafe extern "system" fn window_proc(
             native_callback(hwnd, "GPUI Win32 resize", |owner| {
                 owner.native_resize_device(width, height)
             });
+            LRESULT(0)
+        }
+        WM_DROPFILES => {
+            let drop = HDROP(wparam.0 as *mut c_void);
+            let mut client = POINT::default();
+            let in_client = unsafe { DragQueryPoint(drop, &mut client).as_bool() };
+            let count = unsafe { DragQueryFileW(drop, u32::MAX, None) };
+            let mut paths = ExternalPaths::default();
+            for index in 0..count {
+                let length = unsafe { DragQueryFileW(drop, index, None) } as usize;
+                if length == 0 {
+                    continue;
+                }
+                let mut wide = vec![0u16; length + 1];
+                let copied = unsafe { DragQueryFileW(drop, index, Some(&mut wide)) } as usize;
+                if copied != 0 {
+                    paths
+                        .0
+                        .push(PathBuf::from(String::from_utf16_lossy(&wide[..copied])));
+                }
+            }
+            unsafe { DragFinish(drop) };
+            if in_client && !paths.0.is_empty() {
+                native_callback(hwnd, "GPUI Win32 file drop", |owner| {
+                    let scale = owner.scale_factor();
+                    let position =
+                        Point::new(px(client.x as f32 / scale), px(client.y as f32 / scale));
+                    let _ = owner.dispatch_input(PlatformInput::FileDrop(FileDropEvent::Entered {
+                        position,
+                        paths,
+                    }));
+                    let _ = owner.dispatch_input(PlatformInput::FileDrop(FileDropEvent::Submit {
+                        position,
+                    }));
+                });
+            }
             LRESULT(0)
         }
         WM_LBUTTONDOWN | WM_RBUTTONDOWN => {

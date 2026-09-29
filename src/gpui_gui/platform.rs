@@ -12,6 +12,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, ThreadId};
 use std::time::{Duration, Instant};
 
+use super::PostEffectHandle;
 use anyhow::Result;
 use futures::channel::oneshot;
 #[cfg(target_os = "windows")]
@@ -478,6 +479,7 @@ pub(crate) struct EmbeddedPlatform {
     callback_keyboard_only: bool,
     visibility_callback: VisibilityCallback,
     pointer_cancel_callback: PointerCancelCallback,
+    post_effects: Option<PostEffectHandle>,
     gpu_context: gpui_wgpu::GpuContext,
     window_owner: RefCell<Option<Weak<WindowState>>>,
     parent_scale_factor: f32,
@@ -490,6 +492,7 @@ impl EmbeddedPlatform {
         callback_keyboard_only: bool,
         visibility_callback: VisibilityCallback,
         pointer_cancel_callback: PointerCancelCallback,
+        post_effects: Option<PostEffectHandle>,
     ) -> anyhow::Result<Rc<Self>> {
         let dispatcher = EmbeddedDispatcher::new();
         let dispatcher_trait: Arc<dyn gpui::PlatformDispatcher> = dispatcher.clone();
@@ -517,6 +520,7 @@ impl EmbeddedPlatform {
             callback_keyboard_only,
             visibility_callback,
             pointer_cancel_callback,
+            post_effects,
             gpu_context: Rc::new(RefCell::new(None)),
             window_owner: RefCell::new(None),
             parent_scale_factor: parent_scale_factor(parent),
@@ -734,6 +738,7 @@ impl Platform for EmbeddedPlatform {
             self.visibility_callback.clone(),
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             self.pointer_cancel_callback.clone(),
+            self.post_effects.clone(),
         ));
         let _state = window.state.clone();
         #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -1069,6 +1074,7 @@ struct WindowState {
     dispatcher: Arc<EmbeddedDispatcher>,
     bounds: Cell<Bounds<Pixels>>,
     active_window: Rc<Cell<Option<AnyWindowHandle>>>,
+    post_effects: Option<PostEffectHandle>,
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     native: RefCell<Option<NativeChild>>,
     #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -1151,6 +1157,7 @@ impl EmbeddedWindow {
         visibility_callback: VisibilityCallback,
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         pointer_cancel_callback: PointerCancelCallback,
+        post_effects: Option<PostEffectHandle>,
     ) -> Self {
         Self {
             state: Rc::new(WindowState {
@@ -1158,6 +1165,7 @@ impl EmbeddedWindow {
                 dispatcher: _dispatcher,
                 bounds: Cell::new(options.bounds),
                 active_window,
+                post_effects,
                 #[cfg(any(target_os = "macos", target_os = "windows"))]
                 native: RefCell::new(None),
                 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -2151,7 +2159,17 @@ impl PlatformWindow for EmbeddedWindow {
         let failed = {
             let mut native = self.state.native.borrow_mut();
             native.as_mut().is_some_and(|native| {
-                crate::gui_panic::contain("GPUI native draw", || native.draw(_scene)).is_none()
+                crate::gui_panic::contain("GPUI native draw", || {
+                    native.draw(
+                        _scene,
+                        self.state
+                            .post_effects
+                            .as_ref()
+                            .map(|handle| handle.borrow().clone())
+                            .unwrap_or_default(),
+                    )
+                })
+                .is_none()
             })
         };
         #[cfg(any(target_os = "macos", target_os = "windows"))]
