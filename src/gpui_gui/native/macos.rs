@@ -250,13 +250,14 @@ impl NativeChild {
         }
     }
 
-    pub(crate) fn draw(&mut self, scene: &Scene) {
+    pub(crate) fn draw(&mut self, scene: &Scene, effects: Vec<gpui_wgpu::PostEffect>) {
         if self.failed {
             return;
         }
         let Some(renderer) = self.renderer.as_mut() else {
             return;
         };
+        renderer.set_post_effects(&effects);
         unsafe { sync_metal_layer(self.view.as_ptr()) };
         if self.capture_requested {
             self.capture_requested = false;

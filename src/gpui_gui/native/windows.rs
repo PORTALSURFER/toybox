@@ -407,11 +407,12 @@ impl NativeChild {
         })
     }
 
-    pub(crate) fn draw(&mut self, scene: &Scene) {
+    pub(crate) fn draw(&mut self, scene: &Scene, effects: Vec<gpui_wgpu::PostEffect>) {
         if self.failed {
             return;
         }
         if let Some(renderer) = self.renderer.as_mut() {
+            renderer.set_post_effects(&effects);
             if self.capture_requested {
                 self.capture_requested = false;
                 match renderer.render_to_rgba(scene) {

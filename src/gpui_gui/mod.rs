@@ -18,6 +18,11 @@ use raw_window_handle::RawWindowHandle;
 
 use self::platform::EmbeddedPlatform;
 
+pub use gpui_wgpu::{PostEffect, WaterEffect};
+
+/// UI-thread state read by the embedded renderer before each frame.
+pub type PostEffectHandle = Rc<RefCell<Vec<PostEffect>>>;
+
 type ViewFactory = dyn Fn(&mut gpui::Window, &mut App) -> AnyView;
 
 /// A logical editor size contract used by GPUI host resize negotiation.
@@ -165,6 +170,7 @@ pub struct GpuiHostedGui {
     pointer_cancel_callback: platform::PointerCancelCallback,
     runtime: Option<Runtime>,
     callback_keyboard_only: bool,
+    post_effects: Option<PostEffectHandle>,
 }
 
 impl GpuiHostedGui {
@@ -187,7 +193,14 @@ impl GpuiHostedGui {
             pointer_cancel_callback: Rc::new(RefCell::new(None)),
             runtime: None,
             callback_keyboard_only: false,
+            post_effects: None,
         }
+    }
+
+    /// Apply a framebuffer water refraction to an editor-defined region.
+    pub fn with_post_effects(mut self, effect: PostEffectHandle) -> Self {
+        self.post_effects = Some(effect);
+        self
     }
 
     /// Apply an inclusive logical minimum, preferred, and maximum size.
@@ -260,6 +273,7 @@ impl GpuiHostedGui {
             self.callback_keyboard_only,
             self.visibility_callback.clone(),
             self.pointer_cancel_callback.clone(),
+            self.post_effects.clone(),
         ) else {
             return false;
         };
