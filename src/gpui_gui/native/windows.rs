@@ -9,13 +9,14 @@
 use std::ffi::c_void;
 use std::mem::size_of;
 use std::num::NonZeroIsize;
+use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use gpui::{
-    ClipboardItem, DevicePixels, GpuSpecs, KeyDownEvent, KeyUpEvent, Modifiers, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, PlatformAtlas, PlatformInput, Point,
-    Scene, ScrollDelta, ScrollWheelEvent, Size, TouchPhase, px,
+    ClipboardItem, DevicePixels, ExternalPaths, FileDropEvent, GpuSpecs, KeyDownEvent, KeyUpEvent,
+    Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, PlatformAtlas,
+    PlatformInput, Point, Scene, ScrollDelta, ScrollWheelEvent, Size, TouchPhase, px,
 };
 use gpui_wgpu::{WgpuRenderer, WgpuSurfaceConfig};
 use raw_window_handle_06::{
@@ -45,16 +46,19 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetCapture, GetKeyState, ReleaseCapture, SetCapture, SetFocus, VIRTUAL_KEY, VK_CONTROL,
     VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
 };
+use windows::Win32::UI::Shell::{
+    DragAcceptFiles, DragFinish, DragQueryFileW, DragQueryPoint, HDROP,
+};
 use windows::Win32::UI::WindowsAndMessaging::KillTimer;
 use windows::Win32::UI::WindowsAndMessaging::{
     CS_HREDRAW, CS_OWNDC, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DestroyWindow, GA_ROOT,
     GWLP_USERDATA, GetAncestor, GetMessageTime, GetWindowLongPtrW, IDC_ARROW, IsIconic,
     IsWindowVisible, LoadCursorW, RegisterClassExW, SW_HIDE, SW_SHOW, SetTimer, SetWindowLongPtrW,
     ShowWindow, UnregisterClassW, WM_CANCELMODE, WM_CAPTURECHANGED, WM_CHAR, WM_DPICHANGED,
-    WM_DPICHANGED_AFTERPARENT, WM_ERASEBKGND, WM_IME_COMPOSITION, WM_IME_ENDCOMPOSITION,
-    WM_IME_STARTCOMPOSITION, WM_KEYDOWN, WM_KEYUP, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_LBUTTONUP,
-    WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE,
-    WM_TIMER, WNDCLASSEXW, WS_CHILD, WS_TABSTOP, WS_VISIBLE,
+    WM_DPICHANGED_AFTERPARENT, WM_DROPFILES, WM_ERASEBKGND, WM_IME_COMPOSITION,
+    WM_IME_ENDCOMPOSITION, WM_IME_STARTCOMPOSITION, WM_KEYDOWN, WM_KEYUP, WM_KILLFOCUS,
+    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT,
+    WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WM_TIMER, WNDCLASSEXW, WS_CHILD, WS_TABSTOP, WS_VISIBLE,
 };
 use windows::core::PCWSTR;
 
@@ -194,6 +198,7 @@ impl NativeChild {
                 GWLP_USERDATA,
                 (&mut *owner_token as *mut Weak<WindowState>) as isize,
             );
+            DragAcceptFiles(hwnd, true);
         }
         let timer_id = unsafe { SetTimer(Some(hwnd), UI_TIMER_ID, UI_TIMER_INTERVAL_MS, None) };
         if timer_id == 0 {
@@ -539,6 +544,42 @@ unsafe extern "system" fn window_proc(
             native_callback(hwnd, "GPUI Win32 resize", |owner| {
                 owner.native_resize_device(width, height)
             });
+            LRESULT(0)
+        }
+        WM_DROPFILES => {
+            let drop = HDROP(wparam.0 as *mut c_void);
+            let mut client = POINT::default();
+            let in_client = unsafe { DragQueryPoint(drop, &mut client).as_bool() };
+            let count = unsafe { DragQueryFileW(drop, u32::MAX, None) };
+            let mut paths = ExternalPaths::default();
+            for index in 0..count {
+                let length = unsafe { DragQueryFileW(drop, index, None) } as usize;
+                if length == 0 {
+                    continue;
+                }
+                let mut wide = vec![0u16; length + 1];
+                let copied = unsafe { DragQueryFileW(drop, index, Some(&mut wide)) } as usize;
+                if copied != 0 {
+                    paths
+                        .0
+                        .push(PathBuf::from(String::from_utf16_lossy(&wide[..copied])));
+                }
+            }
+            unsafe { DragFinish(drop) };
+            if in_client && !paths.0.is_empty() {
+                native_callback(hwnd, "GPUI Win32 file drop", |owner| {
+                    let scale = owner.scale_factor();
+                    let position =
+                        Point::new(px(client.x as f32 / scale), px(client.y as f32 / scale));
+                    let _ = owner.dispatch_input(PlatformInput::FileDrop(FileDropEvent::Entered {
+                        position,
+                        paths,
+                    }));
+                    let _ = owner.dispatch_input(PlatformInput::FileDrop(FileDropEvent::Submit {
+                        position,
+                    }));
+                });
+            }
             LRESULT(0)
         }
         WM_LBUTTONDOWN | WM_RBUTTONDOWN => {
