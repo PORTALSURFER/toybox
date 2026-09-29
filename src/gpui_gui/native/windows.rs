@@ -90,7 +90,7 @@ impl FileDropTarget_Impl {
             x: screen.x,
             y: screen.y,
         };
-        unsafe { ScreenToClient(hwnd, &mut client) };
+        let _ = unsafe { ScreenToClient(hwnd, &mut client) };
         let scale = owner(hwnd).map_or(1.0, |owner| owner.scale_factor());
         Point::new(px(client.x as f32 / scale), px(client.y as f32 / scale))
     }
