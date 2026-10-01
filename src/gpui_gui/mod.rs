@@ -5,6 +5,7 @@
 mod numeric_input;
 mod platform;
 
+pub use gpui_wgpu::{PostEffect, WaterEffect};
 pub use numeric_input::{
     NumericInput, NumericInputCanceled, NumericInputChanged, NumericInputConfig, NumericInputRange,
     NumericInputStepped, NumericInputStyle, NumericInputSubmitted,
@@ -12,6 +13,9 @@ pub use numeric_input::{
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+
+/// UI-thread effect state consumed before each embedded frame.
+pub type PostEffectHandle = Rc<RefCell<Vec<PostEffect>>>;
 
 use gpui::{AnyView, App, AppContext, Application, ApplicationHandle, IntoElement, Render, Window};
 use raw_window_handle::RawWindowHandle;
@@ -165,6 +169,7 @@ pub struct GpuiHostedGui {
     pointer_cancel_callback: platform::PointerCancelCallback,
     runtime: Option<Runtime>,
     callback_keyboard_only: bool,
+    post_effects: Option<PostEffectHandle>,
 }
 
 impl GpuiHostedGui {
@@ -187,7 +192,14 @@ impl GpuiHostedGui {
             pointer_cancel_callback: Rc::new(RefCell::new(None)),
             runtime: None,
             callback_keyboard_only: false,
+            post_effects: None,
         }
+    }
+
+    /// Apply ordered framebuffer effects to editor-defined regions.
+    pub fn with_post_effects(mut self, effects: PostEffectHandle) -> Self {
+        self.post_effects = Some(effects);
+        self
     }
 
     /// Apply an inclusive logical minimum, preferred, and maximum size.
@@ -260,6 +272,7 @@ impl GpuiHostedGui {
             self.callback_keyboard_only,
             self.visibility_callback.clone(),
             self.pointer_cancel_callback.clone(),
+            self.post_effects.clone(),
         ) else {
             return false;
         };
