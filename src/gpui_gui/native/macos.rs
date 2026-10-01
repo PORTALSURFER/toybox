@@ -591,6 +591,18 @@ fn editor_view_class(class_name: &'static str) -> Option<&'static Class> {
             right_mouse_dragged as extern "C" fn(&Object, Sel, *mut Object),
         );
         decl.add_method(
+            sel!(otherMouseDown:),
+            other_mouse_down as extern "C" fn(&Object, Sel, *mut Object),
+        );
+        decl.add_method(
+            sel!(otherMouseUp:),
+            other_mouse_up as extern "C" fn(&Object, Sel, *mut Object),
+        );
+        decl.add_method(
+            sel!(otherMouseDragged:),
+            other_mouse_dragged as extern "C" fn(&Object, Sel, *mut Object),
+        );
+        decl.add_method(
             sel!(mouseMoved:),
             mouse_moved as extern "C" fn(&Object, Sel, *mut Object),
         );
@@ -874,6 +886,27 @@ extern "C" fn right_mouse_dragged(this: &Object, _cmd: Sel, event: *mut Object) 
     });
 }
 
+extern "C" fn other_mouse_down(this: &Object, cmd: Sel, event: *mut Object) {
+    let button: i64 = unsafe { msg_send![event, buttonNumber] };
+    if button == 2 {
+        mouse_down(this, cmd, event);
+    }
+}
+
+extern "C" fn other_mouse_up(this: &Object, cmd: Sel, event: *mut Object) {
+    let button: i64 = unsafe { msg_send![event, buttonNumber] };
+    if button == 2 {
+        mouse_up(this, cmd, event);
+    }
+}
+
+extern "C" fn other_mouse_dragged(this: &Object, cmd: Sel, event: *mut Object) {
+    let button: i64 = unsafe { msg_send![event, buttonNumber] };
+    if button == 2 {
+        mouse_dragged(this, cmd, event);
+    }
+}
+
 extern "C" fn mouse_moved(this: &Object, _cmd: Sel, event: *mut Object) {
     native_callback(this, "GPUI AppKit mouse move", |owner| {
         let _ = owner.dispatch_input(PlatformInput::MouseMove(MouseMoveEvent {
@@ -1114,10 +1147,14 @@ fn event_modifiers(event: *mut Object) -> Modifiers {
 const NS_RIGHT_MOUSE_DOWN: u64 = 3;
 const NS_RIGHT_MOUSE_UP: u64 = 4;
 const NS_RIGHT_MOUSE_DRAGGED: u64 = 7;
+const NS_OTHER_MOUSE_DOWN: u64 = 25;
+const NS_OTHER_MOUSE_UP: u64 = 26;
+const NS_OTHER_MOUSE_DRAGGED: u64 = 27;
 
 fn mouse_button_for_event_type(event_type: u64) -> MouseButton {
     match event_type {
         NS_RIGHT_MOUSE_DOWN | NS_RIGHT_MOUSE_UP | NS_RIGHT_MOUSE_DRAGGED => MouseButton::Right,
+        NS_OTHER_MOUSE_DOWN | NS_OTHER_MOUSE_UP | NS_OTHER_MOUSE_DRAGGED => MouseButton::Middle,
         _ => MouseButton::Left,
     }
 }
@@ -1245,6 +1282,25 @@ mod tests {
             assert_eq!(key_name(characters), expected);
         }
         assert_eq!(key_name(None), "unknown");
+    }
+
+    #[test]
+    fn appkit_middle_mouse_events_keep_the_middle_button() {
+        for event_type in [
+            NS_OTHER_MOUSE_DOWN,
+            NS_OTHER_MOUSE_UP,
+            NS_OTHER_MOUSE_DRAGGED,
+        ] {
+            assert_eq!(mouse_button_for_event_type(event_type), MouseButton::Middle);
+        }
+        let class = editor_view_class("ToyboxMiddleMouseTest").expect("editor class");
+        for selector in [
+            sel!(otherMouseDown:),
+            sel!(otherMouseUp:),
+            sel!(otherMouseDragged:),
+        ] {
+            assert!(class.instance_method(selector).is_some());
+        }
     }
 
     #[test]
