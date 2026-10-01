@@ -860,6 +860,8 @@ fn key_name(key: u32) -> String {
         0x27 => "right",
         0x28 => "down",
         0x2e => "delete",
+        0xdb => "[",
+        0xdd => "]",
         0x70..=0x7b => return format!("f{}", key - 0x6f),
         value if (0x30..=0x39).contains(&value) || (0x41..=0x5a).contains(&value) => {
             return char::from_u32(value)
@@ -875,6 +877,14 @@ fn key_name(key: u32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_bracket_shortcuts_have_distinct_key_names() {
+        assert_eq!(key_name(0xdb), "[");
+        assert_eq!(key_name(0xdd), "]");
+        assert_eq!(key_name(0x41), "a");
+        assert_eq!(key_name(0x25), "left");
+    }
 
     #[test]
     fn client_coordinates_convert_physical_pixels_to_logical_points() {
