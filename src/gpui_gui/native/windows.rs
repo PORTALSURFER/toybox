@@ -53,8 +53,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     ShowWindow, UnregisterClassW, WM_CANCELMODE, WM_CAPTURECHANGED, WM_CHAR, WM_DPICHANGED,
     WM_DPICHANGED_AFTERPARENT, WM_ERASEBKGND, WM_IME_COMPOSITION, WM_IME_ENDCOMPOSITION,
     WM_IME_STARTCOMPOSITION, WM_KEYDOWN, WM_KEYUP, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_LBUTTONUP,
-    WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE,
-    WM_TIMER, WNDCLASSEXW, WS_CHILD, WS_TABSTOP, WS_VISIBLE,
+    WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_PAINT,
+    WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SIZE, WM_TIMER, WNDCLASSEXW, WS_CHILD, WS_TABSTOP, WS_VISIBLE,
 };
 use windows::core::PCWSTR;
 
@@ -65,6 +65,7 @@ const UI_TIMER_INTERVAL_MS: u32 = 16;
 const CF_UNICODETEXT_FORMAT: u32 = 13;
 const MK_LBUTTON_FLAG: u32 = 0x0001;
 const MK_RBUTTON_FLAG: u32 = 0x0002;
+const MK_MBUTTON_FLAG: u32 = 0x0010;
 
 pub(crate) fn parent_scale_factor(parent: raw_window_handle::RawWindowHandle) -> f32 {
     let hwnd = match parent {
@@ -493,6 +494,7 @@ fn pressed_button_for_move(wparam: WPARAM, button: Option<MouseButton>) -> Optio
     match button {
         Some(MouseButton::Left) if flags & MK_LBUTTON_FLAG != 0 => Some(MouseButton::Left),
         Some(MouseButton::Right) if flags & MK_RBUTTON_FLAG != 0 => Some(MouseButton::Right),
+        Some(MouseButton::Middle) if flags & MK_MBUTTON_FLAG != 0 => Some(MouseButton::Middle),
         _ => None,
     }
 }
@@ -504,6 +506,8 @@ fn capture_is_available(current: HWND, requested: HWND) -> bool {
 fn mouse_button_for_message(message: u32) -> MouseButton {
     if message == WM_LBUTTONDOWN || message == WM_LBUTTONUP {
         MouseButton::Left
+    } else if message == WM_MBUTTONDOWN || message == WM_MBUTTONUP {
+        MouseButton::Middle
     } else {
         MouseButton::Right
     }
@@ -541,7 +545,7 @@ unsafe extern "system" fn window_proc(
             });
             LRESULT(0)
         }
-        WM_LBUTTONDOWN | WM_RBUTTONDOWN => {
+        WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN => {
             let button = mouse_button_for_message(message);
             let captured = capture_window_if_available(hwnd);
             if !captured {
@@ -562,7 +566,7 @@ unsafe extern "system" fn window_proc(
             });
             LRESULT(0)
         }
-        WM_LBUTTONUP | WM_RBUTTONUP => {
+        WM_LBUTTONUP | WM_RBUTTONUP | WM_MBUTTONUP => {
             let button = mouse_button_for_message(message);
             native_callback(hwnd, "GPUI Win32 mouse up", |owner| {
                 if !owner.native_pointer_released(button) {
@@ -891,7 +895,20 @@ mod tests {
     }
 
     #[test]
-    fn native_button_messages_preserve_left_and_right_mapping() {
+    fn native_button_messages_preserve_left_right_and_middle_mapping() {
+        assert_eq!(
+            mouse_button_for_message(WM_MBUTTONDOWN),
+            MouseButton::Middle
+        );
+        assert_eq!(mouse_button_for_message(WM_MBUTTONUP), MouseButton::Middle);
+        assert_eq!(
+            pressed_button_for_move(WPARAM(MK_MBUTTON_FLAG as usize), Some(MouseButton::Middle)),
+            Some(MouseButton::Middle)
+        );
+        assert_eq!(
+            pressed_button_for_move(WPARAM(0), Some(MouseButton::Middle)),
+            None
+        );
         assert_eq!(mouse_button_for_message(WM_LBUTTONDOWN), MouseButton::Left);
         assert_eq!(mouse_button_for_message(WM_LBUTTONUP), MouseButton::Left);
         assert_eq!(mouse_button_for_message(WM_RBUTTONDOWN), MouseButton::Right);
