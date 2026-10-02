@@ -2,6 +2,7 @@
 
 #![allow(missing_docs, clippy::missing_docs_in_private_items)]
 
+use super::HostKeyPassthrough;
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
@@ -476,6 +477,7 @@ pub(crate) struct EmbeddedPlatform {
     parent: raw_window_handle::RawWindowHandle,
     class_name: &'static str,
     callback_keyboard_only: bool,
+    host_passthrough_keys: HostKeyPassthrough,
     visibility_callback: VisibilityCallback,
     pointer_cancel_callback: PointerCancelCallback,
     gpu_context: gpui_wgpu::GpuContext,
@@ -488,6 +490,7 @@ impl EmbeddedPlatform {
         parent: raw_window_handle::RawWindowHandle,
         class_name: &'static str,
         callback_keyboard_only: bool,
+        host_passthrough_keys: HostKeyPassthrough,
         visibility_callback: VisibilityCallback,
         pointer_cancel_callback: PointerCancelCallback,
     ) -> anyhow::Result<Rc<Self>> {
@@ -515,6 +518,7 @@ impl EmbeddedPlatform {
             parent,
             class_name,
             callback_keyboard_only,
+            host_passthrough_keys,
             visibility_callback,
             pointer_cancel_callback,
             gpu_context: Rc::new(RefCell::new(None)),
@@ -736,6 +740,7 @@ impl Platform for EmbeddedPlatform {
             self.pointer_cancel_callback.clone(),
         ));
         let _state = window.state.clone();
+        _state.host_passthrough_keys.set(self.host_passthrough_keys);
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         {
             let native = NativeChild::new(
@@ -1065,6 +1070,7 @@ struct WindowsTextState {
 
 #[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
 struct WindowState {
+    host_passthrough_keys: Cell<HostKeyPassthrough>,
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     dispatcher: Arc<EmbeddedDispatcher>,
     bounds: Cell<Bounds<Pixels>>,
@@ -1154,6 +1160,7 @@ impl EmbeddedWindow {
     ) -> Self {
         Self {
             state: Rc::new(WindowState {
+                host_passthrough_keys: Cell::new(HostKeyPassthrough::default()),
                 #[cfg(any(target_os = "macos", target_os = "windows"))]
                 dispatcher: _dispatcher,
                 bounds: Cell::new(options.bounds),
@@ -1363,6 +1370,11 @@ impl WindowState {
         }
     }
 
+    fn should_passthrough_key(&self, key: &str) -> bool {
+        let text_entry = self.input_handler.borrow().value.is_some();
+        self.host_passthrough_keys.get().contains(key, text_entry)
+    }
+
     pub(crate) fn dispatch_vst3_key(
         &self,
         key: u16,
@@ -1376,6 +1388,9 @@ impl WindowState {
         let Some((key_name, key_char)) = vst3_keystroke(key, key_code) else {
             return false;
         };
+        if self.should_passthrough_key(&key_name) {
+            return false;
+        }
         let modifiers = vst3_modifiers(modifiers);
         let keystroke = Keystroke {
             modifiers,
@@ -2222,7 +2237,12 @@ fn vst3_keystroke(key: u16, key_code: i16) -> Option<(String, Option<String>)> {
         return Some(("backspace".to_string(), None));
     }
     let text = vst3_text(key, key_code as i16)?;
-    Some((text.to_lowercase(), Some(text)))
+    let name = if text == " " {
+        "space".to_string()
+    } else {
+        text.to_lowercase()
+    };
+    Some((name, Some(text)))
 }
 
 fn f_key_name(value: i64) -> &'static str {
@@ -2821,8 +2841,59 @@ mod tests {
         })
     }
 
+    #[test]
+    fn host_shortcuts_keep_printable_keys_available_during_text_entry() {
+        let policy = HostKeyPassthrough {
+            always: &["space"],
+            outside_text_entry: &["s"],
+        };
+        assert!(policy.contains("space", false));
+        assert!(policy.contains("space", true));
+        assert!(policy.contains("s", false));
+        assert!(!policy.contains("s", true));
+        assert!(!policy.contains("enter", false));
+        assert!(!HostKeyPassthrough::default().contains("space", false));
+    }
+
+    #[test]
+    fn host_key_passthrough_skips_gpui_and_text_for_both_callback_edges() {
+        let state = test_window_state();
+        let calls = Rc::new(Cell::new(0));
+        let callback_calls = calls.clone();
+        state.input_callback.borrow_mut().value = Some(Box::new(move |_| {
+            callback_calls.set(callback_calls.get() + 1);
+            DispatchEventResult {
+                propagate: false,
+                default_prevented: true,
+            }
+        }));
+        state.host_passthrough_keys.set(HostKeyPassthrough {
+            always: &["space"],
+            outside_text_entry: &["s"],
+        });
+        for (character, code) in [(32, 0), (0, 7), (32, 7)] {
+            assert!(!state.dispatch_vst3_key(character, code, 0, true));
+            assert!(!state.dispatch_vst3_key(character, code, 0, false));
+        }
+        for character in [b's' as u16, b'S' as u16] {
+            for modifiers in [0, 1, 2, 4, 8] {
+                assert!(!state.dispatch_vst3_key(character, 0, modifiers, true));
+                assert!(!state.dispatch_vst3_key(character, 0, modifiers, false));
+            }
+        }
+        assert_eq!(calls.get(), 0);
+        assert!(state.dispatch_vst3_key(13, 19, 0, true));
+        assert_eq!(calls.get(), 1);
+        state
+            .host_passthrough_keys
+            .set(HostKeyPassthrough::default());
+        assert!(state.dispatch_vst3_key(32, 0, 0, true));
+        assert_eq!(calls.get(), 2);
+    }
+
     fn test_window_state() -> Rc<WindowState> {
         Rc::new(WindowState {
+            host_passthrough_keys: Cell::new(HostKeyPassthrough::default()),
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             dispatcher: EmbeddedDispatcher::new(),
             bounds: Cell::new(Bounds::new(

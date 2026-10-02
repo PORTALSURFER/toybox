@@ -144,6 +144,19 @@ struct Runtime {
     _window: gpui::AnyWindowHandle,
 }
 
+/// Host shortcut routing configured independently for transport and text keys.
+#[derive(Clone, Copy, Default)]
+struct HostKeyPassthrough {
+    always: &'static [&'static str],
+    outside_text_entry: &'static [&'static str],
+}
+
+impl HostKeyPassthrough {
+    fn contains(self, key: &str, text_entry: bool) -> bool {
+        self.always.contains(&key) || (!text_entry && self.outside_text_entry.contains(&key))
+    }
+}
+
 /// A GPUI view hosted in a foreign native child window.
 ///
 /// The host owns the native run loop. Call [`Self::pump`] from that loop when
@@ -159,6 +172,7 @@ pub struct GpuiHostedGui {
     pointer_cancel_callback: platform::PointerCancelCallback,
     runtime: Option<Runtime>,
     callback_keyboard_only: bool,
+    host_passthrough_keys: HostKeyPassthrough,
 }
 
 impl GpuiHostedGui {
@@ -181,7 +195,24 @@ impl GpuiHostedGui {
             pointer_cancel_callback: Rc::new(RefCell::new(None)),
             runtime: None,
             callback_keyboard_only: false,
+            host_passthrough_keys: HostKeyPassthrough::default(),
         }
+    }
+
+    /// Reserve named GPUI keys for the host even when a plugin control has focus.
+    /// `outside_text_entry` keys remain available to focused text inputs.
+    /// Native macOS events continue through the responder chain; VST3 callbacks
+    /// return unhandled. Other editors retain their existing keyboard behavior.
+    pub fn with_host_key_passthrough(
+        mut self,
+        always: &'static [&'static str],
+        outside_text_entry: &'static [&'static str],
+    ) -> Self {
+        self.host_passthrough_keys = HostKeyPassthrough {
+            always,
+            outside_text_entry,
+        };
+        self
     }
 
     /// Apply an inclusive logical minimum, preferred, and maximum size.
@@ -252,6 +283,7 @@ impl GpuiHostedGui {
             parent,
             self.class_name,
             self.callback_keyboard_only,
+            self.host_passthrough_keys,
             self.visibility_callback.clone(),
             self.pointer_cancel_callback.clone(),
         ) else {

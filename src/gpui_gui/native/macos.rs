@@ -923,6 +923,13 @@ extern "C" fn key_down(this: &Object, _cmd: Sel, event: *mut Object) {
         let ignored: *mut Object = msg_send![event, charactersIgnoringModifiers];
         let key_char = ns_string(ignored);
         let key = key_name(key_char.as_deref());
+        if owner.should_passthrough_key(&key) {
+            let next: *mut Object = msg_send![this, nextResponder];
+            if !next.is_null() {
+                let _: () = msg_send![next, keyDown: event];
+            }
+            return;
+        }
         let token = event_identity(event).map(|identity| owner.native_event_token(identity));
         let result = owner.dispatch_native_key(
             PlatformInput::KeyDown(KeyDownEvent {
@@ -947,6 +954,13 @@ extern "C" fn key_up(this: &Object, _cmd: Sel, event: *mut Object) {
     native_callback(this, "GPUI AppKit key up", |owner| unsafe {
         let ignored: *mut Object = msg_send![event, charactersIgnoringModifiers];
         let key_char = ns_string(ignored);
+        if owner.should_passthrough_key(&key_name(key_char.as_deref())) {
+            let next: *mut Object = msg_send![this, nextResponder];
+            if !next.is_null() {
+                let _: () = msg_send![next, keyUp: event];
+            }
+            return;
+        }
         let token = event_identity(event).map(|identity| owner.native_event_token(identity));
         let _ = owner.dispatch_native_key(
             PlatformInput::KeyUp(KeyUpEvent {
