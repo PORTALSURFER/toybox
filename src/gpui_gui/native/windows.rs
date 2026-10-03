@@ -73,7 +73,10 @@ use windows::core::{PCWSTR, Ref, implement};
 use super::super::WindowState;
 
 const UI_TIMER_ID: usize = 1;
-const UI_TIMER_INTERVAL_MS: u32 = 16;
+// A 16 ms request can land on two ~15.6 ms Windows timer ticks (~32 Hz).
+// Stay just below one tick so ordinary timer resolution gives ~60 Hz
+// without changing the host process or system timer resolution.
+const UI_TIMER_INTERVAL_MS: u32 = 15;
 const CF_UNICODETEXT_FORMAT: u32 = 13;
 const MK_LBUTTON_FLAG: u32 = 0x0001;
 const MK_RBUTTON_FLAG: u32 = 0x0002;
@@ -909,15 +912,15 @@ unsafe extern "system" fn window_proc(
             let flags = lparam.0 as u32;
             native_callback(hwnd, "GPUI Win32 IME composition", |owner| {
                 let token = owner.windows_text_token(hwnd.0 as usize, message_time);
-                if flags & GCS_RESULTSTR.0 != 0 {
-                    if let Some(text) = ime_string(hwnd, GCS_RESULTSTR) {
-                        owner.windows_ime_composition(&text, true, token);
-                    }
+                if flags & GCS_RESULTSTR.0 != 0
+                    && let Some(text) = ime_string(hwnd, GCS_RESULTSTR)
+                {
+                    owner.windows_ime_composition(&text, true, token);
                 }
-                if flags & GCS_COMPSTR.0 != 0 {
-                    if let Some(text) = ime_string(hwnd, GCS_COMPSTR) {
-                        owner.windows_ime_composition(&text, false, token);
-                    }
+                if flags & GCS_COMPSTR.0 != 0
+                    && let Some(text) = ime_string(hwnd, GCS_COMPSTR)
+                {
+                    owner.windows_ime_composition(&text, false, token);
                 }
             });
             LRESULT(0)
@@ -1185,7 +1188,7 @@ mod tests {
 
     #[test]
     fn capture_does_not_steal_another_window() {
-        let child = HWND(1_usize as *mut _);
+        let child = HWND(std::ptr::dangling_mut());
         assert!(capture_is_available(HWND::default(), child));
         assert!(capture_is_available(child, child));
         assert!(!capture_is_available(HWND(2_usize as *mut _), child));
