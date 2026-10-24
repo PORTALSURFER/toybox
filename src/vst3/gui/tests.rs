@@ -918,3 +918,34 @@ fn vst3_abi_contains_attach_panic_and_quarantines_failed_view() {
     assert_eq!(unsafe { fresh.attached(parent, platform) }, kResultOk);
     assert_eq!(unsafe { fresh.removed() }, kResultOk);
 }
+
+#[test]
+fn fixed_aspect_repeated_rounding_residual_does_not_switch_resize_drivers() {
+    let view = HostedVst3View::new(
+        MockHostedGui {
+            last_size: Mutex::new(None),
+            resize_request: Mutex::new(None),
+        },
+        1140,
+        500,
+    )
+    .with_size_bounds(798, 350, 1824, 800);
+    let mut initial = view_rect(1595, 700);
+    assert_eq!(unsafe { view.onSize(&mut initial) }, kResultOk);
+    for _ in 0..16 {
+        let mut requested = view_rect(1594, 700);
+        assert_eq!(
+            unsafe { view.checkSizeConstraint(&mut requested) },
+            kResultOk
+        );
+        assert_eq!((requested.right, requested.bottom), (1594, 699));
+        assert_eq!(unsafe { view.onSize(&mut requested) }, kResultOk);
+    }
+    // A deliberate vertical drag still uses height as its driving dimension.
+    let mut vertical = view_rect(1594, 720);
+    assert_eq!(
+        unsafe { view.checkSizeConstraint(&mut vertical) },
+        kResultOk
+    );
+    assert_eq!((vertical.right, vertical.bottom), (1642, 720));
+}
