@@ -501,8 +501,14 @@ fn hosted_view_size_constraint_tracks_small_vertical_growth() {
     let mut next = view_rect(500, 314);
     let result = unsafe { view.onSize(&mut next) };
     assert_eq!(result, kResultOk);
-    assert_eq!(next.right - next.left, 502);
-    assert_eq!(next.bottom - next.top, 314);
+    assert_eq!(next.right - next.left, 500);
+    assert_eq!(next.bottom - next.top, 313);
+
+    let mut next = view_rect(500, 315);
+    let result = unsafe { view.onSize(&mut next) };
+    assert_eq!(result, kResultOk);
+    assert_eq!(next.right - next.left, 504);
+    assert_eq!(next.bottom - next.top, 315);
 }
 
 #[test]
@@ -948,4 +954,50 @@ fn fixed_aspect_repeated_rounding_residual_does_not_switch_resize_drivers() {
         kResultOk
     );
     assert_eq!((vertical.right, vertical.bottom), (1642, 720));
+}
+
+#[test]
+fn continuous_aspect_fit_is_stable_for_adjacent_corner_requests() {
+    let view = HostedVst3View::new(
+        MockHostedGui {
+            last_size: Mutex::new(None),
+            resize_request: Mutex::new(None),
+        },
+        1140,
+        500,
+    )
+    .with_size_bounds(798, 350, 1824, 800)
+    .continuous_aspect_resize(true);
+    let mut initial = view_rect(1368, 600);
+    assert_eq!(unsafe { view.onSize(&mut initial) }, kResultOk);
+    let mut previous: Option<i32> = None;
+    for width in 1360..1380 {
+        let mut requested = view_rect(width, 650);
+        assert_eq!(
+            unsafe { view.checkSizeConstraint(&mut requested) },
+            kResultOk
+        );
+        if let Some(last) = previous {
+            assert!((requested.right - last).abs() <= 1);
+        }
+        previous = Some(requested.right);
+        let constrained = (requested.right, requested.bottom);
+        for _ in 0..3 {
+            assert_eq!(unsafe { view.onSize(&mut requested) }, kResultOk);
+            assert_eq!(
+                unsafe { view.checkSizeConstraint(&mut requested) },
+                kResultOk
+            );
+            assert_eq!((requested.right, requested.bottom), constrained);
+        }
+    }
+    let mut vertical = view_rect(1368, 700);
+    assert_eq!(
+        unsafe { view.checkSizeConstraint(&mut vertical) },
+        kResultOk
+    );
+    assert!(vertical.bottom > 600 && vertical.right > 1368);
+    let mut outside = view_rect(i32::MAX, i32::MAX);
+    assert_eq!(unsafe { view.checkSizeConstraint(&mut outside) }, kResultOk);
+    assert_eq!((outside.right, outside.bottom), (1824, 800));
 }
