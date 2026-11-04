@@ -108,6 +108,8 @@ pub struct HostedVst3View<G: Vst3HostedGui> {
     size_bounds: Option<SizeBounds>,
     /// Whether resize operations should preserve a uniform aspect ratio.
     preserve_aspect_ratio: bool,
+    /// Project both proposed dimensions onto the aspect-ratio line.
+    continuous_aspect_resize: bool,
     /// Whether requested sizes are clamped to the declared minimum when resizing.
     enforce_minimum_size: bool,
     /// GUI instance shared with FFI callbacks and synchronized under a mutex.
@@ -137,6 +139,7 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
             default_size: (width, height),
             size_bounds: None,
             preserve_aspect_ratio: true,
+            continuous_aspect_resize: false,
             enforce_minimum_size: false,
             gui: Mutex::new(gui),
             pending_removed: Cell::new(false),
@@ -242,6 +245,15 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
     /// When `true`, width/height are adjusted to keep the default aspect ratio.
     pub fn preserve_aspect_ratio(mut self, keep_ratio: bool) -> Self {
         self.preserve_aspect_ratio = keep_ratio;
+        self
+    }
+
+    /// Smoothly fit both host-proposed dimensions to the fixed aspect ratio.
+    ///
+    /// This avoids switching axes abruptly during a corner drag. It applies
+    /// only when aspect-ratio preservation is enabled.
+    pub fn continuous_aspect_resize(mut self, enabled: bool) -> Self {
+        self.continuous_aspect_resize = enabled;
         self
     }
 
@@ -359,6 +371,15 @@ impl<G: Vst3HostedGui> HostedVst3View<G> {
         let clamped_height = requested_height.clamp(min_height, max_height);
         if !self.preserve_aspect_ratio {
             return (clamped_width, clamped_height);
+        }
+        if self.continuous_aspect_resize {
+            let ratio = f64::from(ratio);
+            let width = ((ratio * f64::from(clamped_width) + f64::from(clamped_height))
+                / (1.0 + ratio * ratio)
+                * ratio)
+                .round() as i32;
+            let height = (f64::from(width) / ratio).round() as i32;
+            return self.fit_uniform_size((width, height));
         }
         let current_width = current.0.max(1);
         let current_height = current.1.max(1);
